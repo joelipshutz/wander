@@ -2662,3 +2662,10 @@ Checkpoint:
 - Deno is not installed in this environment, so the Edge Function helper changes cannot be executed locally with Deno tests here; verification will use code review plus the iOS suite unless Deno is installed or the worker is deployed to hosted Supabase.
 - Full iOS test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m6 CODE_SIGNING_ALLOWED=NO` executed 86 tests with 0 failures.
 - Deployed `supabase/functions/extraction-worker` to Supabase project `rugmtlgufrhlxwfkumhw` with `npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`.
+
+Outcome:
+
+- Commit: `e61fdf9` (`fix: advance m6 extraction roadmap`)
+- PR: https://github.com/joelipshutz/wander/pull/4
+- Known issues: no local Deno runtime is installed, so Edge Function helper tests were not run locally; hosted deploy succeeded. Photo OCR, TikTok/Instagram extraction, analytics, privacy/onboarding gates, performance sweep, and final friend QA remain in M6.
+- Next step: review/merge PR #4, then decide whether the docs/worker-only change needs a TestFlight build or only the already-deployed worker plus Slack/internal QA note.
