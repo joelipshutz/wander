@@ -2669,3 +2669,19 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/4
 - Known issues: no local Deno runtime is installed, so Edge Function helper tests were not run locally; hosted deploy succeeded. Photo OCR, TikTok/Instagram extraction, analytics, privacy/onboarding gates, performance sweep, and final friend QA remain in M6.
 - Next step: review/merge PR #4, then decide whether the docs/worker-only change needs a TestFlight build or only the already-deployed worker plus Slack/internal QA note.
+
+## 2026-06-15 12:22 PDT - Codex - Close M6 Roadmap PR
+
+Agent: Codex
+Branch: detached `origin/main` at `9d714f2`
+Starting status: clean merged `origin/main` after PR #4 squash merge.
+
+Goal: close down open PRs and clean up merged branches.
+
+Outcome:
+
+- Confirmed PR #4 was the only open PR.
+- Squash-merged PR #4 into `main`: `9d714f2` (`fix: advance m6 extraction roadmap`).
+- Deleted remote branch `codex/m6-roadmap-next`.
+- Detached this local worktree at merged `origin/main` and deleted the local `codex/m6-roadmap-next` branch after squash merge cleanup.
+- No TestFlight build bump, archive, or Slack release note for this closure step because the merge does not change the iOS app binary; the backend `extraction-worker` change was already deployed to Supabase before merge. If a later iOS app-code merge lands, resume the normal build bump -> archive/upload -> TestFlight helper -> Slack note sequence.
