@@ -2720,6 +2720,7 @@ Outcome:
 - Build `0.1 (26)` App Store Connect id: `c5b96d4d-7deb-4fb8-ae23-22db6370650e`.
 - Build `0.1 (26)` is `VALID`, export compliance is `usesNonExemptEncryption=false`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
 - Public TestFlight link remains `https://testflight.apple.com/join/knEhRa6t`.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781553002730519
 
 Known issues / testing focus:
 
