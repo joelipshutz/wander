@@ -17,7 +17,7 @@ final class BoundaryImportTests: XCTestCase {
         ]
 
         for file in swiftFiles {
-            let relativePath = file.path.replacingOccurrences(of: projectRoot.path + "/", with: "")
+            let relativePath = Self.relativePath(for: file, projectRoot: projectRoot)
             let contents = try String(contentsOf: file)
 
             if contents.contains("import ClerkKit") || contents.contains("import ClerkKitUI") {
@@ -41,5 +41,35 @@ final class BoundaryImportTests: XCTestCase {
             let values = try url.resourceValues(forKeys: resourceKeys)
             return values.isRegularFile == true ? url : nil
         }
+    }
+
+    private static func relativePath(for file: URL, projectRoot: URL) -> String {
+        let rootPath = canonicalPath(projectRoot.path)
+        let filePath = canonicalPath(file.path)
+        let rootPrefix = rootPath + "/"
+
+        if filePath.hasPrefix(rootPrefix) {
+            return String(filePath.dropFirst(rootPrefix.count))
+        }
+
+        let components = filePath.split(separator: "/").map(String.init)
+        if let wanderIndex = components.lastIndex(of: "Wander") {
+            return components[wanderIndex...].joined(separator: "/")
+        }
+
+        return file.lastPathComponent
+    }
+
+    private static func canonicalPath(_ path: String) -> String {
+        let resolved = URL(fileURLWithPath: path)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+
+        if resolved.hasPrefix("/private/") {
+            return String(resolved.dropFirst("/private".count))
+        }
+
+        return resolved
     }
 }

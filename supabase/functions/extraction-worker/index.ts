@@ -166,6 +166,16 @@ async function extract(source: SourceArtifact): Promise<ExtractionResult> {
       };
     }
 
+    const appleCandidate = appleMapsCandidate(resolvedURL, source, steps);
+    if (appleCandidate) {
+      return {
+        status: "needs_confirmation",
+        candidates: [appleCandidate],
+        confidence: appleCandidate.confidence,
+        providerSteps: steps,
+      };
+    }
+
     const metadataCandidate = await webMetadataCoordinateCandidate(resolvedURL, source, steps);
     if (metadataCandidate) {
       return {
@@ -252,6 +262,31 @@ function googleMapsCandidate(url: URL, source: SourceArtifact, steps: string[]):
   };
 }
 
+function appleMapsCandidate(url: URL, source: SourceArtifact, steps: string[]): ExtractedCandidate | null {
+  if (!isAppleMapsHost(url.hostname)) return null;
+
+  steps.push("apple_maps_url_adapter");
+  const coordinates = coordinatesFromAppleURL(url);
+  const name = placeNameFromQuery(url);
+
+  if (!coordinates || !name) {
+    steps.push("apple_maps_missing_name_or_coordinates");
+    return null;
+  }
+
+  steps.push("apple_maps_coordinate_candidate");
+  return {
+    id: `extracted_${source.normalized_source_hash}`,
+    name,
+    category: inferredCategory(name),
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    source_provider: "apple_maps_link",
+    source_provider_place_id: url.toString(),
+    confidence: 0.84,
+  };
+}
+
 async function webMetadataCoordinateCandidate(url: URL, source: SourceArtifact, steps: string[]): Promise<ExtractedCandidate | null> {
   steps.push("web_metadata_lookup");
   try {
@@ -311,6 +346,22 @@ function coordinatesFromGoogleURL(url: URL): { latitude: number; longitude: numb
   return null;
 }
 
+function coordinatesFromAppleURL(url: URL): { latitude: number; longitude: number } | null {
+  const coordinateValue = firstNonEmpty([
+    url.searchParams.get("ll"),
+    url.searchParams.get("sll"),
+    url.searchParams.get("center"),
+  ]);
+  const coordinateMatch = coordinateValue?.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+  if (coordinateMatch) return coordinatesFromParts(coordinateMatch[1], coordinateMatch[2]);
+
+  const query = firstNonEmpty([url.searchParams.get("q"), url.searchParams.get("query")]);
+  const queryMatch = query?.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+  if (queryMatch) return coordinatesFromParts(queryMatch[1], queryMatch[2]);
+
+  return null;
+}
+
 function coordinatesFromHTML(html: string): { latitude: number; longitude: number } | null {
   const latitude = firstNonEmpty([
     metaContent(html, "place:location:latitude"),
@@ -336,7 +387,7 @@ function coordinatesFromParts(latitudeValue: string, longitudeValue: string): { 
 
 function placeNameFromGoogleURL(url: URL): string | null {
   const parts = url.pathname.split("/").map((part) => decodeURIComponent(part.replaceAll("+", " ")));
-  const placeIndex = parts.findIndex((part) => part === "place");
+  const placeIndex = parts.findIndex((part) => part === "place" || part === "search");
   if (placeIndex >= 0 && parts[placeIndex + 1]) {
     return cleanTitle(parts[placeIndex + 1]);
   }
@@ -349,6 +400,7 @@ function placeNameFromQuery(url: URL): string | null {
     url.searchParams.get("query"),
     url.searchParams.get("destination"),
     url.searchParams.get("daddr"),
+    url.searchParams.get("address"),
   ]);
   if (!query || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(query)) return null;
   return cleanTitle(query);
@@ -395,7 +447,8 @@ function decodeHTML(value: string): string {
 function inferredCategory(name: string): string {
   const lowered = name.toLowerCase();
   if (/(coffee|cafe|espresso|roaster|bakery)/.test(lowered)) return "coffee";
-  if (/(trail|hike|park|canyon|mountain|observatory)/.test(lowered)) return "hike";
+  if (/(park|playground|garden|plaza|beach|lake)/.test(lowered)) return "park";
+  if (/(trail|hike|canyon|mountain|observatory)/.test(lowered)) return "hike";
   if (/(restaurant|noodle|pizza|taco|sushi|grill|kitchen|diner)/.test(lowered)) return "restaurant";
   if (/(bar|wine|brewery|cocktail|pub)/.test(lowered)) return "bar";
   return "place";
@@ -415,6 +468,11 @@ function noPlace(providerSteps: string[], errorCode: string, errorMessage: strin
 function isGoogleMapsHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   return host === "google.com" || host.endsWith(".google.com");
+}
+
+function isAppleMapsHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "maps.apple.com";
 }
 
 function isShortMapHost(hostname: string): boolean {

@@ -2627,3 +2627,38 @@ Tests:
 Known issues:
 
 - The pre-existing boundary-import unit test failure from the build 25 upload entry remains unrelated to this TestFlight finalization.
+
+## 2026-06-15 11:53 PDT - Codex - Build 25 QA, Boundary Test, Roadmap, M6
+
+Agent: Codex
+Branch: `codex/m6-roadmap-next`
+Starting commit: `e5365dc`
+Starting status: clean detached `origin/main`; created branch `codex/m6-roadmap-next`.
+
+Goal: execute Joe's requested next steps: QA Build 25 status/checklist, fix the red boundary test, refresh roadmap/docs, then continue into the next M6 extraction/alpha-readiness slice.
+
+Expected files to touch:
+
+- `WanderTests/BoundaryImportTests.swift`
+- `docs/roadmap.md`
+- `docs/setup.md`
+- `docs/qa/`
+- M6 extraction-related files under `Wander/`, `WanderTests/`, `supabase/`, or docs as scoped after inspection
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Build `0.1 (25)` is approved/live on TestFlight per the latest agent log.
+- The known red suite item is `BoundaryImportTests.testClerkAndSupabaseImportsStayBehindBoundaries()`, which appears to be failing on path normalization (`/privateWander/...`) rather than an actual new forbidden import.
+- `docs/roadmap.md` is stale and still references Build 13 as the immediate next step.
+
+Checkpoint:
+
+- Fixed `BoundaryImportTests` path normalization so `/private/...` simulator paths and symlink-standardized project roots compare correctly. Focused boundary test passed.
+- Updated M6 worker direction without adding fake extraction: Apple Maps links with `q` plus coordinates can become confirmable candidates, Google Maps `/maps/search/...` paths parse names, and `park` now infers `park` instead of `hike`.
+- Updated `docs/roadmap.md` to Build 25/current-M6 state and added a post-M6 roadmap table.
+- Updated `docs/setup.md` with Build 25 approval and current boundary-test status.
+- Added `docs/qa/2026-06-15-build-25-current-qa-and-m6-checklist.md` for the next friend QA session.
+- Deno is not installed in this environment, so the Edge Function helper changes cannot be executed locally with Deno tests here; verification will use code review plus the iOS suite unless Deno is installed or the worker is deployed to hosted Supabase.
+- Full iOS test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m6 CODE_SIGNING_ALLOWED=NO` executed 86 tests with 0 failures.
+- Deployed `supabase/functions/extraction-worker` to Supabase project `rugmtlgufrhlxwfkumhw` with `npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`.
