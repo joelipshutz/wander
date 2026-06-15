@@ -1308,7 +1308,7 @@ private enum MapPlaceSaveStep {
 
 private struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
-    let onSave: (MapPlaceSaveSubmission) async -> SaveResult?
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     @Environment(\.dismiss) private var dismiss
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedStatus: PlaceStatus
@@ -1318,7 +1318,7 @@ private struct MapPlaceSaveFlowSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
 
-    init(context: MapPlaceSaveContext, onSave: @escaping (MapPlaceSaveSubmission) async -> SaveResult?) {
+    init(context: MapPlaceSaveContext, onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?) {
         self.context = context
         self.onSave = onSave
         _selectedStatus = State(initialValue: context.initialStatus)

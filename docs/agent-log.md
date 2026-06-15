@@ -2726,3 +2726,56 @@ Known issues / testing focus:
 
 - This build packages the current M6 worker and QA docs. It does not add photo OCR, TikTok/Instagram extraction, native Contacts, share extension, or public web share pages.
 - Tester focus should be Apple Maps and Google Maps link extraction, unsupported/photo/social link rescue, park category handling, and the existing Build 25 QA checklist.
+
+## 2026-06-15 16:32 PDT - Codex - Pull Latest Update
+
+Agent: Codex
+Branch: `main`
+Starting commit: `3b5a5fd`
+Starting status: `## main...origin/main`, with `docs/agent-log.md` staged from prior pull-log coordination.
+
+Goal: pull the latest update into the workspace.
+
+Expected files to touch:
+
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Read the latest coordination entries and inspected the staged agent-log diff before pulling.
+
+Completion:
+
+- Sandboxed `git pull --rebase --autostash origin main` failed because Git could not write `.git/FETCH_HEAD`.
+- Reran the same pull with approved escalation; `origin/main` fast-forwarded from `3b5a5fd` to `f782303`.
+- Resolved the agent-log autostash conflict by preserving upstream Build 25/26 release history and this pull note.
+- No tests run; this was a branch update plus coordination-log maintenance only.
+
+## 2026-06-15 16:36 PDT - Codex - Fix MapScreen Submission Compile Error
+
+Agent: Codex
+Branch: `codex/fix-map-submission-concurrency`
+Starting commit: `f782303`
+Starting status: `## main...origin/main`, with `docs/agent-log.md` staged from prior pull-log coordination.
+
+Goal: investigate and fix the Xcode Swift 6 compile error in `MapScreen`: "Sending 'submission' risks causing data races."
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- User supplied an Xcode screenshot showing a single `MapScreen` issue: "Sending 'submission' risks causing data races."
+- Fetched `origin` and created short-lived branch `codex/fix-map-submission-concurrency` before editing, per current `AGENTS.md`.
+
+Completion:
+
+- Reproduced the compiler failure with elevated `xcodebuild build -quiet`: `Wander/Features/Map/MapScreen.swift:1582:32: error: sending 'submission' risks causing data races`.
+- Root cause: `MapPlaceSaveFlowSheet` captured a main actor-isolated `MapPlaceSaveSubmission` and sent it to an `onSave` closure typed as nonisolated, even though the only caller routes to `@MainActor saveMapFlowSubmission`.
+- Fixed `MapPlaceSaveFlowSheet.onSave` by marking the closure and initializer parameter `@MainActor`, matching the actual UI/store callback isolation.
+- Elevated `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`: passed.
+- Documented `xcodebuild test` destination from `AGENTS.md` failed locally because `iPhone 16 Plus, OS 18.6` is not installed in this Xcode environment.
+- Elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`: passed, 86 tests.
+- Commit: `0a5afb7` (`fix: isolate map save submission callback`).
