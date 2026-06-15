@@ -2706,3 +2706,22 @@ Initial notes:
 - Current marketing version is `0.1`.
 - Current build number is `25`; this release will use build `26`.
 - This build packages the already-merged M6 worker/docs/test updates into a new iOS binary even though the backend `extraction-worker` was already deployed.
+
+Outcome:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `25` to `26` in `project.yml` and ran `xcodegen generate`.
+- Build bump commit pushed to `main`: `96ba474` (`chore: bump testflight build 26`).
+- Full iOS test suite passed:
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-test26 CODE_SIGNING_ALLOWED=NO`
+  - Result: 86 tests, 0 failures.
+- Archived build `0.1 (26)` at `/private/tmp/Wander-0.1-build26.xcarchive`.
+- Uploaded build `0.1 (26)` with `xcodebuild -exportArchive`; Xcode output ended with `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 26 --timeout-attempts 40 --poll-seconds 30`.
+- Build `0.1 (26)` App Store Connect id: `c5b96d4d-7deb-4fb8-ae23-22db6370650e`.
+- Build `0.1 (26)` is `VALID`, export compliance is `usesNonExemptEncryption=false`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+- Public TestFlight link remains `https://testflight.apple.com/join/knEhRa6t`.
+
+Known issues / testing focus:
+
+- This build packages the current M6 worker and QA docs. It does not add photo OCR, TikTok/Instagram extraction, native Contacts, share extension, or public web share pages.
+- Tester focus should be Apple Maps and Google Maps link extraction, unsupported/photo/social link rescue, park category handling, and the existing Build 25 QA checklist.
