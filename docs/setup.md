@@ -1,6 +1,6 @@
 # Setup
 
-Last updated: 2026-06-04
+Last updated: 2026-06-15
 
 ## Requirements
 
@@ -80,11 +80,13 @@ Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored.
 xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO
 ```
 
-Known good result on 2026-06-01:
+Known good focused regression result on 2026-06-15:
 
 ```text
-18 tests, 0 failures
+BoundaryImportTests.testClerkAndSupabaseImportsStayBehindBoundaries(): passed
 ```
+
+Run the full suite before merging implementation branches. As of this update, the previous red boundary-import path-normalization failure has a branch fix in `codex/m6-roadmap-next`.
 
 If CoreSimulator or Swift plugin server errors happen in a sandbox, rerun from a normal terminal or with approved elevated access.
 
@@ -130,6 +132,8 @@ npx supabase test db supabase/tests/rls_visibility.sql
 ```
 
 The hosted migrations and Clerk profile webhook have been pushed/deployed. The latest hosted migration is `20260604185000_save_own_place.sql`, which adds the direct signed-in own-place save RPC used by the iOS add flow. The current SQL tests passed against hosted Postgres through a temporary Node `pg` runner because the Supabase CLI pgTAP runner still requires Docker.
+
+The `extraction-worker` Edge Function was last deployed from branch `codex/m6-roadmap-next` on 2026-06-15. It supports coordinate-backed Google Maps, Apple Maps, and generic coordinate metadata links while leaving unsupported/photo/social sources as drafts/manual rescue.
 
 Current hosted SQL test status:
 
@@ -214,6 +218,7 @@ Current status as of 2026-06-10:
 - Build `0.1 (22)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.
 - Build `0.1 (23)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.
 - Build `0.1 (24)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.
+- Build `0.1 (25)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml` before each additional TestFlight upload, then run `xcodegen generate`.
 - If Xcode Accounts cannot be used for upload, pass the local App Store Connect API key to `xcodebuild -exportArchive` with `-authenticationKeyPath`, `-authenticationKeyID`, and `-authenticationKeyIssuerID`.
 - After `xcodebuild -exportArchive` reports `Uploaded Wander`, run `node scripts/testflight-release.mjs`. It waits for the uploaded build to become `VALID`, sets export compliance, attaches the build to `Wander Alpha`, submits external beta review, and prints the final TestFlight summary. Use `--dry-run` before upload to verify the resolved build number and App Store Connect config.
