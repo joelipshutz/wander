@@ -2778,4 +2778,4 @@ Completion:
 - Elevated `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`: passed.
 - Documented `xcodebuild test` destination from `AGENTS.md` failed locally because `iPhone 16 Plus, OS 18.6` is not installed in this Xcode environment.
 - Elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`: passed, 86 tests.
-- Commit: `0a5afb7` (`fix: isolate map save submission callback`).
+- Fix commit: `88850ca` (`fix: isolate map save submission callback`).
