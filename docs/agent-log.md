@@ -2685,3 +2685,24 @@ Outcome:
 - Deleted remote branch `codex/m6-roadmap-next`.
 - Detached this local worktree at merged `origin/main` and deleted the local `codex/m6-roadmap-next` branch after squash merge cleanup.
 - No TestFlight build bump, archive, or Slack release note for this closure step because the merge does not change the iOS app binary; the backend `extraction-worker` change was already deployed to Supabase before merge. If a later iOS app-code merge lands, resume the normal build bump -> archive/upload -> TestFlight helper -> Slack note sequence.
+
+## 2026-06-15 12:26 PDT - Codex - Build 26 TestFlight Release
+
+Agent: Codex
+Branch: detached `origin/main` at `7aa23ed`
+Starting status: clean detached `origin/main` after closing PR #4.
+
+Goal: Joe asked to push the current `main` state to TestFlight. Follow the required release order: bump build number, regenerate project, commit/push, run verification, archive/upload, run TestFlight helper, then post Slack.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+- `docs/setup.md`
+
+Initial notes:
+
+- Current marketing version is `0.1`.
+- Current build number is `25`; this release will use build `26`.
+- This build packages the already-merged M6 worker/docs/test updates into a new iOS binary even though the backend `extraction-worker` was already deployed.
