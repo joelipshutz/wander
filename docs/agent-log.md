@@ -2905,3 +2905,37 @@ Verification:
 Outcome:
 
 - Ready to commit and push to existing PR #6.
+
+## 2026-06-16 11:39 PDT - Codex - Shared Agent Skills And Worktree Guidance
+
+Agent: Codex
+Branch: `codex/shared-agent-skills`
+Starting status: main checkout clean at `183e26c`; existing worktree `/private/tmp/recme-auth-save-persist` on `codex/auth-save-persist`; new worktree created at `/private/tmp/recme-shared-agent-skills`.
+
+Goal: extract the rec.me PR merge/TestFlight and TestFlight feedback automations into repo-owned shared skills, add a local installer/checker so another Codex instance can index them, and update repo agent instructions to require checking whether a worktree is needed before non-trivial work.
+
+Expected files to touch:
+
+- `AGENTS.md`
+- `agent-skills/recme-pr-review-merge-release/SKILL.md`
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `scripts/install-agent-skills.sh`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Mission Control task creation failed because `http://localhost:4000/api/tasks` was unreachable from this shell.
+- No overlapping edits detected in the main checkout. Existing worktree appears unrelated.
+
+Checkpoint:
+
+- Added repo-owned shared skills for PR review/merge/TestFlight release and TestFlight feedback triage/implementation.
+- Added `scripts/install-agent-skills.sh` to symlink repo skills into `~/.codex/skills`, `~/.claude/skills`, and `~/.openclaw/workspace/skills`, with `--check` support for verifying another machine.
+- Updated `AGENTS.md` so agents must inspect existing worktrees and decide whether an isolated worktree is needed before non-trivial work.
+- Updated Joe's paused local Codex automations `rec-me-pr-review-merge-and-testflight-release` and `rec-me-testflight-feedback-bug-catcher` so they invoke the shared skills and stop if the indexed/repo-local skill is unavailable.
+
+Verification:
+
+- `bash -n scripts/install-agent-skills.sh` passed.
+- `scripts/install-agent-skills.sh --check` passed and reported the expected missing local symlinks because the branch has not been installed into Joe's global skill roots.
+- `git diff --check` passed.
