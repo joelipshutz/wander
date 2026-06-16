@@ -2871,6 +2871,43 @@ Outcome:
 
 - Ready to commit and push to existing PR #6.
 
+## 2026-06-16 11:28 PDT - Codex - Signed-Out Save Auth Handoff
+
+Agent: Codex
+Branch: `codex/auth-save-persist`
+Starting status: clean branch from `origin/main` at `183e26c` after local `main` was fast-forwarded with `git pull`.
+
+Goal: fix Joe's TestFlight feedback that saving a place while signed out prompts sign-in, but the place disappears after signing in.
+
+Expected files to touch:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Mission Control task creation failed because `http://localhost:4000/api/tasks` was not reachable in this run.
+- The likely cause is `apply(session:)` replacing the current guest profile with the signed-in profile while existing local saves still point at the old local guest `userID`.
+- Delete functionality is also actionable feedback, but it touches data-retention/backend delete semantics and should be handled as an approval-needed triage item rather than a drive-by local-only patch.
+
+Checkpoint:
+
+- Added a regression test for saving a place while signed out, then applying a signed-in session.
+- Updated `WanderStore.apply(session:)` so the signed-in profile claims active saved places from the local guest profile instead of leaving them attached to `local_profile_current`.
+- The first focused test attempt failed under sandbox due CoreSimulator/package-fetch access. The elevated rerun first targeted unavailable `iPhone 17 Pro,OS=26.5`, then used the documented `iPhone 16 Plus,OS=18.6` destination.
+- The pulled `main` failed Swift 6 compilation in `MapScreen.swift` because `MKMapItemRequest.mapItem` returns non-Sendable MapKit types from the new map-feature selection flow. Fixed with `@preconcurrency import MapKit`, matching the compiler's suggested compatibility mode.
+
+Verification:
+
+- Passed focused regression: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-auth-save CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSignedInSessionClaimsGuestSavedPlaces`.
+- Passed full suite: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-auth-save CODE_SIGNING_ALLOWED=NO -jobs 1` (91 tests, 0 failures).
+
+Outcome:
+
+- Ready to commit and open a PR for the signed-out save/auth handoff fix plus the MapKit Swift 6 compile fix.
+- Remaining approval-needed feedback: full delete functionality should be implemented as a deliberate delete/retention/backend-RPC slice, not local UI-only removal.
+
 ## 2026-06-16 00:45 PDT - Codex - Place Preview Polish And Custom Tags
 
 Agent: Codex

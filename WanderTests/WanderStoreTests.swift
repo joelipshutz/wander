@@ -47,6 +47,43 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.profiles.map(\.id), ["user_live"])
     }
 
+    func testSignedInSessionClaimsGuestSavedPlaces() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_guest_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "saved before auth",
+            sourceType: .manual
+        )
+
+        XCTAssertEqual(store.currentUserVisiblePlaces.map(\.userPlace.id), [result.userPlaceID])
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Joe",
+                    handle: "joe",
+                    email: "jolipshutz@gmail.com"
+                )
+            )
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Maru Coffee" }
+        XCTAssertEqual(saved?.userPlace.id, result.userPlaceID)
+        XCTAssertEqual(saved?.userPlace.userID, "user_live")
+        XCTAssertEqual(saved?.userPlace.note, "saved before auth")
+        XCTAssertEqual(saved?.userPlace.syncState, .pendingCreate)
+    }
+
     func testSeededStoreShowsOwnAndVisibleSocialPlaces() {
         let store = makeStore()
 
