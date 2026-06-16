@@ -2947,3 +2947,10 @@ Outcome:
 - Branch pushed: `codex/shared-agent-skills`
 - Local automations updated: `rec-me-pr-review-merge-and-testflight-release`, `rec-me-testflight-feedback-bug-catcher`
 - Next step after merge: run `scripts/install-agent-skills.sh` from the stable repo checkout on each machine that should expose these as indexed skills.
+
+Follow-up:
+
+- Joe reported the automation still could not find an indexed skill because PR #8 had not landed and the stable repo-local `agent-skills/` path did not exist yet.
+- Installed temporary symlinks from the PR worktree into `~/.codex/skills`, `~/.claude/skills`, and `~/.openclaw/workspace/skills` so future local Codex/Claude/OpenClaw runs can index the two skills.
+- Updated the installer so existing symlinks to the same repo-owned `agent-skills/<skill-name>` can be safely re-pointed after PR #8 lands.
+- Updated both local automations with a temporary `/private/tmp/recme-shared-agent-skills/...` fallback until the stable repo-local skill files exist on `main`.
