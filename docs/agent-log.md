@@ -2809,3 +2809,10 @@ Checkpoint:
 - Updated `AGENTS.md` so future agents use `node scripts/open-pr.mjs --base main --title "<pr title>"` instead of asking Ryan to manually compose a PR.
 - `node --check scripts/open-pr.mjs`: passed.
 - Extended the helper to read ignored local token files: `.env.local`, `.env.github`, `~/.config/wander/github.env`, or a path passed with `--env`.
+
+Completion:
+
+- Added `.env.example` documenting the one-time local `GITHUB_TOKEN` setup. `.env.local` is already ignored by `.gitignore`.
+- `node scripts/open-pr.mjs --base main --title "fix: isolate map save submission callback" --dry-run`: passed and resolved branch/repo/base/title correctly.
+- Real helper run still cannot push/open the PR until a GitHub token or authenticated `gh` is available; failure is now explicit: `git push failed and no GITHUB_TOKEN/GH_TOKEN is set`.
+- Next step: create `.env.local` from `.env.example` with a GitHub token that has repo write permission, then rerun `node scripts/open-pr.mjs --base main --title "fix: isolate map save submission callback"`.
