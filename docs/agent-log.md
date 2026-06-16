@@ -2780,3 +2780,31 @@ Completion:
 - Elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`: passed, 86 tests.
 - Fix commit: `88850ca` (`fix: isolate map save submission callback`).
 - Packaging note: branch push/PR creation was attempted but blocked because `origin` uses HTTPS and Git could not read GitHub credentials in this environment; `gh` is not installed.
+
+## 2026-06-15 16:54 PDT - Codex - Automate PR Creation
+
+Agent: Codex
+Branch: `codex/fix-map-submission-concurrency`
+Starting commit: `a857988`
+Starting status: clean local fix branch, not pushed to origin.
+
+Goal: remove the recurring manual PR burden for Ryan/Codex work by adding a repo-local helper that pushes the current branch and opens a PR automatically when GitHub auth is available.
+
+Expected files to touch:
+
+- `scripts/open-pr.mjs`
+- `AGENTS.md`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Local Git exists (`/usr/bin/git`, Apple Git 2.50.1).
+- `gh` and Homebrew are not installed.
+- No `GITHUB_TOKEN`, `GH_TOKEN`, or `~/.ssh` key is available in this environment.
+- The Codex GitHub connector can read the repo but returned 403 when trying to create a branch, so it cannot be the write path for PR automation here.
+
+Checkpoint:
+
+- Added `scripts/open-pr.mjs`, a self-contained Node helper that refuses `main`, requires a clean worktree, pushes the current branch, and opens or reuses a PR through `gh` or `GITHUB_TOKEN`/`GH_TOKEN`.
+- Updated `AGENTS.md` so future agents use `node scripts/open-pr.mjs --base main --title "<pr title>"` instead of asking Ryan to manually compose a PR.
+- `node --check scripts/open-pr.mjs`: passed.
