@@ -2769,3 +2769,9 @@ Known follow-ups:
 
 - Need device/simulator QA for current-location add with the simulator location explicitly set to Los Angeles/current tester location.
 - Need the exact failing Apple Maps permalink from the tester if the hardened parser still cannot resolve their original Urth Caffe URL shape.
+
+Outcome:
+
+- Commit: `d2a1794` (`fix: address testflight add and map feedback`)
+- PR: https://github.com/joelipshutz/wander/pull/6
+- Branch pushed: `codex/testflight-feedback-batch`
