@@ -95,9 +95,15 @@ function runGit(args, options = {}) {
   });
 }
 
-function commandExists(command) {
+function resolveCommand(command, extraPaths = []) {
   const result = spawnSync("which", [command], { encoding: "utf8" });
-  return result.status === 0;
+  if (result.status === 0 && result.stdout.trim()) return result.stdout.trim();
+
+  for (const path of extraPaths.map(expandHome)) {
+    if (fs.existsSync(path)) return path;
+  }
+
+  return "";
 }
 
 function readFile(path) {
@@ -237,7 +243,7 @@ async function createPrWithToken({ repo, branch, base, title, body, draft, token
   });
 }
 
-function createPrWithGh({ repo, branch, base, title, body, draft }) {
+function createPrWithGh({ ghPath, repo, branch, base, title, body, draft }) {
   const args = [
     "pr",
     "create",
@@ -254,13 +260,13 @@ function createPrWithGh({ repo, branch, base, title, body, draft }) {
   ];
   if (draft) args.push("--draft");
 
-  const result = spawnSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const result = spawnSync(ghPath, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (result.status !== 0) {
     const alreadyExists = `${result.stderr}\n${result.stdout}`.match(/pull request.*already exists/i);
     if (!alreadyExists) throw new Error(result.stderr || result.stdout || "gh pr create failed");
 
     const view = spawnSync(
-      "gh",
+      ghPath,
       ["pr", "view", branch, "--repo", repo, "--json", "url", "--jq", ".url"],
       { encoding: "utf8" },
     );
@@ -294,7 +300,8 @@ async function main() {
     : options.body ?? `Automated PR from \`${branch}\`.\n\nVerification: see \`docs/agent-log.md\`.`;
   const envFileToken = tokenFromEnvFiles(options.envPath);
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || envFileToken.token;
-  const hasGh = commandExists("gh");
+  const ghPath = resolveCommand("gh", ["~/.local/bin/gh"]);
+  const hasGh = Boolean(ghPath);
 
   console.log(`Branch: ${branch}`);
   console.log(`Repository: ${repo}`);
@@ -316,7 +323,7 @@ async function main() {
   }
 
   const pr = hasGh
-    ? createPrWithGh({ repo, branch, base: options.base, title, body, draft: options.draft })
+    ? createPrWithGh({ ghPath, repo, branch, base: options.base, title, body, draft: options.draft })
     : await createPrWithToken({ repo, branch, base: options.base, title, body, draft: options.draft, token });
 
   console.log(`PR: ${pr.html_url}`);
