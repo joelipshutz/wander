@@ -3093,3 +3093,11 @@ Screenshot QA:
   - `/tmp/wander-place-detail-iphone17e.png`
 - Result: expanded saved-place sheet renders without obvious overlap on both checked devices. The smaller iPhone wraps the title and keeps actions/metadata readable above the tab bar.
 - Removed the generated `DerivedData-place-detail` folder again after screenshot QA.
+
+Outcome:
+
+- Implementation commit: `86f1759` (`feat: expand map place detail sheet`).
+- Tests: full `xcodebuild test` passed on `iPhone 17 Pro, OS=26.5`; documented `iPhone 16 Plus, OS=18.6` destination was unavailable locally.
+- Screenshot QA artifacts reviewed: `/tmp/wander-place-detail-iphone17pro.png` and `/tmp/wander-place-detail-iphone17e.png`.
+- Known issues/deferred: no paid Google/Yelp public ratings, no partner DoorDash/Resy/OpenTable API integration, no scraping, and no fake provider availability. Exact Order/Reserve links require a trusted direct action link; search-confidence links render with "Find ..." labels.
+- Next step: push branch and open/update the PR. If GitHub tooling is still unavailable, use `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
