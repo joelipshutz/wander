@@ -198,7 +198,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             }
         }
 
-        if WanderPlaceCategory.primary(for: item.pointOfInterestCategory) != nil {
+        if WanderPlaceCategory.primary(for: item.pointOfInterestCategory, name: item.name) != nil {
             score += 120
         }
 
@@ -234,7 +234,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         let fallback = fallbackCategory?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let pointCategory = item.pointOfInterestCategory
 
-        if let primary = WanderPlaceCategory.primary(for: pointCategory) {
+        if let primary = WanderPlaceCategory.primary(for: pointCategory, name: item.name) {
             return primary
         }
 
@@ -298,7 +298,10 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             .joined(separator: " ")
 
         if !street.isEmpty { return street }
-        return placemark.title
+        return placemark.title?
+            .components(separatedBy: ",")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func sourceProviderPlaceID(for item: MKMapItem, name: String) -> String {

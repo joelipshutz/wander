@@ -2870,3 +2870,38 @@ Verification:
 Outcome:
 
 - Ready to commit and push to existing PR #6.
+
+## 2026-06-16 00:45 PDT - Codex - Place Preview Polish And Custom Tags
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; fetched latest `origin`.
+
+Goal: remove duplicate city text in selected-place previews, improve MapKit category labels for health/fitness/vet-style POIs, add custom tag entry from the save flow's tag chips, and make Been/Wanna filter icons match their neutral trim.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- targeted tests if category/tag behavior needs coverage
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added shared `PlaceCandidate.previewSubtitle` formatting so candidate previews de-dupe locality when an address already ends with the city, including comma-style `street, city, state` addresses, and updated Map/Add candidate surfaces to use it.
+- Tightened MapKit address extraction so new candidates store street address separately from locality instead of building `street + city` into the address field.
+- Added name-aware category overrides and MapKit category mappings for hospital, gym, veterinarian, hike, pilates studio, and fitness studio style POIs.
+- Added inline `+` custom tag entry to the Add flow and Map save flow multi-tag rows; custom tag selections are included in saved attribute ordering.
+- Updated Been/Wanna map filter icons to use the same neutral ink trim color.
+
+Verification:
+
+- Initial sandboxed build failed from CoreSimulator/SwiftPM network restrictions only; reran elevated.
+- Fixed two Swift compile issues caught by `xcodebuild` while iterating: explicit `return` needed after adding local setup before array/switch expressions.
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-place-preview-tags CODE_SIGNING_ALLOWED=NO -jobs 1`.
+- Passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-place-preview-tags CODE_SIGNING_ALLOWED=NO -jobs 1` (90 tests, 0 failures).
+
+Outcome:
+
+- Ready to commit and push to existing PR #6.

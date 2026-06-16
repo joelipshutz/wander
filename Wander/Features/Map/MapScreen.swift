@@ -903,7 +903,7 @@ struct MapScreen: View {
     }
 
     private func category(for item: MKMapItem) -> String {
-        WanderPlaceCategory.primary(for: item.pointOfInterestCategory) ?? "place"
+        WanderPlaceCategory.primary(for: item.pointOfInterestCategory, name: item.name) ?? "place"
     }
 
     private func placeCandidate(from feature: MapFeature) -> PlaceCandidate? {
@@ -942,20 +942,27 @@ struct MapScreen: View {
     }
 
     private func category(for feature: MapFeature) -> String {
-        WanderPlaceCategory.primary(for: feature.pointOfInterestCategory) ?? "place"
+        WanderPlaceCategory.primary(for: feature.pointOfInterestCategory, name: feature.title) ?? "place"
     }
 
     private func address(for placemark: MKPlacemark) -> String? {
-        let parts = [
+        let street = [
             placemark.subThoroughfare,
-            placemark.thoroughfare,
-            placemark.locality
+            placemark.thoroughfare
         ].compactMap { value -> String? in
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed?.isEmpty == false ? trimmed : nil
         }
+        .joined(separator: " ")
 
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
+        guard !street.isEmpty else {
+            return placemark.title?
+                .components(separatedBy: ",")
+                .first?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return street
     }
 
     private static func resolvedInitialMapPlaceQuery(from arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {
@@ -1046,11 +1053,14 @@ private enum MapFilter: String, CaseIterable, Identifiable {
     }
 
     func iconColor(isSelected: Bool) -> Color {
-        if self == .social {
+        switch self {
+        case .social:
             return isSelected ? WanderTheme.pinSocial.color : WanderTheme.textInk.color
+        case .been, .wanna:
+            return trimColor(isSelected: isSelected)
+        case .you:
+            return isSelected ? WanderTheme.terracotta.color : WanderTheme.textInk.color
         }
-
-        return isSelected ? WanderTheme.terracotta.color : WanderTheme.textInk.color
     }
 
     func trimStyle(isSelected: Bool) -> StrokeStyle {
@@ -1096,23 +1106,10 @@ private struct MapSearchSuggestion: Identifiable {
     }
 
     static func mapKit(_ candidate: PlaceCandidate) -> MapSearchSuggestion {
-        let subtitle = [
-            candidate.formattedDistance,
-            candidate.address,
-            candidate.locality,
-            candidate.category == "place" ? nil : candidate.category,
-            "not saved"
-        ]
-        .compactMap { value -> String? in
-            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed?.isEmpty == false ? trimmed : nil
-        }
-        .joined(separator: " · ")
-
         return MapSearchSuggestion(
             id: "mapkit_\(candidate.id)",
             title: candidate.name,
-            subtitle: subtitle,
+            subtitle: candidate.previewSubtitle(trailingParts: ["not saved"]),
             category: candidate.category,
             source: .mapKit(candidate)
         )
@@ -1764,16 +1761,7 @@ private struct MapPlaceSaveFlowSheet: View {
     }
 
     private var candidateSubtitle: String {
-        [
-            context.candidate.address,
-            context.candidate.locality,
-            context.candidate.category.isEmpty ? nil : context.candidate.category
-        ]
-        .compactMap { value -> String? in
-            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed?.isEmpty == false ? trimmed : nil
-        }
-        .joined(separator: " · ")
+        context.candidate.previewSubtitle(includeDistance: false)
     }
 
     private func prepareDetails() {
@@ -1822,7 +1810,13 @@ private struct MapPlaceSaveFlowSheet: View {
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
         let values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-        return block.options.filter { values.contains($0) }
+        let optionSelections = block.options.filter { values.contains($0) }
+        let customSelections = values
+            .filter { value in
+                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted()
+        return optionSelections + customSelections
     }
 
     private func save() {
@@ -1914,10 +1908,13 @@ private struct MapSaveQuestionOptions: View {
     let block: AddQuestionBlock
     let selectedValues: Set<String>
     let onSelect: (String) -> Void
+    @State private var isAddingCustomTag = false
+    @State private var customTagText = ""
+    @FocusState private var isCustomTagFocused: Bool
 
     var body: some View {
         MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(block.options, id: \.self) { option in
+            ForEach(displayOptions, id: \.self) { option in
                 Button {
                     onSelect(option)
                 } label: {
@@ -1926,7 +1923,95 @@ private struct MapSaveQuestionOptions: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            if block.kind == .multiTag {
+                customTagControl
+            }
         }
+    }
+
+    private var displayOptions: [String] {
+        let customOptions = selectedValues
+            .filter { value in
+                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted()
+
+        return block.options + customOptions
+    }
+
+    @ViewBuilder
+    private var customTagControl: some View {
+        if isAddingCustomTag {
+            HStack(spacing: WanderTheme.spacing1) {
+                TextField("tag", text: $customTagText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .tint(WanderTheme.terracotta.color)
+                    .frame(width: 86)
+                    .submitLabel(.done)
+                    .focused($isCustomTagFocused)
+                    .onSubmit(addCustomTag)
+
+                Button(action: addCustomTag) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .black))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Save custom tag")
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(WanderTheme.surfaceRaised.color)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+            .fixedSize(horizontal: true, vertical: false)
+            .onAppear {
+                isCustomTagFocused = true
+            }
+        } else {
+            Button {
+                isAddingCustomTag = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .black))
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add custom tag")
+        }
+    }
+
+    private func addCustomTag() {
+        let tag = customTagText
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        guard !tag.isEmpty else {
+            isAddingCustomTag = false
+            customTagText = ""
+            return
+        }
+
+        if let existing = displayOptions.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+            if !selectedValues.contains(existing) {
+                onSelect(existing)
+            }
+        } else {
+            onSelect(tag)
+        }
+
+        customTagText = ""
+        isAddingCustomTag = false
     }
 }
 
@@ -2067,32 +2152,7 @@ private struct SearchCandidateSheet: View {
     }
 
     private var candidateSubtitle: String {
-        [
-            candidate.formattedDistance,
-            candidate.address,
-            candidate.locality,
-            candidate.category == "place" ? nil : candidate.category
-        ]
-        .compactMap { value -> String? in
-            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed?.isEmpty == false ? trimmed : nil
-        }
-        .joined(separator: " · ")
-    }
-}
-
-private extension PlaceCandidate {
-    var formattedDistance: String? {
-        guard let distanceMeters else { return nil }
-
-        let miles = distanceMeters / 1_609.344
-        if miles < 0.1 {
-            return "nearby"
-        }
-        if miles < 10 {
-            return String(format: "%.1f mi", miles)
-        }
-        return "\(Int(miles.rounded())) mi"
+        candidate.previewSubtitle()
     }
 }
 

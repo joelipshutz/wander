@@ -56,6 +56,104 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
     let confidence: Double
 }
 
+extension PlaceCandidate {
+    var previewFormattedDistance: String? {
+        guard let distanceMeters else { return nil }
+
+        let miles = distanceMeters / 1_609.344
+        if miles < 0.1 {
+            return "nearby"
+        }
+        if miles < 10 {
+            return String(format: "%.1f mi", miles)
+        }
+        return "\(Int(miles.rounded())) mi"
+    }
+
+    func previewSubtitle(
+        includeDistance: Bool = true,
+        includeCategory: Bool = true,
+        trailingParts: [String?] = [],
+        fallback: String? = nil
+    ) -> String {
+        let locality = Self.trimmed(self.locality)
+        let address = Self.addressWithoutDuplicateLocality(self.address, locality: locality)
+        let category = includeCategory && !self.category.isEmpty && self.category != "place" ? self.category : nil
+        let baseParts: [String?] = [
+            includeDistance ? previewFormattedDistance : nil,
+            address,
+            locality,
+            category
+        ]
+        let parts = Self.dedupedDisplayParts(baseParts + trailingParts)
+
+        guard !parts.isEmpty else {
+            return fallback ?? "confidence \(Int(confidence * 100))%"
+        }
+
+        return parts.joined(separator: " · ")
+    }
+
+    private static func addressWithoutDuplicateLocality(_ address: String?, locality: String?) -> String? {
+        guard var address = trimmed(address) else { return nil }
+        guard let locality else { return address }
+
+        let normalizedAddress = normalizedDisplayPart(address)
+        let normalizedLocality = normalizedDisplayPart(locality)
+        if normalizedAddress == normalizedLocality {
+            return nil
+        }
+
+        let commaParts = address
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if commaParts.count > 1,
+           commaParts.dropFirst().contains(where: { normalizedDisplayPart($0) == normalizedLocality }),
+           let streetAddress = commaParts.first,
+           normalizedDisplayPart(streetAddress) != normalizedLocality {
+            return streetAddress
+        }
+
+        let suffixes = [", \(locality)", " \(locality)"]
+        for suffix in suffixes where address.lowercased().hasSuffix(suffix.lowercased()) {
+            address.removeLast(suffix.count)
+            address = address.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+            return address.isEmpty ? nil : address
+        }
+
+        return address
+    }
+
+    private static func dedupedDisplayParts(_ parts: [String?]) -> [String] {
+        var seen = Set<String>()
+        var displayParts: [String] = []
+
+        for part in parts {
+            guard let trimmed = trimmed(part) else { continue }
+            let normalized = normalizedDisplayPart(trimmed)
+            guard !seen.contains(normalized) else { continue }
+            seen.insert(normalized)
+            displayParts.append(trimmed)
+        }
+
+        return displayParts
+    }
+
+    private static func normalizedDisplayPart(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
 struct PlaceDraft: Equatable {
     let localID: String
     let serverID: String?

@@ -194,9 +194,11 @@ enum AddQuestionTemplates {
     ]
 
     private static func defaultBlocks(category: String) -> [AddQuestionBlock] {
-        [
+        let keyPrefix = normalizedKeyPrefix(for: category)
+
+        return [
             AddQuestionBlock(
-                key: "\(category.isEmpty ? "place" : category)_tags",
+                key: "\(keyPrefix)_tags",
                 title: "tags",
                 tag: "multi",
                 kind: .multiTag,
@@ -206,5 +208,15 @@ enum AddQuestionTemplates {
                 minimumOptionWidth: 104
             )
         ]
+    }
+
+    private static func normalizedKeyPrefix(for category: String) -> String {
+        let normalized = category
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "_")
+
+        return normalized.isEmpty ? "place" : normalized
     }
 }
