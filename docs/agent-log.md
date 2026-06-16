@@ -2817,3 +2817,4 @@ Completion:
 - Real helper run still cannot push/open the PR until a GitHub token or authenticated `gh` is available; failure is now explicit: `git push failed and no GITHUB_TOKEN/GH_TOKEN is set`.
 - Next step: create `.env.local` from `.env.example` with a GitHub token that has repo write permission, then rerun `node scripts/open-pr.mjs --base main --title "fix: isolate map save submission callback"`.
 - Installed GitHub CLI `gh` 2.94.0 to `~/.local/bin/gh` and updated `scripts/open-pr.mjs` to discover that path even when it is not on `PATH`.
+- Completed `gh auth login` browser/device flow for GitHub account `ryanlane23`; elevated `gh auth status` reports keyring auth with `repo`, `read:org`, and `gist` scopes, and HTTPS Git protocol.
