@@ -2818,3 +2818,4 @@ Completion:
 - Next step: create `.env.local` from `.env.example` with a GitHub token that has repo write permission, then rerun `node scripts/open-pr.mjs --base main --title "fix: isolate map save submission callback"`.
 - Installed GitHub CLI `gh` 2.94.0 to `~/.local/bin/gh` and updated `scripts/open-pr.mjs` to discover that path even when it is not on `PATH`.
 - Completed `gh auth login` browser/device flow for GitHub account `ryanlane23`; elevated `gh auth status` reports keyring auth with `repo`, `read:org`, and `gist` scopes, and HTTPS Git protocol.
+- `node scripts/open-pr.mjs --base main --title "fix: isolate map save submission callback"` pushed branch `codex/fix-map-submission-concurrency` and opened PR #5: https://github.com/joelipshutz/wander/pull/5.
