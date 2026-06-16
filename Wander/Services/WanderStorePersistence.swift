@@ -175,6 +175,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let sourceProvider: String
         let sourceProviderPlaceID: String?
         let confidence: Double?
+        let websiteURLString: String?
+        let phoneNumber: String?
+        let timeZoneIdentifier: String?
+        let actionLinksJSON: String?
         let syncStateRaw: String
         let localUpdatedAt: Date
         let serverUpdatedAt: Date?
@@ -196,6 +200,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
             sourceProvider = place.sourceProvider
             sourceProviderPlaceID = place.sourceProviderPlaceID
             confidence = place.confidence
+            websiteURLString = place.websiteURLString
+            phoneNumber = place.phoneNumber
+            timeZoneIdentifier = place.timeZoneIdentifier
+            actionLinksJSON = place.actionLinksJSON
             syncStateRaw = place.syncStateRaw
             localUpdatedAt = place.localUpdatedAt
             serverUpdatedAt = place.serverUpdatedAt
@@ -219,6 +227,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 sourceProvider: sourceProvider,
                 sourceProviderPlaceID: sourceProviderPlaceID,
                 confidence: confidence,
+                websiteURLString: websiteURLString,
+                phoneNumber: phoneNumber,
+                timeZoneIdentifier: timeZoneIdentifier,
+                actionLinksJSON: actionLinksJSON,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,
                 serverUpdatedAt: serverUpdatedAt,

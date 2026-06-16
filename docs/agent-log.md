@@ -2987,3 +2987,119 @@ Outcome:
 - Branch pushed: `codex/shared-agent-skills`
 - Local automations updated: `rec-me-pr-review-merge-and-testflight-release`, `rec-me-testflight-feedback-bug-catcher`
 - Next step after merge: run `scripts/install-agent-skills.sh` from the stable repo checkout on each machine that should expose these as indexed skills.
+
+## 2026-06-16 12:04 PDT - Codex - Place Detail Eng Plan
+
+Agent: Codex
+Branch: `codex/place-detail-eng-plan`
+Starting status: clean branch tracking `origin/main`; fetched latest `origin`; isolated worktree created at `/Users/ryanlieblein/Developer/Wander-worktrees/place-detail-eng-plan` because another agent may be working locally.
+
+Goal: run `/plan-eng-review` for the expanded saved/unsaved place full-height pull-up view: business actions, tags, ratings/review counts, saved personal metadata, and social notes from followed people.
+
+Expected files to touch:
+
+- `docs/agent-log.md`
+- likely a new implementation plan/review artifact under `docs/plans/`
+- possibly `docs/decisions.md` or `docs/open-questions.md` if durable decisions come out of the review
+
+Initial notes:
+
+- Main checkout was clean at start.
+- Existing detached worktree `/private/tmp/wander-pr7-merge-test` appears unrelated.
+- No overlapping active agent-log entry mentions the planned place detail implementation files yet.
+
+Checkpoint:
+
+- Ran the `/plan-eng-review` preflight in the isolated worktree.
+- Brain cache had no product or recent-decision digest for this project.
+- No branch-specific gstack design doc was found.
+- Codex `request_user_input` is unavailable in Default mode, so the review is paused at the required prerequisite decision: proceed directly with standard eng review or run `/office-hours` first.
+
+Checkpoint:
+
+- Ryan chose to proceed with standard eng review.
+- Loaded current Map/Discover place-detail code, local/remote models, Supabase visible-place RPC contract, TODOs, and the existing rich-place-profile decision.
+- Fetched latest `origin/main`; this branch is one commit behind `origin/main` (`b0918dc`, signed-out save auth handoff), which touches `MapScreen.swift`, `WanderLocalStore.swift`, `WanderStoreTests.swift`, and `docs/agent-log.md`. Review notes account for the landed changes, but the branch still needs update/rebase before any PR.
+- Verified current Google Places docs: `rating`, `userRatingCount`, `websiteUri`, and phone fields require Places API field masks and are billed fields; reviews/review summaries are a higher atmosphere tier. Google Maps URLs remain keyless for search/directions/share.
+- Verified Yelp Fusion exposes rating/review-count style data, but using it would introduce a second provider and matching/attribution work.
+- Step 0 surfaced a scope decision: keep this implementation provider-light and add source-provenance slots/fallback UI, or reverse the prior no-provider decision and build a Google/Yelp-backed metadata integration now.
+
+Checkpoint:
+
+- Ryan chose the provider-light direction: MapKit-provided website/phone/directions/share first, no paid ratings provider in v1.
+- Follow-up scope request: include Reserve / Order Now if it can be done free via DoorDash, Resy, OpenTable, etc.
+- Provider check: DoorDash Marketplace API is limited-access partner infrastructure, so no free structured "is this exact restaurant orderable" integration. OpenTable/Resy can be treated as external consumer destinations, but not as authoritative availability APIs unless a direct provider URL is captured. Plan should use direct place/provider URLs when known and safe search link-outs as secondary "Find delivery" / "Find reservations" actions, with source provenance and no fake availability.
+
+Outcome:
+
+- Wrote engineering plan: `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`.
+- Updated `docs/decisions.md` so the rich place profile decision allows MapKit/direct website and phone data plus exact direct Order/Reserve URLs, while keeping paid provider metadata and fake empty fields out of v0.1.
+- Wrote gstack test/task artifacts:
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-place-detail-eng-plan-eng-review-test-plan-20260616-122929.md`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/tasks-eng-review-20260616-122929.jsonl`
+- Recorded local gstack review status after creating a temporary `/private/tmp/gstack-bun-shim/bun` because the gstack review logger expects `bun` and this shell did not have it on PATH.
+- Verification: `git diff --check` passed. No app build/tests run because this pass produced docs/plan/decision artifacts only.
+- Rebased cleanly onto `origin/main` at `b0918dc`, committed `16cb09b`, and pushed branch `codex/place-detail-eng-plan`.
+- PR creation blocked: `gh` is not installed in this shell, and the GitHub connector returned 403 `Resource not accessible by integration` for pull-request creation. Draft PR can be created at `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
+
+## 2026-06-16 12:46 PDT - Codex - Place Detail Pull-Up Implementation
+
+Agent: Codex
+Branch: `codex/place-detail-eng-plan`
+Starting status: clean branch tracking `origin/codex/place-detail-eng-plan`; fetched latest `origin`; isolated worktree already active at `/Users/ryanlieblein/Developer/Wander-worktrees/place-detail-eng-plan`.
+
+Goal: implement the approved provider-light v1 from `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`: unified saved/unsaved map place sheet, MapKit/direct website and phone metadata, honest order/reserve link behavior, social notes at the bottom, and matching tests.
+
+Expected files to touch:
+
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `Wander/Services/PlaceExternalLinks.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderStoreTests.swift`
+- likely `WanderTests/PlaceExternalLinksTests.swift`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Main checkout remains separate at `/Users/ryanlieblein/Developer/wander`; this implementation stays in the existing isolated worktree.
+- No overlapping active worktree is editing the planned implementation files.
+
+Checkpoint:
+
+- Implemented the provider-light v1:
+  - Saved and unsaved map selections now use the same draggable place sheet.
+  - Unsaved search candidates can expand before save and can inherit social notes when they match a visible saved place.
+  - Saved places retain personal metadata in the expanded sheet, with friend/social notes at the bottom.
+  - `PlaceCandidate`, `LocalPlace`, and file persistence now carry website URL, phone number, time zone, and optional action-link JSON.
+  - MapKit candidates preserve `MKMapItem.url`, `phoneNumber`, and `timeZone`.
+  - External actions are centralized in `PlaceExternalLinks` for Website, Call, exact Order/Reserve/Menu links, honest search-labeled provider links, Share, and Directions.
+- Preserved existing stored business metadata when a later sparse candidate is saved.
+- Did not add paid Google/Yelp ratings/review count, partner APIs, scraping, or fake order/reservation availability. Exact Order/Reserve appears only when an exact direct action link exists; search-confidence links render as "Find delivery" or "Find reservations".
+- The documented simulator destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed on this machine, so that run failed before build with destination error code 70.
+- Verification passed on the installed simulator:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-place-detail CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+- Removed the generated `DerivedData-place-detail` folder after verification.
+
+Screenshot QA:
+
+- Built and installed the simulator app, then launched with `-WanderUseDemoFixtures -WanderMapPlace Woodcat -WanderMapSheetExpanded`.
+- Captured and reviewed:
+  - `/tmp/wander-place-detail-iphone17pro.png`
+  - `/tmp/wander-place-detail-iphone17e.png`
+- Result: expanded saved-place sheet renders without obvious overlap on both checked devices. The smaller iPhone wraps the title and keeps actions/metadata readable above the tab bar.
+- Removed the generated `DerivedData-place-detail` folder again after screenshot QA.
+
+Outcome:
+
+- Implementation commit: `86f1759` (`feat: expand map place detail sheet`).
+- Tests: full `xcodebuild test` passed on `iPhone 17 Pro, OS=26.5`; documented `iPhone 16 Plus, OS=18.6` destination was unavailable locally.
+- Screenshot QA artifacts reviewed: `/tmp/wander-place-detail-iphone17pro.png` and `/tmp/wander-place-detail-iphone17e.png`.
+- Known issues/deferred: no paid Google/Yelp public ratings, no partner DoorDash/Resy/OpenTable API integration, no scraping, and no fake provider availability. Exact Order/Reserve links require a trusted direct action link; search-confidence links render with "Find ..." labels.
+- Implementation and verification log commits were pushed before the PR creation attempt.
+- PR creation remains blocked: GitHub connector returned 403 `Resource not accessible by integration` when creating a PR, and `gh` is not installed in this shell.
+- Manual PR link: `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.

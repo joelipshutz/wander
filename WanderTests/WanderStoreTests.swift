@@ -142,6 +142,9 @@ final class WanderStoreTests: XCTestCase {
             longitude: -118.2354,
             sourceProvider: "mapkit",
             sourceProviderPlaceID: "mapkit_maru_3404070_-11823540",
+            websiteURLString: "https://maru.example",
+            phoneNumber: "+1 (213) 555-0100",
+            timeZoneIdentifier: "America/Los_Angeles",
             confidence: 0.92
         )
 
@@ -152,6 +155,50 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.nearbyConfirmed, true)
         XCTAssertEqual(saved?.place.address, "101 Arts District")
         XCTAssertEqual(saved?.place.sourceProviderPlaceID, "mapkit_maru_3404070_-11823540")
+        XCTAssertEqual(saved?.place.websiteURLString, "https://maru.example")
+        XCTAssertEqual(saved?.place.phoneNumber, "+1 (213) 555-0100")
+        XCTAssertEqual(saved?.place.timeZoneIdentifier, "America/Los_Angeles")
+    }
+
+    func testSavingSparseCandidateDoesNotEraseExistingBusinessMetadata() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let richCandidate = PlaceCandidate(
+            id: "mapkit_rich_maru",
+            name: "Maru Coffee",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit_rich_maru",
+            websiteURLString: "https://maru.example",
+            phoneNumber: "+1 (213) 555-0100",
+            timeZoneIdentifier: "America/Los_Angeles",
+            confidence: 0.92
+        )
+
+        _ = store.saveCandidate(richCandidate, status: .been, visibility: .followers, note: nil, sourceType: .currentLocation)
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_rich_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mapkit_rich_maru",
+                confidence: 0.75
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "still has actions",
+            sourceType: .manual
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Maru Coffee" }
+        XCTAssertEqual(saved?.place.websiteURLString, "https://maru.example")
+        XCTAssertEqual(saved?.place.phoneNumber, "+1 (213) 555-0100")
+        XCTAssertEqual(saved?.place.timeZoneIdentifier, "America/Los_Angeles")
+        XCTAssertEqual(saved?.userPlace.status, .wannaGo)
     }
 
     func testCurrentLocationCandidatesUseInjectedResolver() async throws {
@@ -272,6 +319,9 @@ final class WanderStoreTests: XCTestCase {
                 longitude: -118.2354,
                 sourceProvider: "mapkit",
                 sourceProviderPlaceID: "mapkit_persisted_maru",
+                websiteURLString: "https://maru.example",
+                phoneNumber: "+1 (213) 555-0100",
+                timeZoneIdentifier: "America/Los_Angeles",
                 confidence: 0.92
             ),
             status: .been,
@@ -290,6 +340,9 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.currentUser.id, "user_live")
         XCTAssertEqual(relaunchedStore.defaultVisibility, .mutuals)
         XCTAssertEqual(saved?.place.address, "101 Arts District")
+        XCTAssertEqual(saved?.place.websiteURLString, "https://maru.example")
+        XCTAssertEqual(saved?.place.phoneNumber, "+1 (213) 555-0100")
+        XCTAssertEqual(saved?.place.timeZoneIdentifier, "America/Los_Angeles")
         XCTAssertEqual(saved?.userPlace.status, .been)
         XCTAssertEqual(saved?.userPlace.visibility, .mutuals)
         XCTAssertEqual(saved?.userPlace.note, "window table")

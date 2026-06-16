@@ -53,10 +53,51 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
     var sourceProvider: String = "mapkit"
     var sourceProviderPlaceID: String? = nil
     var distanceMeters: Double? = nil
+    var websiteURLString: String? = nil
+    var phoneNumber: String? = nil
+    var timeZoneIdentifier: String? = nil
+    var actionLinksJSON: String? = nil
     let confidence: Double
 }
 
+struct PlaceActionLink: Equatable, Codable, Identifiable {
+    enum Kind: String, Codable {
+        case website
+        case order
+        case reserve
+        case menu
+        case deliverySearch
+        case reservationSearch
+    }
+
+    enum Source: String, Codable {
+        case mapkit
+        case userCaptured
+        case backendExtraction
+        case providerSearch
+    }
+
+    enum Confidence: String, Codable {
+        case exact
+        case search
+    }
+
+    let kind: Kind
+    let title: String
+    let urlString: String
+    let source: Source
+    let confidence: Confidence
+
+    var id: String {
+        "\(kind.rawValue)|\(source.rawValue)|\(urlString)"
+    }
+}
+
 extension PlaceCandidate {
+    var actionLinks: [PlaceActionLink] {
+        PlaceActionLink.decode(actionLinksJSON)
+    }
+
     var previewFormattedDistance: String? {
         guard let distanceMeters else { return nil }
 
@@ -154,6 +195,28 @@ extension PlaceCandidate {
     }
 }
 
+extension PlaceActionLink {
+    static func decode(_ json: String?) -> [PlaceActionLink] {
+        guard let json,
+              let data = json.data(using: .utf8),
+              let links = try? JSONDecoder().decode([PlaceActionLink].self, from: data)
+        else {
+            return []
+        }
+        return links
+    }
+
+    static func encode(_ links: [PlaceActionLink]) -> String? {
+        guard !links.isEmpty,
+              let data = try? JSONEncoder().encode(links),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return json
+    }
+}
+
 struct PlaceDraft: Equatable {
     let localID: String
     let serverID: String?
@@ -168,6 +231,10 @@ struct PlaceDraft: Equatable {
     let sourceProvider: String
     let sourceProviderPlaceID: String?
     let confidence: Double?
+    var websiteURLString: String? = nil
+    var phoneNumber: String? = nil
+    var timeZoneIdentifier: String? = nil
+    var actionLinksJSON: String? = nil
 }
 
 struct UserPlaceDraft: Equatable {
