@@ -2883,6 +2883,8 @@ Expected files to touch:
 
 - `Wander/Services/WanderLocalStore.swift`
 - `WanderTests/WanderStoreTests.swift`
+- `Wander/App/WanderRootView.swift`
+- `Wander/Features/Auth/AuthGateSheet.swift`
 - `docs/agent-log.md`
 
 Initial notes:
@@ -2895,6 +2897,7 @@ Checkpoint:
 
 - Added a regression test for saving a place while signed out, then applying a signed-in session.
 - Updated `WanderStore.apply(session:)` so the signed-in profile claims active saved places from the local guest profile instead of leaving them attached to `local_profile_current`.
+- Fixed the auth gate sheet color fill by applying the warm canvas presentation background and making `AuthGateSheet` fill the sheet before painting its background.
 - The first focused test attempt failed under sandbox due CoreSimulator/package-fetch access. The elevated rerun first targeted unavailable `iPhone 17 Pro,OS=26.5`, then used the documented `iPhone 16 Plus,OS=18.6` destination.
 - The pulled `main` failed Swift 6 compilation in `MapScreen.swift` because `MKMapItemRequest.mapItem` returns non-Sendable MapKit types from the new map-feature selection flow. Fixed with `@preconcurrency import MapKit`, matching the compiler's suggested compatibility mode.
 
@@ -2905,7 +2908,7 @@ Verification:
 
 Outcome:
 
-- Ready to commit and open a PR for the signed-out save/auth handoff fix plus the MapKit Swift 6 compile fix.
+- Opened PR #7 for the signed-out save/auth handoff fix, auth gate sheet color fill, and MapKit Swift 6 compile fix: https://github.com/joelipshutz/wander/pull/7.
 - Remaining approval-needed feedback: full delete functionality should be implemented as a deliberate delete/retention/backend-RPC slice, not local UI-only removal.
 
 ## 2026-06-16 00:45 PDT - Codex - Place Preview Polish And Custom Tags
