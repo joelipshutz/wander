@@ -3103,3 +3103,53 @@ Outcome:
 - Implementation and verification log commits were pushed before the PR creation attempt.
 - PR creation remains blocked: GitHub connector returned 403 `Resource not accessible by integration` when creating a PR, and `gh` is not installed in this shell.
 - Manual PR link: `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
+
+## 2026-06-16 13:31 PDT - Codex Automation - PR #9 Merge And Build 27 TestFlight Release
+
+Agent: Codex automation `rec-me-pr-review-merge-and-testflight-release`
+Branch: `main`
+Starting status: local `main` was clean but behind `origin/main`; fetched `origin` and reviewed PR #9 in isolated worktree `/private/tmp/wander-pr9`.
+
+Goal: run the shared `recme-pr-review-merge-release` workflow for open PRs targeting `main`, then perform the required TestFlight follow-up for any app-code/UI merge.
+
+Expected files to touch after merge:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+- `docs/setup.md`
+
+Review and merge:
+
+- Read automation memory, shared skill `/private/tmp/recme-shared-agent-skills/agent-skills/recme-pr-review-merge-release/SKILL.md`, gstack review/eng-review skill docs, `DESIGN.md`, recent `docs/agent-log.md`, and PR #9 metadata/diff.
+- PR #9: `https://github.com/joelipshutz/wander/pull/9`
+- PR head reviewed: `32df2dbafac03b6a851460ef7cc77624f3286186`
+- Review result: no blocking findings. Main risk areas checked were external URL/action trust, provider-light metadata persistence, saved/unsaved sheet behavior, and social-note ordering.
+- `git diff --check origin/main...HEAD` passed.
+- PR-stated simulator destination `iPhone 17 Pro, OS=26.5` was unavailable on this machine. Reran the repo-required destination instead:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-place-detail-review CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+- Result: passed on the PR worktree.
+- Squash-merged PR #9 into `main`; merge commit: `4d7aef7` (`feat: expand map place detail sheet`).
+
+Build 27 release:
+
+- Pulled latest `main`, which also included PR #8's repo-local shared agent skills.
+- Bumped `CURRENT_PROJECT_VERSION` from `26` to `27` in `project.yml`.
+- Ran `xcodegen generate`; generated `Wander.xcodeproj/project.pbxproj` changed only build number `26` to `27`.
+- Build bump commit pushed to `main`: `54a9053` (`chore: bump testflight build 27`).
+- Root release verification caveat:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build27 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet` hung in Xcode package/build-service loading and was interrupted.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-test27 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet` reached the test/finalize stage, then hung waiting for test workers/log recording and was interrupted.
+  - The generated result bundle `DerivedData-test27/Logs/Test/Test-Wander-2026.06.16_13-48-32--0700.xcresult` recorded cancelled build/test status and no reported test issues. Risk was treated as low because the PR-head iPhone 16 Plus test passed and the post-merge change was build-number metadata only.
+- Archived build `0.1 (27)` at `/private/tmp/Wander-0.1-build27.xcarchive`.
+- Uploaded build `0.1 (27)` with `xcodebuild -exportArchive`; Xcode output ended with `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 27 --timeout-attempts 40 --poll-seconds 30`.
+- Build `0.1 (27)` App Store Connect id: `f3acfad6-6134-4995-ae03-79a857460617`.
+- Build `0.1 (27)` is `VALID`, export compliance is `usesNonExemptEncryption=false`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+- Public TestFlight link remains `https://testflight.apple.com/join/knEhRa6t`.
+- Tester-facing Slack note posted to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781643578905919`.
+
+Known issues / testing focus:
+
+- Tester focus: map search/tapped-place expandable detail sheet, Website/Call/Share/Directions actions, metadata persistence after save, and social/friend notes at the bottom of the expanded sheet.
+- Deferred: no Google/Yelp public ratings/review counts, no DoorDash/Resy/OpenTable partner API integration or scraping, no photo OCR, no native Contacts, no share extension, and no public web share pages.
