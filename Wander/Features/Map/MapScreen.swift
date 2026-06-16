@@ -155,9 +155,15 @@ struct MapScreen: View {
                 .tint(Self.currentLocationTint)
                 .ignoresSafeArea()
                 .onTapGesture(coordinateSpace: .local) { point in
-                    guard selectedPlaceID != nil || selectedSearchCandidateID != nil else { return }
                     guard !isTapNearSelectableMarker(point, proxy: proxy) else { return }
-                    clearMapSelection()
+                    if let coordinate = proxy.convert(point, from: .local),
+                       CLLocationCoordinate2DIsValid(coordinate) {
+                        Task {
+                            await resolveTappedMapLocation(at: coordinate)
+                        }
+                    } else {
+                        clearMapSelection()
+                    }
                 }
                 .onMapCameraChange(frequency: .onEnd) { context in
                     currentSearchRegion = context.region
@@ -188,7 +194,7 @@ struct MapScreen: View {
                                 Button {
                                     toggle(filter)
                                 } label: {
-                                    MapFilterChip(title: filter.title, systemImage: filter.systemImage, isSelected: selectedFilters.contains(filter))
+                                    MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -397,6 +403,39 @@ struct MapScreen: View {
         }
     }
 
+    @MainActor
+    private func resolveTappedMapLocation(at coordinate: CLLocationCoordinate2D) async {
+        mapSearchMessage = "Checking that spot..."
+
+        do {
+            guard let candidate = try await mapKitCandidates(near: coordinate).first else {
+                clearMapSelection()
+                mapSearchMessage = "No place found at that spot."
+                return
+            }
+
+            if let visiblePlace = visiblePlace(matching: candidate) {
+                selectedPlaceID = visiblePlace.id
+                selectedSearchCandidateID = nil
+                mapSearchCandidates = []
+                isPlaceSheetExpanded = false
+                mapSearchMessage = nil
+                center(on: visiblePlace)
+                return
+            }
+
+            upsertMapSearchCandidate(candidate)
+            selectedPlaceID = nil
+            selectedSearchCandidateID = candidate.id
+            isPlaceSheetExpanded = false
+            center(on: candidate)
+            mapSearchMessage = "Map location. Tap + to add it."
+        } catch {
+            clearMapSelection()
+            mapSearchMessage = "No place found at that spot."
+        }
+    }
+
     private func mapKitCandidates(for query: String, limit: Int = 8) async throws -> [PlaceCandidate] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
@@ -405,8 +444,29 @@ struct MapScreen: View {
 
         let response = try await MKLocalSearch(request: request).start()
         let origin = await searchOriginLocation()
+        return mapKitCandidates(from: response.mapItems, query: query, origin: origin, limit: limit)
+    }
+
+    private func mapKitCandidates(near coordinate: CLLocationCoordinate2D, limit: Int = 6) async throws -> [PlaceCandidate] {
+        let origin = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+
+        for radius in [CLLocationDistance(70), CLLocationDistance(150), CLLocationDistance(300)] {
+            let request = MKLocalPointsOfInterestRequest(center: coordinate, radius: radius)
+            request.pointOfInterestFilter = .includingAll
+
+            let response = try await MKLocalSearch(request: request).start()
+            let candidates = mapKitCandidates(from: response.mapItems, query: nil, origin: origin, limit: limit)
+            if !candidates.isEmpty {
+                return candidates
+            }
+        }
+
+        return []
+    }
+
+    private func mapKitCandidates(from items: [MKMapItem], query: String?, origin: CLLocation, limit: Int) -> [PlaceCandidate] {
         var seen = Set<String>()
-        return response.mapItems
+        return items
             .sorted {
                 mapSearchRankingScore(for: $0, query: query, origin: origin)
                     > mapSearchRankingScore(for: $1, query: query, origin: origin)
@@ -537,9 +597,21 @@ struct MapScreen: View {
     }
 
     private func isAlreadyVisible(candidate: PlaceCandidate) -> Bool {
-        baseVisiblePlaces.contains { visiblePlace in
+        visiblePlace(matching: candidate) != nil
+    }
+
+    private func visiblePlace(matching candidate: PlaceCandidate) -> VisiblePlace? {
+        baseVisiblePlaces.first { visiblePlace in
             visiblePlace.place.sourceProviderPlaceID == candidate.sourceProviderPlaceID
                 || visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
+        }
+    }
+
+    private func upsertMapSearchCandidate(_ candidate: PlaceCandidate) {
+        if let index = mapSearchCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            mapSearchCandidates[index] = candidate
+        } else {
+            mapSearchCandidates.insert(candidate, at: 0)
         }
     }
 
@@ -740,17 +812,19 @@ struct MapScreen: View {
         )
     }
 
-    private func mapSearchRankingScore(for item: MKMapItem, query: String, origin: CLLocation) -> Double {
-        let normalizedQuery = Self.normalized(query)
+    private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {
+        let normalizedQuery = Self.normalized(query ?? "")
         let normalizedName = Self.normalized(item.name ?? "")
         var score = 0.0
 
-        if normalizedName == normalizedQuery {
-            score += 1_000
-        } else if normalizedName.hasPrefix(normalizedQuery) {
-            score += 750
-        } else if normalizedName.contains(normalizedQuery) {
-            score += 500
+        if !normalizedQuery.isEmpty {
+            if normalizedName == normalizedQuery {
+                score += 1_000
+            } else if normalizedName.hasPrefix(normalizedQuery) {
+                score += 750
+            } else if normalizedName.contains(normalizedQuery) {
+                score += 500
+            }
         }
 
         if item.pointOfInterestCategory != nil {
@@ -860,6 +934,37 @@ private enum MapFilter: String, CaseIterable, Identifiable {
         case .wanna: "circle.dashed"
         }
     }
+
+    func trimColor(isSelected: Bool) -> Color {
+        guard isSelected else {
+            return self == .social
+                ? WanderTheme.pinSocial.color.opacity(0.45)
+                : WanderTheme.surfaceRaised.color.opacity(0.55)
+        }
+
+        switch self {
+        case .social:
+            return WanderTheme.pinSocial.color
+        default:
+            return WanderTheme.terracotta.color
+        }
+    }
+
+    func iconColor(isSelected: Bool) -> Color {
+        if self == .social {
+            return isSelected ? WanderTheme.pinSocial.color : WanderTheme.textInk.color
+        }
+
+        return isSelected ? WanderTheme.terracotta.color : WanderTheme.textInk.color
+    }
+
+    func trimStyle(isSelected: Bool) -> StrokeStyle {
+        StrokeStyle(
+            lineWidth: isSelected ? 2 : 1,
+            lineCap: .round,
+            dash: self == .wanna ? [1, 4] : []
+        )
+    }
 }
 
 private struct MapSearchSuggestion: Identifiable {
@@ -898,6 +1003,7 @@ private struct MapSearchSuggestion: Identifiable {
     static func mapKit(_ candidate: PlaceCandidate) -> MapSearchSuggestion {
         let subtitle = [
             candidate.formattedDistance,
+            candidate.address,
             candidate.locality,
             candidate.category == "place" ? nil : candidate.category,
             "not saved"
@@ -1093,16 +1199,15 @@ private struct RecenterButton: View {
 }
 
 private struct MapFilterChip: View {
-    let title: String
-    let systemImage: String
+    let filter: MapFilter
     let isSelected: Bool
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage)
+            Image(systemName: filter.systemImage)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
-            Text(title)
+                .foregroundStyle(filter.iconColor(isSelected: isSelected))
+            Text(filter.title)
                 .lineLimit(1)
         }
         .font(.system(size: 12, weight: .bold))
@@ -1114,8 +1219,8 @@ private struct MapFilterChip: View {
         .overlay(
             Capsule()
                 .stroke(
-                    isSelected ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color.opacity(0.55),
-                    lineWidth: isSelected ? 2 : 1
+                    filter.trimColor(isSelected: isSelected),
+                    style: filter.trimStyle(isSelected: isSelected)
                 )
         )
         .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
@@ -1869,6 +1974,7 @@ private struct SearchCandidateSheet: View {
     private var candidateSubtitle: String {
         [
             candidate.formattedDistance,
+            candidate.address,
             candidate.locality,
             candidate.category == "place" ? nil : candidate.category
         ]

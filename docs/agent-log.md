@@ -2775,3 +2775,40 @@ Outcome:
 - Commit: `d2a1794` (`fix: address testflight add and map feedback`)
 - PR: https://github.com/joelipshutz/wander/pull/6
 - Branch pushed: `codex/testflight-feedback-batch`
+
+## 2026-06-15 23:27 PDT - Codex - Map State Colors And POI Tap Add-On
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; continuing PR #6 with Ryan's add-on request.
+
+Goal: update Map filter state styling so Social uses blue trim and Wanna uses dotted/dashed trim, then enable tapping built-in map locations/POIs to open a place sheet and add them like search results.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/RepositoryProtocols.swift` if a candidate field needs to carry tapped MapKit data
+- `WanderTests/` if the tap conversion or style logic can be covered without UI automation
+- `docs/agent-log.md`
+
+Eng-review note:
+
+- Lightweight eng review applied because this touches Map interaction flow: prefer SwiftUI MapKit feature selection APIs over custom coordinate reverse-geocoding; normalize selected `MapFeature` into the same unsaved `PlaceCandidate` path used by search results; keep saved/search/social ownership and add behavior centralized through existing `SearchCandidateSheet` and `MapPlaceSaveFlowSheet`.
+
+Checkpoint:
+
+- Local SDK interfaces did not expose a direct `MapFeature` selection API, so implementation uses `MapProxy` tap-coordinate conversion plus `MKLocalPointsOfInterestRequest` around the tapped point.
+- Tapping a non-marker map location now searches nearby POIs in small increasing radii, normalizes the nearest/relevant `MKMapItem` into the same `PlaceCandidate` shape used by search results, and opens the existing unsaved candidate sheet with the `+` add flow.
+- If the tapped POI matches an already visible saved/social place by provider ID or name, the existing saved/social place sheet opens instead of creating a duplicate unsaved result.
+- Map filter chips are filter-aware: Social uses the existing social blue trim/icon when selected, and Wanna uses a round-dotted trim instead of a solid outline.
+- Search/tapped candidate subtitles now include address when available so tapped map locations show more associated MapKit data.
+
+Verification:
+
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-tap CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Outcome:
+
+- Implemented map filter color/style updates and tappable POI selection/add flow in `MapScreen`.
+- Continuing PR: https://github.com/joelipshutz/wander/pull/6
+- Known caveat: direct Apple map feature selection symbols were not present in the local SDK headers, so taps resolve by searching nearby MapKit POIs around the tapped coordinate. If MapKit returns a neighboring POI first, exact label selection may require an `MKMapView` bridge or a newer SwiftUI MapKit API.
