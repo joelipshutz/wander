@@ -513,7 +513,7 @@ struct AddScreen: View {
         saveToast = toast
 
         let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(result?.syncState == .failed ? .warning : .success)
+        generator.notificationOccurred(result?.syncState == .serverDenied ? .warning : .success)
 
         Task {
             try? await Task.sleep(nanoseconds: toast.dismissDelayNanoseconds)
@@ -808,7 +808,13 @@ struct AddScreen: View {
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
         let values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-        return block.options.filter { values.contains($0) }
+        let optionSelections = block.options.filter { values.contains($0) }
+        let customSelections = values
+            .filter { value in
+                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted()
+        return optionSelections + customSelections
     }
 }
 
@@ -882,9 +888,9 @@ private struct AddSaveToast: Identifiable, Equatable {
             dismissDelayNanoseconds = 2_000_000_000
         case .failed:
             title = "saved here"
-            message = "Sync needs a retry, but it is still on this phone."
-            systemImage = "exclamationmark.arrow.triangle.2.circlepath"
-            dismissDelayNanoseconds = 5_000_000_000
+            message = canSignIn ? "Sign in to back it up." : "We'll keep trying to back it up."
+            systemImage = "checkmark"
+            dismissDelayNanoseconds = 3_000_000_000
         case .pendingCreate, .pendingUpdate, .pendingDelete:
             title = "saved here"
             message = "Sync is queued."
@@ -1042,20 +1048,7 @@ private struct CandidateRow: View {
 
 private extension PlaceCandidate {
     var subtitle: String {
-        let parts = [
-            address,
-            locality,
-            category.isEmpty ? nil : category
-        ].compactMap { value -> String? in
-            guard let value, !value.isEmpty else { return nil }
-            return value
-        }
-
-        guard !parts.isEmpty else {
-            return "confidence \(Int(confidence * 100))%"
-        }
-
-        return parts.joined(separator: " · ")
+        previewSubtitle()
     }
 }
 
@@ -1156,10 +1149,13 @@ private struct SelectableQuestionOptions: View {
     let block: AddQuestionBlock
     let selectedValues: Set<String>
     let onSelect: (String) -> Void
+    @State private var isAddingCustomTag = false
+    @State private var customTagText = ""
+    @FocusState private var isCustomTagFocused: Bool
 
     var body: some View {
         WrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(block.options, id: \.self) { option in
+            ForEach(displayOptions, id: \.self) { option in
                 Button {
                     onSelect(option)
                 } label: {
@@ -1168,7 +1164,95 @@ private struct SelectableQuestionOptions: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            if block.kind == .multiTag {
+                customTagControl
+            }
         }
+    }
+
+    private var displayOptions: [String] {
+        let customOptions = selectedValues
+            .filter { value in
+                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted()
+
+        return block.options + customOptions
+    }
+
+    @ViewBuilder
+    private var customTagControl: some View {
+        if isAddingCustomTag {
+            HStack(spacing: WanderTheme.spacing1) {
+                TextField("tag", text: $customTagText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .tint(WanderTheme.terracotta.color)
+                    .frame(width: 86)
+                    .submitLabel(.done)
+                    .focused($isCustomTagFocused)
+                    .onSubmit(addCustomTag)
+
+                Button(action: addCustomTag) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .black))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Save custom tag")
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(WanderTheme.surfaceRaised.color)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+            .fixedSize(horizontal: true, vertical: false)
+            .onAppear {
+                isCustomTagFocused = true
+            }
+        } else {
+            Button {
+                isAddingCustomTag = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .black))
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add custom tag")
+        }
+    }
+
+    private func addCustomTag() {
+        let tag = customTagText
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        guard !tag.isEmpty else {
+            isAddingCustomTag = false
+            customTagText = ""
+            return
+        }
+
+        if let existing = displayOptions.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+            if !selectedValues.contains(existing) {
+                onSelect(existing)
+            }
+        } else {
+            onSelect(tag)
+        }
+
+        customTagText = ""
+        isAddingCustomTag = false
     }
 }
 

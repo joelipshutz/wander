@@ -541,6 +541,13 @@ final class WanderStore: ObservableObject {
             ? upsertSourceArtifact(sourceType: sourceType, originalInput: originalInput, localAssetRef: localAssetRef)
             : nil
         let job = artifact.map { upsertExtractionJob(sourceType: sourceType, artifact: $0) }
+        if let existing = existingUnresolvedDraft(
+            sourceType: sourceType,
+            sourceArtifactID: artifact.map { $0.serverID ?? $0.localID },
+            extractionJobID: job.map { $0.serverID ?? $0.localID }
+        ) {
+            return existing
+        }
 
         let draft = UnresolvedDraft(
             id: "draft_\(sourceType.rawValue)_\(unresolvedDrafts.count + 1)",
@@ -554,6 +561,26 @@ final class WanderStore: ObservableObject {
         unresolvedDrafts.append(draft)
         persist()
         return draft
+    }
+
+    private func existingUnresolvedDraft(
+        sourceType: AddSourceType,
+        sourceArtifactID: String?,
+        extractionJobID: String?
+    ) -> UnresolvedDraft? {
+        unresolvedDrafts.first { draft in
+            guard draft.sourceType == sourceType else { return false }
+
+            if let sourceArtifactID {
+                return draft.sourceArtifactID == sourceArtifactID
+            }
+
+            if let extractionJobID {
+                return draft.extractionJobID == extractionJobID
+            }
+
+            return false
+        }
     }
 
     @discardableResult
@@ -1404,6 +1431,12 @@ final class WanderStore: ObservableObject {
               let artifact = sourceArtifact(matching: artifactID),
               let job = extractionJob(matching: jobID)
         else { return }
+        if artifact.serverID != nil,
+           job.serverID != nil,
+           SyncState(rawValue: artifact.syncStateRaw) == .synced,
+           SyncState(rawValue: job.syncStateRaw) == .synced {
+            return
+        }
 
         do {
             let result = try await backend.enqueueExtractionJob(

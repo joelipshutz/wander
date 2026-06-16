@@ -169,6 +169,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
                     longitude: item.placemark.coordinate.longitude,
                     sourceProvider: "mapkit",
                     sourceProviderPlaceID: sourceID,
+                    distanceMeters: distanceMeters(from: origin, to: item),
                     confidence: confidence(for: item, fallbackCategory: fallbackCategory, origin: origin)
                 )
             )
@@ -197,7 +198,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             }
         }
 
-        if WanderPlaceCategory.primary(for: item.pointOfInterestCategory) != nil {
+        if WanderPlaceCategory.primary(for: item.pointOfInterestCategory, name: item.name) != nil {
             score += 120
         }
 
@@ -233,7 +234,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         let fallback = fallbackCategory?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let pointCategory = item.pointOfInterestCategory
 
-        if let primary = WanderPlaceCategory.primary(for: pointCategory) {
+        if let primary = WanderPlaceCategory.primary(for: pointCategory, name: item.name) {
             return primary
         }
 
@@ -278,6 +279,16 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         return min(0.96, 0.66 + categoryBoost + fallbackBoost + distanceBoost)
     }
 
+    private func distanceMeters(from origin: CLLocation?, to item: MKMapItem) -> Double? {
+        guard let origin else { return nil }
+
+        let itemLocation = CLLocation(
+            latitude: item.placemark.coordinate.latitude,
+            longitude: item.placemark.coordinate.longitude
+        )
+        return itemLocation.distance(from: origin)
+    }
+
     private func address(for placemark: MKPlacemark) -> String? {
         let street = [placemark.subThoroughfare, placemark.thoroughfare]
             .compactMap { value -> String? in
@@ -287,7 +298,10 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             .joined(separator: " ")
 
         if !street.isEmpty { return street }
-        return placemark.title
+        return placemark.title?
+            .components(separatedBy: ",")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func sourceProviderPlaceID(for item: MKMapItem, name: String) -> String {
@@ -317,6 +331,8 @@ protocol CurrentLocationProviding {
 
 @MainActor
 final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcurrency CLLocationManagerDelegate {
+    private static let maximumLocationAge: TimeInterval = 120
+    private static let maximumHorizontalAccuracy: CLLocationAccuracy = 300
     private let manager = CLLocationManager()
     private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
@@ -369,7 +385,10 @@ final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcur
         guard let continuation = locationContinuation else { return }
         locationContinuation = nil
 
-        guard let location = locations.last else {
+        guard let location = locations
+            .sorted(by: { $0.timestamp > $1.timestamp })
+            .first(where: { Self.isUsableLocation($0) })
+        else {
             continuation.resume(throwing: PlaceResolutionError.locationUnavailable)
             return
         }
@@ -381,5 +400,15 @@ final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcur
         guard let continuation = locationContinuation else { return }
         locationContinuation = nil
         continuation.resume(throwing: PlaceResolutionError.locationUnavailable)
+    }
+
+    private static func isUsableLocation(_ location: CLLocation) -> Bool {
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= maximumHorizontalAccuracy
+        else {
+            return false
+        }
+
+        return abs(location.timestamp.timeIntervalSinceNow) <= maximumLocationAge
     }
 }

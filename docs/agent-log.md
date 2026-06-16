@@ -2726,3 +2726,182 @@ Known issues / testing focus:
 
 - This build packages the current M6 worker and QA docs. It does not add photo OCR, TikTok/Instagram extraction, native Contacts, share extension, or public web share pages.
 - Tester focus should be Apple Maps and Google Maps link extraction, unsupported/photo/social link rescue, park category handling, and the existing Build 25 QA checklist.
+
+## 2026-06-15 22:42 PDT - Codex - TestFlight Feedback Batch
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean `main` aligned with `origin/main`; branch created for isolated feedback fixes.
+
+Goal: investigate and fix recent `#testflight-feedback` reports: false manual-add sync retry, Apple Maps Urth Caffe extraction failure, duplicate unresolved drafts for the same failed link, current-location add resolving to San Francisco, and map search distance/relevance ranking.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `WanderTests/`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Recent log shows no active overlapping branch after Build 26 release.
+- Prior M6 work already improved Apple/Google Maps parsing, but Build 26 tester feedback shows at least one Apple Maps URL still falls through to unresolved draft.
+
+Checkpoint:
+
+- False manual-add sync retry: softened the Add success toast for `.failed` sync state so a successful local-first save no longer shows "Sync needs a retry" as the main tester-facing message. It now keeps the success framing while saying the app will keep trying to back it up.
+- Apple Maps Urth Caffe-style link parsing: expanded Apple Maps query parsing to accept additional place-name keys and address-like Apple Maps parameters with letters, covered by `LinkPlaceParserTests.testParsesAppleMapsAddressParameter`.
+- Duplicate failed-link drafts: made unresolved drafts idempotent by source artifact/job, and skipped remote extraction enqueue when the matching artifact/job is already synced. Updated store coverage so saving the same link twice produces one visible draft.
+- Current-location add wrong-place guard: `CoreLocationProvider` now rejects stale or low-accuracy locations instead of using an old cached coordinate as live current location. If the simulator/device is actively set to San Francisco, the app will still receive San Francisco from CoreLocation; that requires device/simulator location settings, not app math.
+- Map search distance/ranking: search candidates now carry `distanceMeters`, show estimated distance in typeahead/search sheets/Add candidate rows, rank by name/query relevance first and proximity second, and dedupe same-name same-locality results with closer/relevant results first.
+
+Verification:
+
+- Focused tests passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-feedback CODE_SIGNING_ALLOWED=NO -only-testing:WanderTests/LinkPlaceParserTests -only-testing:WanderTests/WanderStoreTests/testDraftsAreIdempotentBySourceHash`
+- Plain simulator build passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-feedback CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full suite attempted three times, but local Xcode failed before reaching Wander tests due OS resource exhaustion spawning `swift-frontend` / loading `swift-plugin-server` (`Resource temporarily unavailable`) in package dependencies (`XCTestDynamicOverlay`, `NukeUI`, `ClerkKit`). Treat as an environment blocker, not an observed test failure in Wander code.
+
+Known follow-ups:
+
+- Need device/simulator QA for current-location add with the simulator location explicitly set to Los Angeles/current tester location.
+- Need the exact failing Apple Maps permalink from the tester if the hardened parser still cannot resolve their original Urth Caffe URL shape.
+
+Outcome:
+
+- Commit: `d2a1794` (`fix: address testflight add and map feedback`)
+- PR: https://github.com/joelipshutz/wander/pull/6
+- Branch pushed: `codex/testflight-feedback-batch`
+
+## 2026-06-15 23:27 PDT - Codex - Map State Colors And POI Tap Add-On
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; continuing PR #6 with Ryan's add-on request.
+
+Goal: update Map filter state styling so Social uses blue trim and Wanna uses dotted/dashed trim, then enable tapping built-in map locations/POIs to open a place sheet and add them like search results.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/RepositoryProtocols.swift` if a candidate field needs to carry tapped MapKit data
+- `WanderTests/` if the tap conversion or style logic can be covered without UI automation
+- `docs/agent-log.md`
+
+Eng-review note:
+
+- Lightweight eng review applied because this touches Map interaction flow: prefer SwiftUI MapKit feature selection APIs over custom coordinate reverse-geocoding; normalize selected `MapFeature` into the same unsaved `PlaceCandidate` path used by search results; keep saved/search/social ownership and add behavior centralized through existing `SearchCandidateSheet` and `MapPlaceSaveFlowSheet`.
+
+Checkpoint:
+
+- Local SDK interfaces did not expose a direct `MapFeature` selection API, so implementation uses `MapProxy` tap-coordinate conversion plus `MKLocalPointsOfInterestRequest` around the tapped point.
+- Tapping a non-marker map location now searches nearby POIs in small increasing radii, normalizes the nearest/relevant `MKMapItem` into the same `PlaceCandidate` shape used by search results, and opens the existing unsaved candidate sheet with the `+` add flow.
+- If the tapped POI matches an already visible saved/social place by provider ID or name, the existing saved/social place sheet opens instead of creating a duplicate unsaved result.
+- Map filter chips are filter-aware: Social uses the existing social blue trim/icon when selected, and Wanna uses a round-dotted trim instead of a solid outline.
+- Search/tapped candidate subtitles now include address when available so tapped map locations show more associated MapKit data.
+
+Verification:
+
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-tap CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Outcome:
+
+- Implemented map filter color/style updates and tappable POI selection/add flow in `MapScreen`.
+- Continuing PR: https://github.com/joelipshutz/wander/pull/6
+- Known caveat: direct Apple map feature selection symbols were not present in the local SDK headers, so taps resolve by searching nearby MapKit POIs around the tapped coordinate. If MapKit returns a neighboring POI first, exact label selection may require an `MKMapView` bridge or a newer SwiftUI MapKit API.
+
+## 2026-06-16 08:42 PDT - Codex - Exact Map Feature Selection Correction
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; correcting previous POI tap implementation on PR #6 after Ryan clarified expected behavior.
+
+Goal: remove random-coordinate nearby POI resolution and make only actual tapped MapKit places/features open the unsaved place half-sheet with `+`, while blank map taps dismiss/clear any temporary pin.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Confirmed local iPhoneOS SDK exposes SwiftUI `MapFeature` selection plus `MKMapItemRequest(feature:)`; the previous broader coordinate fallback is not the right behavior for this product interaction.
+- Replaced map coordinate tap resolution with SwiftUI `Map(position:selection:)` using `MapFeature`; only point-of-interest features with titles are selectable.
+- Selected map features now resolve through `MKMapItemRequest(feature:)`, normalize into the same `PlaceCandidate` shape as search results, and open the existing half-sheet with the `+` save action.
+- Blank map taps clear the native feature selection and remove the temporary map candidate/pin; they no longer synthesize a candidate from nearby coordinates.
+- iOS 18+ hides the native MapKit selection accessory so the app-owned half-sheet is the primary UI; iOS 17 keeps feature selection support without using unavailable APIs.
+- Tried `xcodegen generate` after removing stale test coverage, but `xcodegen` is not installed in this shell, so the existing referenced test file was kept with neutral radius-helper tests to avoid breaking the generated project.
+
+Verification:
+
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-feature CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-map-feature-tests CODE_SIGNING_ALLOWED=NO -jobs 1` (87 tests, 0 failures)
+
+Outcome:
+
+- Corrected the map tap behavior on PR #6 so random map coordinates do nothing, while actual Apple map place taps open/save through the app's existing search candidate flow.
+
+## 2026-06-16 08:55 PDT - Codex - Map Filter Neutral Trim And Single POI Marker
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; continuing PR #6 polish request.
+
+Goal: make Been/Wanna filter pill outlines neutral instead of terracotta, and prevent duplicate native Apple POI + Wander candidate markers while an unsaved MapKit place is selected.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Map filter trim colors so Social remains blue, You remains warm, and Been/Wanna use neutral ink-toned outlines; Wanna keeps the existing dotted trim style.
+- Updated native MapKit feature selection so the unsaved selected Apple POI drives the bottom sheet/add flow without also rendering a Wander candidate marker. When the selected POI matches an already saved place, native selection clears and the saved Wander marker becomes the selected marker.
+
+Verification:
+
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-marker-polish CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-map-marker-polish-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 87 tests, 0 failures.
+
+Outcome:
+
+- Ready to commit and push to existing PR #6.
+
+## 2026-06-16 00:45 PDT - Codex - Place Preview Polish And Custom Tags
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; fetched latest `origin`.
+
+Goal: remove duplicate city text in selected-place previews, improve MapKit category labels for health/fitness/vet-style POIs, add custom tag entry from the save flow's tag chips, and make Been/Wanna filter icons match their neutral trim.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- targeted tests if category/tag behavior needs coverage
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added shared `PlaceCandidate.previewSubtitle` formatting so candidate previews de-dupe locality when an address already ends with the city, including comma-style `street, city, state` addresses, and updated Map/Add candidate surfaces to use it.
+- Tightened MapKit address extraction so new candidates store street address separately from locality instead of building `street + city` into the address field.
+- Added name-aware category overrides and MapKit category mappings for hospital, gym, veterinarian, hike, pilates studio, and fitness studio style POIs.
+- Added inline `+` custom tag entry to the Add flow and Map save flow multi-tag rows; custom tag selections are included in saved attribute ordering.
+- Updated Been/Wanna map filter icons to use the same neutral ink trim color.
+
+Verification:
+
+- Initial sandboxed build failed from CoreSimulator/SwiftPM network restrictions only; reran elevated.
+- Fixed two Swift compile issues caught by `xcodebuild` while iterating: explicit `return` needed after adding local setup before array/switch expressions.
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-place-preview-tags CODE_SIGNING_ALLOWED=NO -jobs 1`.
+- Passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-place-preview-tags CODE_SIGNING_ALLOWED=NO -jobs 1` (90 tests, 0 failures).
+
+Outcome:
+
+- Ready to commit and push to existing PR #6.
