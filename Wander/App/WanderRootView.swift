@@ -44,6 +44,7 @@ struct WanderRootView: View {
             AuthGateSheet(request: request)
                 .environmentObject(auth)
                 .presentationDetents([.medium])
+                .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .sheet(isPresented: $auth.isPresentingNativeAuth) {
             ClerkNativeAuthView()

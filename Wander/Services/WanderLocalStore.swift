@@ -964,6 +964,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func apply(session: AuthSession) {
+        let previousCurrentUser = currentUser
         let handle = normalizedSessionHandle(from: session)
         let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: handle)
         let localID = "local_profile_current"
@@ -980,7 +981,29 @@ final class WanderStore: ObservableObject {
         currentUser = profile
         profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
         profiles.insert(profile, at: 0)
+        claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
         defaultVisibility = preferredVisibility
+    }
+
+    private func claimGuestRowsIfNeeded(from previousProfile: LocalProfile, to signedInProfile: LocalProfile) {
+        guard previousProfile.localID == "local_profile_current",
+              previousProfile.serverID == nil,
+              previousProfile.id != signedInProfile.id
+        else { return }
+
+        let previousUserID = previousProfile.id
+        var didClaimRows = false
+
+        for userPlace in userPlaces where userPlace.userID == previousUserID && userPlace.deletedAt == nil {
+            userPlace.userID = signedInProfile.id
+            userPlace.updatedAt = .now
+            userPlace.localUpdatedAt = .now
+            didClaimRows = true
+        }
+
+        guard didClaimRows else { return }
+        objectWillChange.send()
+        persist()
     }
 
     private func applySignedOutProfile() {

@@ -54,7 +54,7 @@ struct AuthGateSheet: View {
             }
         }
         .padding(WanderTheme.spacing4)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
     }
 }
