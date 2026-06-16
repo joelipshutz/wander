@@ -2843,3 +2843,30 @@ Verification:
 Outcome:
 
 - Corrected the map tap behavior on PR #6 so random map coordinates do nothing, while actual Apple map place taps open/save through the app's existing search candidate flow.
+
+## 2026-06-16 08:55 PDT - Codex - Map Filter Neutral Trim And Single POI Marker
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; continuing PR #6 polish request.
+
+Goal: make Been/Wanna filter pill outlines neutral instead of terracotta, and prevent duplicate native Apple POI + Wander candidate markers while an unsaved MapKit place is selected.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Map filter trim colors so Social remains blue, You remains warm, and Been/Wanna use neutral ink-toned outlines; Wanna keeps the existing dotted trim style.
+- Updated native MapKit feature selection so the unsaved selected Apple POI drives the bottom sheet/add flow without also rendering a Wander candidate marker. When the selected POI matches an already saved place, native selection clears and the saved Wander marker becomes the selected marker.
+
+Verification:
+
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-marker-polish CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-map-marker-polish-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 87 tests, 0 failures.
+
+Outcome:
+
+- Ready to commit and push to existing PR #6.

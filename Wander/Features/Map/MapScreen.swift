@@ -95,7 +95,10 @@ struct MapScreen: View {
     }
 
     private var mappableSearchCandidates: [PlaceCandidate] {
-        mapSearchCandidates.filter { $0.latitude != nil && $0.longitude != nil }
+        mapSearchCandidates.filter { candidate in
+            guard candidate.latitude != nil, candidate.longitude != nil else { return false }
+            return !isNativeSelectedFeatureCandidate(candidate)
+        }
     }
 
     private var currentViewport: MapViewport {
@@ -454,6 +457,7 @@ struct MapScreen: View {
         mapFeatureResolutionTask = nil
 
         if let visiblePlace = visiblePlace(matching: candidate) {
+            clearNativeMapFeatureSelection()
             selectedPlaceID = visiblePlace.id
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
@@ -467,6 +471,14 @@ struct MapScreen: View {
         selectedSearchCandidateID = candidate.id
         isPlaceSheetExpanded = false
         mapSearchMessage = "Map place. Tap + to add it."
+    }
+
+    private func isNativeSelectedFeatureCandidate(_ candidate: PlaceCandidate) -> Bool {
+        guard selectedMapFeature != nil,
+              selectedSearchCandidateID == candidate.id
+        else { return false }
+
+        return true
     }
 
     private func mapKitCandidates(for query: String, limit: Int = 8) async throws -> [PlaceCandidate] {
@@ -1013,15 +1025,22 @@ private enum MapFilter: String, CaseIterable, Identifiable {
 
     func trimColor(isSelected: Bool) -> Color {
         guard isSelected else {
-            return self == .social
-                ? WanderTheme.pinSocial.color.opacity(0.45)
-                : WanderTheme.surfaceRaised.color.opacity(0.55)
+            switch self {
+            case .social:
+                return WanderTheme.pinSocial.color.opacity(0.45)
+            case .been, .wanna:
+                return WanderTheme.textMuted.color.opacity(0.42)
+            case .you:
+                return WanderTheme.surfaceRaised.color.opacity(0.55)
+            }
         }
 
         switch self {
         case .social:
             return WanderTheme.pinSocial.color
-        default:
+        case .been, .wanna:
+            return WanderTheme.textInk.color.opacity(0.82)
+        case .you:
             return WanderTheme.terracotta.color
         }
     }
