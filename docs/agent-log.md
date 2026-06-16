@@ -2726,3 +2726,46 @@ Known issues / testing focus:
 
 - This build packages the current M6 worker and QA docs. It does not add photo OCR, TikTok/Instagram extraction, native Contacts, share extension, or public web share pages.
 - Tester focus should be Apple Maps and Google Maps link extraction, unsupported/photo/social link rescue, park category handling, and the existing Build 25 QA checklist.
+
+## 2026-06-15 22:42 PDT - Codex - TestFlight Feedback Batch
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean `main` aligned with `origin/main`; branch created for isolated feedback fixes.
+
+Goal: investigate and fix recent `#testflight-feedback` reports: false manual-add sync retry, Apple Maps Urth Caffe extraction failure, duplicate unresolved drafts for the same failed link, current-location add resolving to San Francisco, and map search distance/relevance ranking.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `WanderTests/`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Recent log shows no active overlapping branch after Build 26 release.
+- Prior M6 work already improved Apple/Google Maps parsing, but Build 26 tester feedback shows at least one Apple Maps URL still falls through to unresolved draft.
+
+Checkpoint:
+
+- False manual-add sync retry: softened the Add success toast for `.failed` sync state so a successful local-first save no longer shows "Sync needs a retry" as the main tester-facing message. It now keeps the success framing while saying the app will keep trying to back it up.
+- Apple Maps Urth Caffe-style link parsing: expanded Apple Maps query parsing to accept additional place-name keys and address-like Apple Maps parameters with letters, covered by `LinkPlaceParserTests.testParsesAppleMapsAddressParameter`.
+- Duplicate failed-link drafts: made unresolved drafts idempotent by source artifact/job, and skipped remote extraction enqueue when the matching artifact/job is already synced. Updated store coverage so saving the same link twice produces one visible draft.
+- Current-location add wrong-place guard: `CoreLocationProvider` now rejects stale or low-accuracy locations instead of using an old cached coordinate as live current location. If the simulator/device is actively set to San Francisco, the app will still receive San Francisco from CoreLocation; that requires device/simulator location settings, not app math.
+- Map search distance/ranking: search candidates now carry `distanceMeters`, show estimated distance in typeahead/search sheets/Add candidate rows, rank by name/query relevance first and proximity second, and dedupe same-name same-locality results with closer/relevant results first.
+
+Verification:
+
+- Focused tests passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-feedback CODE_SIGNING_ALLOWED=NO -only-testing:WanderTests/LinkPlaceParserTests -only-testing:WanderTests/WanderStoreTests/testDraftsAreIdempotentBySourceHash`
+- Plain simulator build passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-feedback CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full suite attempted three times, but local Xcode failed before reaching Wander tests due OS resource exhaustion spawning `swift-frontend` / loading `swift-plugin-server` (`Resource temporarily unavailable`) in package dependencies (`XCTestDynamicOverlay`, `NukeUI`, `ClerkKit`). Treat as an environment blocker, not an observed test failure in Wander code.
+
+Known follow-ups:
+
+- Need device/simulator QA for current-location add with the simulator location explicitly set to Los Angeles/current tester location.
+- Need the exact failing Apple Maps permalink from the tester if the hardened parser still cannot resolve their original Urth Caffe URL shape.

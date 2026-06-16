@@ -404,17 +404,24 @@ struct MapScreen: View {
         request.resultTypes = [.pointOfInterest, .address]
 
         let response = try await MKLocalSearch(request: request).start()
+        let origin = await searchOriginLocation()
         var seen = Set<String>()
-        return response.mapItems.compactMap { item in
+        return response.mapItems
+            .sorted {
+                mapSearchRankingScore(for: $0, query: query, origin: origin)
+                    > mapSearchRankingScore(for: $1, query: query, origin: origin)
+            }
+            .compactMap { item in
             guard let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !name.isEmpty,
                   CLLocationCoordinate2DIsValid(item.placemark.coordinate)
             else { return nil }
 
-            let sourceID = mapKitSourceID(for: item, name: name)
-            guard !seen.contains(sourceID) else { return nil }
-            seen.insert(sourceID)
+            let duplicateKey = mapKitDuplicateKey(for: item, name: name)
+            guard !seen.contains(duplicateKey) else { return nil }
+            seen.insert(duplicateKey)
 
+            let sourceID = mapKitSourceID(for: item, name: name)
             return PlaceCandidate(
                 id: sourceID,
                 name: name,
@@ -427,6 +434,7 @@ struct MapScreen: View {
                 longitude: item.placemark.coordinate.longitude,
                 sourceProvider: "mapkit",
                 sourceProviderPlaceID: sourceID,
+                distanceMeters: distanceMeters(from: origin, to: item),
                 confidence: item.pointOfInterestCategory == nil ? 0.72 : 0.86
             )
         }
@@ -721,6 +729,49 @@ struct MapScreen: View {
         }
     }
 
+    private func searchOriginLocation() async -> CLLocation {
+        if let coordinate = await currentUserCoordinate() {
+            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        }
+
+        return CLLocation(
+            latitude: currentSearchRegion.center.latitude,
+            longitude: currentSearchRegion.center.longitude
+        )
+    }
+
+    private func mapSearchRankingScore(for item: MKMapItem, query: String, origin: CLLocation) -> Double {
+        let normalizedQuery = Self.normalized(query)
+        let normalizedName = Self.normalized(item.name ?? "")
+        var score = 0.0
+
+        if normalizedName == normalizedQuery {
+            score += 1_000
+        } else if normalizedName.hasPrefix(normalizedQuery) {
+            score += 750
+        } else if normalizedName.contains(normalizedQuery) {
+            score += 500
+        }
+
+        if item.pointOfInterestCategory != nil {
+            score += 120
+        }
+
+        let distance = distanceMeters(from: origin, to: item) ?? 25_000
+        score += max(0, 250 - min(distance, 10_000) / 40)
+
+        return score
+    }
+
+    private func distanceMeters(from origin: CLLocation?, to item: MKMapItem) -> Double? {
+        guard let origin else { return nil }
+
+        return CLLocation(
+            latitude: item.placemark.coordinate.latitude,
+            longitude: item.placemark.coordinate.longitude
+        ).distance(from: origin)
+    }
+
     private func mapKitSourceID(for item: MKMapItem, name: String) -> String {
         let latitude = Int((item.placemark.coordinate.latitude * 100_000).rounded())
         let longitude = Int((item.placemark.coordinate.longitude * 100_000).rounded())
@@ -729,6 +780,14 @@ struct MapScreen: View {
             .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
         return "mapkit_\(slug)_\(latitude)_\(longitude)"
+    }
+
+    private func mapKitDuplicateKey(for item: MKMapItem, name: String) -> String {
+        let slug = name
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return "\(slug)_\(item.placemark.locality?.lowercased() ?? "")"
     }
 
     private func category(for item: MKMapItem) -> String {
@@ -838,6 +897,7 @@ private struct MapSearchSuggestion: Identifiable {
 
     static func mapKit(_ candidate: PlaceCandidate) -> MapSearchSuggestion {
         let subtitle = [
+            candidate.formattedDistance,
             candidate.locality,
             candidate.category == "place" ? nil : candidate.category,
             "not saved"
@@ -1808,6 +1868,7 @@ private struct SearchCandidateSheet: View {
 
     private var candidateSubtitle: String {
         [
+            candidate.formattedDistance,
             candidate.locality,
             candidate.category == "place" ? nil : candidate.category
         ]
@@ -1816,6 +1877,21 @@ private struct SearchCandidateSheet: View {
             return trimmed?.isEmpty == false ? trimmed : nil
         }
         .joined(separator: " · ")
+    }
+}
+
+private extension PlaceCandidate {
+    var formattedDistance: String? {
+        guard let distanceMeters else { return nil }
+
+        let miles = distanceMeters / 1_609.344
+        if miles < 0.1 {
+            return "nearby"
+        }
+        if miles < 10 {
+            return String(format: "%.1f mi", miles)
+        }
+        return "\(Int(miles.rounded())) mi"
     }
 }
 

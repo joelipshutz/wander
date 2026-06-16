@@ -42,8 +42,9 @@ struct LinkPlaceParser {
     }
 
     private func queryPlaceName(from components: URLComponents) -> String? {
-        let preferredKeys = ["q", "query", "destination", "daddr", "address", "place"]
+        let preferredKeys = ["q", "query", "destination", "daddr", "address", "place", "name", "title"]
         return firstQueryValue(in: components, keys: preferredKeys)
+            ?? appleMapsAddressValue(in: components.queryItems ?? []).flatMap(cleanedPlaceText)
     }
 
     private func areaHint(from components: URLComponents) -> String? {
@@ -60,6 +61,24 @@ struct LinkPlaceParser {
                 continue
             }
             return cleaned
+        }
+
+        return nil
+    }
+
+    private func appleMapsAddressValue(in items: [URLQueryItem]) -> String? {
+        let mapAddressKeys = ["auid", "address", "q"]
+
+        for item in items {
+            let name = item.name.lowercased()
+            guard name.hasPrefix(mapAddressKeys[0]) == false,
+                  mapAddressKeys.contains(where: { name.contains($0) }),
+                  let value = item.value,
+                  value.range(of: "[A-Za-z]", options: .regularExpression) != nil
+            else {
+                continue
+            }
+            return value
         }
 
         return nil

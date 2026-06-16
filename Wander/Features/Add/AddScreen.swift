@@ -513,7 +513,7 @@ struct AddScreen: View {
         saveToast = toast
 
         let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(result?.syncState == .failed ? .warning : .success)
+        generator.notificationOccurred(result?.syncState == .serverDenied ? .warning : .success)
 
         Task {
             try? await Task.sleep(nanoseconds: toast.dismissDelayNanoseconds)
@@ -882,9 +882,9 @@ private struct AddSaveToast: Identifiable, Equatable {
             dismissDelayNanoseconds = 2_000_000_000
         case .failed:
             title = "saved here"
-            message = "Sync needs a retry, but it is still on this phone."
-            systemImage = "exclamationmark.arrow.triangle.2.circlepath"
-            dismissDelayNanoseconds = 5_000_000_000
+            message = canSignIn ? "Sign in to back it up." : "We'll keep trying to back it up."
+            systemImage = "checkmark"
+            dismissDelayNanoseconds = 3_000_000_000
         case .pendingCreate, .pendingUpdate, .pendingDelete:
             title = "saved here"
             message = "Sync is queued."
@@ -1043,6 +1043,7 @@ private struct CandidateRow: View {
 private extension PlaceCandidate {
     var subtitle: String {
         let parts = [
+            formattedDistance,
             address,
             locality,
             category.isEmpty ? nil : category
@@ -1056,6 +1057,19 @@ private extension PlaceCandidate {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    private var formattedDistance: String? {
+        guard let distanceMeters else { return nil }
+
+        let miles = distanceMeters / 1_609.344
+        if miles < 0.1 {
+            return "nearby"
+        }
+        if miles < 10 {
+            return String(format: "%.1f mi", miles)
+        }
+        return "\(Int(miles.rounded())) mi"
     }
 }
 

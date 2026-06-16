@@ -350,13 +350,14 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(photoDraft.extractionJobID, store.extractionJobs.last?.localID)
     }
 
-    func testDraftSourceArtifactsAreIdempotentBySourceHash() {
+    func testDraftsAreIdempotentBySourceHash() {
         let store = makeStore()
 
-        _ = store.createUnresolvedDraft(sourceType: .link, originalInput: "https://example.com/place")
-        _ = store.createUnresolvedDraft(sourceType: .link, originalInput: "https://example.com/place")
+        let firstDraft = store.createUnresolvedDraft(sourceType: .link, originalInput: "https://example.com/place")
+        let secondDraft = store.createUnresolvedDraft(sourceType: .link, originalInput: "https://example.com/place")
 
-        XCTAssertEqual(store.unresolvedDrafts.count, 2)
+        XCTAssertEqual(firstDraft, secondDraft)
+        XCTAssertEqual(store.unresolvedDrafts.count, 1)
         XCTAssertEqual(store.sourceArtifacts.count, 1)
         XCTAssertEqual(store.extractionJobs.count, 1)
     }

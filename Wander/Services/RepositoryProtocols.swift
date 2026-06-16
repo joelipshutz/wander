@@ -52,6 +52,7 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
     let longitude: Double?
     var sourceProvider: String = "mapkit"
     var sourceProviderPlaceID: String? = nil
+    var distanceMeters: Double? = nil
     let confidence: Double
 }
 
