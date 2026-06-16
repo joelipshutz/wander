@@ -80,6 +80,14 @@ node scripts/open-pr.mjs --base main --title "<pr title>"
 
 The helper pushes the current non-`main` branch and opens or reuses a GitHub PR. It uses `gh` when installed, otherwise `GITHUB_TOKEN` or `GH_TOKEN`. If GitHub auth is missing, do not ask Ryan to manually compose a PR; report the missing one-time auth setup and the exact command that failed.
 
+For Ryan's local workspace, the preferred one-time auth setup is an ignored `.env.local` file at the repo root:
+
+```bash
+GITHUB_TOKEN=github_pat_...
+```
+
+`scripts/open-pr.mjs` also checks `.env.github` and `~/.config/wander/github.env`.
+
 Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and update `docs/agent-log.md` with outcome, tests, known issues, and next steps. Prefer squash merging PRs into `main`, then delete the branch.
 
 ## Tech Stack

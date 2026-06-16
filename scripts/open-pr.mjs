@@ -13,12 +13,14 @@ Options:
   --body <body>         PR body. Defaults to a concise generated summary.
   --body-file <path>    Read PR body from a file.
   --draft               Create the PR as a draft.
+  --env <path>          Local env file with GITHUB_TOKEN or GH_TOKEN.
   --remote <name>       Git remote to push. Default: origin.
   --dry-run             Print the resolved plan without pushing or creating a PR.
   --help                Show this help.
 
 Auth:
-  Uses GitHub CLI if available. Otherwise uses GITHUB_TOKEN or GH_TOKEN.
+  Uses GitHub CLI if available. Otherwise uses GITHUB_TOKEN or GH_TOKEN from
+  the shell, .env.local, .env.github, ~/.config/wander/github.env, or --env.
   Tokens need repo write permission for private repos.`);
 }
 
@@ -29,6 +31,7 @@ function parseArgs(argv) {
     bodyFile: null,
     draft: false,
     dryRun: false,
+    envPath: null,
     remote: "origin",
     title: null,
   };
@@ -53,6 +56,9 @@ function parseArgs(argv) {
         break;
       case "--draft":
         options.draft = true;
+        break;
+      case "--env":
+        options.envPath = next();
         break;
       case "--dry-run":
         options.dryRun = true;
@@ -96,6 +102,46 @@ function commandExists(command) {
 
 function readFile(path) {
   return fs.readFileSync(path, "utf8").trim();
+}
+
+function expandHome(path) {
+  if (!path.startsWith("~/")) return path;
+  return `${process.env.HOME}${path.slice(1)}`;
+}
+
+function tokenFromEnvText(text) {
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || !line.includes("=")) continue;
+    const index = line.indexOf("=");
+    const key = line.slice(0, index).trim();
+    if (key !== "GITHUB_TOKEN" && key !== "GH_TOKEN") continue;
+
+    let value = line.slice(index + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function tokenFromEnvFiles(explicitPath) {
+  const paths = explicitPath
+    ? [explicitPath]
+    : [".env.local", ".env.github", "~/.config/wander/github.env"];
+
+  for (const path of paths.map(expandHome)) {
+    if (!fs.existsSync(path)) continue;
+    const token = tokenFromEnvText(fs.readFileSync(path, "utf8"));
+    if (token) return { path, token };
+  }
+
+  return { path: null, token: "" };
 }
 
 function repoFromRemote(remoteUrl) {
@@ -225,6 +271,12 @@ function createPrWithGh({ repo, branch, base, title, body, draft }) {
   return { html_url: result.stdout.trim() };
 }
 
+function authLabel({ hasGh, token, envFilePath }) {
+  if (hasGh) return "gh";
+  if (!token) return "missing";
+  return envFilePath ? `token file (${envFilePath})` : "GITHUB_TOKEN/GH_TOKEN";
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -240,14 +292,15 @@ async function main() {
   const body = options.bodyFile
     ? readFile(options.bodyFile)
     : options.body ?? `Automated PR from \`${branch}\`.\n\nVerification: see \`docs/agent-log.md\`.`;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+  const envFileToken = tokenFromEnvFiles(options.envPath);
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || envFileToken.token;
   const hasGh = commandExists("gh");
 
   console.log(`Branch: ${branch}`);
   console.log(`Repository: ${repo}`);
   console.log(`Base: ${options.base}`);
   console.log(`Title: ${title}`);
-  console.log(`Auth: ${hasGh ? "gh" : token ? "GITHUB_TOKEN/GH_TOKEN" : "missing"}`);
+  console.log(`Auth: ${authLabel({ hasGh, token, envFilePath: envFileToken.path })}`);
 
   if (options.dryRun) return;
 

@@ -2808,3 +2808,4 @@ Checkpoint:
 - Added `scripts/open-pr.mjs`, a self-contained Node helper that refuses `main`, requires a clean worktree, pushes the current branch, and opens or reuses a PR through `gh` or `GITHUB_TOKEN`/`GH_TOKEN`.
 - Updated `AGENTS.md` so future agents use `node scripts/open-pr.mjs --base main --title "<pr title>"` instead of asking Ryan to manually compose a PR.
 - `node --check scripts/open-pr.mjs`: passed.
+- Extended the helper to read ignored local token files: `.env.local`, `.env.github`, `~/.config/wander/github.env`, or a path passed with `--env`.
