@@ -243,7 +243,7 @@ For broad announcements only, `#all-recme` (`C0B9FU1QNG2`) exists, but TestFligh
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary.
 
 ```bash
 node scripts/testflight-release.mjs
@@ -253,6 +253,8 @@ Useful overrides:
 
 - `--build-number <n>` to process a specific build instead of the current `project.yml` value.
 - `--dry-run` to verify the resolved app id, group, and build number without calling App Store Connect.
+- `--what-to-test "<copy>"` or `--what-to-test-file <path>` to set the TestFlight "What to Test" description for the build.
+- `--locale <locale>` to set a non-default TestFlight beta build localization. Default: `en-US`.
 - `--timeout-attempts <n>` and `--poll-seconds <n>` if App Store Connect indexing is slow.
 
 The script reads App Store Connect credentials from env vars or `/Users/joelipshutz/.openclaw/workspace/.env.keys`: `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`. Never commit the `.p8` key or local env file.

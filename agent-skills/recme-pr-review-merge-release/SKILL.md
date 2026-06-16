@@ -23,6 +23,23 @@ TestFlight follow-up that used to live directly in Joe's local Codex automation.
 - Do not merge, push to `main`, upload TestFlight, or post Slack release notes unless the user explicitly requested PR landing/release work or a scheduled automation prompt authorizes it.
 - Skip draft PRs, WIP PRs, PRs labeled or titled `hold` or `do-not-merge`, PRs with merge conflicts, PRs with failing required checks, or PRs whose latest head SHA has already been reviewed by this workflow unless new commits were pushed.
 - Do not create App Store release metadata, submit for App Store review, change the marketing version, or announce broadly in `#all-recme` unless Joe explicitly asks.
+- Machines without App Store Connect access may still review/merge PRs and may still bump/push the TestFlight build number when appropriate. They must stop before archive/upload, clearly mark the release as pending upload, and leave exact continuation commands/state in `docs/agent-log.md`.
+
+## Thread Naming And Inbox Title
+
+Whenever this workflow merges a PR, bumps a TestFlight build, or resumes a pending
+release, update the current thread title or inbox item title when the host supports
+it:
+
+- After merging before build bump: `PR #<number> merged`
+- After bumping but before upload: `Build <number> pending upload`
+- After successful upload/TestFlight attach: `Build <number> TestFlight live`
+- If a merge is blocked: `PR #<number> blocked`
+- If there are no eligible PRs or pending releases: `rec.me PR sweep clear`
+
+If no thread-title tool is available, use the same wording in the final
+`::inbox-item{title="..."}` or equivalent host inbox/status primitive. This is the
+current Codex-compatible fallback; true thread renaming is host-dependent.
 
 ## Required Setup
 
@@ -35,6 +52,45 @@ TestFlight follow-up that used to live directly in Joe's local Codex automation.
    - append/update `docs/agent-log.md`
 3. Use a short-lived branch for any docs/process/build-number edits.
 4. Treat unrelated local changes as belonging to Joe, Ryan, or another agent. Do not revert them.
+
+## Required Sweep Order
+
+Every run must check both new PR work and unfinished release work. Do not assume
+"no open PRs" means "no work".
+
+1. Fetch `origin` and inspect the current local status.
+2. Check for pending TestFlight release work from already-merged PRs:
+   - Read the latest `docs/agent-log.md` TestFlight/release entries.
+   - Check the latest `CURRENT_PROJECT_VERSION` in `project.yml`.
+   - Check recent merged PRs targeting `main`, for example:
+     `gh pr list --base main --state merged --limit 20 --json number,title,mergedAt,mergeCommit,files,labels,url`
+   - Check recent build-bump commits, for example:
+     `git log --oneline --grep='bump testflight build' origin/main`
+   - A merged PR is pending a build bump if it touches app-code, UI, schema,
+     testable behavior, project config, or QA-relevant runtime code and no later
+     build-bump commit packages it.
+   - A build-bump commit is pending upload/finalization if `docs/agent-log.md`
+     does not record archive/upload plus TestFlight helper completion for that
+     build.
+3. If pending release work exists, finish the oldest pending release before
+   merging another app-code PR unless Joe explicitly prioritizes a newer PR.
+4. Then check open PRs targeting `main` and run the PR review workflow below.
+5. If both queues are empty, report the sweep as clear and do not edit
+   `docs/agent-log.md` unless a previous run left incomplete state to clarify.
+
+## Pending Release Classification
+
+Use this classification when deciding whether a merged PR requires TestFlight:
+
+- Requires build bump/release by default: app source, SwiftUI/UI, data model,
+  persistence, auth/sync/backend client behavior, Supabase schema/contracts used
+  by the app, `project.yml`, Xcode project membership, tests that encode runtime
+  behavior, QA-relevant launch flags, or user-facing copy/assets.
+- Usually does not require build bump: docs-only, plans, agent-skill/process
+  updates, scripts not used by the app binary, backend-only changes already
+  deployed outside the iOS binary, and release/status docs.
+- If uncertain, treat it as pending release unless the diff is clearly
+  process/docs-only. Note the decision in `docs/agent-log.md`.
 
 ## PR Review Workflow
 
@@ -78,10 +134,29 @@ After a successful app-code, UI, schema, testable behavior, or QA-relevant merge
 3. Run `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects the new build number.
 4. Commit both `project.yml` and `Wander.xcodeproj/project.pbxproj` with a conventional TestFlight build bump message, then push `main`.
 5. Run the relevant `xcodebuild build` and `xcodebuild test` commands from `AGENTS.md`.
-6. Upload the archive/build to TestFlight using the repo's documented or discoverable upload path and available signing credentials. If upload is blocked by credentials, signing, or missing workflow, stop after the pushed build-number bump and report the blocker clearly.
-7. Run `node scripts/testflight-release.mjs` after upload succeeds to set export compliance, attach the build to the public group, and submit external beta review.
-8. Update `docs/agent-log.md` with build number, merge/commit hash, tests run, archive path, upload status, TestFlight status, known issues, and next steps.
-9. Whenever a new TestFlight build is uploaded, attached to the public group, or confirmed available/processing for testing, post the required tester-facing release note to Slack `#testflight-feedback` (`C0BAA7DG2AC`).
+6. Create a concise TestFlight "What to Test" description from the merged PR(s):
+   - 1-2 lines on what changed for testers.
+   - A short concrete checklist of what to test.
+   - Known/deferred areas when useful.
+   - Keep it under 4000 characters.
+7. Upload the archive/build to TestFlight using the repo's documented or discoverable upload path and available signing credentials. If upload is blocked by credentials, signing, or missing workflow, stop after the pushed build-number bump and report the blocker clearly.
+8. Run `node scripts/testflight-release.mjs` after upload succeeds to set export compliance, set TestFlight "What to Test" copy when provided, attach the build to the public group, and submit external beta review. Prefer:
+   `node scripts/testflight-release.mjs --build-number <n> --what-to-test-file <path>`
+   or:
+   `node scripts/testflight-release.mjs --build-number <n> --what-to-test "<copy>"`
+   If the helper cannot set the description, continue the release, record the
+   limitation, and include the same testing copy in Slack.
+9. Update `docs/agent-log.md` with build number, merge/commit hash, tests run, archive path, upload status, TestFlight status, TestFlight description status, known issues, and next steps.
+10. Whenever a new TestFlight build is uploaded, attached to the public group, or confirmed available/processing for testing, post the required tester-facing release note to Slack `#testflight-feedback` (`C0BAA7DG2AC`).
+
+If App Store Connect access is unavailable after a build-number bump:
+
+- Leave `main` pushed with the bumped build number.
+- Do not post a tester-facing "live" Slack note.
+- Add a clear `docs/agent-log.md` handoff with build number, bump commit, merged
+  PR(s), tests run, exact blocker, and exact archive/upload/helper commands for
+  the next capable agent.
+- Set the thread/inbox title to `Build <number> pending upload`.
 
 Slack release note must include:
 

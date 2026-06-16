@@ -3153,3 +3153,38 @@ Known issues / testing focus:
 
 - Tester focus: map search/tapped-place expandable detail sheet, Website/Call/Share/Directions actions, metadata persistence after save, and social/friend notes at the bottom of the expanded sheet.
 - Deferred: no Google/Yelp public ratings/review counts, no DoorDash/Resy/OpenTable partner API integration or scraping, no photo OCR, no native Contacts, no share extension, and no public web share pages.
+
+## 2026-06-16 14:27 PDT - Codex - PR Release Skill Deferred TestFlight Updates
+
+Agent: Codex
+Branch: `codex/update-pr-release-skill`
+Starting status: clean branch created from `main` at `4e276b1`; fetched latest `origin`; existing worktrees are `/private/tmp/recme-auth-save-persist` and `/private/tmp/recme-shared-agent-skills`, with no overlap on the repo-local skill or release helper.
+
+Goal: update the repo-owned PR review/merge/TestFlight skill so the recurring coordinator renames the thread/inbox item after merges, detects merged PRs that still need a TestFlight build-number bump/release, handles machines without App Store Connect access, and can set TestFlight "what to test" copy when possible.
+
+Expected files to touch:
+
+- `agent-skills/recme-pr-review-merge-release/SKILL.md`
+- `scripts/testflight-release.mjs`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Mission Control `localhost:4000` was unreachable, so tracking is staying in this log.
+- TestFlight "what to test" copy is feasible through App Store Connect beta build localization (`whatsNew`) once the uploaded build exists; the current helper script does not expose it yet, so this pass will add that option.
+
+Completion notes:
+
+- Updated `agent-skills/recme-pr-review-merge-release/SKILL.md` so every run sweeps both open PRs and already-merged PRs with unfinished TestFlight work, classifies pending release work, and finishes the oldest pending release before merging additional app-code unless Joe overrides priority.
+- Added explicit behavior for machines without App Store Connect access: they may review/merge and bump/push the build number, then must stop before archive/upload, mark `Build <n> pending upload`, and leave exact continuation state/commands.
+- Added thread/inbox title rules for `PR #<number> merged`, `Build <number> pending upload`, `Build <number> TestFlight live`, blocked PRs, and clear sweeps. True thread renaming remains host-dependent; Codex-compatible fallback is the final inbox item title.
+- Added TestFlight "What to Test" guidance to the skill and taught `scripts/testflight-release.mjs` `--what-to-test`, `--what-to-test-file`, and `--locale` using App Store Connect beta build localization (`whatsNew`).
+- Updated `AGENTS.md` so the repo helper docs advertise the new TestFlight description options.
+
+Verification:
+
+- `node --check scripts/testflight-release.mjs`
+- `node scripts/testflight-release.mjs --dry-run --build-number 27 --what-to-test 'Try the expanded place sheet.'`
+- `git diff --check`
+- Apple Developer App Store Connect API docs were checked for `BetaBuildLocalizationCreateRequest`: `locale` is required, `whatsNew` is the optional "What to Test" field, `relationships.build` is required, and the linkage type is `builds`, matching the helper payload.
+- Live App Store Connect localization write was not exercised in this process-only PR; the helper's argument parsing, dry-run resolution, and request-shape alignment were verified locally.
