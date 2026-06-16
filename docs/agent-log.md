@@ -3100,4 +3100,6 @@ Outcome:
 - Tests: full `xcodebuild test` passed on `iPhone 17 Pro, OS=26.5`; documented `iPhone 16 Plus, OS=18.6` destination was unavailable locally.
 - Screenshot QA artifacts reviewed: `/tmp/wander-place-detail-iphone17pro.png` and `/tmp/wander-place-detail-iphone17e.png`.
 - Known issues/deferred: no paid Google/Yelp public ratings, no partner DoorDash/Resy/OpenTable API integration, no scraping, and no fake provider availability. Exact Order/Reserve links require a trusted direct action link; search-confidence links render with "Find ..." labels.
-- Next step: push branch and open/update the PR. If GitHub tooling is still unavailable, use `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
+- Implementation and verification log commits were pushed before the PR creation attempt.
+- PR creation remains blocked: GitHub connector returned 403 `Resource not accessible by integration` when creating a PR, and `gh` is not installed in this shell.
+- Manual PR link: `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
