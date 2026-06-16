@@ -170,6 +170,9 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
                     sourceProvider: "mapkit",
                     sourceProviderPlaceID: sourceID,
                     distanceMeters: distanceMeters(from: origin, to: item),
+                    websiteURLString: item.url?.absoluteString,
+                    phoneNumber: item.phoneNumber,
+                    timeZoneIdentifier: item.timeZone?.identifier,
                     confidence: confidence(for: item, fallbackCategory: fallbackCategory, origin: origin)
                 )
             )

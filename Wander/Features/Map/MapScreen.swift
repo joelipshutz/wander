@@ -221,7 +221,13 @@ struct MapScreen: View {
                 }
 
                 if let selectedSearchCandidate {
-                    SearchCandidateSheet(candidate: selectedSearchCandidate) {
+                    PlaceSheet(
+                        place: PlaceSheetPlace(candidate: selectedSearchCandidate),
+                        saves: saveSummaries(for: selectedSearchCandidate),
+                        currentUserID: store.currentUser.id,
+                        action: .add,
+                        isExpanded: $isPlaceSheetExpanded
+                    ) {
                         mapSaveFlow = MapPlaceSaveContext.addCandidate(
                             selectedSearchCandidate,
                             sourceType: .manual,
@@ -232,7 +238,7 @@ struct MapScreen: View {
                     .padding(.bottom, WanderTheme.spacing2)
                 } else if let selectedPlace {
                     PlaceSheet(
-                        visiblePlace: selectedPlace,
+                        place: PlaceSheetPlace(visiblePlace: selectedPlace),
                         saves: saveSummaries(for: selectedPlace),
                         currentUserID: store.currentUser.id,
                         action: action(for: selectedPlace),
@@ -361,6 +367,11 @@ struct MapScreen: View {
             if rhs.visiblePlace.id == selectedPlace.id { return false }
             return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
         }
+    }
+
+    private func saveSummaries(for candidate: PlaceCandidate) -> [PlaceSaveSummary] {
+        guard let matchingPlace = visiblePlace(matching: candidate) else { return [] }
+        return saveSummaries(for: matchingPlace)
     }
 
     private func submitMapSearch() {
@@ -523,6 +534,9 @@ struct MapScreen: View {
                 sourceProvider: "mapkit",
                 sourceProviderPlaceID: sourceID,
                 distanceMeters: distanceMeters(from: origin, to: item),
+                websiteURLString: item.url?.absoluteString,
+                phoneNumber: item.phoneNumber,
+                timeZoneIdentifier: item.timeZone?.identifier,
                 confidence: item.pointOfInterestCategory == nil ? 0.72 : 0.86
             )
         }
@@ -1432,6 +1446,66 @@ private struct PlaceSaveSummary: Identifiable {
     var id: String { visiblePlace.userPlace.id }
 }
 
+private struct PlaceSheetPlace {
+    let id: String
+    let name: String
+    let category: String
+    let address: String?
+    let locality: String?
+    let region: String?
+    let latitude: Double?
+    let longitude: Double?
+    let websiteURLString: String?
+    let phoneNumber: String?
+    let actionLinksJSON: String?
+    let compactSubtitleOverride: String?
+    let status: PlaceStatus?
+    let visibility: PlaceVisibility?
+    let note: String?
+    let noteOwnerID: String?
+    let noteOwnerName: String?
+
+    init(visiblePlace: VisiblePlace) {
+        self.id = visiblePlace.place.id
+        self.name = visiblePlace.place.canonicalName
+        self.category = visiblePlace.place.category
+        self.address = visiblePlace.place.address
+        self.locality = visiblePlace.place.locality
+        self.region = visiblePlace.place.region
+        self.latitude = visiblePlace.place.latitude
+        self.longitude = visiblePlace.place.longitude
+        self.websiteURLString = visiblePlace.place.websiteURLString
+        self.phoneNumber = visiblePlace.place.phoneNumber
+        self.actionLinksJSON = visiblePlace.place.actionLinksJSON
+        self.compactSubtitleOverride = nil
+        self.status = visiblePlace.userPlace.status
+        self.visibility = visiblePlace.userPlace.visibility
+        self.note = visiblePlace.userPlace.note
+        self.noteOwnerID = visiblePlace.owner.id
+        self.noteOwnerName = visiblePlace.owner.displayName
+    }
+
+    init(candidate: PlaceCandidate) {
+        self.id = candidate.id
+        self.name = candidate.name
+        self.category = candidate.category
+        self.address = candidate.address
+        self.locality = candidate.locality
+        self.region = candidate.region
+        self.latitude = candidate.latitude
+        self.longitude = candidate.longitude
+        self.websiteURLString = candidate.websiteURLString
+        self.phoneNumber = candidate.phoneNumber
+        self.actionLinksJSON = candidate.actionLinksJSON
+        self.compactSubtitleOverride = candidate.previewSubtitle()
+        self.status = nil
+        self.visibility = nil
+        self.note = nil
+        self.noteOwnerID = nil
+        self.noteOwnerName = nil
+    }
+}
+
 private enum MapPlaceSaveMode {
     case add(AddSourceType)
     case edit(VisiblePlace)
@@ -1529,6 +1603,10 @@ private struct MapPlaceSaveContext: Identifiable {
             longitude: visiblePlace.place.longitude,
             sourceProvider: visiblePlace.place.sourceProvider,
             sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID,
+            websiteURLString: visiblePlace.place.websiteURLString,
+            phoneNumber: visiblePlace.place.phoneNumber,
+            timeZoneIdentifier: visiblePlace.place.timeZoneIdentifier,
+            actionLinksJSON: visiblePlace.place.actionLinksJSON,
             confidence: visiblePlace.place.confidence ?? 1
         )
     }
@@ -2098,66 +2176,8 @@ private struct MapSaveWrappingChipLayout: Layout {
     }
 }
 
-private struct SearchCandidateSheet: View {
-    let candidate: PlaceCandidate
-    let onSave: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Capsule()
-                .fill(WanderTheme.borderStrong.color)
-                .frame(width: 42, height: 5)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, WanderTheme.spacing1)
-
-            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                CategoryThumb(category: candidate.category)
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(candidate.name)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.82)
-                    Text(candidateSubtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(2)
-                    Text("not saved yet")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .background(WanderTheme.terracottaTint.color)
-                        .clipShape(Capsule())
-                }
-
-                Spacer()
-
-                Button(action: onSave) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 21, weight: .black))
-                        .frame(width: 46, height: 46)
-                        .background(WanderTheme.terracotta.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Add map result")
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 20, x: 0, y: 10)
-    }
-
-    private var candidateSubtitle: String {
-        candidate.previewSubtitle()
-    }
-}
-
 private struct PlaceSheet: View {
-    let visiblePlace: VisiblePlace
+    let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
@@ -2196,16 +2216,16 @@ private struct PlaceSheet: View {
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                CategoryThumb(category: visiblePlace.place.category)
+                CategoryThumb(category: place.category)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     HStack {
-                        Text(visiblePlace.place.canonicalName)
+                        Text(place.name)
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
-                        StatusBadge(status: visiblePlace.userPlace.status)
+                        statusBadge
                     }
                     if let subtitle = compactSubtitle {
                         Text(subtitle)
@@ -2227,14 +2247,18 @@ private struct PlaceSheet: View {
                 actionButton(size: 46, iconSize: 21)
             }
 
-            SocialProofRow(savers: savers, currentUserID: currentUserID, visibility: visiblePlace.userPlace.visibility)
+            if !savers.isEmpty {
+                SocialProofRow(savers: savers, currentUserID: currentUserID, visibility: place.visibility)
+            }
         }
     }
 
     private var expandedContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             expandedHeader
-            SocialProofRow(savers: savers, currentUserID: currentUserID, visibility: visiblePlace.userPlace.visibility)
+            if !savers.isEmpty {
+                SocialProofRow(savers: savers, currentUserID: currentUserID, visibility: place.visibility)
+            }
             externalActions
 
             if !placeFacts.isEmpty {
@@ -2262,9 +2286,9 @@ private struct PlaceSheet: View {
 
     private var expandedHeader: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: visiblePlace.place.category)
+            CategoryThumb(category: place.category)
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(visiblePlace.place.canonicalName)
+                Text(place.name)
                     .font(.system(size: 26, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(3)
@@ -2277,7 +2301,7 @@ private struct PlaceSheet: View {
                         .lineLimit(2)
                 }
 
-                StatusBadge(status: visiblePlace.userPlace.status)
+                statusBadge
 
                 if let noteLine = selectedNoteLine {
                     Text(noteLine)
@@ -2296,11 +2320,28 @@ private struct PlaceSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var statusBadge: some View {
+        if let status = place.status {
+            StatusBadge(status: status)
+        } else {
+            Text("not saved yet")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .padding(.horizontal, WanderTheme.spacing2)
+                .padding(.vertical, WanderTheme.spacing1)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Capsule())
+        }
+    }
+
     private var externalActions: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            if let directionsURL {
-                PlaceExternalActionButton(title: "Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
-                    openURL(directionsURL)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(externalActionItems) { item in
+                    PlaceExternalActionButton(title: item.title, systemImage: item.systemImage) {
+                        openURL(item.url)
+                    }
                 }
             }
         }
@@ -2309,7 +2350,7 @@ private struct PlaceSheet: View {
     @ViewBuilder
     private var shareButton: some View {
         if let shareURL {
-            ShareLink(item: shareURL, subject: Text(visiblePlace.place.canonicalName), message: Text(shareText)) {
+            ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 17, weight: .black))
                     .frame(width: 42, height: 42)
@@ -2356,7 +2397,7 @@ private struct PlaceSheet: View {
     }
 
     private var compactSubtitle: String? {
-        joinedText([visiblePlace.place.locality, categoryDisplay])
+        trimmed(place.compactSubtitleOverride) ?? joinedText([place.locality, categoryDisplay])
     }
 
     private var expandedSubtitle: String? {
@@ -2364,57 +2405,63 @@ private struct PlaceSheet: View {
     }
 
     private var addressLine: String? {
-        let address = trimmed(visiblePlace.place.address)
+        let address = trimmed(place.address)
         if let address {
             return address
         }
-        return joinedText([visiblePlace.place.locality, visiblePlace.place.region])
+        return joinedText([place.locality, place.region])
     }
 
     private var categoryDisplay: String? {
-        let category = trimmed(visiblePlace.place.category)
+        let category = trimmed(place.category)
         return category == "place" ? nil : category
     }
 
     private var selectedNote: String? {
-        trimmed(visiblePlace.userPlace.note)
+        trimmed(place.note)
     }
 
     private var selectedNoteLine: String? {
         guard let selectedNote else { return nil }
-        let ownerLabel = visiblePlace.owner.id == currentUserID ? "your note" : "\(visiblePlace.owner.displayName)'s note"
+        let ownerLabel = place.noteOwnerID == currentUserID ? "your note" : "\(place.noteOwnerName ?? "their") note"
         return "\(ownerLabel): \"\(selectedNote)\""
     }
 
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
         if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: visiblePlace.place.category)))
+            facts.append(PlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: place.category)))
         }
         return facts
     }
 
-    private var directionsURL: URL? {
-        PlaceExternalLinks.googleMapsDirectionsURL(
-            placeName: visiblePlace.place.canonicalName,
-            latitude: visiblePlace.place.latitude,
-            longitude: visiblePlace.place.longitude
+    private var externalActionItems: [PlaceExternalAction] {
+        var actions = PlaceExternalLinks.visibleBusinessActions(
+            websiteURLString: place.websiteURLString,
+            phoneNumber: place.phoneNumber,
+            actionLinksJSON: place.actionLinksJSON
         )
+        if let latitude = place.latitude,
+           let longitude = place.longitude,
+           let directionsAction = PlaceExternalLinks.directionsAction(placeName: place.name, latitude: latitude, longitude: longitude) {
+            actions.append(directionsAction)
+        }
+        return actions
     }
 
     private var shareURL: URL? {
         PlaceExternalLinks.googleMapsSearchURL(
-            placeName: visiblePlace.place.canonicalName,
-            address: visiblePlace.place.address,
-            locality: visiblePlace.place.locality
+            placeName: place.name,
+            address: place.address,
+            locality: place.locality
         )
     }
 
     private var shareText: String {
         PlaceExternalLinks.shareSummary(
-            placeName: visiblePlace.place.canonicalName,
-            locality: visiblePlace.place.locality,
-            status: visiblePlace.userPlace.status
+            placeName: place.name,
+            locality: place.locality,
+            status: place.status
         )
     }
 
@@ -2638,7 +2685,7 @@ private struct SaveReviewCard: View {
 private struct SocialProofRow: View {
     let savers: [LocalProfile]
     let currentUserID: String
-    let visibility: PlaceVisibility
+    let visibility: PlaceVisibility?
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -2648,13 +2695,15 @@ private struct SocialProofRow: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .lineLimit(1)
             Spacer()
-            Text(visibility.displayTitle)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.vertical, WanderTheme.spacing1)
-                .background(WanderTheme.surfaceSand.color)
-                .clipShape(Capsule())
+            if let visibility {
+                Text(visibility.displayTitle)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.vertical, WanderTheme.spacing1)
+                    .background(WanderTheme.surfaceSand.color)
+                    .clipShape(Capsule())
+            }
         }
     }
 

@@ -674,6 +674,12 @@ final class WanderStore: ObservableObject {
                 category: visiblePlace.place.category,
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude,
+                sourceProvider: visiblePlace.place.sourceProvider,
+                sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID,
+                websiteURLString: visiblePlace.place.websiteURLString,
+                phoneNumber: visiblePlace.place.phoneNumber,
+                timeZoneIdentifier: visiblePlace.place.timeZoneIdentifier,
+                actionLinksJSON: visiblePlace.place.actionLinksJSON,
                 confidence: visiblePlace.place.confidence ?? 1
             ),
             status: status,
@@ -1112,7 +1118,11 @@ final class WanderStore: ObservableObject {
             longitude: place.longitude,
             sourceProvider: place.sourceProvider,
             sourceProviderPlaceID: place.sourceProviderPlaceID,
-            confidence: place.confidence
+            confidence: place.confidence,
+            websiteURLString: place.websiteURLString,
+            phoneNumber: place.phoneNumber,
+            timeZoneIdentifier: place.timeZoneIdentifier,
+            actionLinksJSON: place.actionLinksJSON
         )
 
         let attributeDrafts = attributes(for: userPlace.id).map { attribute in
@@ -1369,6 +1379,7 @@ final class WanderStore: ObservableObject {
                 || ($0.sourceProvider == candidate.sourceProvider && $0.sourceProviderPlaceID == providerPlaceID)
                 || $0.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
         }) {
+            mergeBusinessMetadata(from: candidate, into: existing)
             return existing
         }
 
@@ -1385,10 +1396,40 @@ final class WanderStore: ObservableObject {
             sourceProvider: candidate.sourceProvider,
             sourceProviderPlaceID: providerPlaceID,
             confidence: candidate.confidence,
+            websiteURLString: normalizedMetadata(candidate.websiteURLString),
+            phoneNumber: normalizedMetadata(candidate.phoneNumber),
+            timeZoneIdentifier: normalizedMetadata(candidate.timeZoneIdentifier),
+            actionLinksJSON: normalizedMetadata(candidate.actionLinksJSON),
             syncState: .pendingCreate
         )
         places.append(place)
         return place
+    }
+
+    private func mergeBusinessMetadata(from candidate: PlaceCandidate, into place: LocalPlace) {
+        var didChange = false
+
+        didChange = mergeMetadataValue(normalizedMetadata(candidate.websiteURLString), into: &place.websiteURLString) || didChange
+        didChange = mergeMetadataValue(normalizedMetadata(candidate.phoneNumber), into: &place.phoneNumber) || didChange
+        didChange = mergeMetadataValue(normalizedMetadata(candidate.timeZoneIdentifier), into: &place.timeZoneIdentifier) || didChange
+        didChange = mergeMetadataValue(normalizedMetadata(candidate.actionLinksJSON), into: &place.actionLinksJSON) || didChange
+
+        if didChange {
+            place.updatedAt = .now
+            place.localUpdatedAt = .now
+        }
+    }
+
+    private func mergeMetadataValue(_ candidateValue: String?, into storedValue: inout String?) -> Bool {
+        guard let candidateValue else { return false }
+        guard storedValue != candidateValue else { return false }
+        storedValue = candidateValue
+        return true
+    }
+
+    private func normalizedMetadata(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     private func upsertSourceArtifact(sourceType: AddSourceType, originalInput: String?, localAssetRef: String?) -> LocalSourceArtifact {

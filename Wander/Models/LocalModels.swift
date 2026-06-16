@@ -117,6 +117,7 @@ final class LocalBlock {
     }
 
     var id: String { serverID ?? localID }
+    var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
 }
 
 @Model
@@ -134,6 +135,10 @@ final class LocalPlace {
     var sourceProvider: String
     var sourceProviderPlaceID: String?
     var confidence: Double?
+    var websiteURLString: String?
+    var phoneNumber: String?
+    var timeZoneIdentifier: String?
+    var actionLinksJSON: String?
     var syncStateRaw: String
     var localUpdatedAt: Date
     var serverUpdatedAt: Date?
@@ -141,7 +146,7 @@ final class LocalPlace {
     var createdAt: Date
     var updatedAt: Date
 
-    init(localID: String, serverID: String? = nil, canonicalName: String, category: String, address: String? = nil, locality: String? = nil, region: String? = nil, country: String? = nil, latitude: Double, longitude: Double, sourceProvider: String = "mapkit", sourceProviderPlaceID: String? = nil, confidence: Double? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now) {
+    init(localID: String, serverID: String? = nil, canonicalName: String, category: String, address: String? = nil, locality: String? = nil, region: String? = nil, country: String? = nil, latitude: Double, longitude: Double, sourceProvider: String = "mapkit", sourceProviderPlaceID: String? = nil, confidence: Double? = nil, websiteURLString: String? = nil, phoneNumber: String? = nil, timeZoneIdentifier: String? = nil, actionLinksJSON: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now) {
         self.localID = localID
         self.serverID = serverID
         self.canonicalName = canonicalName
@@ -155,6 +160,10 @@ final class LocalPlace {
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.confidence = confidence
+        self.websiteURLString = websiteURLString
+        self.phoneNumber = phoneNumber
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.actionLinksJSON = actionLinksJSON
         self.syncStateRaw = syncState.rawValue
         self.localUpdatedAt = localUpdatedAt
         self.serverUpdatedAt = serverUpdatedAt
@@ -164,6 +173,7 @@ final class LocalPlace {
     }
 
     var id: String { serverID ?? localID }
+    var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
 }
 
 @Model

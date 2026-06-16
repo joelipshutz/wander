@@ -3041,3 +3041,55 @@ Outcome:
 - Verification: `git diff --check` passed. No app build/tests run because this pass produced docs/plan/decision artifacts only.
 - Rebased cleanly onto `origin/main` at `b0918dc`, committed `16cb09b`, and pushed branch `codex/place-detail-eng-plan`.
 - PR creation blocked: `gh` is not installed in this shell, and the GitHub connector returned 403 `Resource not accessible by integration` for pull-request creation. Draft PR can be created at `https://github.com/joelipshutz/wander/pull/new/codex/place-detail-eng-plan`.
+
+## 2026-06-16 12:46 PDT - Codex - Place Detail Pull-Up Implementation
+
+Agent: Codex
+Branch: `codex/place-detail-eng-plan`
+Starting status: clean branch tracking `origin/codex/place-detail-eng-plan`; fetched latest `origin`; isolated worktree already active at `/Users/ryanlieblein/Developer/Wander-worktrees/place-detail-eng-plan`.
+
+Goal: implement the approved provider-light v1 from `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`: unified saved/unsaved map place sheet, MapKit/direct website and phone metadata, honest order/reserve link behavior, social notes at the bottom, and matching tests.
+
+Expected files to touch:
+
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `Wander/Services/PlaceExternalLinks.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderStoreTests.swift`
+- likely `WanderTests/PlaceExternalLinksTests.swift`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Main checkout remains separate at `/Users/ryanlieblein/Developer/wander`; this implementation stays in the existing isolated worktree.
+- No overlapping active worktree is editing the planned implementation files.
+
+Checkpoint:
+
+- Implemented the provider-light v1:
+  - Saved and unsaved map selections now use the same draggable place sheet.
+  - Unsaved search candidates can expand before save and can inherit social notes when they match a visible saved place.
+  - Saved places retain personal metadata in the expanded sheet, with friend/social notes at the bottom.
+  - `PlaceCandidate`, `LocalPlace`, and file persistence now carry website URL, phone number, time zone, and optional action-link JSON.
+  - MapKit candidates preserve `MKMapItem.url`, `phoneNumber`, and `timeZone`.
+  - External actions are centralized in `PlaceExternalLinks` for Website, Call, exact Order/Reserve/Menu links, honest search-labeled provider links, Share, and Directions.
+- Preserved existing stored business metadata when a later sparse candidate is saved.
+- Did not add paid Google/Yelp ratings/review count, partner APIs, scraping, or fake order/reservation availability. Exact Order/Reserve appears only when an exact direct action link exists; search-confidence links render as "Find delivery" or "Find reservations".
+- The documented simulator destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed on this machine, so that run failed before build with destination error code 70.
+- Verification passed on the installed simulator:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-place-detail CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+- Removed the generated `DerivedData-place-detail` folder after verification.
+
+Screenshot QA:
+
+- Built and installed the simulator app, then launched with `-WanderUseDemoFixtures -WanderMapPlace Woodcat -WanderMapSheetExpanded`.
+- Captured and reviewed:
+  - `/tmp/wander-place-detail-iphone17pro.png`
+  - `/tmp/wander-place-detail-iphone17e.png`
+- Result: expanded saved-place sheet renders without obvious overlap on both checked devices. The smaller iPhone wraps the title and keeps actions/metadata readable above the tab bar.
+- Removed the generated `DerivedData-place-detail` folder again after screenshot QA.
