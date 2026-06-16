@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-06-09
+Last updated: 2026-06-16
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -60,7 +60,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Map filter selected state | Locked | Inactive chips keep the bone/sand fill; active chips add a terracotta ring and terracotta icon, with no checkmark. |
 | Map place labels | M2 selected/simple labels | Show place labels on Wander pins in the local prototype, with selected/tapped state made visually explicit. Revisit clutter rules later with real density. |
 | Social proof copy | Locked | Place sheets should show who saved a place with avatars/facepile, not "`Name`'s tip" copy. |
-| Rich place profile data | Locked v0.1 | Expanded map place profiles use only data Wander actually has: place name/category/address/locality/coordinates, save status/visibility, notes, flexible answer attributes, social proof, friend saves, share, and keyless Google Maps directions URLs. Do not show empty website/phone/hours/price/cuisine/order/ratings/photos fields. Price can appear only as a user answer attribute. No paid place metadata API is part of this v0.1 surface. |
+| Rich place profile data | Locked v0.1, revised 2026-06-16 | Expanded map place profiles use only data Wander actually has: place name/category/address/locality/coordinates, save status/visibility, notes, flexible answer attributes, social proof, friend saves, share, keyless map directions, and MapKit/directly captured website or phone data. Do not show empty hours/price/cuisine/photos fields. Price can appear only as a user answer attribute. "Order" and "Reserve" are allowed only when backed by a direct provider/place URL; non-authoritative provider searches must be labeled as search/find actions. No paid place metadata API is part of this v0.1 surface. |
 | Screen titles | Locked | Main surfaces use plain titles like Discover and Settings; avoid oversized informal slogans as page titles. |
 | Discover hierarchy | Locked | People stay near the top under search; Places are the primary Discover content with a segmented `mine` / `friends` / `everyone` scope switch at the top of the Places section. |
 | Add question answers | Locked | M2 persists starter contextual answers into flexible `LocalPlaceAttribute` rows using `question_key`, `value_type`, and JSON values. Starter templates are category-aware: coffee = work setup/tags, hike = strenuousness/tags, restaurant = price/occasion/tags, plus a rating/excitement signal. Expanded place sheets read persisted attributes rather than inferred placeholder chips. Future user-created/custom questions should add question-definition metadata, not hardcode new answer columns. |

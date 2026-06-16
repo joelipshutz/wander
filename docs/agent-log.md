@@ -2987,3 +2987,56 @@ Outcome:
 - Branch pushed: `codex/shared-agent-skills`
 - Local automations updated: `rec-me-pr-review-merge-and-testflight-release`, `rec-me-testflight-feedback-bug-catcher`
 - Next step after merge: run `scripts/install-agent-skills.sh` from the stable repo checkout on each machine that should expose these as indexed skills.
+
+## 2026-06-16 12:04 PDT - Codex - Place Detail Eng Plan
+
+Agent: Codex
+Branch: `codex/place-detail-eng-plan`
+Starting status: clean branch tracking `origin/main`; fetched latest `origin`; isolated worktree created at `/Users/ryanlieblein/Developer/Wander-worktrees/place-detail-eng-plan` because another agent may be working locally.
+
+Goal: run `/plan-eng-review` for the expanded saved/unsaved place full-height pull-up view: business actions, tags, ratings/review counts, saved personal metadata, and social notes from followed people.
+
+Expected files to touch:
+
+- `docs/agent-log.md`
+- likely a new implementation plan/review artifact under `docs/plans/`
+- possibly `docs/decisions.md` or `docs/open-questions.md` if durable decisions come out of the review
+
+Initial notes:
+
+- Main checkout was clean at start.
+- Existing detached worktree `/private/tmp/wander-pr7-merge-test` appears unrelated.
+- No overlapping active agent-log entry mentions the planned place detail implementation files yet.
+
+Checkpoint:
+
+- Ran the `/plan-eng-review` preflight in the isolated worktree.
+- Brain cache had no product or recent-decision digest for this project.
+- No branch-specific gstack design doc was found.
+- Codex `request_user_input` is unavailable in Default mode, so the review is paused at the required prerequisite decision: proceed directly with standard eng review or run `/office-hours` first.
+
+Checkpoint:
+
+- Ryan chose to proceed with standard eng review.
+- Loaded current Map/Discover place-detail code, local/remote models, Supabase visible-place RPC contract, TODOs, and the existing rich-place-profile decision.
+- Fetched latest `origin/main`; this branch is one commit behind `origin/main` (`b0918dc`, signed-out save auth handoff), which touches `MapScreen.swift`, `WanderLocalStore.swift`, `WanderStoreTests.swift`, and `docs/agent-log.md`. Review notes account for the landed changes, but the branch still needs update/rebase before any PR.
+- Verified current Google Places docs: `rating`, `userRatingCount`, `websiteUri`, and phone fields require Places API field masks and are billed fields; reviews/review summaries are a higher atmosphere tier. Google Maps URLs remain keyless for search/directions/share.
+- Verified Yelp Fusion exposes rating/review-count style data, but using it would introduce a second provider and matching/attribution work.
+- Step 0 surfaced a scope decision: keep this implementation provider-light and add source-provenance slots/fallback UI, or reverse the prior no-provider decision and build a Google/Yelp-backed metadata integration now.
+
+Checkpoint:
+
+- Ryan chose the provider-light direction: MapKit-provided website/phone/directions/share first, no paid ratings provider in v1.
+- Follow-up scope request: include Reserve / Order Now if it can be done free via DoorDash, Resy, OpenTable, etc.
+- Provider check: DoorDash Marketplace API is limited-access partner infrastructure, so no free structured "is this exact restaurant orderable" integration. OpenTable/Resy can be treated as external consumer destinations, but not as authoritative availability APIs unless a direct provider URL is captured. Plan should use direct place/provider URLs when known and safe search link-outs as secondary "Find delivery" / "Find reservations" actions, with source provenance and no fake availability.
+
+Outcome:
+
+- Wrote engineering plan: `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`.
+- Updated `docs/decisions.md` so the rich place profile decision allows MapKit/direct website and phone data plus exact direct Order/Reserve URLs, while keeping paid provider metadata and fake empty fields out of v0.1.
+- Wrote gstack test/task artifacts:
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-place-detail-eng-plan-eng-review-test-plan-20260616-122929.md`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/tasks-eng-review-20260616-122929.jsonl`
+- Recorded local gstack review status after creating a temporary `/private/tmp/gstack-bun-shim/bun` because the gstack review logger expects `bun` and this shell did not have it on PATH.
+- Verification: `git diff --check` passed. No app build/tests run because this pass produced docs/plan/decision artifacts only.
+- Known issue before PR: branch is behind `origin/main` by one commit and needs rebase/update before pushing.
