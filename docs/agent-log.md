@@ -2812,3 +2812,34 @@ Outcome:
 - Implemented map filter color/style updates and tappable POI selection/add flow in `MapScreen`.
 - Continuing PR: https://github.com/joelipshutz/wander/pull/6
 - Known caveat: direct Apple map feature selection symbols were not present in the local SDK headers, so taps resolve by searching nearby MapKit POIs around the tapped coordinate. If MapKit returns a neighboring POI first, exact label selection may require an `MKMapView` bridge or a newer SwiftUI MapKit API.
+
+## 2026-06-16 08:42 PDT - Codex - Exact Map Feature Selection Correction
+
+Agent: Codex
+Branch: `codex/testflight-feedback-batch`
+Starting status: clean branch tracking `origin/codex/testflight-feedback-batch`; correcting previous POI tap implementation on PR #6 after Ryan clarified expected behavior.
+
+Goal: remove random-coordinate nearby POI resolution and make only actual tapped MapKit places/features open the unsaved place half-sheet with `+`, while blank map taps dismiss/clear any temporary pin.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Confirmed local iPhoneOS SDK exposes SwiftUI `MapFeature` selection plus `MKMapItemRequest(feature:)`; the previous broader coordinate fallback is not the right behavior for this product interaction.
+- Replaced map coordinate tap resolution with SwiftUI `Map(position:selection:)` using `MapFeature`; only point-of-interest features with titles are selectable.
+- Selected map features now resolve through `MKMapItemRequest(feature:)`, normalize into the same `PlaceCandidate` shape as search results, and open the existing half-sheet with the `+` save action.
+- Blank map taps clear the native feature selection and remove the temporary map candidate/pin; they no longer synthesize a candidate from nearby coordinates.
+- iOS 18+ hides the native MapKit selection accessory so the app-owned half-sheet is the primary UI; iOS 17 keeps feature selection support without using unavailable APIs.
+- Tried `xcodegen generate` after removing stale test coverage, but `xcodegen` is not installed in this shell, so the existing referenced test file was kept with neutral radius-helper tests to avoid breaking the generated project.
+
+Verification:
+
+- Passed: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-map-feature CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-map-feature-tests CODE_SIGNING_ALLOWED=NO -jobs 1` (87 tests, 0 failures)
+
+Outcome:
+
+- Corrected the map tap behavior on PR #6 so random map coordinates do nothing, while actual Apple map place taps open/save through the app's existing search candidate flow.

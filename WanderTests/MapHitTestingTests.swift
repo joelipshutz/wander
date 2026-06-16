@@ -3,7 +3,7 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
-    func testScreenPointNearMarkerUsesPixelDistance() {
+    func testScreenPointWithinMarkerRadius() {
         let marker = CGPoint(x: 120, y: 240)
 
         XCTAssertTrue(
@@ -14,7 +14,7 @@ final class MapHitTestingTests: XCTestCase {
         )
     }
 
-    func testScreenPointAwayFromMarkerClearsSelection() {
+    func testScreenPointOutsideMarkerRadius() {
         let marker = CGPoint(x: 120, y: 240)
 
         XCTAssertFalse(
