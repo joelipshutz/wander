@@ -19,6 +19,9 @@ All agents working in this repo must keep `docs/agent-log.md` current.
 Before non-trivial work:
 
 - Read the latest entries in `docs/agent-log.md`.
+- Check whether an isolated worktree is needed before editing. Use one when Joe,
+  Ryan, or another agent may be working locally, when the current checkout has
+  uncommitted/untracked changes, or when the task touches high-conflict files.
 - Append a new entry with date/time, agent/tool name, goal, branch, current git status, and files you expect to touch.
 - If another agent is already working on overlapping files, call that out before editing.
 
@@ -48,13 +51,13 @@ Branch prefixes:
 - `claude/<short-task>` for Claude
 - `openclaw/<short-task>` for OpenClaw
 
-Prefer a separate worktree for agent implementation when Joe, Ryan, or another agent may also be working locally:
+Prefer a separate worktree for agent implementation when Joe, Ryan, or another agent may also be working locally. Before deciding, inspect `git worktree list`, `git status --short --branch`, and recent `docs/agent-log.md` entries. If a worktree is needed, create it from latest `origin/main` and do the work there:
 
 ```bash
 git worktree add ../Wander-worktrees/<short-task> -b codex/<short-task> origin/main
 ```
 
-Before editing, agents must run `git fetch origin`, check `git status --short --branch`, and read the latest `docs/agent-log.md` entries. If there are uncommitted or untracked files, assume they belong to Joe, Ryan, or another agent. Do not edit overlapping files without calling out the overlap first.
+Before editing, agents must run `git fetch origin`, check `git status --short --branch`, inspect existing worktrees with `git worktree list`, and read the latest `docs/agent-log.md` entries. If there are uncommitted or untracked files, assume they belong to Joe, Ryan, or another agent. Do not edit overlapping files without calling out the overlap first.
 
 Avoid parallel edits to high-conflict files unless explicitly coordinated:
 
@@ -73,6 +76,33 @@ For non-trivial feature, fix, refactor, release, or docs/process changes, agents
 This applies especially to Ryan-owned work on `ryan/<short-task>` branches. Ryan's agent should push its branch and open or update the PR before stopping without waiting for a separate human prompt, unless Ryan explicitly says not to push or not to open a PR.
 
 Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and update `docs/agent-log.md` with outcome, tests, known issues, and next steps. Prefer squash merging PRs into `main`, then delete the branch.
+
+## Shared Agent Skills
+
+Repo-owned agent workflows live in `agent-skills/`. These files are the shared
+source of truth for recurring Codex/Claude/OpenClaw workflows that should behave
+the same across Joe's machine, Ryan's machine, and scheduled automations.
+
+Install or verify local symlinks with:
+
+```bash
+scripts/install-agent-skills.sh
+scripts/install-agent-skills.sh --check
+```
+
+The installer links repo skills into local indexed skill roots:
+
+- `~/.codex/skills`
+- `~/.claude/skills`
+- `~/.openclaw/workspace/skills`
+
+If the local Codex instance does not list a repo-owned skill, read the
+corresponding `agent-skills/<skill-name>/SKILL.md` directly and follow it.
+
+Current shared skills:
+
+- `recme-pr-review-merge-release` - use when asked to review, merge, land, ship, or release a rec.me/Wander PR.
+- `recme-testflight-feedback-bug-catcher` - use when checking or acting on rec.me/Wander TestFlight feedback.
 
 ## Tech Stack
 
