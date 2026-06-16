@@ -2939,3 +2939,11 @@ Verification:
 - `bash -n scripts/install-agent-skills.sh` passed.
 - `scripts/install-agent-skills.sh --check` passed and reported the expected missing local symlinks because the branch has not been installed into Joe's global skill roots.
 - `git diff --check` passed.
+
+Outcome:
+
+- Commit: `f389e9e` (`docs: add shared recme agent skills`)
+- PR: https://github.com/joelipshutz/wander/pull/8
+- Branch pushed: `codex/shared-agent-skills`
+- Local automations updated: `rec-me-pr-review-merge-and-testflight-release`, `rec-me-testflight-feedback-bug-catcher`
+- Next step after merge: run `scripts/install-agent-skills.sh` from the stable repo checkout on each machine that should expose these as indexed skills.
