@@ -3268,3 +3268,8 @@ Verification:
 
 - `git diff --check`
 - Searched both skill files for stale Slack polling/checkmark language; remaining Slack mentions are only contextual or release-note-specific.
+
+Outcome:
+
+- Commit: `ac03f30` (`docs: align recme skills with linear statuses`)
+- PR: https://github.com/joelipshutz/wander/pull/13
