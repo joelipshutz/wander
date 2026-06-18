@@ -24,6 +24,11 @@ enum AddQuestionTemplates {
         let normalizedCategory = category.lowercased()
         var blocks = [ratingBlock(status: status)]
 
+        if status == .wannaGo {
+            blocks.append(contentsOf: wannaGoBlocks(category: normalizedCategory))
+            return blocks
+        }
+
         switch normalizedCategory {
         case "coffee":
             blocks.append(contentsOf: coffeeBlocks)
@@ -40,6 +45,111 @@ enum AddQuestionTemplates {
         }
 
         return blocks
+    }
+
+    private static func wannaGoBlocks(category: String) -> [AddQuestionBlock] {
+        switch category {
+        case "coffee":
+            return [
+                AddQuestionBlock(
+                    key: "coffee_tags",
+                    title: "why save it?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["work maybe", "cute", "food maybe", "nearby", "recommended"],
+                    defaultValues: [],
+                    minimumOptionWidth: 108
+                )
+            ]
+        case "hike":
+            return [
+                AddQuestionBlock(
+                    key: "hike_tags",
+                    title: "why save it?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["sunset", "views", "easy maybe", "dog friendly", "recommended"],
+                    defaultValues: [],
+                    minimumOptionWidth: 112
+                )
+            ]
+        case "restaurant":
+            return [
+                AddQuestionBlock(
+                    key: "occasion",
+                    title: "planning for?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["quick bite", "date night", "group", "rainy night"],
+                    defaultValues: [],
+                    minimumOptionWidth: 104
+                ),
+                AddQuestionBlock(
+                    key: "restaurant_tags",
+                    title: "why save it?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["looks cozy", "good table", "share plates", "recommended"],
+                    defaultValues: [],
+                    minimumOptionWidth: 112
+                )
+            ]
+        case "bar":
+            return [
+                AddQuestionBlock(
+                    key: "occasion",
+                    title: "planning for?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["first drink", "date", "group", "late"],
+                    defaultValues: [],
+                    minimumOptionWidth: 98
+                ),
+                AddQuestionBlock(
+                    key: "bar_tags",
+                    title: "why save it?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["patio", "good music", "not too loud", "walk-in"],
+                    defaultValues: [],
+                    minimumOptionWidth: 104
+                )
+            ]
+        case "park":
+            return [
+                AddQuestionBlock(
+                    key: "best_for",
+                    title: "planning for?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["walk", "picnic", "views", "reset"],
+                    defaultValues: [],
+                    minimumOptionWidth: 84
+                )
+            ]
+        default:
+            let keyPrefix = normalizedKeyPrefix(for: category)
+
+            return [
+                AddQuestionBlock(
+                    key: "\(keyPrefix)_tags",
+                    title: "why save it?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: ["looks useful", "easy maybe", "cozy", "bring friends"],
+                    defaultValues: [],
+                    minimumOptionWidth: 112
+                )
+            ]
+        }
     }
 
     private static func ratingBlock(status: PlaceStatus) -> AddQuestionBlock {

@@ -193,6 +193,16 @@ Core rules:
 
 - Every milestone should land with matching tests.
 - Run the full `xcodebuild test` command above before committing implementation changes.
+- In Codex, sandboxed `xcodebuild test` commonly fails before exercising app code because
+  CoreSimulator services, `~/Library/Logs/CoreSimulator`, or SwiftPM dependency fetching are
+  blocked. When that happens, rerun the same `xcodebuild test` command with escalated
+  permissions rather than changing the destination or interpreting the sandbox failure as a
+  test failure. Use `prefix_rule: ["xcodebuild", "test"]` for the approval request.
+- For focused regression checks, use the same simulator destination and add
+  `-only-testing:<TestTarget>/<TestCase>/<testName>`, for example:
+  ```bash
+  xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts
+  ```
 - Current important test coverage:
   - design tokens
   - four-tab navigation contract

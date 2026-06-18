@@ -3153,3 +3153,46 @@ Known issues / testing focus:
 
 - Tester focus: map search/tapped-place expandable detail sheet, Website/Call/Share/Directions actions, metadata persistence after save, and social/friend notes at the bottom of the expanded sheet.
 - Deferred: no Google/Yelp public ratings/review counts, no DoorDash/Resy/OpenTable partner API integration or scraping, no photo OCR, no native Contacts, no share extension, and no public web share pages.
+
+## 2026-06-18 12:24 PDT - Codex Automation - TestFlight Feedback Wanna-Go Questions
+
+Agent: Codex automation `rec-me-testflight-feedback-bug-catcher`
+Branch: `codex/wanna-go-question-fit`
+Starting status: root checkout was clean on `main` at `4e276b1`; fetched `origin`, checked out `main`, and `git pull` reported already up to date. Existing worktrees `/private/tmp/recme-auth-save-persist` and `/private/tmp/recme-shared-agent-skills` do not overlap with this UI/template fix. Mission Control `localhost:4000` was unreachable, so tracking is staying in this log.
+
+Goal: triage new Slack `#testflight-feedback` items since 2026-06-16 11:22 PDT and implement the safe subset of Joe's report that `wannaGo` saves ask questions a user cannot know before visiting.
+
+Expected files to touch:
+
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `AGENTS.md`
+- `docs/agent-log.md`
+
+Initial triage:
+
+- Joe's 2026-06-16 17:10/17:11 report combines a save sync failure/retry concern with a clearer `wannaGo` question-fit problem.
+- The sync hardening part needs a broader retry queue/drain decision and possibly backend diagnosis, so this run is not changing sync semantics.
+- Joe's 2026-06-16 17:30 screenshot is a Supabase security alert for `rls_disabled_in_public`; it is privacy/security and schema-sensitive, so this run is triage-only for that item.
+- Joe's 2026-06-16 13:01 Add-tab search request and 12:53 social-map filter request are clear product/UX enhancements, not a safe bug-fix patch for this run.
+- Ryan's 2026-06-16 11:24 "no this is not fixed" reopens the Apple Maps link parsing issue from the 2026-06-15 21:07 thread; parent thread was already checked off, so this needs a separate follow-up rather than being treated as done.
+
+Implementation:
+
+- Updated `AddQuestionTemplates` so `wannaGo` saves keep the existing excitement scale but skip visited-only prompts such as restaurant `price`, coffee `work_setup`, and hike `strenuousness`.
+- Added pre-visit prompts that reuse existing attribute keys where possible: `planning for?` and `why save it?`, with no default tags auto-selected.
+- Added `AGENTS.md` testing guidance for Codex: sandboxed `xcodebuild test` can fail on CoreSimulator, logs, or SwiftPM access, and agents should rerun the same command with escalated permissions using `prefix_rule: ["xcodebuild", "test"]`.
+
+Verification:
+
+- Sandboxed focused test failed before exercising app code because CoreSimulator access and GitHub package resolution were blocked.
+- Elevated focused test passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-wanna-go CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts`
+- `git diff --check` passed.
+
+Remaining triage / next actions:
+
+- P1 security/backend: Supabase alert says `rls_disabled_in_public` is publicly accessible in project `wander`. Recommended next step is to inspect hosted tables and apply/verify RLS policies explicitly; this needs backend approval and should not be changed blindly from this workflow.
+- P1 sync reliability: signed-in own-place saves can fail remote sync and currently land in `.failed` with local persistence, but there is no visible retry queue drain for failed `user_places`. Recommended next step is a small sync-retry design/implementation pass with tests.
+- P2 reopened link parsing: Apple Maps Urth Cafe link issue was marked handled before Ryan's "not fixed" reply; needs a fresh repro link/device/account details or a dedicated parser regression pass.
+- P2 product UX: Add-tab search bar/in-page results and social person map filter are actionable enhancements, but should be planned as separate UI work.
