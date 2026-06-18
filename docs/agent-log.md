@@ -3237,3 +3237,34 @@ Process correction:
 
 - Updated `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md` on branch `codex/feedback-checkmark-pr-rule` so actionable implementation feedback only gets `:white_check_mark:` after an implementation PR is open and linked.
 - The updated rule also says triage-only, backlog, follow-up-needed, approval-needed, and mixed incomplete threads stay uncheckmarked.
+
+## 2026-06-18 13:04 PDT - Codex - Linear Task Status Skill Contract
+
+Agent: Codex
+Branch: `codex/feedback-checkmark-pr-rule`
+Starting status: branch clean at `d9be6d0`; root checkout has untracked `DerivedData-build28-test/` from the prior build/test run, left untouched. Existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`, with no overlap on the skill docs being edited.
+
+Goal: update both repo-owned rec.me automation skills so Linear is the source of truth for task polling/status, and so both skills share one strict task status definition. Joe confirmed current `Done` should mean merged to `main` and pushed/available in TestFlight; later production release workflow will update `Done` to mean production.
+
+Linear context checked:
+
+- Team `recme` statuses: `Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`, `Duplicate`.
+- Example integrated issue: `REC-1` (`Add search bar to the top of the add tab`) is in `Backlog` with a Slack attachment, confirming Slack feeds Linear but Linear should be polled as the queue.
+
+Expected files to touch:
+
+- `agent-skills/recme-pr-review-merge-release/SKILL.md`
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/agent-log.md`
+
+Completion notes:
+
+- Added the same Universal Linear Task Status Contract to both skills.
+- Updated the feedback issue-checker skill to poll Linear `Backlog`, `Todo`, and `In Progress` issues instead of Slack, use Slack attachments only as context, move implementation work to `In Progress`, and move issues to `In Review` only after an implementation PR is open.
+- Updated the PR review/merge/TestFlight skill to resolve linked Linear issues, keep merged-but-not-TestFlight work in `In Review`, and move product/app issues to `Done` only after the change is merged to `main` and available in TestFlight.
+- Preserved the future production caveat: when production releases exist, the contract should be updated so `Done` means shipped in a production App Store version.
+
+Verification:
+
+- `git diff --check`
+- Searched both skill files for stale Slack polling/checkmark language; remaining Slack mentions are only contextual or release-note-specific.
