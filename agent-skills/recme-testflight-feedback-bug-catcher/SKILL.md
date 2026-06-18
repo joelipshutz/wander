@@ -98,7 +98,8 @@ For each actionable Linear issue:
 3. Comment in Linear with the triage summary when the issue needs a durable
    decision, implementation plan, or handoff.
 4. Classify severity (`P0`, `P1`, `P2`, `P3`), likely app area, likely cause, recommended fix path, test plan, and open questions with recommended answers.
-5. Apply plan-eng-review lens for backend, sync, auth, extraction, privacy, data model, persistence, visibility, or regression-risk issues.
+5. Run the Engineering Review Gate below before implementation when the issue
+   scope warrants it. Otherwise note why the gate was skipped.
 6. Apply plan-design-review lens for UX, visual hierarchy, copy, affordance, accessibility, screen composition, or interaction issues.
 7. Apply both lenses when cross-cutting.
 8. Respect Wander/rec.me rules:
@@ -111,25 +112,74 @@ For each actionable Linear issue:
    - `DESIGN.md` governs UI
    - backend visibility/RLS is authoritative; client visibility policy is UI-only
 
+## Engineering Review Gate
+
+Invoke the `plan-eng-review` skill before implementation when a Linear issue has
+non-trivial engineering risk. Prefer the indexed `plan-eng-review` skill when
+available; if it is not indexed, read and follow
+`/Users/joelipshutz/.claude/skills/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md`.
+
+Run `plan-eng-review` for:
+
+- P0/P1 issues.
+- Auth, sync, backend, privacy, Supabase schema/RLS, data model, persistence,
+  extraction, visibility, security, or migration work.
+- Work that changes cross-screen app behavior, app-wide state, release flow, or
+  any contract used by more than one feature.
+- Plans likely to touch more than eight files, add more than two new
+  classes/services, or introduce a new queue/cache/job/integration.
+- Any issue where the test plan, failure modes, data flow, or implementation
+  boundary is unclear.
+
+Skipping `plan-eng-review` is acceptable for isolated copy changes, obvious
+one-file UI polish, small template swaps, docs/process-only edits, or tests that
+do not change runtime behavior. Record the skip reason in `docs/agent-log.md`
+when implementing.
+
+Decision handling:
+
+- If `plan-eng-review` identifies architecture, data, test, performance, scope,
+  or rollout decisions, stop before implementation.
+- Flag each key decision in the current Codex/automation thread with the
+  recommendation and tradeoff. If a native question tool is available, use it;
+  otherwise write the decision brief in chat and pause.
+- Also leave a Linear comment summarizing the blocked decision and recommended
+  option so the issue record stays durable.
+- Do not silently choose a direction for product-sensitive, security-sensitive,
+  schema/data, sync, visibility, or release-risk decisions.
+- Once Joe explicitly accepts a path, update the Linear comment and
+  `docs/agent-log.md`, then proceed with implementation.
+
+Record the `plan-eng-review` outcome in the final Codex report:
+
+- `not needed` with skip reason
+- `clean` with the review summary
+- `blocked on decision` with the decision link/context
+- `converted to approval-needed` when the issue should not be auto-built
+
 ## Implementation Path For Auto-Approved Fixes
 
 1. If the issue is in `Backlog` but the direction is clear and safe, move it to
    `Todo` or directly to `In Progress` when starting work. If direction is not
    clear or approval is needed, leave it in `Backlog` or `Todo` and comment with
    the decision needed.
-2. When starting implementation, assign/claim the Linear issue when possible,
+2. Complete the Engineering Review Gate before claiming implementation. If the
+   gate is required and returns unresolved decisions, stop and flag them in the
+   current thread before executing.
+3. When starting implementation, assign/claim the Linear issue when possible,
    move it to `In Progress`, and comment with branch/worktree.
-3. Create a `codex/<short-task>` branch/worktree from latest `origin/main`,
+4. Create a `codex/<short-task>` branch/worktree from latest `origin/main`,
    preferably using the Linear issue key in the branch name.
-4. Keep `docs/agent-log.md` current with goal, Linear issue, status, files touched, commands, tests, and final outcome.
-5. Make the smallest safe fix that addresses the tester feedback.
-6. Run relevant tests/builds. For UI changes, run simulator/screenshot checks when feasible.
-7. Commit with a conventional commit message.
-8. Push the branch and open a PR to `main` with a concise description, Linear
+5. Keep `docs/agent-log.md` current with goal, Linear issue, engineering review
+   gate outcome, status, files touched, commands, tests, and final outcome.
+6. Make the smallest safe fix that addresses the tester feedback.
+7. Run relevant tests/builds. For UI changes, run simulator/screenshot checks when feasible.
+8. Commit with a conventional commit message.
+9. Push the branch and open a PR to `main` with a concise description, Linear
    issue link, source Slack link if applicable, test results, and known issues.
-9. Move the Linear issue to `In Review` and comment with the PR link, head SHA,
+10. Move the Linear issue to `In Review` and comment with the PR link, head SHA,
    tests run, and known gaps.
-10. Do not merge, upload TestFlight, move issues to `Done`, or post Slack analysis
+11. Do not merge, upload TestFlight, move issues to `Done`, or post Slack analysis
    from this workflow.
 
 ## Completion
@@ -145,5 +195,5 @@ For each actionable Linear issue:
   an explicit Joe-approved non-implementation outcome. Otherwise split the issue
   or comment with completed and remaining subitems.
 - Output a concise Codex report with Linear issue link, source Slack link if
-  applicable, severity, likely area, decision, PR link if created, recommended
-  next action, tests run, and open questions.
+  applicable, severity, likely area, engineering review gate outcome, decision,
+  PR link if created, recommended next action, tests run, and open questions.

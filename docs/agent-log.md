@@ -3273,3 +3273,27 @@ Outcome:
 
 - Commit: `ac03f30` (`docs: align recme skills with linear statuses`)
 - PR: https://github.com/joelipshutz/wander/pull/13
+
+## 2026-06-18 13:22 PDT - Codex - Issue Checker Eng Review Gate
+
+Agent: Codex
+Branch: `codex/issue-review-eng-gate`
+Starting status: clean `main...origin/main` at `d4d7825`; existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-rec-1-rec-3-ui`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`, with no overlap on the issue-checker skill doc.
+
+Goal: update the repo-owned `recme-testflight-feedback-bug-catcher` skill so Linear issue review invokes `plan-eng-review` when issue scope warrants it, and so key decisions surfaced by that review are flagged in the current thread before implementation proceeds.
+
+Expected files to touch:
+
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/agent-log.md`
+
+Completion notes:
+
+- Read `/Users/joelipshutz/.claude/skills/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md` and updated the issue-checker skill to invoke it before implementation when Linear issue scope has non-trivial engineering risk.
+- Added trigger criteria for P0/P1, auth/sync/backend/privacy/schema/RLS/data/persistence/visibility/security/migration, cross-screen behavior, multi-service/file plans, and unclear test/data/failure-mode boundaries.
+- Added a decision-stop rule: if `plan-eng-review` surfaces architecture, data, test, performance, scope, or rollout decisions, the agent must flag the decision in the current thread and Linear comment before executing.
+- Updated final reporting to include the engineering review gate outcome.
+
+Verification:
+
+- `git diff --check`
