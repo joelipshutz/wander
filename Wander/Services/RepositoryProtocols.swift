@@ -28,6 +28,7 @@ struct PlaceFilters: Equatable {
     var statuses: Set<PlaceStatus> = []
     var categories: Set<String> = []
     var ownerScopes: Set<String> = []
+    var ownerIDs: Set<String> = []
 }
 
 struct ManualPlaceInput: Equatable {

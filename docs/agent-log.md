@@ -3273,3 +3273,43 @@ Outcome:
 
 - Commit: `ac03f30` (`docs: align recme skills with linear statuses`)
 - PR: https://github.com/joelipshutz/wander/pull/13
+
+## 2026-06-18 13:08 PDT - Codex - REC-1/REC-3 Add Search And Social Filter
+
+Agent: Codex
+Branch: `codex/rec-1-rec-3-ui`
+Worktree: `/private/tmp/recme-rec-1-rec-3-ui`
+Starting status: created from latest `origin/main` at `11f70ba`; root checkout was clean on `main` after fetching/pulling. Existing worktrees `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit` do not overlap with this UI work.
+
+Linear issues:
+
+- `REC-1` Add search bar to the top of the add tab
+- `REC-3` Add social map filter pill dropdown
+
+Goal: implement the next clear Linear feedback issues from the updated bug-catcher workflow, then open a PR and move both issues to `In Review`.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Implemented Add-tab top search field that accepts a place name or map/location link and shows candidate results inline on the Add source page.
+- Current-location results now also stay on the Add source page instead of jumping to a separate confirm step, matching the in-page-results feedback.
+- Implemented social map filter as a dropdown pill with options for all social places, each visible social owner, and hiding social places.
+- Extended `PlaceFilters` with `ownerIDs` and wired local/remote visible-place filtering so the selected social owner actually filters the map data.
+- Added store regression coverage for filtering remote-visible social places to a specific owner.
+
+Verification:
+
+- `git diff --check` passed.
+- Initial focused selector compiled but matched 0 tests, so it was not counted as verification.
+- Elevated focused suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests` (41 tests, 0 failures).
+- Elevated full test passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3 CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
+- Rebasing onto latest `origin/main` produced a `docs/agent-log.md` conflict with the skill-contract log entry; resolved by preserving both entries.
+- Elevated full test passed again on rebased head `b86170f`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3-final CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).

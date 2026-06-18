@@ -18,6 +18,8 @@ struct AddScreen: View {
     @State private var manualArea = ""
     @State private var manualCategory = "coffee"
     @State private var linkInput = ""
+    @State private var quickAddQuery = ""
+    @State private var isShowingInlineCandidateResults = false
     @State private var selectedAnswers: [String: Set<String>] = [:]
     @State private var savedResult: SaveResult?
     @State private var draft: UnresolvedDraft?
@@ -119,44 +121,72 @@ struct AddScreen: View {
     }
 
     private var sourcePicker: some View {
-        VStack(spacing: WanderTheme.spacing2) {
-            SourceRow(
-                title: isResolvingCandidates ? "finding nearby places..." : AddSourceType.currentLocation.title,
-                subtitle: "asks once, suggests places nearby",
-                systemImage: "location.fill",
-                isPrimary: true,
-                isDisabled: isResolvingCandidates
-            ) {
-                Task {
-                    await resolveCurrentLocationCandidates()
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            AddSearchField(
+                query: $quickAddQuery,
+                isLoading: isResolvingCandidates,
+                submit: {
+                    Task {
+                        await resolveQuickAddQuery()
+                    }
                 }
-            }
-            SourceRow(title: AddSourceType.link.title, subtitle: "paste a map or location link", systemImage: "link", isDisabled: isResolvingCandidates) {
-                resolutionMessage = nil
-                selectedSource = .link
-                step = .link
-            }
-            SourceRow(title: AddSourceType.manual.title, subtitle: "search by name or neighborhood", systemImage: "square.and.pencil", isDisabled: isResolvingCandidates) {
-                resolutionMessage = nil
-                selectedSource = .manual
-                step = .manual
-            }
-            SourceRow(title: AddSourceType.photo.title, subtitle: "save a photo draft for extraction", systemImage: "photo", isDisabled: isResolvingCandidates) {
-                resolutionMessage = nil
-                selectedSource = .photo
-                step = .photo
-            }
+            )
 
-            if let resolutionMessage {
-                InlineMessage(text: resolutionMessage)
+            if isShowingInlineCandidateResults {
+                Button {
+                    clearInlineCandidateResults()
+                } label: {
+                    Label("back to add options", systemImage: "chevron.left")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back to add options")
+
+                confirmPlace
+
+                if let resolutionMessage {
+                    InlineMessage(text: resolutionMessage)
+                }
+            } else {
+                SourceRow(
+                    title: isResolvingCandidates ? "finding nearby places..." : AddSourceType.currentLocation.title,
+                    subtitle: "asks once, suggests places nearby",
+                    systemImage: "location.fill",
+                    isPrimary: true,
+                    isDisabled: isResolvingCandidates
+                ) {
+                    Task {
+                        await resolveCurrentLocationCandidates()
+                    }
+                }
+                SourceRow(title: AddSourceType.link.title, subtitle: "paste a map or location link", systemImage: "link", isDisabled: isResolvingCandidates) {
+                    resolutionMessage = nil
+                    selectedSource = .link
+                    step = .link
+                }
+                SourceRow(title: AddSourceType.manual.title, subtitle: "search by name or neighborhood", systemImage: "square.and.pencil", isDisabled: isResolvingCandidates) {
+                    resolutionMessage = nil
+                    selectedSource = .manual
+                    step = .manual
+                }
+                SourceRow(title: AddSourceType.photo.title, subtitle: "save a photo draft for extraction", systemImage: "photo", isDisabled: isResolvingCandidates) {
+                    resolutionMessage = nil
+                    selectedSource = .photo
+                    step = .photo
+                }
+
+                if let resolutionMessage {
+                    InlineMessage(text: resolutionMessage)
+                        .padding(.top, WanderTheme.spacing2)
+                }
+
+                Text("location finds nearby places only · it never broadcasts you")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, WanderTheme.spacing2)
             }
-
-            Text("location finds nearby places only · it never broadcasts you")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, WanderTheme.spacing2)
         }
     }
 
@@ -477,6 +507,8 @@ struct AddScreen: View {
         manualArea = ""
         manualCategory = "coffee"
         linkInput = ""
+        quickAddQuery = ""
+        isShowingInlineCandidateResults = false
         selectedAnswers = [:]
         savedResult = nil
         draft = nil
@@ -499,6 +531,8 @@ struct AddScreen: View {
         manualArea = ""
         manualCategory = "coffee"
         linkInput = ""
+        quickAddQuery = ""
+        isShowingInlineCandidateResults = false
         selectedAnswers = [:]
         savedResult = nil
         draft = nil
@@ -544,7 +578,7 @@ struct AddScreen: View {
                 step = .source
             }
         case .details:
-            step = .confirm
+            step = isShowingInlineCandidateResults ? .source : .confirm
         case .draft:
             step = .source
         case .source, .saved:
@@ -621,6 +655,7 @@ struct AddScreen: View {
     private func resolveCurrentLocationCandidates() async {
         selectedSource = .currentLocation
         resolutionMessage = nil
+        isShowingInlineCandidateResults = false
         isResolvingCandidates = true
         defer { isResolvingCandidates = false }
 
@@ -632,7 +667,8 @@ struct AddScreen: View {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
             }
-            step = .confirm
+            isShowingInlineCandidateResults = true
+            step = .source
         } catch {
             candidates = []
             selectedCandidateID = nil
@@ -641,9 +677,10 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolveManualCandidates() async {
+    private func resolveManualCandidates(inline: Bool = false) async {
         selectedSource = .manual
         resolutionMessage = nil
+        isShowingInlineCandidateResults = false
         isResolvingCandidates = true
         defer { isResolvingCandidates = false }
 
@@ -659,7 +696,8 @@ struct AddScreen: View {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
             }
-            step = .confirm
+            isShowingInlineCandidateResults = inline
+            step = inline ? .source : .confirm
         } catch {
             candidates = []
             selectedCandidateID = nil
@@ -668,9 +706,10 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolveLinkCandidates() async {
+    private func resolveLinkCandidates(inline: Bool = false) async {
         selectedSource = .link
         resolutionMessage = nil
+        isShowingInlineCandidateResults = false
         isResolvingCandidates = true
         defer { isResolvingCandidates = false }
 
@@ -682,7 +721,8 @@ struct AddScreen: View {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
             }
-            step = .confirm
+            isShowingInlineCandidateResults = inline
+            step = inline ? .source : .confirm
         } catch {
             if auth.isSignedIn {
                 let draft = await store.createUnresolvedDraft(
@@ -707,6 +747,38 @@ struct AddScreen: View {
         Task {
             await saveLinkDraftAsync()
         }
+    }
+
+    @MainActor
+    private func resolveQuickAddQuery() async {
+        let query = quickAddQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        if Self.looksLikeLink(query) {
+            linkInput = query
+            await resolveLinkCandidates(inline: true)
+        } else {
+            manualName = query
+            manualArea = ""
+            await resolveManualCandidates(inline: true)
+        }
+    }
+
+    private func clearInlineCandidateResults() {
+        candidates = []
+        selectedCandidateID = nil
+        selectedAnswers = [:]
+        resolutionMessage = nil
+        isShowingInlineCandidateResults = false
+    }
+
+    private static func looksLikeLink(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.hasPrefix("http://")
+            || normalized.hasPrefix("https://")
+            || normalized.contains("maps.apple.com")
+            || normalized.contains("google.com/maps")
+            || normalized.contains("maps.app.goo.gl")
     }
 
     @MainActor
@@ -968,6 +1040,50 @@ private struct AddSaveToastView: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
+    }
+}
+
+private struct AddSearchField: View {
+    @Binding var query: String
+    let isLoading: Bool
+    let submit: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: isLoading ? "hourglass" : "magnifyingglass")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            TextField("search by name or add a link", text: $query)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .tint(WanderTheme.terracotta.color)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit(submit)
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear add search")
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 48)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Search by name or add a link")
+        .disabled(isLoading)
+        .opacity(isLoading ? 0.78 : 1)
     }
 }
 
