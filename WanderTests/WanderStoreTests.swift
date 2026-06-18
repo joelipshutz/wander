@@ -409,6 +409,28 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(tags?.kind, .multiTag)
     }
 
+    func testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts() {
+        let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .wannaGo)
+        let coffeeBlocks = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)
+        let hikeBlocks = AddQuestionTemplates.blocks(category: "hike", status: .wannaGo)
+
+        XCTAssertEqual(restaurantBlocks.map(\.key), ["rating_signal", "occasion", "restaurant_tags"])
+        XCTAssertEqual(restaurantBlocks.first?.title, "how excited are you?")
+        XCTAssertEqual(restaurantBlocks.first?.options, ["curious", "excited", "must go"])
+        XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "occasion" }?.title, "planning for?")
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, [])
+
+        XCTAssertEqual(coffeeBlocks.map(\.key), ["rating_signal", "coffee_tags"])
+        XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
+        XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
+
+        XCTAssertEqual(hikeBlocks.map(\.key), ["rating_signal", "hike_tags"])
+        XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
+        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("easy maybe"), true)
+    }
+
     func testFollowersAndFollowingUseGraphEdges() {
         let store = makeStore()
 
