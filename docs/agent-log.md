@@ -3196,3 +3196,29 @@ Remaining triage / next actions:
 - P1 sync reliability: signed-in own-place saves can fail remote sync and currently land in `.failed` with local persistence, but there is no visible retry queue drain for failed `user_places`. Recommended next step is a small sync-retry design/implementation pass with tests.
 - P2 reopened link parsing: Apple Maps Urth Cafe link issue was marked handled before Ryan's "not fixed" reply; needs a fresh repro link/device/account details or a dedicated parser regression pass.
 - P2 product UX: Add-tab search bar/in-page results and social person map filter are actionable enhancements, but should be planned as separate UI work.
+
+## 2026-06-18 12:39 PDT - Codex - PR #11 Merge And Build 28 Release
+
+Agent: Codex
+Branch: `main`
+Starting status: local `main` was clean and up to date at `4e276b1`; fetched, pulled, reviewed PR #11 metadata/diff, then merged PR #11.
+
+Goal: merge PR #11, bump TestFlight build, and correct the TestFlight feedback workflow after Joe pointed out that Add-tab search and social-filter feedback had been checkmarked without implementation PRs.
+
+PR #11 merge:
+
+- PR: `https://github.com/joelipshutz/wander/pull/11`
+- Head reviewed: `581350651fc651f428146a3a91d19bb9d077e431`
+- Merge commit on `main`: `fc808cc` (`fix: tailor wanna-go add questions (#11)`)
+- Scope merged: `wannaGo` add/save question templates now avoid visited-only prompts; focused regression test added; Codex `xcodebuild test` escalation procedure documented in `AGENTS.md`.
+
+Correction / follow-up:
+
+- Add-tab search-bar/in-page results and the social filter-pill dropdown are not implemented in PR #11, not present in another open PR, and not present in a local/remote branch found by branch/search checks.
+- The Slack `:white_check_mark:` reactions on those feedback items were premature; they represented triage only, not shipped fixes.
+- Follow-up required: update `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md` so enhancement/bug implementation items are not checkmarked unless an implementation PR is open. Approval-needed P1/security reports should be clearly labeled as decision-needed, not silently treated as fixed.
+
+Build 28:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `27` to `28` in `project.yml`.
+- Ran `xcodegen generate`; generated `Wander.xcodeproj/project.pbxproj` reflects build `28`.
