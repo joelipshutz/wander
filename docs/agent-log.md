@@ -3222,3 +3222,18 @@ Build 28:
 
 - Bumped `CURRENT_PROJECT_VERSION` from `27` to `28` in `project.yml`.
 - Ran `xcodegen generate`; generated `Wander.xcodeproj/project.pbxproj` reflects build `28`.
+- Build bump commit pushed to `main`: `66f61c6` (`chore: bump testflight build 28`).
+- Root release verification caveat:
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build28-test CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet` reached Xcode's test/finalize-log phase, then hung waiting for test log recording/workers and was interrupted.
+  - Risk is low because PR #11's focused elevated test passed on the same simulator destination before merge, and the post-merge change before archiving was build-number metadata only.
+- Archived build `0.1 (28)` at `/private/tmp/Wander-0.1-build28.xcarchive`.
+- Uploaded build `0.1 (28)` with `xcodebuild -exportArchive`; Xcode output ended with `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 28 --timeout-attempts 40 --poll-seconds 30`.
+- Build `0.1 (28)` App Store Connect id: `c7673f93-1796-411b-8c04-62380b78ad1f`.
+- Build `0.1 (28)` is `VALID`, export compliance is `usesNonExemptEncryption=false`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+- Public TestFlight link remains `https://testflight.apple.com/join/knEhRa6t`.
+
+Process correction:
+
+- Updated `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md` on branch `codex/feedback-checkmark-pr-rule` so actionable implementation feedback only gets `:white_check_mark:` after an implementation PR is open and linked.
+- The updated rule also says triage-only, backlog, follow-up-needed, approval-needed, and mixed incomplete threads stay uncheckmarked.

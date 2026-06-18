@@ -82,5 +82,7 @@ For each actionable message or thread:
 
 ## Completion
 
-- Add `:white_check_mark:` only after the message has either produced an approval-needed triage report or an implementation PR.
+- For actionable bug fixes or product/UX implementation requests, add `:white_check_mark:` only after an implementation PR is open and linked in the Codex report.
+- Do not add `:white_check_mark:` for triage-only outcomes, backlog classification, "needs follow-up" notes, or approval-needed reports. Leave the message uncheckmarked and surface the required decision or follow-up clearly in the Codex report.
+- If one Slack message or thread contains multiple actionable requests, add `:white_check_mark:` only after every request has an open implementation PR or an explicit Joe-approved non-implementation outcome. Otherwise list the completed and remaining subitems in the Codex report.
 - Output a concise Codex report with Slack link, severity, likely area, decision, PR link if created, recommended next action, tests run, and open questions.
