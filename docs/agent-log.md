@@ -3352,3 +3352,24 @@ Next steps:
 - Accept/update the required Apple Developer Program license agreement and install or create an iOS Distribution signing certificate for the team.
 - Re-run export/upload from the existing archive if still valid: `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build29.xcarchive -exportPath /private/tmp/WanderTestFlightUpload29 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates`.
 - After upload succeeds, run `node scripts/testflight-release.mjs --build-number 29 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`, mark REC-1/REC-3 `Done`, and post the required `#testflight-feedback` tester note.
+
+## 2026-06-18 21:58 PDT - Codex - Build 29 TestFlight Upload Completed
+
+Agent: Codex
+Branch: `main`
+
+Follow-up after Joe fixed the signing certificate:
+
+- Retried export/upload from the existing archive `/private/tmp/Wander-0.1-build29.xcarchive`.
+- Upload succeeded; App Store Connect accepted the package and began processing.
+- Ran `node scripts/testflight-release.mjs --build-number 29 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`.
+- Build `0.1 (29)` became `VALID`, build id `e34cc9e1-1696-4415-a5c0-ab8ef7082858`.
+- Set export compliance to `usesNonExemptEncryption=false`.
+- Attached build 29 to `Wander Alpha`.
+- Submitted external TestFlight review; App Store Connect reports review state `APPROVED`.
+- Marked Linear REC-1 and REC-3 `Done`.
+- Posted tester note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781845127959469
+
+Known local cleanup:
+
+- Root checkout still has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/` from the earlier interrupted verification attempts; left untouched.
