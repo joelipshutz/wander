@@ -616,6 +616,28 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func retryFailedOwnPlaceSyncs(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+
+        let retryableIDs = userPlaces
+            .filter { userPlace in
+                userPlace.userID == currentUser.id
+                    && userPlace.deletedAt == nil
+                    && userPlace.syncState == .failed
+                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
+            }
+            .map(\.id)
+
+        var syncedCount = 0
+        for userPlaceID in retryableIDs {
+            if await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend) {
+                syncedCount += 1
+            }
+        }
+        return syncedCount
+    }
+
     func extractionJob(for draft: UnresolvedDraft) -> LocalExtractionJob? {
         guard let jobID = draft.extractionJobID else { return nil }
         return extractionJob(matching: jobID)
@@ -1390,6 +1412,27 @@ final class WanderStore: ObservableObject {
 
     private func remoteErrorMessage(_ error: Error) -> String {
         String(describing: error)
+    }
+
+    private func retryOwnPlaceSync(userPlaceID: String, backend: WanderBackend) async -> Bool {
+        guard let draft = userPlaceDraft(for: userPlaceID) else { return false }
+
+        markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
+        do {
+            let remoteResult = try await backend.saveUserPlace(draft)
+            if let placeID = remoteResult.placeID {
+                markPlace(localOrServerID: draft.place.localID, serverID: placeID, syncState: .synced)
+            }
+            markUserPlace(localOrServerID: userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
+            lastRemoteError = nil
+            await refreshRemoteVisiblePlaces(backend: backend)
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markUserPlace(localOrServerID: userPlaceID, syncState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
     }
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {

@@ -446,6 +446,7 @@ function decodeHTML(value: string): string {
 
 function inferredCategory(name: string): string {
   const lowered = name.toLowerCase();
+  if (/(temple|shrine|meditation|spiritual|church|chapel|cathedral|mosque|synagogue)/.test(lowered)) return "spiritual";
   if (/(coffee|cafe|espresso|roaster|bakery)/.test(lowered)) return "coffee";
   if (/(park|playground|garden|plaza|beach|lake)/.test(lowered)) return "park";
   if (/(trail|hike|canyon|mountain|observatory)/.test(lowered)) return "hike";

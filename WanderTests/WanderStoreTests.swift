@@ -1041,6 +1041,48 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testRetryFailedOwnPlaceSyncsMarksRowsSynced() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let failingBackend = WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
+        )
+
+        let failed = await store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_taco",
+                name: "Taco Table",
+                category: "restaurant",
+                latitude: 34.0522,
+                longitude: -118.2437,
+                confidence: 0.7
+            ),
+            status: .wannaGo,
+            visibility: .mutuals,
+            note: "retry this",
+            sourceType: .manual,
+            attributes: [],
+            backend: failingBackend
+        )
+        XCTAssertEqual(failed.syncState, .failed)
+
+        let successRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_taco", syncState: .synced, placeID: "place_remote_taco")
+        )
+        let retriedCount = await store.retryFailedOwnPlaceSyncs(
+            backend: WanderBackend(userPlaceRepository: successRepository)
+        )
+
+        XCTAssertEqual(retriedCount, 1)
+        XCTAssertEqual(successRepository.savedDrafts.count, 1)
+        XCTAssertEqual(successRepository.savedDrafts[0].note, "retry this")
+        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Taco Table" }
+        XCTAssertEqual(saved?.place.serverID, "place_remote_taco")
+        XCTAssertEqual(saved?.userPlace.serverID, "up_remote_taco")
+        XCTAssertEqual(saved?.userPlace.syncState, .synced)
+        XCTAssertNil(saved?.userPlace.lastSyncError)
+    }
+
     func testRemoteFollowFailureLeavesFailedLocalFollow() async {
         let store = makeStore()
         let followRepository = FakeFollowRepository(error: WanderRemoteError.invalidResponse("network down"))

@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import UIKit
+import Vision
 
 struct AddScreen: View {
     @EnvironmentObject private var store: WanderStore
@@ -814,6 +815,15 @@ struct AddScreen: View {
         do {
             let data = try await item.loadTransferable(type: Data.self)
             let byteCount = data?.count ?? 0
+            if let data,
+               let recognizedText = await recognizeText(in: data),
+               let photoQuery = PhotoPlaceTextExtractor.searchQuery(from: recognizedText) {
+                await resolvePhotoTextCandidates(query: photoQuery)
+                if !candidates.isEmpty {
+                    return
+                }
+            }
+
             let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" } ?? "photos_picker:imported_photo_\(byteCount)"
             draft = await store.createUnresolvedDraft(
                 sourceType: .photo,
@@ -833,6 +843,53 @@ struct AddScreen: View {
         } catch {
             resolutionMessage = "Could not import that photo. Try another one or add manually."
         }
+    }
+
+    @MainActor
+    private func resolvePhotoTextCandidates(query: String) async {
+        selectedSource = .photo
+        manualName = query
+        manualArea = ""
+        resolutionMessage = nil
+
+        do {
+            candidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
+            selectedCandidateID = candidates.first?.id
+            selectedVisibility = store.defaultVisibility
+            guard !candidates.isEmpty else {
+                resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
+                return
+            }
+            step = .confirm
+        } catch {
+            candidates = []
+            selectedCandidateID = nil
+            resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
+        }
+    }
+
+    private func recognizeText(in data: Data) async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            guard let image = UIImage(data: data),
+                  let cgImage = image.cgImage
+            else { return nil }
+
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+
+            let handler = VNImageRequestHandler(
+                cgImage: cgImage,
+                orientation: CGImagePropertyOrientation(image.imageOrientation),
+                options: [:]
+            )
+            try? handler.perform([request])
+            let lines = request.results?.compactMap { observation in
+                observation.topCandidates(1).first?.string
+            } ?? []
+            let text = lines.joined(separator: "\n")
+            return text.isEmpty ? nil : text
+        }.value
     }
 
     @MainActor
@@ -887,6 +944,31 @@ struct AddScreen: View {
             }
             .sorted()
         return optionSelections + customSelections
+    }
+}
+
+private extension CGImagePropertyOrientation {
+    init(_ orientation: UIImage.Orientation) {
+        switch orientation {
+        case .up:
+            self = .up
+        case .down:
+            self = .down
+        case .left:
+            self = .left
+        case .right:
+            self = .right
+        case .upMirrored:
+            self = .upMirrored
+        case .downMirrored:
+            self = .downMirrored
+        case .leftMirrored:
+            self = .leftMirrored
+        case .rightMirrored:
+            self = .rightMirrored
+        @unknown default:
+            self = .up
+        }
     }
 }
 

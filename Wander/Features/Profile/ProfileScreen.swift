@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct ProfileScreen: View {
@@ -6,6 +7,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @State private var showsSettings = false
     @State private var listMode: GraphListMode?
+    @State private var savedListMode: SavedPlacesListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
 
     var body: some View {
@@ -35,6 +37,10 @@ struct ProfileScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+            }
+            .navigationDestination(item: $savedListMode) { mode in
+                SavedPlacesListScreen(mode: mode)
+                    .environmentObject(store)
             }
             .task(id: auth.isSignedIn) {
                 guard auth.isSignedIn else { return }
@@ -83,8 +89,21 @@ struct ProfileScreen: View {
 
     private var statsGrid: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            StatTile(value: "\(store.stats.been)", label: "BEEN", color: WanderTheme.terracotta.color, fill: WanderTheme.terracottaTint.color)
-            StatTile(value: "\(store.stats.wanna)", label: "WANNA", color: WanderTheme.stateWarning.color, fill: WanderTheme.sunTint.color)
+            Button {
+                savedListMode = .been
+            } label: {
+                StatTile(value: "\(store.stats.been)", label: "BEEN", color: WanderTheme.terracotta.color, fill: WanderTheme.terracottaTint.color)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open been places")
+
+            Button {
+                savedListMode = .wanna
+            } label: {
+                StatTile(value: "\(store.stats.wanna)", label: "WANNA", color: WanderTheme.stateWarning.color, fill: WanderTheme.sunTint.color)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open wanna places")
         }
     }
 
@@ -356,6 +375,176 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
         case .following: "follow someone from contacts or username search"
         case .followers: "people who follow you will show up here"
         case .friends: "mutual follows show up here"
+        }
+    }
+}
+
+private enum SavedPlacesListMode: String, Identifiable {
+    case been
+    case wanna
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .been: "Been"
+        case .wanna: "Wanna"
+        }
+    }
+
+    var status: PlaceStatus {
+        switch self {
+        case .been: .been
+        case .wanna: .wannaGo
+        }
+    }
+}
+
+private struct SavedPlacesListScreen: View {
+    @EnvironmentObject private var store: WanderStore
+    let mode: SavedPlacesListMode
+    @State private var query = ""
+    @State private var selectedCategory: String?
+    @State private var selectedMetadataTag: String?
+
+    private var places: [VisiblePlace] {
+        store.currentUserVisiblePlaces
+            .filter { $0.userPlace.status == mode.status }
+            .filter(matchesSelectedCategory)
+            .filter(matchesSelectedMetadataTag)
+            .filter(matchesQuery)
+            .sorted { lhs, rhs in
+                lhs.place.canonicalName.localizedCaseInsensitiveCompare(rhs.place.canonicalName) == .orderedAscending
+            }
+    }
+
+    private var allModePlaces: [VisiblePlace] {
+        store.currentUserVisiblePlaces.filter { $0.userPlace.status == mode.status }
+    }
+
+    private var categories: [String] {
+        Array(Set(allModePlaces.map(\.place.category))).sorted()
+    }
+
+    private var metadataTags: [String] {
+        Array(Set(allModePlaces.flatMap(metadataTags(for:)))).sorted()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                searchField
+                filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                filterSection(title: "tags", values: metadataTags, selectedValue: $selectedMetadataTag)
+
+                if places.isEmpty {
+                    SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                } else {
+                    ForEach(places) { visiblePlace in
+                        ProfilePlaceRow(visiblePlace: visiblePlace)
+                    }
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing8)
+        }
+        .wanderScreen()
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(WanderTheme.textMuted.color)
+            TextField("search \(mode.title.lowercased())", text: $query)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+
+    private func filterSection(title: String, values: [String], selectedValue: Binding<String?>) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Button {
+                        selectedValue.wrappedValue = nil
+                    } label: {
+                        WanderChip(title: "all", isSelected: selectedValue.wrappedValue == nil)
+                    }
+                    .buttonStyle(.plain)
+
+                    ForEach(values, id: \.self) { value in
+                        Button {
+                            selectedValue.wrappedValue = selectedValue.wrappedValue == value ? nil : value
+                        } label: {
+                            WanderChip(title: value, isSelected: selectedValue.wrappedValue == value)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func matchesSelectedCategory(_ visiblePlace: VisiblePlace) -> Bool {
+        guard let selectedCategory else { return true }
+        return visiblePlace.place.category == selectedCategory
+    }
+
+    private func matchesSelectedMetadataTag(_ visiblePlace: VisiblePlace) -> Bool {
+        guard let selectedMetadataTag else { return true }
+        return metadataTags(for: visiblePlace).contains { $0.caseInsensitiveCompare(selectedMetadataTag) == .orderedSame }
+    }
+
+    private func matchesQuery(_ visiblePlace: VisiblePlace) -> Bool {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return true }
+
+        let searchable = [
+            visiblePlace.place.canonicalName,
+            visiblePlace.place.category,
+            visiblePlace.place.locality,
+            visiblePlace.userPlace.note,
+            visiblePlace.userPlace.ratingSignal
+        ].compactMap { $0?.lowercased() }
+        return searchable.contains { $0.contains(normalized) }
+            || metadataTags(for: visiblePlace).contains { $0.lowercased().contains(normalized) }
+    }
+
+    private func metadataTags(for visiblePlace: VisiblePlace) -> [String] {
+        store.attributes(for: visiblePlace.userPlace.id)
+            .flatMap { ProfileMetadataTagParser.tags(from: $0.valueJSON) }
+    }
+}
+
+enum ProfileMetadataTagParser {
+    static func tags(from valueJSON: String) -> [String] {
+        guard let data = valueJSON.data(using: .utf8),
+              let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        else { return [] }
+
+        if let string = value as? String {
+            return cleanedTags([string])
+        }
+        if let strings = value as? [String] {
+            return cleanedTags(strings)
+        }
+        return []
+    }
+
+    private static func cleanedTags(_ tags: [String]) -> [String] {
+        tags.compactMap { tag in
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 }

@@ -3422,3 +3422,50 @@ Final outcome:
 - Attached PR #16 to Linear REC-10, REC-7, and REC-9; moved all three to `In Review`.
 - Known local cleanup: worktree has untracked generated `DerivedData-followed-users/`, left uncommitted.
 - Next step: review/merge PR #16, then run the standard build-number/TestFlight follow-up if merged to `main`.
+
+## 2026-06-18 22:36 PDT - Codex - Remaining Linear Issue Sweep
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: Joe asked to look across all rec.me Linear issues, run `plan-eng-review` where needed, tee up only necessary decisions, and close as many issues as possible now.
+
+Plan-eng-review scope result:
+
+- REC-7/REC-9/REC-10 remain covered by PR #16.
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are implementable in this same branch because they share Map/Profile/Add/store codepaths.
+- REC-4 is not honestly closable yet: checked-in RLS migrations/tests already define the intended policy model, but live Supabase verification requires database/management access. Local env currently exposes app/service keys, not the management or DB credentials needed to inspect `pg_class.relrowsecurity` or apply migrations. Supabase CLI is not installed in this environment.
+
+Expected files to touch:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- focused tests under `WanderTests/`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added failed own-place sync retry on signed-in auth refresh for REC-5.
+- Tuned place category inference so Lake Shrine / shrine / temple-style names classify as `spiritual` in local category normalization and the extraction worker for REC-6.
+- Added tappable Profile Been/Wanna stat navigation with search, category, and metadata tag filters for REC-8.
+- Added one-time map centering over current user's visible saved places, with a fallback to all visible places, for REC-11.
+- Improved Apple Maps place-path parsing for `/place/<name>?coordinate=...` URLs while preserving existing `ll` query behavior for REC-12.
+- Added on-device Vision OCR for photo imports and maps place-like recognized text into the existing confirm-candidate flow, preserving unresolved draft fallback for low-confidence photos, for REC-13.
+- Added focused regression coverage for map region fitting, photo text extraction, profile metadata tag parsing, Apple Maps path parsing, Lake Shrine category override, and failed-save retry.
+
+Verification:
+
+- Removed generated `DerivedData-followed-users/` after the first focused rerun failed with `No space left on device`; reran with a fresh warmed `DerivedData-focused-issues/`.
+- Focused regression passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/LinkPlaceParserTests -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/MapRegionFitterTests -only-testing:WanderTests/PhotoPlaceTextExtractorTests -only-testing:WanderTests/ProfileMetadataTagParserTests -only-testing:WanderTests/WanderStoreTests/testRetryFailedOwnPlaceSyncsMarksRowsSynced` (20 tests, 0 failures).
+- Full elevated suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1` (106 tests, 0 failures).
+- `git diff --check` passed.
+
+Final status:
+
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are ready to attach to PR #16 and move to `In Review`.
+- REC-4 remains a real decision/access item: need Supabase CLI or DB/management credentials to verify hosted RLS state before calling it closed.
