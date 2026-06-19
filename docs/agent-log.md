@@ -3451,3 +3451,31 @@ Known issues / next steps:
 - No visual simulator screenshot was captured for the new trust sheet yet; the sheet is simple, but manual QA should still verify clipping and dismiss behavior from Profile -> Settings.
 - M8 implementation remains in the separate `codex/followed-users-surfaces` worktree/branch and should own Map/Discover/Profile/store changes.
 - Generated untracked DerivedData directories exist in this worktree from validation runs and are intentionally not staged.
+
+## 2026-06-18 22:59 PDT - Codex - Build 30 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+Starting status: clean worktree at merged `origin/main` commit `5a33e58`.
+
+Goal: after merging PR #17, run the required app-code merge follow-up: bump TestFlight build number, regenerate the Xcode project, verify, archive/upload if signing allows, attach to TestFlight, and post tester-facing Slack notes after upload/availability.
+
+Merge context:
+
+- Squash-merged PR #17 into `main`: `5a33e58` (`feat: add m7 alpha trust surface (#17)`).
+- PR #17 added the Settings `Privacy and trust` sheet, trust-copy contract tests, M7/M8 plan, eng-review artifact, and QA checklist.
+- The `gh pr merge --delete-branch` command reported a non-blocking local branch deletion failure because `codex/m7-alpha-trust` is checked out at `/private/tmp/recme-m7-alpha-trust`; the PR itself merged successfully.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 30 if signing and App Store Connect credentials are available.
+- Run `node scripts/testflight-release.mjs --build-number 30`.
