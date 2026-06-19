@@ -292,12 +292,12 @@ struct MapScreen: View {
             resolveInitialSelection()
         }
         .task {
-            await store.refreshRemoteVisiblePlaces(in: currentViewport, backend: backend)
+            await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
         }
         .onChange(of: auth.isSignedIn) { _, isSignedIn in
             guard isSignedIn else { return }
             Task {
-                await store.refreshRemoteVisiblePlaces(in: currentViewport, backend: backend)
+                await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
             }
         }
         .onChange(of: visiblePlaceIDs) { _, ids in

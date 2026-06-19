@@ -267,6 +267,16 @@ struct ProfileDetailView: View {
                 Spacer()
 
                 Menu {
+                    if state.shell.relationship != .owner && state.shell.relationship != .nonFollower && !state.isBlocked {
+                        Button("Unfollow", role: .destructive) {
+                            auth.requireSignIn(for: .followPeople) {
+                                Task {
+                                    await store.unfollow(userID: state.shell.id, backend: backend)
+                                    await refreshRemoteProfile()
+                                }
+                            }
+                        }
+                    }
                     Button("Block", role: .destructive) {
                         showBlockConfirm = true
                     }
@@ -297,22 +307,12 @@ struct ProfileDetailView: View {
                         }
                     }
                 } else if state.shell.relationship != .owner && !state.isBlocked {
-                    Button {
-                        auth.requireSignIn(for: .followPeople) {
-                            Task {
-                                await store.unfollow(userID: state.shell.id, backend: backend)
-                                await refreshRemoteProfile()
-                            }
-                        }
-                    } label: {
-                        Text(state.shell.relationship == .mutual ? "friend" : "following")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(WanderTheme.surfaceSand.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+                    Text(state.shell.relationship == .mutual ? "friend" : "following")
+                        .font(.system(size: 15, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(WanderTheme.surfaceSand.color)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .clipShape(Capsule())
                 }
             }
         }

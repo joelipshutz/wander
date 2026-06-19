@@ -909,6 +909,24 @@ final class WanderStore: ObservableObject {
         await refreshRemoteVisiblePlaces(in: Self.defaultRemoteViewport, backend: backend)
     }
 
+    func refreshRemoteSocialSurfaces(backend: WanderBackend?) async {
+        await refreshRemoteSocialSurfaces(in: Self.defaultRemoteViewport, backend: backend)
+    }
+
+    func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async {
+        guard backend != nil else {
+            return
+        }
+
+        await refreshRemoteSocialGraph(backend: backend)
+        await refreshRemoteVisiblePlaces(in: viewport, backend: backend)
+
+        let followedProfileIDs = following(of: currentUser.id).map(\.id)
+        for profileID in followedProfileIDs {
+            await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        }
+    }
+
     func refreshRemoteProfileVisiblePlaces(profileID: String, backend: WanderBackend?) async {
         guard let backend else {
             return

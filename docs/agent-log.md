@@ -3373,3 +3373,44 @@ Follow-up after Joe fixed the signing certificate:
 Known local cleanup:
 
 - Root checkout still has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/` from the earlier interrupted verification attempts; left untouched.
+
+## 2026-06-18 22:14 PDT - Codex - REC-10 Followed Users Surfaces
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: created from latest `origin/main` at `44565dd`. Root checkout has untracked generated `DerivedData-build29/` and `DerivedData-build29-test/` from the build 29 release run, left untouched. Existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-rec-1-rec-3-ui`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`; no overlap expected except this work may touch the same social/map/discover surfaces as the already-merged REC-1/REC-3 branch.
+
+Linear issues:
+
+- REC-10 Followed users don't appear in Discover or on map
+- REC-7 Friends' saved places not showing in Discover or map filter
+- REC-9 People follow state is inconsistent across search, profile, and Discover
+
+Goal: implement the social-surface consistency fix as one umbrella change: followed users should appear in Discover's people rail, their visible places should feed Discover/map/social filters, and profile follow controls should not imply accidental unfollow.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added a store-level remote social surface refresh that refreshes the current user's social graph, remote visible places, and per-followed-user visible places.
+- Wired Discover and Map startup/auth refresh through that social surface refresh so followed users and their saved places are available outside username search.
+- Added followed users from `store.following(of:)` to Discover's horizontal people rail, deduped against contacts and search results.
+- After following from Discover contact/search cards, refresh social surfaces before refreshing Discover results.
+- Changed the other-user profile header so the `friend`/`following` pill is status-only; `Unfollow` now lives in the overflow menu next to Block.
+- Added regression coverage for remote social graph hydration followed by per-user place hydration.
+
+Verification:
+
+- Sandboxed `xcodebuild test ... -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces` failed before compiling because CoreSimulator and Swift package network access were sandbox-blocked.
+- Elevated focused regression passed after one compile fix: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`.
+- Elevated `WanderStoreTests` passed: 42 tests, 0 failures.
+- Elevated full test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1` (99 tests, 0 failures).
