@@ -3844,3 +3844,18 @@ Build 32 checkpoint:
   Result: passed with elevated access, `BUILD SUCCEEDED` in `218.667 sec`.
 - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build32 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: passed with elevated access, `110` tests, `0` failures.
+
+Release outcome:
+
+- Build-number commit pushed to `main`: `96be999d` (`chore: bump testflight build 32`).
+- Archive succeeded: `/private/tmp/Wander-0.1-build32.xcarchive`.
+- Export/upload succeeded: `/private/tmp/WanderTestFlightUpload32`; App Store Connect accepted the upload and reported package processing.
+- `node scripts/testflight-release.mjs --build-number 32 --timeout-attempts 40 --poll-seconds 30`
+  Result: build `0.1 (32)` id `ba4bb8d9-6022-452f-8e59-8e7b93abc07b` was `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, submitted for external TestFlight review, and review state was `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781885958732189
+
+Known issues:
+
+- Link/photo capture still creates unresolved drafts until backend extraction jobs are fully live.
+- Social surfaces may still look sparse depending on account data.
