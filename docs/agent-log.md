@@ -3313,3 +3313,42 @@ Verification:
 - Elevated full test passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3 CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
 - Rebasing onto latest `origin/main` produced a `docs/agent-log.md` conflict with the skill-contract log entry; resolved by preserving both entries.
 - Elevated full test passed again on rebased head `b86170f`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3-final CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
+
+## 2026-06-18 21:43 PDT - Codex - PR #15 Review, Merge, Build 29 Release Attempt
+
+Agent: Codex
+Branch: `main`
+Starting status: `main` clean at `origin/main`; root checkout later gained untracked `DerivedData-build29/` and `DerivedData-build29-test/` from release verification attempts, left untouched.
+
+Goal: run the shared `recme-pr-review-merge-release` workflow for open PRs targeting `main`, merge eligible app-code PRs, and complete the TestFlight follow-up.
+
+Open PR triage:
+
+- PR #15 (`codex/rec-1-rec-3-ui`) was clean and app-code eligible.
+- PR #14 (`codex/issue-review-eng-gate`) is still open and currently `DIRTY` after the main update.
+- PR #10 (`codex/update-pr-release-skill`) is still open and currently `DIRTY`.
+
+PR #15 review/merge:
+
+- Reviewed REC-1/REC-3 changes across Add search, current-location inline candidates, social map filtering, local store filtering, and regression tests.
+- `git diff --check origin/main...HEAD` passed in the PR worktree.
+- Elevated focused PR verification passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-pr15-review CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests` (41 tests, 0 failures).
+- GitHub would not allow self-approval, so a review comment was posted instead: https://github.com/joelipshutz/wander/pull/15#issuecomment-4745912187
+- Squash-merged PR #15 to `main`: `65dc4ea` (`feat: add add-tab search and social map filter (#15)`). Branch deletion failed only because the branch is checked out in `/private/tmp/recme-rec-1-rec-3-ui`.
+
+Build 29 release follow-up:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 28 to 29 in `project.yml`.
+- Ran `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects build 29.
+- Committed and pushed build bump to `main`: `3fc2014` (`chore: bump testflight build 29`).
+- Release build/test verification caveat: simulator `xcodebuild build` and full `xcodebuild test` both reached Xcode finalization/waiting phases and then hung; at Joe's instruction to proceed with the archive, both were interrupted rather than retried further. The focused PR regression suite above passed before merge.
+- Archive succeeded: `/private/tmp/Wander-0.1-build29.xcarchive`.
+- TestFlight export/upload is blocked before upload by Apple tooling: `PLA Update available` and `No signing certificate "iOS Distribution" found`.
+- Because build 29 is not uploaded or available in TestFlight, no tester Slack release note was posted, and linked Linear issues REC-1/REC-3 were left in `In Review` per the rec.me Linear status contract.
+- Added Linear comments to REC-1 and REC-3 with the merge/build/archive status and the App Store Connect signing/license blocker.
+
+Next steps:
+
+- Accept/update the required Apple Developer Program license agreement and install or create an iOS Distribution signing certificate for the team.
+- Re-run export/upload from the existing archive if still valid: `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build29.xcarchive -exportPath /private/tmp/WanderTestFlightUpload29 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates`.
+- After upload succeeds, run `node scripts/testflight-release.mjs --build-number 29 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`, mark REC-1/REC-3 `Done`, and post the required `#testflight-feedback` tester note.
