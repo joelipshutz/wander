@@ -3602,3 +3602,31 @@ Next steps:
 - Push the updated PR #16 branch.
 - Re-check GitHub mergeability.
 - After PR #16 lands, run the normal build-number/TestFlight follow-up because this branch contains app-code changes.
+
+## 2026-06-18 23:23 PDT - Codex - Build 31 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: clean `main` at merged PR #16 commit `b8d8b92`.
+
+Goal: after merging PR #16, run the required app-code merge follow-up: bump TestFlight build number, regenerate the Xcode project, verify, archive/upload, attach to TestFlight, and post tester-facing Slack notes after upload/availability.
+
+Merge context:
+
+- Squash-merged PR #16 into `main`: `b8d8b92` (`Fix followed users and issue sweep (#16)`).
+- PR #16 closes the issue sweep for REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13, and includes the REC-7/REC-9/REC-10 social surface branch work.
+- REC-4 remains blocked on hosted Supabase RLS verification access, not code.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 31 if signing allows.
+- Run `node scripts/testflight-release.mjs --build-number 31`.
