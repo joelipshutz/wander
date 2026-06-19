@@ -3469,3 +3469,108 @@ Final status:
 
 - REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are ready to attach to PR #16 and move to `In Review`.
 - REC-4 remains a real decision/access item: need Supabase CLI or DB/management credentials to verify hosted RLS state before calling it closed.
+## 2026-06-18 22:25 PDT - Codex - M7/M8 Planning And M7 Alpha Trust Worktree
+
+Agent: Codex
+Branch: `codex/m7-alpha-trust`
+Worktree: `/private/tmp/recme-m7-alpha-trust`
+Starting status: clean worktree at `origin/main` commit `44565dd`.
+
+Goal: answer whether M7/M8 have real plans, create an isolated worktree because another agent is cooking, and start the non-overlapping M7 alpha trust/onboarding work while avoiding the active M8 social reliability worktree.
+
+Coordination notes:
+
+- Existing root checkout has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/`; left untouched.
+- Existing worktree `/private/tmp/recme-followed-users-surfaces` on `codex/followed-users-surfaces` has uncommitted M8/social changes in `DiscoverScreen`, `MapScreen`, `ProfileScreen`, `WanderLocalStore`, `WanderStoreTests`, and `docs/agent-log.md`.
+- To avoid overlap, this branch should not edit Map/Discover/Profile/store social surfaces unless explicitly coordinated.
+- Current roadmap only has high-level M7/M8 bullets. No detailed M7/M8 implementation plan exists yet.
+
+Expected files to touch:
+
+- `docs/plans/2026-06-18-m7-m8-alpha-plan.md`
+- `docs/roadmap.md`
+- `docs/agent-log.md`
+- Potentially low-overlap M7 files under `Wander/Features/Auth/`, `Wander/Features/Settings/`, and app/auth gate tests after inspection.
+
+### 2026-06-18 22:37 PDT checkpoint
+
+Joe paused implementation and requested `/plan-eng-review` for the M7/M8 plan before continuing.
+
+Actions:
+
+- Interrupted focused `xcodebuild test -only-testing:WanderTests/AuthSessionTests`; Xcode reported `** TEST INTERRUPTED **`, so no pass/fail signal should be inferred from that run.
+- Ran plan-eng-review against `docs/plans/2026-06-18-m7-m8-alpha-plan.md`, the current M7 diff, and the parallel M8 branch shape.
+- Added review artifact `docs/reviews/2026-06-18-m7-m8-plan-eng-review.md`.
+- Appended `## GSTACK REVIEW REPORT` to the M7/M8 plan.
+
+Review outcome:
+
+- Status: `DONE_WITH_CONCERNS`.
+- M7 is acceptable as a small Settings/Auth trust lane, but needs UI/inspection or visual QA coverage for the new trust sheet before landing.
+- M8 should stay in the social branch lane and needs explicit two-account QA before REC-7/REC-9/REC-10 are marked done.
+- Keep M9 capture expansion out of M7/M8 until social reliability is accepted.
+
+### 2026-06-18 22:48 PDT checkpoint
+
+Implemented the M7 follow-up from the eng review without touching the active M8 social files.
+
+Files changed:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/roadmap.md`
+- `docs/plans/2026-06-18-m7-m8-alpha-plan.md`
+- `docs/reviews/2026-06-18-m7-m8-plan-eng-review.md`
+- `docs/qa/2026-06-18-m7-m8-alpha-trust-social-checklist.md`
+- `docs/agent-log.md`
+
+Outcome:
+
+- Added a Settings row for `Privacy and trust`, presented as a sheet.
+- Extracted the alpha trust copy into `SettingsTrustSurface` so it is testable and not buried only in SwiftUI view text.
+- Covered the copy contract in `AuthSessionTests`, including Everyone/followers, Friends/mutuals, location not live broadcast, extraction not auto-save, blocks, and contacts/username search expectations.
+- Added the M7/M8 QA checklist with a specific M8 two-account social graph gate.
+- Updated the roadmap to point at M7/M8 active work and current Build 29 status.
+
+Validation:
+
+- Passed focused auth/settings contract test:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m7-alpha-trust CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests`
+- Passed full suite:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m7-alpha-trust-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 100 tests, 0 failures.
+- `git diff --check` passed.
+
+Known issues / next steps:
+
+- No visual simulator screenshot was captured for the new trust sheet yet; the sheet is simple, but manual QA should still verify clipping and dismiss behavior from Profile -> Settings.
+- M8 implementation remains in the separate `codex/followed-users-surfaces` worktree/branch and should own Map/Discover/Profile/store changes.
+- Generated untracked DerivedData directories exist in this worktree from validation runs and are intentionally not staged.
+
+## 2026-06-18 22:59 PDT - Codex - Build 30 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+Starting status: clean worktree at merged `origin/main` commit `5a33e58`.
+
+Goal: after merging PR #17, run the required app-code merge follow-up: bump TestFlight build number, regenerate the Xcode project, verify, archive/upload if signing allows, attach to TestFlight, and post tester-facing Slack notes after upload/availability.
+
+Merge context:
+
+- Squash-merged PR #17 into `main`: `5a33e58` (`feat: add m7 alpha trust surface (#17)`).
+- PR #17 added the Settings `Privacy and trust` sheet, trust-copy contract tests, M7/M8 plan, eng-review artifact, and QA checklist.
+- The `gh pr merge --delete-branch` command reported a non-blocking local branch deletion failure because `codex/m7-alpha-trust` is checked out at `/private/tmp/recme-m7-alpha-trust`; the PR itself merged successfully.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 30 if signing and App Store Connect credentials are available.
+- Run `node scripts/testflight-release.mjs --build-number 30`.
