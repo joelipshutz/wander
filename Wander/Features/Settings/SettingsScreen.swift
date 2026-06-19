@@ -4,6 +4,7 @@ struct SettingsScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @State private var activeDetail: SettingsDetail?
 
     var body: some View {
         NavigationStack {
@@ -19,6 +20,12 @@ struct SettingsScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .wanderScreen()
+        }
+        .sheet(item: $activeDetail) { detail in
+            switch detail {
+            case .trust:
+                TrustAndPrivacySheet()
+            }
         }
     }
 
@@ -199,6 +206,14 @@ struct SettingsScreen: View {
 
     private var groupedRows: some View {
         VStack(spacing: WanderTheme.spacing3) {
+            SettingsRow(
+                title: SettingsTrustSurface.rowTitle,
+                subtitle: SettingsTrustSurface.rowSubtitle,
+                systemImage: "shield.lefthalf.filled",
+                accessibilityIdentifier: SettingsTrustSurface.rowAccessibilityID
+            ) {
+                activeDetail = .trust
+            }
             SettingsRow(title: "Contacts", subtitle: "planned native permission later", systemImage: "person.crop.rectangle.stack")
             SettingsRow(title: "Notifications", subtitle: "after first save", systemImage: "bell")
             SettingsRow(title: "Data and sync", subtitle: "\(store.pendingSyncCount) pending local item\(store.pendingSyncCount == 1 ? "" : "s")", systemImage: "arrow.triangle.2.circlepath") {
@@ -211,6 +226,12 @@ struct SettingsScreen: View {
         let source = session.displayName ?? session.handle ?? session.userID
         return String(source.prefix(2)).uppercased()
     }
+}
+
+private enum SettingsDetail: String, Identifiable {
+    case trust
+
+    var id: String { rawValue }
 }
 
 private struct SettingsSectionTitle: View {
@@ -226,10 +247,129 @@ private struct SettingsSectionTitle: View {
     }
 }
 
+private struct TrustAndPrivacySheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text(SettingsTrustSurface.sheetTitle)
+                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .accessibilityAddTraits(.isHeader)
+                        Text(SettingsTrustSurface.sheetIntro)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    ForEach(SettingsTrustSurface.facts) { fact in
+                        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                            Image(systemName: fact.icon)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .frame(width: 38, height: 38)
+                                .background(WanderTheme.terracottaTint.color)
+                                .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                Text(fact.title)
+                                    .font(.system(size: 15, weight: .black))
+                                Text(fact.body)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(SettingsTrustSurface.factAccessibilityPrefix + fact.id)
+                    }
+                }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+            .wanderScreen()
+            .accessibilityIdentifier(SettingsTrustSurface.sheetAccessibilityID)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+        }
+    }
+}
+
+struct SettingsTrustSurface {
+    static let rowTitle = "Privacy and trust"
+    static let rowSubtitle = "who sees places, location, sources"
+    static let rowAccessibilityID = "settings.privacyTrust.row"
+    static let sheetAccessibilityID = "settings.privacyTrust.sheet"
+    static let factAccessibilityPrefix = "settings.privacyTrust.fact."
+    static let sheetTitle = "privacy and trust"
+    static let sheetIntro = "quick answers for what rec.me shares, syncs, and keeps private."
+
+    static let facts: [TrustFact] = [
+        TrustFact(
+            id: "everyone",
+            icon: "eye.slash",
+            title: "Everyone means followers",
+            body: "Places saved to Everyone are visible to people who follow you. They are not a public internet feed."
+        ),
+        TrustFact(
+            id: "friends",
+            icon: "person.2",
+            title: "Friends means mutual follows",
+            body: "Friends places are for people you follow who also follow you back."
+        ),
+        TrustFact(
+            id: "location",
+            icon: "location",
+            title: "Location is for finding places",
+            body: "rec.me uses location when you ask for nearby candidates. It does not broadcast live location."
+        ),
+        TrustFact(
+            id: "extraction",
+            icon: "wand.and.stars",
+            title: "Extraction asks first",
+            body: "Links and photos can create candidates or drafts. Low-confidence results never auto-save to your map."
+        ),
+        TrustFact(
+            id: "blocks",
+            icon: "person.crop.circle.badge.xmark",
+            title: "Blocks are hard blocks",
+            body: "Blocking hides profiles, places, search results, and map content in both directions."
+        ),
+        TrustFact(
+            id: "contacts",
+            icon: "person.crop.rectangle.stack",
+            title: "Contacts are later",
+            body: "Native Contacts permission is planned, but not part of this alpha. Username search works now."
+        )
+    ]
+}
+
+struct TrustFact: Identifiable, Equatable {
+    let id: String
+    let icon: String
+    let title: String
+    let body: String
+}
+
 private struct SettingsRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
+    var accessibilityIdentifier: String?
     var action: (() -> Void)?
 
     var body: some View {
@@ -264,5 +404,6 @@ private struct SettingsRow: View {
         }
         .buttonStyle(.plain)
         .disabled(action == nil)
+        .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title.lowercased().replacingOccurrences(of: " ", with: "."))")
     }
 }

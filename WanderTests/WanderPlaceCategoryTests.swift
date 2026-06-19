@@ -40,6 +40,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Plankhaus"),
             "pilates studio"
         )
+        XCTAssertEqual(
+            WanderPlaceCategory.primary(for: .fitnessCenter, name: "Lake Shrine"),
+            "spiritual"
+        )
+        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "spiritual"), "sparkles")
     }
 
     func testCandidatePreviewSubtitleDoesNotRepeatLocality() {

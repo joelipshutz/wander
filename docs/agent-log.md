@@ -3421,3 +3421,312 @@ Verification:
 - `git diff --check` passed.
 - No conflict markers found in `docs/agent-log.md`.
 - Checked the PR diff against `origin/main`; the remaining PR surface is limited to the shared skill docs, `AGENTS.md`, and this log.
+
+## 2026-06-18 22:14 PDT - Codex - REC-10 Followed Users Surfaces
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: created from latest `origin/main` at `44565dd`. Root checkout has untracked generated `DerivedData-build29/` and `DerivedData-build29-test/` from the build 29 release run, left untouched. Existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-rec-1-rec-3-ui`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`; no overlap expected except this work may touch the same social/map/discover surfaces as the already-merged REC-1/REC-3 branch.
+
+Linear issues:
+
+- REC-10 Followed users don't appear in Discover or on map
+- REC-7 Friends' saved places not showing in Discover or map filter
+- REC-9 People follow state is inconsistent across search, profile, and Discover
+
+Goal: implement the social-surface consistency fix as one umbrella change: followed users should appear in Discover's people rail, their visible places should feed Discover/map/social filters, and profile follow controls should not imply accidental unfollow.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added a store-level remote social surface refresh that refreshes the current user's social graph, remote visible places, and per-followed-user visible places.
+- Wired Discover and Map startup/auth refresh through that social surface refresh so followed users and their saved places are available outside username search.
+- Added followed users from `store.following(of:)` to Discover's horizontal people rail, deduped against contacts and search results.
+- After following from Discover contact/search cards, refresh social surfaces before refreshing Discover results.
+- Changed the other-user profile header so the `friend`/`following` pill is status-only; `Unfollow` now lives in the overflow menu next to Block.
+- Added regression coverage for remote social graph hydration followed by per-user place hydration.
+
+Verification:
+
+- Sandboxed `xcodebuild test ... -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces` failed before compiling because CoreSimulator and Swift package network access were sandbox-blocked.
+- Elevated focused regression passed after one compile fix: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`.
+- Elevated `WanderStoreTests` passed: 42 tests, 0 failures.
+- Elevated full test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1` (99 tests, 0 failures).
+
+Final outcome:
+
+- Committed implementation as `58d1707` (`fix: hydrate followed users across social surfaces`) on `codex/followed-users-surfaces`.
+- Opened PR #16: https://github.com/joelipshutz/wander/pull/16
+- Attached PR #16 to Linear REC-10, REC-7, and REC-9; moved all three to `In Review`.
+- Known local cleanup: worktree has untracked generated `DerivedData-followed-users/`, left uncommitted.
+- Next step: review/merge PR #16, then run the standard build-number/TestFlight follow-up if merged to `main`.
+
+## 2026-06-18 22:36 PDT - Codex - Remaining Linear Issue Sweep
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: Joe asked to look across all rec.me Linear issues, run `plan-eng-review` where needed, tee up only necessary decisions, and close as many issues as possible now.
+
+Plan-eng-review scope result:
+
+- REC-7/REC-9/REC-10 remain covered by PR #16.
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are implementable in this same branch because they share Map/Profile/Add/store codepaths.
+- REC-4 is not honestly closable yet: checked-in RLS migrations/tests already define the intended policy model, but live Supabase verification requires database/management access. Local env currently exposes app/service keys, not the management or DB credentials needed to inspect `pg_class.relrowsecurity` or apply migrations. Supabase CLI is not installed in this environment.
+
+Expected files to touch:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- focused tests under `WanderTests/`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added failed own-place sync retry on signed-in auth refresh for REC-5.
+- Tuned place category inference so Lake Shrine / shrine / temple-style names classify as `spiritual` in local category normalization and the extraction worker for REC-6.
+- Added tappable Profile Been/Wanna stat navigation with search, category, and metadata tag filters for REC-8.
+- Added one-time map centering over current user's visible saved places, with a fallback to all visible places, for REC-11.
+- Improved Apple Maps place-path parsing for `/place/<name>?coordinate=...` URLs while preserving existing `ll` query behavior for REC-12.
+- Added on-device Vision OCR for photo imports and maps place-like recognized text into the existing confirm-candidate flow, preserving unresolved draft fallback for low-confidence photos, for REC-13.
+- Added focused regression coverage for map region fitting, photo text extraction, profile metadata tag parsing, Apple Maps path parsing, Lake Shrine category override, and failed-save retry.
+
+Verification:
+
+- Removed generated `DerivedData-followed-users/` after the first focused rerun failed with `No space left on device`; reran with a fresh warmed `DerivedData-focused-issues/`.
+- Focused regression passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/LinkPlaceParserTests -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/MapRegionFitterTests -only-testing:WanderTests/PhotoPlaceTextExtractorTests -only-testing:WanderTests/ProfileMetadataTagParserTests -only-testing:WanderTests/WanderStoreTests/testRetryFailedOwnPlaceSyncsMarksRowsSynced` (20 tests, 0 failures).
+- Full elevated suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1` (106 tests, 0 failures).
+- `git diff --check` passed.
+
+Final status:
+
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are ready to attach to PR #16 and move to `In Review`.
+- REC-4 remains a real decision/access item: need Supabase CLI or DB/management credentials to verify hosted RLS state before calling it closed.
+## 2026-06-18 22:25 PDT - Codex - M7/M8 Planning And M7 Alpha Trust Worktree
+
+Agent: Codex
+Branch: `codex/m7-alpha-trust`
+Worktree: `/private/tmp/recme-m7-alpha-trust`
+Starting status: clean worktree at `origin/main` commit `44565dd`.
+
+Goal: answer whether M7/M8 have real plans, create an isolated worktree because another agent is cooking, and start the non-overlapping M7 alpha trust/onboarding work while avoiding the active M8 social reliability worktree.
+
+Coordination notes:
+
+- Existing root checkout has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/`; left untouched.
+- Existing worktree `/private/tmp/recme-followed-users-surfaces` on `codex/followed-users-surfaces` has uncommitted M8/social changes in `DiscoverScreen`, `MapScreen`, `ProfileScreen`, `WanderLocalStore`, `WanderStoreTests`, and `docs/agent-log.md`.
+- To avoid overlap, this branch should not edit Map/Discover/Profile/store social surfaces unless explicitly coordinated.
+- Current roadmap only has high-level M7/M8 bullets. No detailed M7/M8 implementation plan exists yet.
+
+Expected files to touch:
+
+- `docs/plans/2026-06-18-m7-m8-alpha-plan.md`
+- `docs/roadmap.md`
+- `docs/agent-log.md`
+- Potentially low-overlap M7 files under `Wander/Features/Auth/`, `Wander/Features/Settings/`, and app/auth gate tests after inspection.
+
+### 2026-06-18 22:37 PDT checkpoint
+
+Joe paused implementation and requested `/plan-eng-review` for the M7/M8 plan before continuing.
+
+Actions:
+
+- Interrupted focused `xcodebuild test -only-testing:WanderTests/AuthSessionTests`; Xcode reported `** TEST INTERRUPTED **`, so no pass/fail signal should be inferred from that run.
+- Ran plan-eng-review against `docs/plans/2026-06-18-m7-m8-alpha-plan.md`, the current M7 diff, and the parallel M8 branch shape.
+- Added review artifact `docs/reviews/2026-06-18-m7-m8-plan-eng-review.md`.
+- Appended `## GSTACK REVIEW REPORT` to the M7/M8 plan.
+
+Review outcome:
+
+- Status: `DONE_WITH_CONCERNS`.
+- M7 is acceptable as a small Settings/Auth trust lane, but needs UI/inspection or visual QA coverage for the new trust sheet before landing.
+- M8 should stay in the social branch lane and needs explicit two-account QA before REC-7/REC-9/REC-10 are marked done.
+- Keep M9 capture expansion out of M7/M8 until social reliability is accepted.
+
+### 2026-06-18 22:48 PDT checkpoint
+
+Implemented the M7 follow-up from the eng review without touching the active M8 social files.
+
+Files changed:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/roadmap.md`
+- `docs/plans/2026-06-18-m7-m8-alpha-plan.md`
+- `docs/reviews/2026-06-18-m7-m8-plan-eng-review.md`
+- `docs/qa/2026-06-18-m7-m8-alpha-trust-social-checklist.md`
+- `docs/agent-log.md`
+
+Outcome:
+
+- Added a Settings row for `Privacy and trust`, presented as a sheet.
+- Extracted the alpha trust copy into `SettingsTrustSurface` so it is testable and not buried only in SwiftUI view text.
+- Covered the copy contract in `AuthSessionTests`, including Everyone/followers, Friends/mutuals, location not live broadcast, extraction not auto-save, blocks, and contacts/username search expectations.
+- Added the M7/M8 QA checklist with a specific M8 two-account social graph gate.
+- Updated the roadmap to point at M7/M8 active work and current Build 29 status.
+
+Validation:
+
+- Passed focused auth/settings contract test:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m7-alpha-trust CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests`
+- Passed full suite:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-m7-alpha-trust-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 100 tests, 0 failures.
+- `git diff --check` passed.
+
+Known issues / next steps:
+
+- No visual simulator screenshot was captured for the new trust sheet yet; the sheet is simple, but manual QA should still verify clipping and dismiss behavior from Profile -> Settings.
+- M8 implementation remains in the separate `codex/followed-users-surfaces` worktree/branch and should own Map/Discover/Profile/store changes.
+- Generated untracked DerivedData directories exist in this worktree from validation runs and are intentionally not staged.
+
+## 2026-06-18 22:59 PDT - Codex - Build 30 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+Starting status: clean worktree at merged `origin/main` commit `5a33e58`.
+
+Goal: after merging PR #17, run the required app-code merge follow-up: bump TestFlight build number, regenerate the Xcode project, verify, archive/upload if signing allows, attach to TestFlight, and post tester-facing Slack notes after upload/availability.
+
+Merge context:
+
+- Squash-merged PR #17 into `main`: `5a33e58` (`feat: add m7 alpha trust surface (#17)`).
+- PR #17 added the Settings `Privacy and trust` sheet, trust-copy contract tests, M7/M8 plan, eng-review artifact, and QA checklist.
+- The `gh pr merge --delete-branch` command reported a non-blocking local branch deletion failure because `codex/m7-alpha-trust` is checked out at `/private/tmp/recme-m7-alpha-trust`; the PR itself merged successfully.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 30 if signing and App Store Connect credentials are available.
+- Run `node scripts/testflight-release.mjs --build-number 30`.
+
+## 2026-06-18 23:20 PDT - Codex - PR #16 Post-Main Merge Verification
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: keep PR #16 current after `main` advanced with PR #17/build 30, then re-run verification before pushing the issue sweep branch.
+
+Actions:
+
+- Merged `origin/main` into `codex/followed-users-surfaces`.
+- Resolved the only conflict in `docs/agent-log.md` by preserving both the issue-sweep notes and the M7/M8/build 30 notes.
+- Cleared generated DerivedData to recover from local disk exhaustion during the first post-merge full-suite run.
+- Removed old generated root worktree artifacts `DerivedData-build29/` and `DerivedData-build29-test/` to free enough space for a clean rerun.
+
+Validation:
+
+- First post-merge full-suite run reached app tests but failed when the simulator and xcresult bundle hit `No space left on device`; persistence assertions failed only after writes to simulator tmp failed.
+- Reran the full suite after cleanup:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-issue-sweep-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 108 tests, 0 failures.
+
+Next steps:
+
+- Push the updated PR #16 branch.
+- Re-check GitHub mergeability.
+- After PR #16 lands, run the normal build-number/TestFlight follow-up because this branch contains app-code changes.
+
+## 2026-06-18 23:34 PDT - Codex - Build 31 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+Starting status: fast-forwarded to `origin/main` commit `b8d8b92` after PR #16 landed on top of the build 30 release commit.
+
+Goal: keep current `main` aligned with TestFlight after PR #16 (`Fix followed users and issue sweep`) merged app-code, parser, store, profile, map, add, Supabase function, and test changes after build 30 was uploaded.
+
+Context:
+
+- Build 30 was uploaded and approved for the M7 trust sheet merge, but `main` advanced immediately after with PR #16.
+- PR #16's own log entry calls for the normal build-number/TestFlight follow-up after landing.
+- Bumping `CURRENT_PROJECT_VERSION` from 30 to 31 and regenerating the Xcode project before verification/archive/upload.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 31.
+- Run `node scripts/testflight-release.mjs --build-number 31`.
+- Post the required tester-facing Slack note only after build 31 is uploaded/attached/available or clearly state if it is still processing.
+
+Checkpoint from `/private/tmp/recme-followed-users-surfaces`:
+
+- Confirmed `origin/main` already contains build bump commit `ed525b4` (`chore: bump testflight build 31`), so no duplicate bump commit was created from this worktree.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed, `BUILD SUCCEEDED` in 629.210 sec.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed, 108 tests, 0 failures.
+
+## 2026-06-18 23:46 PDT - Codex - Build 31 TestFlight Release Complete
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+
+Outcome:
+
+- Fast-forwarded to `origin/main` commit `b5196ef` (`docs: log build 31 verification`) after confirming it was docs-only.
+- Preserved build 31 as the current TestFlight candidate because the only post-bump main change was `docs/agent-log.md`.
+- Build 31 archive succeeded:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build31.xcarchive -derivedDataPath DerivedData-build31-archive -allowProvisioningUpdates`
+  Result: `ARCHIVE SUCCEEDED` in 170.929 sec.
+- Export/upload succeeded using App Store Connect API-key authentication:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build31.xcarchive -exportPath /private/tmp/WanderTestFlightUpload31 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates -authenticationKeyPath /Users/joelipshutz/Downloads/AuthKey_WU73VMSN38.p8 -authenticationKeyID WU73VMSN38 -authenticationKeyIssuerID 7f20b667-afd3-456b-b2bc-ca94ab295484`
+  Result: `EXPORT SUCCEEDED`; uploaded package entered processing.
+- TestFlight helper completed:
+  `node scripts/testflight-release.mjs --build-number 31 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build `0.1 (31)` id `e851d502-1c07-4e52-8559-36f0e719370e`, `processingState=VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, review state `APPROVED`.
+
+Validation:
+
+- Build 31 app-code build passed before archive:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO`
+  Result: `BUILD SUCCEEDED` in 95.756 sec.
+- Build 31 full tests passed before archive:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `TEST SUCCEEDED` in 125.537 sec; 108 tests, 0 failures.
+
+Release status:
+
+- Build 30 was uploaded and approved first, but it is superseded by build 31 because PR #16 landed after the build 30 release.
+- Build 31 is the current public TestFlight build attached to `Wander Alpha`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Tester-facing Slack note: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781851586744319
+
+Known issues / follow-up:
+
+- M7 trust sheet still needs human visual QA on device.
+- M8 followed-user/social visibility surfaces need two-account human QA after installing build 31.
+- Local disk remained tight during release; only generated DerivedData was cleaned when needed.
