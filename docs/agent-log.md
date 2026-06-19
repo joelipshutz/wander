@@ -3730,3 +3730,24 @@ Known issues / follow-up:
 - M7 trust sheet still needs human visual QA on device.
 - M8 followed-user/social visibility surfaces need two-account human QA after installing build 31.
 - Local disk remained tight during release; only generated DerivedData was cleaned when needed.
+
+## 2026-06-19 00:01 PDT - Codex Automation - PR #10 Release Skill Refresh
+
+Agent: Codex
+Branch: `codex/update-pr-release-skill`
+Worktree: `/private/tmp/recme-pr10-release-skill`
+
+Goal: refresh stale PR #10 onto latest `origin/main` after PR #14 and build 31 landed, then merge it if the process/script changes are still valid.
+
+Actions:
+
+- Merged latest `origin/main` into PR #10.
+- Resolved `agent-skills/recme-pr-review-merge-release/SKILL.md` by preserving both the pending-release sweep/TestFlight description support from PR #10 and the newer Linear status plus eng-review gate rules from `main`.
+- Resolved `docs/agent-log.md` by keeping current `main` history and adding this fresh refresh note instead of replaying stale June 16 conflict blocks.
+- Confirmed PR #10 remains docs/script/process-only; it does not change the iOS app binary, so it should not trigger a TestFlight build-number bump after merge.
+
+Validation planned:
+
+- `node --check scripts/testflight-release.mjs`
+- `node scripts/testflight-release.mjs --dry-run --build-number 31 --what-to-test 'Try the current TestFlight build.'`
+- `git diff --check`
