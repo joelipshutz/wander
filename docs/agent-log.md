@@ -3640,3 +3640,45 @@ Checkpoint from `/private/tmp/recme-followed-users-surfaces`:
   Result: passed, `BUILD SUCCEEDED` in 629.210 sec.
 - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: passed, 108 tests, 0 failures.
+
+## 2026-06-18 23:46 PDT - Codex - Build 31 TestFlight Release Complete
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+
+Outcome:
+
+- Fast-forwarded to `origin/main` commit `b5196ef` (`docs: log build 31 verification`) after confirming it was docs-only.
+- Preserved build 31 as the current TestFlight candidate because the only post-bump main change was `docs/agent-log.md`.
+- Build 31 archive succeeded:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build31.xcarchive -derivedDataPath DerivedData-build31-archive -allowProvisioningUpdates`
+  Result: `ARCHIVE SUCCEEDED` in 170.929 sec.
+- Export/upload succeeded using App Store Connect API-key authentication:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build31.xcarchive -exportPath /private/tmp/WanderTestFlightUpload31 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates -authenticationKeyPath /Users/joelipshutz/Downloads/AuthKey_WU73VMSN38.p8 -authenticationKeyID WU73VMSN38 -authenticationKeyIssuerID 7f20b667-afd3-456b-b2bc-ca94ab295484`
+  Result: `EXPORT SUCCEEDED`; uploaded package entered processing.
+- TestFlight helper completed:
+  `node scripts/testflight-release.mjs --build-number 31 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build `0.1 (31)` id `e851d502-1c07-4e52-8559-36f0e719370e`, `processingState=VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, review state `APPROVED`.
+
+Validation:
+
+- Build 31 app-code build passed before archive:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO`
+  Result: `BUILD SUCCEEDED` in 95.756 sec.
+- Build 31 full tests passed before archive:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `TEST SUCCEEDED` in 125.537 sec; 108 tests, 0 failures.
+
+Release status:
+
+- Build 30 was uploaded and approved first, but it is superseded by build 31 because PR #16 landed after the build 30 release.
+- Build 31 is the current public TestFlight build attached to `Wander Alpha`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Tester-facing Slack note: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781851586744319
+
+Known issues / follow-up:
+
+- M7 trust sheet still needs human visual QA on device.
+- M8 followed-user/social visibility surfaces need two-account human QA after installing build 31.
+- Local disk remained tight during release; only generated DerivedData was cleaned when needed.
