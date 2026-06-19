@@ -3803,3 +3803,44 @@ Next steps:
 - PR opened: https://github.com/joelipshutz/wander/pull/18
 - Needs explicit Joe approval to merge/release per `recme-pr-review-merge-release` safety boundary.
 - After approval, merge urgently, then bump to build 32 and upload a replacement TestFlight build because build 31 is broken for signed-out users.
+
+## 2026-06-19 09:05 PDT - Codex Automation - Build 32 TestFlight Follow-Up
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: complete the scheduled PR review/merge/TestFlight workflow after PR #18 fixed missing release auth client config.
+
+Context:
+
+- PR #18 (`fix: ship auth client config in release builds`) merged to `main` as `4ed4c0ed`.
+- Pre-merge review found no blockers. The fix is scoped to tracked public Clerk/Supabase client config, generated project settings, setup docs, and regression coverage.
+- Sandboxed full-suite test failed before app code due to CoreSimulator and SwiftPM network restrictions, then the same command passed with elevated simulator/network access.
+
+Validation before merge:
+
+- `xcodegen generate` succeeded and left no tracked diff.
+- `git diff --check` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-pr18-review CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `110` tests, `0` failures.
+
+Release plan:
+
+- Bump `CURRENT_PROJECT_VERSION` from `31` to `32`.
+- Run `xcodegen generate`.
+- Run build and test validation for build 32.
+- Archive/export/upload build 32 to TestFlight.
+- Run `node scripts/testflight-release.mjs --build-number 32`.
+- Post the tester-facing Slack release note after TestFlight attachment/approval or clearly note processing state.
+
+Build 32 checkpoint:
+
+- Updated `project.yml` to `CURRENT_PROJECT_VERSION: "32"` and regenerated `Wander.xcodeproj/project.pbxproj`.
+- `git diff --check` passed.
+- Initial elevated build failed before source failure due to `/private/tmp` running out of space at link time (`errno=28`).
+- Removed generated DerivedData folders from prior automation worktrees to restore working disk space.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build32 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `BUILD SUCCEEDED` in `218.667 sec`.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build32 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `110` tests, `0` failures.
