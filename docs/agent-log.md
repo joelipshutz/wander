@@ -3602,3 +3602,32 @@ Next steps:
 - Push the updated PR #16 branch.
 - Re-check GitHub mergeability.
 - After PR #16 lands, run the normal build-number/TestFlight follow-up because this branch contains app-code changes.
+
+## 2026-06-18 23:34 PDT - Codex - Build 31 TestFlight Release Follow-Up
+
+Agent: Codex
+Branch: `codex/build30-release`
+Worktree: `/private/tmp/recme-release-build30`
+Starting status: fast-forwarded to `origin/main` commit `b8d8b92` after PR #16 landed on top of the build 30 release commit.
+
+Goal: keep current `main` aligned with TestFlight after PR #16 (`Fix followed users and issue sweep`) merged app-code, parser, store, profile, map, add, Supabase function, and test changes after build 30 was uploaded.
+
+Context:
+
+- Build 30 was uploaded and approved for the M7 trust sheet merge, but `main` advanced immediately after with PR #16.
+- PR #16's own log entry calls for the normal build-number/TestFlight follow-up after landing.
+- Bumping `CURRENT_PROJECT_VERSION` from 30 to 31 and regenerating the Xcode project before verification/archive/upload.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
+- Archive/export/upload build 31.
+- Run `node scripts/testflight-release.mjs --build-number 31`.
+- Post the required tester-facing Slack note only after build 31 is uploaded/attached/available or clearly state if it is still processing.
