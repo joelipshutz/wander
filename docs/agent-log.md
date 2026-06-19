@@ -3751,3 +3751,55 @@ Validation planned:
 - `node --check scripts/testflight-release.mjs`
 - `node scripts/testflight-release.mjs --dry-run --build-number 31 --what-to-test 'Try the current TestFlight build.'`
 - `git diff --check`
+
+## 2026-06-19 00:05 PDT - Codex - Build 31 Missing Clerk Key Regression
+
+Agent: Codex
+Branch: `codex/fix-clerk-publishable-key`
+Worktree: `/private/tmp/recme-clerk-key-fix`
+Starting status: clean branch fast-forwarded to latest `origin/main` commit `2e800b7`.
+
+Goal: fix Joe's TestFlight report that build 31 signs users out after upgrade and then shows `Missing Clerk publishable key.` when trying to sign in.
+
+Findings so far:
+
+- `project.yml`, `Wander/Config/Auth.xcconfig`, and the generated `Wander.xcodeproj/project.pbxproj` currently leave `WANDER_CLERK_PUBLISHABLE_KEY` blank.
+- The previous local/dev setup relied on ignored `Wander/Config/LocalAuth.xcconfig`; release worktrees do not have that file, so archives can silently ship with empty auth config.
+- Supabase's public anon key is also only in local env, so remote sync can be silently disabled in release worktrees for the same reason.
+- Clerk publishable key and Supabase anon key are public client keys, not server secrets, so the release-safe fix is to commit them into tracked client config and keep only real secrets in local env.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander/Config/Auth.xcconfig`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/setup.md`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Verify generated build settings resolve non-empty `WANDER_CLERK_PUBLISHABLE_KEY` and `WANDER_SUPABASE_PUBLISHABLE_KEY`.
+- Add/adjust a regression test if practical.
+- Run focused tests and then the full `xcodebuild test` suite if the environment allows.
+
+Outcome:
+
+- Root cause confirmed: build 31 was archived from a release worktree without ignored `Wander/Config/LocalAuth.xcconfig`, while tracked config and generated project settings left the Clerk publishable key empty.
+- Added tracked default public client keys to `Wander/Config/Auth.xcconfig` for the alpha Clerk and Supabase projects. These are publishable/anon client keys, not server secrets; `LocalAuth.xcconfig` remains ignored and optional for alternate local projects.
+- Removed the empty project-level publishable-key overrides from `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj`.
+- Added `WanderTests/BuildConfigurationTests.swift` to prevent tracked auth config or generated project settings from regressing to empty release keys.
+- Updated `docs/setup.md` so release-capable worktrees no longer depend on local ignored auth config.
+
+Validation:
+
+- `xcodegen generate` succeeded.
+- Release build settings check succeeded and resolved non-empty `WANDER_CLERK_PUBLISHABLE_KEY` and `WANDER_SUPABASE_PUBLISHABLE_KEY`.
+- Focused test passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-clerk-key CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests` (`2` tests, `0` failures).
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-clerk-key-full CODE_SIGNING_ALLOWED=NO -jobs 1` (`110` tests, `0` failures).
+
+Next steps:
+
+- PR opened: https://github.com/joelipshutz/wander/pull/18
+- Needs explicit Joe approval to merge/release per `recme-pr-review-merge-release` safety boundary.
+- After approval, merge urgently, then bump to build 32 and upload a replacement TestFlight build because build 31 is broken for signed-out users.

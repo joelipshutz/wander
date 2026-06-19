@@ -7,10 +7,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
-    WANDER_CLERK_PUBLISHABLE_KEY: ""
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
-    WANDER_SUPABASE_PUBLISHABLE_KEY: ""
 packages:
   clerk-ios:
     url: https://github.com/clerk/clerk-ios
