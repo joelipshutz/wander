@@ -802,6 +802,59 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(followRepository.followersUserIDs, ["user_live"])
     }
 
+    func testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: nil, bio: nil, relationship: .follower)
+        let remotePlace = VisiblePlace(
+            id: "up_remote_maya_speranza",
+            place: LocalPlace(
+                localID: "remote_place_speranza",
+                serverID: "place_remote_speranza",
+                canonicalName: "Speranza",
+                category: "restaurant",
+                latitude: 34.101,
+                longitude: -118.292,
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: "remote_up_maya_speranza",
+                serverID: "up_remote_maya_speranza",
+                userID: "user_maya",
+                placeID: "place_remote_speranza",
+                status: .been,
+                visibility: .followers,
+                note: "great patio",
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "remote_profile_maya",
+                serverID: "user_maya",
+                handle: "maya",
+                displayName: "Maya",
+                syncState: .synced
+            )
+        )
+        let followRepository = FakeFollowRepository(following: [maya], relationships: ["user_maya": .follower])
+        let placeRepository = FakePlaceRepository(places: [])
+        let userPlaceRepository = FakeUserPlaceRepository(userPlacesByUserID: ["user_maya": [remotePlace]])
+        let backend = WanderBackend(
+            followRepository: followRepository,
+            placeRepository: placeRepository,
+            userPlaceRepository: userPlaceRepository
+        )
+
+        await store.refreshRemoteSocialSurfaces(backend: backend)
+
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_maya"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
+        XCTAssertEqual(placeRepository.viewports.count, 1)
+        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya"])
+    }
+
     func testRemoteSocialSaveMarksLocalCopySynced() async {
         let store = makeStore()
         let socialSaveRepository = FakeSocialPlaceSaveRepository(result: SaveResult(userPlaceID: "up_remote_saved", syncState: .synced))
@@ -986,6 +1039,48 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.syncState, .failed)
         XCTAssertNotNil(saved?.userPlace.lastSyncError)
         XCTAssertNotNil(store.lastRemoteError)
+    }
+
+    func testRetryFailedOwnPlaceSyncsMarksRowsSynced() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let failingBackend = WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
+        )
+
+        let failed = await store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_taco",
+                name: "Taco Table",
+                category: "restaurant",
+                latitude: 34.0522,
+                longitude: -118.2437,
+                confidence: 0.7
+            ),
+            status: .wannaGo,
+            visibility: .mutuals,
+            note: "retry this",
+            sourceType: .manual,
+            attributes: [],
+            backend: failingBackend
+        )
+        XCTAssertEqual(failed.syncState, .failed)
+
+        let successRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_taco", syncState: .synced, placeID: "place_remote_taco")
+        )
+        let retriedCount = await store.retryFailedOwnPlaceSyncs(
+            backend: WanderBackend(userPlaceRepository: successRepository)
+        )
+
+        XCTAssertEqual(retriedCount, 1)
+        XCTAssertEqual(successRepository.savedDrafts.count, 1)
+        XCTAssertEqual(successRepository.savedDrafts[0].note, "retry this")
+        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Taco Table" }
+        XCTAssertEqual(saved?.place.serverID, "place_remote_taco")
+        XCTAssertEqual(saved?.userPlace.serverID, "up_remote_taco")
+        XCTAssertEqual(saved?.userPlace.syncState, .synced)
+        XCTAssertNil(saved?.userPlace.lastSyncError)
     }
 
     func testRemoteFollowFailureLeavesFailedLocalFollow() async {
@@ -1184,17 +1279,26 @@ private final class FakePlaceRepository: PlaceRepository {
 
 @MainActor
 private final class FakeUserPlaceRepository: UserPlaceRepository {
+    struct UserPlaceRequest: Equatable {
+        let userID: String
+        let filters: PlaceFilters
+    }
+
     private let result: SaveResult?
     private let error: Error?
+    private let userPlacesByUserID: [String: [VisiblePlace]]
     private(set) var savedDrafts: [UserPlaceDraft] = []
+    private(set) var userPlaceRequests: [UserPlaceRequest] = []
 
-    init(result: SaveResult? = nil, error: Error? = nil) {
+    init(result: SaveResult? = nil, error: Error? = nil, userPlacesByUserID: [String: [VisiblePlace]] = [:]) {
         self.result = result
         self.error = error
+        self.userPlacesByUserID = userPlacesByUserID
     }
 
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
-        []
+        userPlaceRequests.append(UserPlaceRequest(userID: userID, filters: filters))
+        return userPlacesByUserID[userID] ?? []
     }
 
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {

@@ -3374,6 +3374,101 @@ Known local cleanup:
 
 - Root checkout still has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/` from the earlier interrupted verification attempts; left untouched.
 
+## 2026-06-18 22:14 PDT - Codex - REC-10 Followed Users Surfaces
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: created from latest `origin/main` at `44565dd`. Root checkout has untracked generated `DerivedData-build29/` and `DerivedData-build29-test/` from the build 29 release run, left untouched. Existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-rec-1-rec-3-ui`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`; no overlap expected except this work may touch the same social/map/discover surfaces as the already-merged REC-1/REC-3 branch.
+
+Linear issues:
+
+- REC-10 Followed users don't appear in Discover or on map
+- REC-7 Friends' saved places not showing in Discover or map filter
+- REC-9 People follow state is inconsistent across search, profile, and Discover
+
+Goal: implement the social-surface consistency fix as one umbrella change: followed users should appear in Discover's people rail, their visible places should feed Discover/map/social filters, and profile follow controls should not imply accidental unfollow.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added a store-level remote social surface refresh that refreshes the current user's social graph, remote visible places, and per-followed-user visible places.
+- Wired Discover and Map startup/auth refresh through that social surface refresh so followed users and their saved places are available outside username search.
+- Added followed users from `store.following(of:)` to Discover's horizontal people rail, deduped against contacts and search results.
+- After following from Discover contact/search cards, refresh social surfaces before refreshing Discover results.
+- Changed the other-user profile header so the `friend`/`following` pill is status-only; `Unfollow` now lives in the overflow menu next to Block.
+- Added regression coverage for remote social graph hydration followed by per-user place hydration.
+
+Verification:
+
+- Sandboxed `xcodebuild test ... -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces` failed before compiling because CoreSimulator and Swift package network access were sandbox-blocked.
+- Elevated focused regression passed after one compile fix: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`.
+- Elevated `WanderStoreTests` passed: 42 tests, 0 failures.
+- Elevated full test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1` (99 tests, 0 failures).
+
+Final outcome:
+
+- Committed implementation as `58d1707` (`fix: hydrate followed users across social surfaces`) on `codex/followed-users-surfaces`.
+- Opened PR #16: https://github.com/joelipshutz/wander/pull/16
+- Attached PR #16 to Linear REC-10, REC-7, and REC-9; moved all three to `In Review`.
+- Known local cleanup: worktree has untracked generated `DerivedData-followed-users/`, left uncommitted.
+- Next step: review/merge PR #16, then run the standard build-number/TestFlight follow-up if merged to `main`.
+
+## 2026-06-18 22:36 PDT - Codex - Remaining Linear Issue Sweep
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: Joe asked to look across all rec.me Linear issues, run `plan-eng-review` where needed, tee up only necessary decisions, and close as many issues as possible now.
+
+Plan-eng-review scope result:
+
+- REC-7/REC-9/REC-10 remain covered by PR #16.
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are implementable in this same branch because they share Map/Profile/Add/store codepaths.
+- REC-4 is not honestly closable yet: checked-in RLS migrations/tests already define the intended policy model, but live Supabase verification requires database/management access. Local env currently exposes app/service keys, not the management or DB credentials needed to inspect `pg_class.relrowsecurity` or apply migrations. Supabase CLI is not installed in this environment.
+
+Expected files to touch:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- focused tests under `WanderTests/`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added failed own-place sync retry on signed-in auth refresh for REC-5.
+- Tuned place category inference so Lake Shrine / shrine / temple-style names classify as `spiritual` in local category normalization and the extraction worker for REC-6.
+- Added tappable Profile Been/Wanna stat navigation with search, category, and metadata tag filters for REC-8.
+- Added one-time map centering over current user's visible saved places, with a fallback to all visible places, for REC-11.
+- Improved Apple Maps place-path parsing for `/place/<name>?coordinate=...` URLs while preserving existing `ll` query behavior for REC-12.
+- Added on-device Vision OCR for photo imports and maps place-like recognized text into the existing confirm-candidate flow, preserving unresolved draft fallback for low-confidence photos, for REC-13.
+- Added focused regression coverage for map region fitting, photo text extraction, profile metadata tag parsing, Apple Maps path parsing, Lake Shrine category override, and failed-save retry.
+
+Verification:
+
+- Removed generated `DerivedData-followed-users/` after the first focused rerun failed with `No space left on device`; reran with a fresh warmed `DerivedData-focused-issues/`.
+- Focused regression passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/LinkPlaceParserTests -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/MapRegionFitterTests -only-testing:WanderTests/PhotoPlaceTextExtractorTests -only-testing:WanderTests/ProfileMetadataTagParserTests -only-testing:WanderTests/WanderStoreTests/testRetryFailedOwnPlaceSyncsMarksRowsSynced` (20 tests, 0 failures).
+- Full elevated suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-focused-issues CODE_SIGNING_ALLOWED=NO -jobs 1` (106 tests, 0 failures).
+- `git diff --check` passed.
+
+Final status:
+
+- REC-5, REC-6, REC-8, REC-11, REC-12, and REC-13 are ready to attach to PR #16 and move to `In Review`.
+- REC-4 remains a real decision/access item: need Supabase CLI or DB/management credentials to verify hosted RLS state before calling it closed.
 ## 2026-06-18 22:25 PDT - Codex - M7/M8 Planning And M7 Alpha Trust Worktree
 
 Agent: Codex
@@ -3479,3 +3574,31 @@ Planned validation:
 - Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
 - Archive/export/upload build 30 if signing and App Store Connect credentials are available.
 - Run `node scripts/testflight-release.mjs --build-number 30`.
+
+## 2026-06-18 23:20 PDT - Codex - PR #16 Post-Main Merge Verification
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: keep PR #16 current after `main` advanced with PR #17/build 30, then re-run verification before pushing the issue sweep branch.
+
+Actions:
+
+- Merged `origin/main` into `codex/followed-users-surfaces`.
+- Resolved the only conflict in `docs/agent-log.md` by preserving both the issue-sweep notes and the M7/M8/build 30 notes.
+- Cleared generated DerivedData to recover from local disk exhaustion during the first post-merge full-suite run.
+- Removed old generated root worktree artifacts `DerivedData-build29/` and `DerivedData-build29-test/` to free enough space for a clean rerun.
+
+Validation:
+
+- First post-merge full-suite run reached app tests but failed when the simulator and xcresult bundle hit `No space left on device`; persistence assertions failed only after writes to simulator tmp failed.
+- Reran the full suite after cleanup:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-issue-sweep-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 108 tests, 0 failures.
+
+Next steps:
+
+- Push the updated PR #16 branch.
+- Re-check GitHub mergeability.
+- After PR #16 lands, run the normal build-number/TestFlight follow-up because this branch contains app-code changes.

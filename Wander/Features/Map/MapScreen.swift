@@ -26,6 +26,7 @@ struct MapScreen: View {
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
+    @State private var didCenterInitialPlaces = false
 
     private static let defaultRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
@@ -66,6 +67,11 @@ struct MapScreen: View {
 
     private var visiblePlaceIDs: [String] {
         visiblePlaces.map(\.id)
+    }
+
+    private var initialCameraPlaces: [VisiblePlace] {
+        let ownPlaces = store.currentUserVisiblePlaces
+        return ownPlaces.isEmpty ? visiblePlaces : ownPlaces
     }
 
     private var filters: PlaceFilters {
@@ -290,14 +296,17 @@ struct MapScreen: View {
         .background(WanderTheme.canvasWarm.color)
         .onAppear {
             resolveInitialSelection()
+            centerMapOnInitialPlacesIfNeeded()
         }
         .task {
-            await store.refreshRemoteVisiblePlaces(in: currentViewport, backend: backend)
+            await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+            centerMapOnInitialPlacesIfNeeded()
         }
         .onChange(of: auth.isSignedIn) { _, isSignedIn in
             guard isSignedIn else { return }
             Task {
-                await store.refreshRemoteVisiblePlaces(in: currentViewport, backend: backend)
+                await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                centerMapOnInitialPlacesIfNeeded()
             }
         }
         .onChange(of: visiblePlaceIDs) { _, ids in
@@ -305,6 +314,7 @@ struct MapScreen: View {
                 selectedPlaceID = nil
                 isPlaceSheetExpanded = false
             }
+            centerMapOnInitialPlacesIfNeeded()
         }
         .onChange(of: mapQuery) { _, _ in
             handleMapQueryChange()
@@ -395,6 +405,20 @@ struct MapScreen: View {
         if selectedPlaceID == nil {
             selectedPlaceID = visiblePlaces.first?.id
         }
+    }
+
+    private func centerMapOnInitialPlacesIfNeeded() {
+        guard !didCenterInitialPlaces else { return }
+        let coordinates = initialCameraPlaces.map { visiblePlace in
+            CLLocationCoordinate2D(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
+        }
+        guard let region = MapRegionFitter.region(fitting: coordinates) else { return }
+
+        didCenterInitialPlaces = true
+        position = .region(region)
     }
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {

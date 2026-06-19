@@ -45,10 +45,11 @@ struct LinkPlaceParser {
         let preferredKeys = ["q", "query", "destination", "daddr", "address", "place", "name", "title"]
         return firstQueryValue(in: components, keys: preferredKeys)
             ?? appleMapsAddressValue(in: components.queryItems ?? []).flatMap(cleanedPlaceText)
+            ?? appleMapsPathName(from: components)
     }
 
     private func areaHint(from components: URLComponents) -> String? {
-        firstQueryValue(in: components, keys: ["near", "ll", "sll"])
+        firstAreaHint(in: components, keys: ["near", "center", "coordinate"])
     }
 
     private func firstQueryValue(in components: URLComponents, keys: [String]) -> String? {
@@ -66,8 +67,30 @@ struct LinkPlaceParser {
         return nil
     }
 
+    private func firstAreaHint(in components: URLComponents, keys: [String]) -> String? {
+        let items = components.queryItems ?? []
+
+        for key in keys {
+            guard let value = items.first(where: { $0.name.lowercased() == key })?.value else {
+                continue
+            }
+
+            let decoded = value.removingPercentEncoding ?? value
+            let trimmed = decoded
+                .replacingOccurrences(of: "+", with: " ")
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        return nil
+    }
+
     private func appleMapsAddressValue(in items: [URLQueryItem]) -> String? {
-        let mapAddressKeys = ["auid", "address", "q"]
+        let mapAddressKeys = ["auid", "address", "q", "name", "title"]
 
         for item in items {
             let name = item.name.lowercased()
@@ -82,6 +105,15 @@ struct LinkPlaceParser {
         }
 
         return nil
+    }
+
+    private func appleMapsPathName(from components: URLComponents) -> String? {
+        let pieces = normalizedPathPieces(from: components)
+        guard let index = pieces.firstIndex(where: { $0.lowercased() == "place" }),
+              pieces.indices.contains(index + 1)
+        else { return nil }
+
+        return cleanedPlaceText(pieces[index + 1])
     }
 
     private func mapPathInput(from components: URLComponents) -> ManualPlaceInput? {
