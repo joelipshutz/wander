@@ -3574,3 +3574,31 @@ Planned validation:
 - Run `xcodebuild build` and `xcodebuild test` with `CODE_SIGNING_ALLOWED=NO`.
 - Archive/export/upload build 30 if signing and App Store Connect credentials are available.
 - Run `node scripts/testflight-release.mjs --build-number 30`.
+
+## 2026-06-18 23:20 PDT - Codex - PR #16 Post-Main Merge Verification
+
+Agent: Codex
+Branch: `codex/followed-users-surfaces`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: keep PR #16 current after `main` advanced with PR #17/build 30, then re-run verification before pushing the issue sweep branch.
+
+Actions:
+
+- Merged `origin/main` into `codex/followed-users-surfaces`.
+- Resolved the only conflict in `docs/agent-log.md` by preserving both the issue-sweep notes and the M7/M8/build 30 notes.
+- Cleared generated DerivedData to recover from local disk exhaustion during the first post-merge full-suite run.
+- Removed old generated root worktree artifacts `DerivedData-build29/` and `DerivedData-build29-test/` to free enough space for a clean rerun.
+
+Validation:
+
+- First post-merge full-suite run reached app tests but failed when the simulator and xcresult bundle hit `No space left on device`; persistence assertions failed only after writes to simulator tmp failed.
+- Reran the full suite after cleanup:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-issue-sweep-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 108 tests, 0 failures.
+
+Next steps:
+
+- Push the updated PR #16 branch.
+- Re-check GitHub mergeability.
+- After PR #16 lands, run the normal build-number/TestFlight follow-up because this branch contains app-code changes.
