@@ -3631,3 +3631,12 @@ Planned validation:
 - Archive/export/upload build 31.
 - Run `node scripts/testflight-release.mjs --build-number 31`.
 - Post the required tester-facing Slack note only after build 31 is uploaded/attached/available or clearly state if it is still processing.
+
+Checkpoint from `/private/tmp/recme-followed-users-surfaces`:
+
+- Confirmed `origin/main` already contains build bump commit `ed525b4` (`chore: bump testflight build 31`), so no duplicate bump commit was created from this worktree.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed, `BUILD SUCCEEDED` in 629.210 sec.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build31 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed, 108 tests, 0 failures.
