@@ -187,6 +187,7 @@ final class WanderStore: ObservableObject {
 
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
             guard filters.categories.isEmpty || filters.categories.contains(place.category) else { return nil }
+            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
 
             if !filters.ownerScopes.isEmpty {
                 let isMine = owner.id == currentUser.id
@@ -208,6 +209,7 @@ final class WanderStore: ObservableObject {
             guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
             guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
             guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.place.category) else { return false }
+            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
             guard !filters.ownerScopes.isEmpty else { return true }
 

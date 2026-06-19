@@ -22,6 +22,7 @@ struct MapScreen: View {
     @State private var suppressedTypeaheadQuery: String?
     @State private var isSearchingMapKit = false
     @State private var selectedFilters: Set<MapFilter> = [.you, .social, .been, .wanna]
+    @State private var selectedSocialOwnerID: String?
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
@@ -80,8 +81,32 @@ struct MapScreen: View {
         if selectedFilters.contains(.you) { scopes.insert("you") }
         if selectedFilters.contains(.social) { scopes.insert("social") }
         filters.ownerScopes = scopes
+        if let selectedSocialOwnerID, selectedFilters.contains(.social) {
+            filters.ownerIDs = [selectedSocialOwnerID]
+        }
 
         return filters
+    }
+
+    private var socialOwnerOptions: [MapSocialOwnerOption] {
+        let socialPlaces = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
+        var seen = Set<String>()
+        return socialPlaces.compactMap { visiblePlace in
+            let owner = visiblePlace.owner
+            guard owner.id != store.currentUser.id, !seen.contains(owner.id) else { return nil }
+            seen.insert(owner.id)
+            return MapSocialOwnerOption(
+                id: owner.id,
+                displayName: owner.displayName,
+                handle: owner.handle
+            )
+        }
+        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var selectedSocialOwner: MapSocialOwnerOption? {
+        guard let selectedSocialOwnerID else { return nil }
+        return socialOwnerOptions.first { $0.id == selectedSocialOwnerID }
     }
 
     private var selectedPlace: VisiblePlace? {
@@ -194,12 +219,23 @@ struct MapScreen: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: WanderTheme.spacing1) {
                             ForEach(MapFilter.allCases) { filter in
-                                Button {
-                                    toggle(filter)
-                                } label: {
-                                    MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                if filter == .social {
+                                    MapSocialFilterMenu(
+                                        isSelected: selectedFilters.contains(.social),
+                                        selectedOwner: selectedSocialOwner,
+                                        ownerOptions: socialOwnerOptions,
+                                        showAll: showAllSocialPlaces,
+                                        hideSocial: hideSocialPlaces,
+                                        selectOwner: showSocialPlaces
+                                    )
+                                } else {
+                                    Button {
+                                        toggle(filter)
+                                    } label: {
+                                        MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -293,9 +329,27 @@ struct MapScreen: View {
     private func toggle(_ filter: MapFilter) {
         if selectedFilters.contains(filter) {
             selectedFilters.remove(filter)
+            if filter == .social {
+                selectedSocialOwnerID = nil
+            }
         } else {
             selectedFilters.insert(filter)
         }
+    }
+
+    private func showAllSocialPlaces() {
+        selectedFilters.insert(.social)
+        selectedSocialOwnerID = nil
+    }
+
+    private func hideSocialPlaces() {
+        selectedFilters.remove(.social)
+        selectedSocialOwnerID = nil
+    }
+
+    private func showSocialPlaces(for ownerID: String) {
+        selectedFilters.insert(.social)
+        selectedSocialOwnerID = ownerID
     }
 
     private func clearMapSelection() {
@@ -1130,6 +1184,16 @@ private struct MapSearchSuggestion: Identifiable {
     }
 }
 
+private struct MapSocialOwnerOption: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let handle: String
+
+    var menuTitle: String {
+        handle.isEmpty ? displayName : "\(displayName) @\(handle)"
+    }
+}
+
 private struct SearchBar: View {
     @Binding var query: String
     let userInitials: String
@@ -1331,6 +1395,74 @@ private struct MapFilterChip: View {
         )
         .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct MapSocialFilterMenu: View {
+    let isSelected: Bool
+    let selectedOwner: MapSocialOwnerOption?
+    let ownerOptions: [MapSocialOwnerOption]
+    let showAll: () -> Void
+    let hideSocial: () -> Void
+    let selectOwner: (String) -> Void
+
+    var body: some View {
+        Menu {
+            Button {
+                showAll()
+            } label: {
+                Label("All social places", systemImage: selectedOwner == nil && isSelected ? "checkmark" : "person.2")
+            }
+
+            if !ownerOptions.isEmpty {
+                Divider()
+
+                ForEach(ownerOptions) { owner in
+                    Button {
+                        selectOwner(owner.id)
+                    } label: {
+                        Label(owner.menuTitle, systemImage: selectedOwner?.id == owner.id ? "checkmark" : "person")
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                hideSocial()
+            } label: {
+                Label("Hide social places", systemImage: !isSelected ? "checkmark" : "eye.slash")
+            }
+        } label: {
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(MapFilter.social.iconColor(isSelected: isSelected))
+                Text(selectedOwner?.displayName ?? "social")
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            .font(.system(size: 12, weight: .bold))
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(height: 38)
+            .background(WanderTheme.surfaceSand.color)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        selectedOwner == nil
+                            ? MapFilter.social.trimColor(isSelected: isSelected)
+                            : WanderTheme.textInk.color.opacity(0.82),
+                        lineWidth: selectedOwner == nil ? (isSelected ? 2 : 1) : 2
+                    )
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+        .accessibilityLabel(selectedOwner.map { "Social places filtered to \($0.displayName)" } ?? "Social places filter")
     }
 }
 

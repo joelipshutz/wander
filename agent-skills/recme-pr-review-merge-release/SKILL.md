@@ -89,7 +89,7 @@ For each eligible PR targeting `main`:
    source/tests/docs.
 2. Use the gstack `review` skill as the primary pre-landing review lens when available.
 3. If UI/UX changed, read `DESIGN.md` and evaluate visual hierarchy, safe areas, Dynamic Type, accessibility, tap targets, copy, screen composition, and consistency with the approved rec.me/Wander direction.
-4. If backend, sync, auth, privacy, data, persistence, or visibility behavior changed, apply the plan-eng-review lens for data flow, trust boundaries, regression risk, test coverage, and failure modes.
+4. If backend, sync, auth, privacy, data, persistence, or visibility behavior changed, invoke `plan-eng-review` when the change has non-trivial engineering risk. For narrow low-risk changes, record why full invocation was not needed and still apply the plan-eng-review lens for data flow, trust boundaries, regression risk, test coverage, and failure modes.
 5. Check for scope drift, unrelated generated junk, accidental signing/project churn, privacy/visibility regressions, SwiftUI state bugs, persistence bugs, and missing tests.
 6. Run appropriate verification where feasible:
    - `xcodegen generate` if `project.yml` or project membership changed
@@ -101,6 +101,7 @@ For each eligible PR targeting `main`:
 
 - If blocking findings exist, do not merge. Leave a concise PR review/comment with blocking findings, file/line references, tests run, and exact requested fixes. Update `docs/agent-log.md`.
 - If only non-blocking notes exist, include them in the PR comment and continue only if they do not require changes before TestFlight.
+- If review identifies key architecture, data, test, performance, rollout, or release-risk decisions, pause before merge and flag them in the current thread plus the linked Linear issue or PR comment.
 
 ## Merge Gate
 

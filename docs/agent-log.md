@@ -3267,17 +3267,52 @@ Completion notes:
 Verification:
 
 - `git diff --check`
-
-Outcome:
-
-- Commit: `d02e8ac` (`docs: add eng review gate to issue checker`)
-- PR: https://github.com/joelipshutz/wander/pull/14
 - Searched both skill files for stale Slack polling/checkmark language; remaining Slack mentions are only contextual or release-note-specific.
 
 Outcome:
 
 - Commit: `ac03f30` (`docs: align recme skills with linear statuses`)
 - PR: https://github.com/joelipshutz/wander/pull/13
+
+## 2026-06-18 13:08 PDT - Codex - REC-1/REC-3 Add Search And Social Filter
+
+Agent: Codex
+Branch: `codex/rec-1-rec-3-ui`
+Worktree: `/private/tmp/recme-rec-1-rec-3-ui`
+Starting status: created from latest `origin/main` at `11f70ba`; root checkout was clean on `main` after fetching/pulling. Existing worktrees `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit` do not overlap with this UI work.
+
+Linear issues:
+
+- `REC-1` Add search bar to the top of the add tab
+- `REC-3` Add social map filter pill dropdown
+
+Goal: implement the next clear Linear feedback issues from the updated bug-catcher workflow, then open a PR and move both issues to `In Review`.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Implemented Add-tab top search field that accepts a place name or map/location link and shows candidate results inline on the Add source page.
+- Current-location results now also stay on the Add source page instead of jumping to a separate confirm step, matching the in-page-results feedback.
+- Implemented social map filter as a dropdown pill with options for all social places, each visible social owner, and hiding social places.
+- Extended `PlaceFilters` with `ownerIDs` and wired local/remote visible-place filtering so the selected social owner actually filters the map data.
+- Added store regression coverage for filtering remote-visible social places to a specific owner.
+
+Verification:
+
+- `git diff --check` passed.
+- Initial focused selector compiled but matched 0 tests, so it was not counted as verification.
+- Elevated focused suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests` (41 tests, 0 failures).
+- Elevated full test passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3 CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
+- Rebasing onto latest `origin/main` produced a `docs/agent-log.md` conflict with the skill-contract log entry; resolved by preserving both entries.
+- Elevated full test passed again on rebased head `b86170f`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3-final CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
 
 ## 2026-06-18 13:22 PDT - Codex - Issue Checker Eng Review Gate
 
@@ -3302,3 +3337,87 @@ Completion notes:
 Verification:
 
 - `git diff --check`
+
+Outcome:
+
+- Commits: `d02e8ac` (`docs: add eng review gate to issue checker`) and `b1fbbef` (`docs: log issue checker eng gate pr`)
+- PR: https://github.com/joelipshutz/wander/pull/14
+
+## 2026-06-18 21:43 PDT - Codex - PR #15 Review, Merge, Build 29 Release Attempt
+
+Agent: Codex
+Branch: `main`
+Starting status: `main` clean at `origin/main`; root checkout later gained untracked `DerivedData-build29/` and `DerivedData-build29-test/` from release verification attempts, left untouched.
+
+Goal: run the shared `recme-pr-review-merge-release` workflow for open PRs targeting `main`, merge eligible app-code PRs, and complete the TestFlight follow-up.
+
+Open PR triage:
+
+- PR #15 (`codex/rec-1-rec-3-ui`) was clean and app-code eligible.
+- PR #14 (`codex/issue-review-eng-gate`) is still open and currently `DIRTY` after the main update.
+- PR #10 (`codex/update-pr-release-skill`) is still open and currently `DIRTY`.
+
+PR #15 review/merge:
+
+- Reviewed REC-1/REC-3 changes across Add search, current-location inline candidates, social map filtering, local store filtering, and regression tests.
+- `git diff --check origin/main...HEAD` passed in the PR worktree.
+- Elevated focused PR verification passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-pr15-review CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests` (41 tests, 0 failures).
+- GitHub would not allow self-approval, so a review comment was posted instead: https://github.com/joelipshutz/wander/pull/15#issuecomment-4745912187
+- Squash-merged PR #15 to `main`: `65dc4ea` (`feat: add add-tab search and social map filter (#15)`). Branch deletion failed only because the branch is checked out in `/private/tmp/recme-rec-1-rec-3-ui`.
+
+Build 29 release follow-up:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 28 to 29 in `project.yml`.
+- Ran `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects build 29.
+- Committed and pushed build bump to `main`: `3fc2014` (`chore: bump testflight build 29`).
+- Release build/test verification caveat: simulator `xcodebuild build` and full `xcodebuild test` both reached Xcode finalization/waiting phases and then hung; at Joe's instruction to proceed with the archive, both were interrupted rather than retried further. The focused PR regression suite above passed before merge.
+- Archive succeeded: `/private/tmp/Wander-0.1-build29.xcarchive`.
+- TestFlight export/upload is blocked before upload by Apple tooling: `PLA Update available` and `No signing certificate "iOS Distribution" found`.
+- Because build 29 is not uploaded or available in TestFlight, no tester Slack release note was posted, and linked Linear issues REC-1/REC-3 were left in `In Review` per the rec.me Linear status contract.
+- Added Linear comments to REC-1 and REC-3 with the merge/build/archive status and the App Store Connect signing/license blocker.
+
+Next steps:
+
+- Accept/update the required Apple Developer Program license agreement and install or create an iOS Distribution signing certificate for the team.
+- Re-run export/upload from the existing archive if still valid: `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build29.xcarchive -exportPath /private/tmp/WanderTestFlightUpload29 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates`.
+- After upload succeeds, run `node scripts/testflight-release.mjs --build-number 29 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`, mark REC-1/REC-3 `Done`, and post the required `#testflight-feedback` tester note.
+
+## 2026-06-18 21:58 PDT - Codex - Build 29 TestFlight Upload Completed
+
+Agent: Codex
+Branch: `main`
+
+Follow-up after Joe fixed the signing certificate:
+
+- Retried export/upload from the existing archive `/private/tmp/Wander-0.1-build29.xcarchive`.
+- Upload succeeded; App Store Connect accepted the package and began processing.
+- Ran `node scripts/testflight-release.mjs --build-number 29 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`.
+- Build `0.1 (29)` became `VALID`, build id `e34cc9e1-1696-4415-a5c0-ab8ef7082858`.
+- Set export compliance to `usesNonExemptEncryption=false`.
+- Attached build 29 to `Wander Alpha`.
+- Submitted external TestFlight review; App Store Connect reports review state `APPROVED`.
+- Marked Linear REC-1 and REC-3 `Done`.
+- Posted tester note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781845127959469
+
+Known local cleanup:
+
+- Root checkout still has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/` from the earlier interrupted verification attempts; left untouched.
+
+## 2026-06-18 22:33 PDT - Codex - Issue Checker Eng Gate PR Refresh
+
+Agent: Codex
+Branch: `codex/issue-review-eng-gate`
+
+Follow-up after Joe said "check for more":
+
+- Found PR #14 was conflicting after the build 29 mainline updates.
+- Merged latest `origin/main` into the PR branch and preserved both the build 29 release log entries and the issue-checker skill update entry.
+- Cleaned an older log merge artifact that had placed the PR #14 outcome inside the prior Linear-status contract entry.
+- Updated `AGENTS.md` so the shared issue-checker skill is described as Linear issue plus TestFlight feedback work.
+- Tightened `recme-pr-review-merge-release` so risky backend/sync/auth/privacy/data/persistence/visibility PRs invoke `plan-eng-review` when warranted, and key review decisions are flagged in the current thread and linked Linear issue or PR before merge.
+
+Verification:
+
+- `git diff --check` passed.
+- No conflict markers found in `docs/agent-log.md`.
+- Checked the PR diff against `origin/main`; the remaining PR surface is limited to the shared skill docs, `AGENTS.md`, and this log.
