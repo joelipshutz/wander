@@ -39,6 +39,14 @@ final class LinkPlaceParserTests: XCTestCase {
         XCTAssertEqual(input, ManualPlaceInput(name: "Urth Caffe, 451 S Hewitt St, Los Angeles, CA 90013", areaHint: nil, category: nil))
     }
 
+    func testParsesAppleMapsPlacePathAndCoordinateHint() {
+        let input = parser.manualInput(
+            from: LinkPlaceInput(rawValue: "https://maps.apple.com/place/Lake%20Shrine?coordinate=34.0483,-118.4634")
+        )
+
+        XCTAssertEqual(input, ManualPlaceInput(name: "Lake Shrine", areaHint: "34.0483,-118.4634", category: nil))
+    }
+
     func testParsesInstagramLocationSlug() {
         let input = parser.manualInput(
             from: LinkPlaceInput(rawValue: "https://www.instagram.com/explore/locations/123456789/larchmont-noodles/")

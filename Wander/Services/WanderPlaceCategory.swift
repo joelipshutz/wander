@@ -57,6 +57,8 @@ enum WanderPlaceCategory {
             "figure.strengthtraining.traditional"
         case "pilates studio":
             "figure.mind.and.body"
+        case "spiritual":
+            "sparkles"
         case "veterinarian":
             "pawprint.fill"
         case "pharmacy":
@@ -71,6 +73,10 @@ enum WanderPlaceCategory {
 
         if containsAny(normalizedName, ["veterinary", "veterinarian", " vet ", "animal hospital", "pet hospital", "pet clinic", "dog dental", "cat clinic"]) {
             return "veterinarian"
+        }
+
+        if containsAny(normalizedName, ["temple", "shrine", "meditation", "spiritual", "church", "chapel", "cathedral", "mosque", "synagogue"]) {
+            return "spiritual"
         }
 
         if containsAny(normalizedName, ["hospital", "medical center", "health center", "urgent care"]) {

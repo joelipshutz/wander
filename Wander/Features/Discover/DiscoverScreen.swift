@@ -26,6 +26,13 @@ struct DiscoverScreen: View {
         results.profiles.filter { !contactUserIDs.contains($0.id) }
     }
 
+    private var followedProfiles: [ProfileShell] {
+        let hiddenIDs = contactUserIDs.union(profileResults.map(\.id))
+        return store.following(of: store.currentUser.id)
+            .map(store.shell(for:))
+            .filter { !hiddenIDs.contains($0.id) }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -159,6 +166,7 @@ struct DiscoverScreen: View {
                                     auth.requireSignIn(for: .followPeople) {
                                         Task {
                                             await store.follow(userID: userID, source: .contacts, backend: backend)
+                                            await store.refreshRemoteSocialSurfaces(backend: backend)
                                             await refresh()
                                         }
                                     }
@@ -173,9 +181,18 @@ struct DiscoverScreen: View {
                                 auth.requireSignIn(for: .followPeople) {
                                     Task {
                                         await store.follow(userID: profile.id, source: .username, backend: backend)
+                                        await store.refreshRemoteSocialSurfaces(backend: backend)
                                         await refresh()
                                     }
                                 }
+                            }
+                        }
+
+                        ForEach(followedProfiles) { profile in
+                            ProfileMiniCard(profile: profile) {
+                                selectedProfile = SelectedProfile(id: profile.id)
+                            } follow: {
+                                selectedProfile = SelectedProfile(id: profile.id)
                             }
                         }
                     }
@@ -263,7 +280,7 @@ struct DiscoverScreen: View {
 
     private func refreshRemotePlacesIfNeeded() async {
         guard auth.isSignedIn else { return }
-        await store.refreshRemoteVisiblePlaces(backend: backend)
+        await store.refreshRemoteSocialSurfaces(backend: backend)
     }
 }
 

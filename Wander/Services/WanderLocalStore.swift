@@ -187,6 +187,7 @@ final class WanderStore: ObservableObject {
 
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
             guard filters.categories.isEmpty || filters.categories.contains(place.category) else { return nil }
+            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
 
             if !filters.ownerScopes.isEmpty {
                 let isMine = owner.id == currentUser.id
@@ -208,6 +209,7 @@ final class WanderStore: ObservableObject {
             guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
             guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
             guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.place.category) else { return false }
+            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
             guard !filters.ownerScopes.isEmpty else { return true }
 
@@ -614,6 +616,28 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func retryFailedOwnPlaceSyncs(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+
+        let retryableIDs = userPlaces
+            .filter { userPlace in
+                userPlace.userID == currentUser.id
+                    && userPlace.deletedAt == nil
+                    && userPlace.syncState == .failed
+                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
+            }
+            .map(\.id)
+
+        var syncedCount = 0
+        for userPlaceID in retryableIDs {
+            if await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend) {
+                syncedCount += 1
+            }
+        }
+        return syncedCount
+    }
+
     func extractionJob(for draft: UnresolvedDraft) -> LocalExtractionJob? {
         guard let jobID = draft.extractionJobID else { return nil }
         return extractionJob(matching: jobID)
@@ -905,6 +929,24 @@ final class WanderStore: ObservableObject {
 
     func refreshRemoteVisiblePlaces(backend: WanderBackend?) async {
         await refreshRemoteVisiblePlaces(in: Self.defaultRemoteViewport, backend: backend)
+    }
+
+    func refreshRemoteSocialSurfaces(backend: WanderBackend?) async {
+        await refreshRemoteSocialSurfaces(in: Self.defaultRemoteViewport, backend: backend)
+    }
+
+    func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async {
+        guard backend != nil else {
+            return
+        }
+
+        await refreshRemoteSocialGraph(backend: backend)
+        await refreshRemoteVisiblePlaces(in: viewport, backend: backend)
+
+        let followedProfileIDs = following(of: currentUser.id).map(\.id)
+        for profileID in followedProfileIDs {
+            await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        }
     }
 
     func refreshRemoteProfileVisiblePlaces(profileID: String, backend: WanderBackend?) async {
@@ -1370,6 +1412,27 @@ final class WanderStore: ObservableObject {
 
     private func remoteErrorMessage(_ error: Error) -> String {
         String(describing: error)
+    }
+
+    private func retryOwnPlaceSync(userPlaceID: String, backend: WanderBackend) async -> Bool {
+        guard let draft = userPlaceDraft(for: userPlaceID) else { return false }
+
+        markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
+        do {
+            let remoteResult = try await backend.saveUserPlace(draft)
+            if let placeID = remoteResult.placeID {
+                markPlace(localOrServerID: draft.place.localID, serverID: placeID, syncState: .synced)
+            }
+            markUserPlace(localOrServerID: userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
+            lastRemoteError = nil
+            await refreshRemoteVisiblePlaces(backend: backend)
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markUserPlace(localOrServerID: userPlaceID, syncState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
     }
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {

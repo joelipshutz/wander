@@ -83,6 +83,12 @@ struct WanderRootView: View {
     private func applyAuthStateIfNeeded(_ state: AuthState) {
         guard fixtureMode == .empty else { return }
         store.apply(authState: state)
+
+        if state.isSignedIn {
+            Task {
+                await store.retryFailedOwnPlaceSyncs(backend: backend)
+            }
+        }
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {
