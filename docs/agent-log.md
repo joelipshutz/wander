@@ -3314,6 +3314,35 @@ Verification:
 - Rebasing onto latest `origin/main` produced a `docs/agent-log.md` conflict with the skill-contract log entry; resolved by preserving both entries.
 - Elevated full test passed again on rebased head `b86170f`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec-1-rec-3-final CODE_SIGNING_ALLOWED=NO -jobs 1` (98 tests, 0 failures).
 
+## 2026-06-18 13:22 PDT - Codex - Issue Checker Eng Review Gate
+
+Agent: Codex
+Branch: `codex/issue-review-eng-gate`
+Starting status: clean `main...origin/main` at `d4d7825`; existing worktrees are `/private/tmp/recme-auth-save-persist`, `/private/tmp/recme-rec-1-rec-3-ui`, `/private/tmp/recme-shared-agent-skills`, and `/private/tmp/recme-wanna-go-question-fit`, with no overlap on the issue-checker skill doc.
+
+Goal: update the repo-owned `recme-testflight-feedback-bug-catcher` skill so Linear issue review invokes `plan-eng-review` when issue scope warrants it, and so key decisions surfaced by that review are flagged in the current thread before implementation proceeds.
+
+Expected files to touch:
+
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/agent-log.md`
+
+Completion notes:
+
+- Read `/Users/joelipshutz/.claude/skills/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md` and updated the issue-checker skill to invoke it before implementation when Linear issue scope has non-trivial engineering risk.
+- Added trigger criteria for P0/P1, auth/sync/backend/privacy/schema/RLS/data/persistence/visibility/security/migration, cross-screen behavior, multi-service/file plans, and unclear test/data/failure-mode boundaries.
+- Added a decision-stop rule: if `plan-eng-review` surfaces architecture, data, test, performance, scope, or rollout decisions, the agent must flag the decision in the current thread and Linear comment before executing.
+- Updated final reporting to include the engineering review gate outcome.
+
+Verification:
+
+- `git diff --check`
+
+Outcome:
+
+- Commits: `d02e8ac` (`docs: add eng review gate to issue checker`) and `b1fbbef` (`docs: log issue checker eng gate pr`)
+- PR: https://github.com/joelipshutz/wander/pull/14
+
 ## 2026-06-18 21:43 PDT - Codex - PR #15 Review, Merge, Build 29 Release Attempt
 
 Agent: Codex
@@ -3373,6 +3402,25 @@ Follow-up after Joe fixed the signing certificate:
 Known local cleanup:
 
 - Root checkout still has untracked generated directories `DerivedData-build29/` and `DerivedData-build29-test/` from the earlier interrupted verification attempts; left untouched.
+
+## 2026-06-18 22:33 PDT - Codex - Issue Checker Eng Gate PR Refresh
+
+Agent: Codex
+Branch: `codex/issue-review-eng-gate`
+
+Follow-up after Joe said "check for more":
+
+- Found PR #14 was conflicting after the build 29 mainline updates.
+- Merged latest `origin/main` into the PR branch and preserved both the build 29 release log entries and the issue-checker skill update entry.
+- Cleaned an older log merge artifact that had placed the PR #14 outcome inside the prior Linear-status contract entry.
+- Updated `AGENTS.md` so the shared issue-checker skill is described as Linear issue plus TestFlight feedback work.
+- Tightened `recme-pr-review-merge-release` so risky backend/sync/auth/privacy/data/persistence/visibility PRs invoke `plan-eng-review` when warranted, and key review decisions are flagged in the current thread and linked Linear issue or PR before merge.
+
+Verification:
+
+- `git diff --check` passed.
+- No conflict markers found in `docs/agent-log.md`.
+- Checked the PR diff against `origin/main`; the remaining PR surface is limited to the shared skill docs, `AGENTS.md`, and this log.
 
 ## 2026-06-18 22:14 PDT - Codex - REC-10 Followed Users Surfaces
 

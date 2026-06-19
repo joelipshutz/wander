@@ -102,7 +102,7 @@ corresponding `agent-skills/<skill-name>/SKILL.md` directly and follow it.
 Current shared skills:
 
 - `recme-pr-review-merge-release` - use when asked to review, merge, land, ship, or release a rec.me/Wander PR.
-- `recme-testflight-feedback-bug-catcher` - use when checking or acting on rec.me/Wander TestFlight feedback.
+- `recme-testflight-feedback-bug-catcher` - use when checking or acting on rec.me/Wander Linear issues or TestFlight feedback.
 
 ## Tech Stack
 
