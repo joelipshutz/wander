@@ -3414,3 +3414,11 @@ Verification:
 - Elevated focused regression passed after one compile fix: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`.
 - Elevated `WanderStoreTests` passed: 42 tests, 0 failures.
 - Elevated full test suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-users CODE_SIGNING_ALLOWED=NO -jobs 1` (99 tests, 0 failures).
+
+Final outcome:
+
+- Committed implementation as `58d1707` (`fix: hydrate followed users across social surfaces`) on `codex/followed-users-surfaces`.
+- Opened PR #16: https://github.com/joelipshutz/wander/pull/16
+- Attached PR #16 to Linear REC-10, REC-7, and REC-9; moved all three to `In Review`.
+- Known local cleanup: worktree has untracked generated `DerivedData-followed-users/`, left uncommitted.
+- Next step: review/merge PR #16, then run the standard build-number/TestFlight follow-up if merged to `main`.
