@@ -4075,3 +4075,33 @@ Next steps:
 
 - Push the updated PR #20 branch, verify GitHub mergeability, squash-merge to `main`, then bump the next TestFlight build number to `34`.
 - Build `33` from PR #19 remains not uploaded because export was blocked by signing/cloud-signing permissions; build `34` should supersede it if signing succeeds.
+
+## 2026-06-20 14:30 PDT - Codex - PR #20 Merge and Build 34 TestFlight Release Complete
+
+Agent: Codex automation `rec-me-pr-review-merge-and-testflight-release`
+Branch: `main`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: PR #20 was updated from latest `origin/main` after build 33 completion landed.
+
+Outcome:
+
+- PR #20 (`fix: harden Clerk runtime configuration`) was squash-merged to `main` as `3a1c990c`.
+- Bumped `CURRENT_PROJECT_VERSION` from `33` to `34` in `project.yml`, regenerated `Wander.xcodeproj`, committed `e9691016` (`chore: bump testflight build 34`), and pushed it to `origin/main`.
+- Build 34 validation passed:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build34 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `BUILD SUCCEEDED`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build34 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `119` tests, `0` failures, including the new Clerk auth/config regression coverage.
+- Archived build `0.1 (34)` at `/private/tmp/Wander-0.1-build34.xcarchive`.
+- Export/upload succeeded with Joe's App Store Connect API key; Xcode output ended with `Uploaded Wander`.
+- First TestFlight helper run with inline What-to-Test copy found build 34 as `VALID` and set export compliance, but App Store Connect rejected the optional beta localization request with `PARAMETER_ERROR.ILLEGAL` for `filter[locale]`.
+- Reran helper without What-to-Test copy:
+  `node scripts/testflight-release.mjs --build-number 34 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build id `25db0778-ac56-4b2f-a83c-dd4befb27632`, processing state `VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781990973821369
+- Linear `REC-14` was updated with release details and moved to `Done`.
+
+Known issues / follow-up:
+
+- TestFlight "What to Test" metadata was not updated because the helper's beta localization lookup is using an App Store Connect filter that this endpoint now rejects. Tester instructions were included in Slack instead.
+- Build 33 and build 34 both completed today; build 34 is the current release candidate because it includes the Clerk login fix.
