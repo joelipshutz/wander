@@ -4105,3 +4105,32 @@ Known issues / follow-up:
 
 - TestFlight "What to Test" metadata was not updated because the helper's beta localization lookup is using an App Store Connect filter that this endpoint now rejects. Tester instructions were included in Slack instead.
 - Build 33 and build 34 both completed today; build 34 is the current release candidate because it includes the Clerk login fix.
+
+## 2026-06-20 14:48 PDT - Codex - Followed Social Surfaces Regression
+
+Agent: Codex
+Branch: `codex/fix-followed-social-surfaces`
+Worktree: `/private/tmp/recme-followed-social-fix`
+Starting status: clean branch from latest `origin/main` at `2deb2f9c`; main release worktree `/private/tmp/recme-followed-users-surfaces` has untracked build 34 DerivedData/archive outputs and is intentionally not used for edits.
+
+Goal: run `/plan-eng-review` on the recurring followed-user social surface bug, then fix the real store-level path so followed users' visible places appear consistently in Discover places and the Map social surface.
+
+Context:
+
+- Linear REC-10/REC-7/REC-9 were marked Done by PR #16, but the repo QA checklist explicitly said not to mark those done until two-account social cases passed.
+- The current user report says Ryan's places are still missing from Discover > Places and the social map even though Joe follows him.
+- Mission Control at `localhost:4000` was unavailable, so coordination is recorded here and will be mirrored to Linear.
+
+Expected files:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Plan-eng-review found no branch design doc; proceeded with standard incident review using Linear REC-10/REC-7/REC-9 and the existing M7/M8 review/checklist as source context.
+- Root risk from PR #16: it added social profile backfill but only tested one followed user and did not preserve the two-account QA gate before Linear completion.
+- Implementation in progress: preserve locally known followed IDs across social refresh, refresh Discover results when the visible-place social surface changes, fit initial Map camera to social pins when social is enabled, and add a Maya+Ryan regression.

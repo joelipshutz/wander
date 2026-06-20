@@ -806,7 +806,8 @@ final class WanderStoreTests: XCTestCase {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: nil, bio: nil, relationship: .follower)
-        let remotePlace = VisiblePlace(
+        let ryan = ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .follower)
+        let mayaPlace = VisiblePlace(
             id: "up_remote_maya_speranza",
             place: LocalPlace(
                 localID: "remote_place_speranza",
@@ -836,9 +837,47 @@ final class WanderStoreTests: XCTestCase {
                 syncState: .synced
             )
         )
-        let followRepository = FakeFollowRepository(following: [maya], relationships: ["user_maya": .follower])
+        let ryanPlace = VisiblePlace(
+            id: "up_remote_ryan_dama",
+            place: LocalPlace(
+                localID: "remote_place_dama",
+                serverID: "place_remote_dama",
+                canonicalName: "Dama",
+                category: "restaurant",
+                latitude: 34.033,
+                longitude: -118.229,
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: "remote_up_ryan_dama",
+                serverID: "up_remote_ryan_dama",
+                userID: "user_ryan",
+                placeID: "place_remote_dama",
+                status: .been,
+                visibility: .followers,
+                note: "order the prawns",
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "remote_profile_ryan",
+                serverID: "user_ryan",
+                handle: "ryan",
+                displayName: "Ryan",
+                syncState: .synced
+            )
+        )
+        let followRepository = FakeFollowRepository(
+            following: [maya, ryan],
+            relationships: ["user_maya": .follower, "user_ryan": .follower]
+        )
         let placeRepository = FakePlaceRepository(places: [])
-        let userPlaceRepository = FakeUserPlaceRepository(userPlacesByUserID: ["user_maya": [remotePlace]])
+        let userPlaceRepository = FakeUserPlaceRepository(
+            userPlacesByUserID: [
+                "user_maya": [mayaPlace],
+                "user_ryan": [ryanPlace]
+            ]
+        )
         let backend = WanderBackend(
             followRepository: followRepository,
             placeRepository: placeRepository,
@@ -847,12 +886,16 @@ final class WanderStoreTests: XCTestCase {
 
         await store.refreshRemoteSocialSurfaces(backend: backend)
 
-        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya"])
-        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza", "Dama"])
         XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_maya"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_ryan"])).map(\.place.canonicalName), ["Dama"])
+        let discoverPlaces = await store.discover(query: "", scope: .everyone, backend: backend).places
+        XCTAssertEqual(discoverPlaces.map(\.owner.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(discoverPlaces.map(\.place.canonicalName), ["Speranza", "Dama"])
         XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
         XCTAssertEqual(placeRepository.viewports.count, 1)
-        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya"])
+        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya", "user_ryan"])
     }
 
     func testRemoteSocialSaveMarksLocalCopySynced() async {
