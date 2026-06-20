@@ -37,7 +37,19 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
 
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
         let location = try await locationProvider.currentLocation()
+        return try await nearbyPlaceCandidates(near: location)
+    }
 
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] {
+        guard CLLocationCoordinate2DIsValid(coordinate) else {
+            throw PlaceResolutionError.locationUnavailable
+        }
+        return try await nearbyPlaceCandidates(
+            near: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        )
+    }
+
+    private func nearbyPlaceCandidates(near location: CLLocation) async throws -> [PlaceCandidate] {
         for radius in [CLLocationDistance(175), CLLocationDistance(350), CLLocationDistance(700)] {
             let request = MKLocalPointsOfInterestRequest(center: location.coordinate, radius: radius)
             request.pointOfInterestFilter = .includingAll
