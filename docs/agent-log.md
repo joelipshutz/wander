@@ -3995,3 +3995,58 @@ Known issues:
 
 - TestFlight "What to Test" metadata was not updated due the App Store Connect beta localization endpoint rejecting `filter[locale]`; the same testing checklist was included in Slack.
 - Backend photo extraction jobs remain deferred; build 33 improves the local OCR-to-place-candidate path.
+
+## 2026-06-20 11:52 PDT - Codex - REC-14 Clerk Login Regression
+
+Agent: Codex
+Branch: `codex/fix-clerk-login-regression`
+Worktree: `/private/tmp/recme-clerk-login-regression`
+Starting status: clean branch from `origin/main` at `c5b5a0ed`.
+
+Goal: fix REC-14 / TestFlight build 32 login regression where users still see missing Clerk errors and cannot sign in.
+
+Context:
+
+- Linear issue: REC-14, "Missing Clerk issue still blocks sign-in on TestFlight".
+- Slack attachment in Linear from Ryan reports build 32 still has missing Clerk issues and sign-in is blocked; sign-out path was unavailable to test.
+- Regression window points at PR #18/build 32 auth config changes.
+- Mission Control task creation attempted but `localhost:4000` was not reachable (`curl` exit 7).
+
+Expected files to touch:
+
+- `Wander/Config/Auth.xcconfig`
+- `Wander/App/WanderBackendConfiguration.swift`
+- `Wander/Services/Auth/ClerkAuthService.swift`
+- `WanderTests/BuildConfigurationTests.swift`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Inspect PR #18/build 32 auth config behavior.
+- Add a regression test for the actual Clerk publishable-key shape used by the SDK.
+- Run focused build configuration/auth tests and the full suite if feasible.
+
+Outcome:
+
+- Root cause: PR #18 correctly moved public Clerk/Supabase client values into tracked `Auth.xcconfig`, but the runtime still treated unresolved Info.plist substitutions like `$(WANDER_CLERK_PUBLISHABLE_KEY)` as missing. ClerkKit also returns an unconfigured client when `Clerk.configure` fails, so the sign-in surface could remain blocked without a stronger runtime fallback/guard.
+- Added static public client defaults in `WanderBackendConfiguration` and made runtime configuration fall back when Info.plist values are unresolved, blank, or missing.
+- Tightened `ClerkAuthService.canPresentNativeAuth` so native auth only presents after ClerkKit returns a configured client.
+- Added auth regression coverage for unresolved Info.plist values, Auth.xcconfig/project/plist wiring, Clerk publishable-key frontend decoding, native auth presentation from fallback config, and SDK configure failure.
+
+Validation:
+
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec14-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests`
+  Result: passed with elevated simulator access, `5` tests, `0` failures.
+- Verified built app Info.plist values from `DerivedData-rec14-focused`:
+  - `WANDER_CLERK_PUBLISHABLE_KEY = pk_test_Z3Jvd2luZy1waGVhc2FudC0yMi5jbGVyay5hY2NvdW50cy5kZXYk`
+  - `WANDER_CLERK_FRONTEND_API = growing-pheasant-22.clerk.accounts.dev`
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec14-auth-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests -only-testing:WanderTests/AuthSessionTests`
+  Result: passed with elevated simulator access, `16` tests, `0` failures.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec14-full-after-auth CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated simulator access, `117` tests, `0` failures.
+
+Known notes:
+
+- Simulator test logs still show Clerk keychain `unexpectedStatus(-34018)` warnings; ClerkKit logs these as non-critical and tests passed.
+- Mission Control remained unavailable on `localhost:4000`, so no tracker task was created.
+- Ready to push `codex/fix-clerk-login-regression` and open a PR linked to REC-14. No TestFlight upload or Slack release note from this bug-fix branch until the PR is reviewed/merged.
