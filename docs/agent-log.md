@@ -3900,3 +3900,11 @@ Checkpoint:
   Result: passed with elevated access, `4` tests, `0` failures.
 - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec13-photo-full CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: passed with elevated access, `112` tests, `0` failures.
+
+Outcome:
+
+- Implementation commit pushed to `codex/rec-13-photo-extraction`: `ca2f0c4` (`fix: improve photo place extraction`).
+- PR opened against `main`: https://github.com/joelipshutz/wander/pull/19
+- Linear `REC-13` will be moved to `In Review` with PR link attached.
+- Known issue: backend image extraction remains deferred; this PR improves the current local Vision OCR -> MapKit candidate path and still falls back to unresolved drafts when no candidate resolves.
+- Next step: PR review/merge/release workflow should own merge, TestFlight build, Slack release note, and moving `REC-13` to `Done` after TestFlight availability.
