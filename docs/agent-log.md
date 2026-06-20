@@ -3859,3 +3859,52 @@ Known issues:
 
 - Link/photo capture still creates unresolved drafts until backend extraction jobs are fully live.
 - Social surfaces may still look sparse depending on account data.
+
+## 2026-06-20 12:07 PDT - Codex - REC-13 Photo Extraction PR
+
+Agent: Codex
+Branch: `codex/rec-13-photo-extraction`
+Worktree: `/private/tmp/recme-rec-13-photo-extraction`
+Starting status: fresh worktree from latest `origin/main` at `c5b5a0e`; root checkout `/Users/ryanlieblein/Developer/wander` is dirty/behind with old build-number edits and is intentionally not used for this implementation.
+
+Linear issue:
+
+- `REC-13` - Photo extraction doesn't work when adding a place
+
+Goal: implement REC-13 as a separate PR so adding from a photo can extract useful place text and show/save candidate places instead of always falling back to an unresolved manual draft.
+
+Initial notes:
+
+- Moved REC-13 from `Todo` to `In Progress` and assigned it to Ryan.
+- REC-13 has an attachment to merged PR #16, but the current release log still lists link/photo capture as unresolved until backend extraction jobs are fully live, and the issue was not marked done. Treating this as a still-open product gap.
+- Engineering review gate required because this touches extraction/add flow behavior.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Services/PhotoPlaceTextExtractor.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/PhotoPlaceTextExtractorTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Engineering review gate outcome: clean to proceed with a narrow client-side fix. Keep the data flow local: PhotosPicker image -> Vision OCR -> ranked place queries -> existing MapKit/manual candidate resolver -> confirm/save. No schema/backend changes and no auto-save.
+- Implemented ranked OCR search queries in `PhotoPlaceTextExtractor` so photo text can try multiple likely place names and nearby address/locality context before falling back to a draft.
+- Updated the Add photo copy from draft-only language to scan/search language and made the Add flow try each OCR-derived query until one resolves candidates.
+- Initial focused test command against the documented `iPhone 16 Plus, OS=18.6` destination could not run because this machine only has iOS 26.5 simulators installed.
+- First focused run on `iPhone 17 Pro, OS=26.5` compiled successfully but failed one new extractor test because `Santa Monica, CA` outranked `Heavy Handed`. Fixed by treating locality lines as context only, not primary place candidates.
+- `git diff --check` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec13-photo CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PhotoPlaceTextExtractorTests`
+  Result: passed with elevated access, `4` tests, `0` failures.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec13-photo-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `112` tests, `0` failures.
+
+Outcome:
+
+- Implementation commit pushed to `codex/rec-13-photo-extraction`: `ca2f0c4` (`fix: improve photo place extraction`).
+- PR opened against `main`: https://github.com/joelipshutz/wander/pull/19
+- Linear `REC-13` will be moved to `In Review` with PR link attached.
+- Known issue: backend image extraction remains deferred; this PR improves the current local Vision OCR -> MapKit candidate path and still falls back to unresolved drafts when no candidate resolves.
+- Next step: PR review/merge/release workflow should own merge, TestFlight build, Slack release note, and moving `REC-13` to `Done` after TestFlight availability.
