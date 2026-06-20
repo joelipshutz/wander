@@ -4212,3 +4212,54 @@ Validation:
 - `git diff --check` passed.
 - `scripts/install-agent-skills.sh --check` passed with six existing symlinks
   present and pointing to `/private/tmp/recme-shared-agent-skills`.
+
+## 2026-06-20 16:51 PDT - Codex - Build 35 TestFlight Release Complete
+
+Agent: Codex automation `rec-me-pr-review-merge-and-testflight-release`
+Branch: `main`
+Worktree: `/private/tmp/recme-followed-users-surfaces`
+Starting status: continued the release worktree on `main` after the feedback
+skill PR and the reopened REC-13 photo add fallback PR landed.
+
+Outcome:
+
+- PR #21 (`Harden feedback skill engineering review gate`) was squash-merged to
+  `main` as `94dccdfb`. Classified as docs/process-only, so it did not require
+  a build bump by itself.
+- PR #22 (`Fix photo add extraction fallbacks`) was merged to `main` as
+  `c991b66e`, linking `REC-13` and requiring a new TestFlight build because it
+  changes app behavior.
+- Bumped `CURRENT_PROJECT_VERSION` from `34` to `35` in `project.yml`,
+  regenerated `Wander.xcodeproj` with `xcodegen generate`, committed
+  `aaeca4d8` (`chore: bump testflight build 35`), and pushed it to
+  `origin/main`.
+- Build 35 validation passed:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build35 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `BUILD SUCCEEDED`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build35 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `123` tests, `0` failures.
+- First archive attempt failed because the repo-local generated DerivedData
+  directories filled the disk. Removed only generated `DerivedData-build34`,
+  `DerivedData-build34-archive`, `DerivedData-build35`, and
+  `DerivedData-build35-archive`, then reran the archive successfully.
+- Archived build `0.1 (35)` at `/private/tmp/Wander-0.1-build35.xcarchive`.
+- Export/upload succeeded with Joe's App Store Connect API key; Xcode output
+  ended with `Uploaded Wander`.
+- TestFlight helper completed:
+  `node scripts/testflight-release.mjs --build-number 35 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build id `f5c7d353-af6a-40d3-8049-0c5f294267ac`, processing state
+  `VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`,
+  external review `APPROVED`.
+- Linear `REC-13` was commented with build 35 release details and moved to
+  `Done`.
+- Tester-facing Slack note posted to `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781999502113259
+
+Known issues / follow-up:
+
+- TestFlight "What to Test" metadata was not updated; tester instructions were
+  included in Slack instead.
+- The release claim for REC-13 is the local photo OCR/GPS/manual rescue path.
+  Backend/remote photo extraction jobs remain outside this build's scope.
+- The worktree may still have generated archive DerivedData if not cleaned after
+  this log update; do not commit it.
