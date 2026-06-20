@@ -3908,3 +3908,47 @@ Outcome:
 - Linear `REC-13` will be moved to `In Review` with PR link attached.
 - Known issue: backend image extraction remains deferred; this PR improves the current local Vision OCR -> MapKit candidate path and still falls back to unresolved drafts when no candidate resolves.
 - Next step: PR review/merge/release workflow should own merge, TestFlight build, Slack release note, and moving `REC-13` to `Done` after TestFlight availability.
+
+## 2026-06-20 12:42 PDT - Codex - PR #19 Squash Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/pr19-merge-release`
+Starting status: clean worktree at `c5b5a0e`, tracking `origin/main`.
+
+Goal: review PR #19 (`codex/rec-13-photo-extraction`), squash-merge it to `main` only if conflict-free and non-blocking, then follow the required app-code release path with a build-number commit and TestFlight handling.
+
+Expected files to touch:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Initial notes:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is on `main`, behind `origin/main`, with local modifications to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and `docs/agent-log.md`; those are treated as unrelated paused work and will not be edited or reverted.
+- Existing PR implementation worktree `/private/tmp/recme-rec-13-photo-extraction` is clean on `codex/rec-13-photo-extraction`.
+- This isolated release worktree was created from latest `origin/main` to avoid interfering with Ryan/Joe local state.
+
+Review checkpoint:
+
+- PR #19 metadata: open, ready, no labels, base `main`, head `codex/rec-13-photo-extraction` at `a5a758a2888a790eb94f61e84b877308a39effd8`, GitHub mergeability `MERGEABLE`, no reported GitHub checks.
+- Reviewed diff against `origin/main`: `Wander/Features/Add/AddScreen.swift`, `Wander/Services/PhotoPlaceTextExtractor.swift`, `WanderTests/PhotoPlaceTextExtractorTests.swift`, and `docs/agent-log.md`.
+- No blocking findings found. The change stays within the add-photo/OCR candidate flow, preserves the unresolved draft fallback when OCR search cannot resolve candidates, and adds focused extractor coverage.
+- `git diff --check origin/main...origin/codex/rec-13-photo-extraction` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr19-review-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PhotoPlaceTextExtractorTests`
+  Result: passed with elevated access, `4` tests, `0` failures.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr19-review-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `112` tests, `0` failures.
+
+Merge and build checkpoint:
+
+- Squash-merged PR #19 to `main` with head guard `a5a758a2888a790eb94f61e84b877308a39effd8`.
+- GitHub PR state after merge: `MERGED`; merge commit `f65514b7965ffd38ec4fe5265448f561886071a9`.
+- Fast-forwarded this release worktree to the updated `origin/main` and resolved the expected `docs/agent-log.md` overlap by keeping both the REC-13 implementation entry and this release entry.
+- Bumped TestFlight build number from `32` to `33` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; because the local generator wanted to churn unrelated project settings, restored the project file from `origin/main` and kept only the intended `CURRENT_PROJECT_VERSION = 33` changes.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build33 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build33 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `112` tests, `0` failures.
