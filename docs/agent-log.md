@@ -3970,3 +3970,28 @@ Known issues / next steps:
 - `main` has PR #19 merged and build `33` committed; code verification is complete.
 - To finish TestFlight, grant Ryan's App Store Connect API key/account the required distribution/cloud-signing permission or install/provide an Apple Distribution certificate/profile for `com.grayline.wander`, then rerun the export/upload command above from this worktree or from latest `main`.
 - After upload succeeds, run `node scripts/testflight-release.mjs --build-number 33 --timeout-attempts 40 --poll-seconds 30`, move `REC-13` to `Done`, post the required `#testflight-feedback` tester note, and append the final live/approved status to this log.
+
+## 2026-06-20 13:51 PDT - Codex - Build 33 TestFlight Completion
+
+Agent: Codex
+Branch: `codex/pr19-merge-release`
+Starting status: clean worktree at `4060d62`, tracking `origin/main`. Ryan provided a replacement App Store Connect API key file `AuthKey_P4ZR59AXMD.p8` to unblock build 33 export/upload.
+
+Outcome:
+
+- Installed the new key at `/Users/ryanlieblein/.openclaw/workspace/AuthKey_P4ZR59AXMD.p8` with owner-only permissions and updated `/Users/ryanlieblein/.openclaw/workspace/.env.keys` to `ASC_KEY_ID=P4ZR59AXMD`.
+- `node scripts/testflight-release.mjs --dry-run --build-number 33 --env /Users/ryanlieblein/.openclaw/workspace/.env.keys`
+  Result: resolved app id `6776850787`, build number `33`, group `Wander Alpha`, and public link `https://testflight.apple.com/join/knEhRa6t`.
+- Retried export/upload from the existing archive `/private/tmp/Wander-0.1-build33.xcarchive` with key `P4ZR59AXMD`.
+  Result: upload succeeded; Xcode output ended with `Uploaded Wander`.
+- First helper run with `--what-to-test-file /private/tmp/recme-build33-what-to-test.txt` found build `0.1 (33)` as `VALID` and set export compliance, but Apple rejected the beta localization request with `PARAMETER_ERROR.ILLEGAL` for `filter[locale]`.
+- Reran helper without the What-to-Test file:
+  `node scripts/testflight-release.mjs --build-number 33 --timeout-attempts 40 --poll-seconds 30 --env /Users/ryanlieblein/.openclaw/workspace/.env.keys`
+  Result: build id `6e7297a5-4955-4a3c-b237-dd510cdb85c4`, processing state `VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, submitted for external TestFlight review, review state `APPROVED`.
+- Linear `REC-13` was already `Done`; added a completion comment with build 33 details and the helper limitation.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1781988702789919
+
+Known issues:
+
+- TestFlight "What to Test" metadata was not updated due the App Store Connect beta localization endpoint rejecting `filter[locale]`; the same testing checklist was included in Slack.
+- Backend photo extraction jobs remain deferred; build 33 improves the local OCR-to-place-candidate path.
