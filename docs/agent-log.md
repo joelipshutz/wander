@@ -3996,6 +3996,68 @@ Known issues:
 - TestFlight "What to Test" metadata was not updated due the App Store Connect beta localization endpoint rejecting `filter[locale]`; the same testing checklist was included in Slack.
 - Backend photo extraction jobs remain deferred; build 33 improves the local OCR-to-place-candidate path.
 
+## 2026-06-20 14:13 PDT - Codex - REC-13 Reopened Photo Extraction Fix
+
+Agent: Codex
+Branch: `codex/photo-extraction-real`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/photo-extraction-real`
+Starting status: clean worktree from latest `origin/main` at `e969101` (`chore: bump testflight build 34`). Root checkout `/Users/ryanlieblein/Developer/wander` is intentionally left untouched so Ryan's Xcode main workspace stays stable.
+
+Linear issue:
+
+- Reopened `REC-13` from `Done` to `In Progress` after Ryan reported build 33 still shows the old photo draft fallback screen.
+
+Goal: fix Add from Photo for real, with root-cause investigation first. Build 33 only added a best-effort OCR-to-MapKit path and still falls back to the old unresolved draft screen whenever OCR or MapKit matching fails.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Services/PhotoPlaceTextExtractor.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/PhotoPlaceTextExtractorTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Investigation rules:
+
+- No implementation changes before confirming the root cause and adding regression coverage that would have caught the build 33 gap.
+- Treat the previous PR as incomplete rather than simply changing copy.
+
+Checkpoint:
+
+- Root cause: PR #19 added local Vision OCR plus MapKit manual search, but photo import still falls into the old unresolved-draft path whenever OCR returns no ranked query or MapKit cannot match the ranked queries. The backend cannot rescue this path today: the Supabase extraction worker still returns `photo_ocr_not_configured` for photo artifacts, so "Photo saved as a draft" is current behavior, not a stale TestFlight install.
+- Fix direction: make photo import resolve through a testable staged resolver: OCR text queries first, photo GPS metadata nearby POIs second, editable manual rescue with OCR text third, and only then an honest draft when the image has no usable place signal.
+
+Outcome:
+
+- Added a staged `PhotoPlaceImportResolver` that tries OCR-to-MapKit candidates, then EXIF GPS nearby POIs, then an editable manual rescue with the recognized query prefilled. The generic unresolved draft path now only runs when the selected photo has no usable OCR query and no usable photo coordinate.
+- Added `PhotoPlaceMetadataExtractor` for GPS metadata in imported image data and `resolveNearbyPlaces(near:)` to the MapKit resolver boundary.
+- Updated Add from Photo copy and fallback draft copy to stop promising backend photo extraction that does not exist yet.
+- Tightened OCR query filtering for Apple Maps UI lines (`Apple Maps`, `Search`, `Top result`) after raising the query limit from 4 to 8.
+- Kept the new tests inside `PhotoPlaceTextExtractorTests.swift` because `xcodegen` is not installed in this shell and the existing generated Xcode project already includes that file.
+
+Validation:
+
+- Expected failing regression baseline:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-photo-real-failing CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PhotoPlaceImportResolverTests`
+  Result before implementation: failed to compile because `PhotoPlaceCandidateSearching` did not exist.
+- Focused photo resolver validation:
+  same command after implementation.
+  Result: passed, `4` tests, `0` failures.
+- Broader photo/store validation:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-photo-real CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PhotoPlaceTextExtractorTests -only-testing:WanderTests/PhotoPlaceImportResolverTests -only-testing:WanderTests/WanderStoreTests`
+  Result: passed after tightening OCR UI-noise filtering, `51` tests, `0` failures.
+- Full suite:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-photo-real CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed, `123` tests, `0` failures.
+
+Known notes:
+
+- The local machine only has iOS Simulator `26.5` devices available, so validation used `iPhone 17 Pro, OS=26.5` instead of the older `iPhone 16 Plus, OS=18.6` destination in repo docs.
+- Test logs still show non-critical Clerk keychain warnings (`unexpectedStatus(-34018)`) and a CoreLocation simulator warning; tests passed.
+- Backend photo OCR remains deferred/not configured. This fix makes the local app behavior real and user-rescuable instead of dropping usable photo signals into the old draft screen.
+
 ## 2026-06-20 11:52 PDT - Codex - REC-14 Clerk Login Regression
 
 Agent: Codex

@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 struct UnresolvedDraft: Identifiable, Equatable {
@@ -421,6 +422,20 @@ final class WanderStore: ObservableObject {
         )
     }
 
+    func photoTextCandidates(for query: String) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolveManualEntry(
+            ManualPlaceInput(
+                name: query,
+                areaHint: nil,
+                category: nil
+            )
+        )
+    }
+
+    func photoLocationCandidates(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] {
+        try await placeResolver.resolveNearbyPlaces(near: coordinate)
+    }
+
     func linkCandidates(_ rawValue: String) async throws -> [PlaceCandidate] {
         try await placeResolver.resolveLink(LinkPlaceInput(rawValue: rawValue))
     }
@@ -532,8 +547,8 @@ final class WanderStore: ObservableObject {
             title = "This link needs a little help."
             message = originalInput?.isEmpty == false ? originalInput ?? "Saved as a draft." : "Saved as a draft for extraction."
         case .photo:
-            title = "Photo saved as a draft."
-            message = "Photo is ready for extraction. Add it manually if you want it on your map now."
+            title = "Could not find a place in this photo."
+            message = "We could not read a place from that photo yet. Add it manually if you want it on your map now."
         default:
             title = "Draft saved."
             message = "You can finish this manually."
@@ -1843,6 +1858,8 @@ final class WanderStore: ObservableObject {
         }
     }
 }
+
+extension WanderStore: PhotoPlaceCandidateSearching {}
 
 private extension AddSourceType {
     var createsSourceArtifact: Bool {

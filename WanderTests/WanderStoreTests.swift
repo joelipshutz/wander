@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import Wander
 
@@ -1380,17 +1381,21 @@ private final class FakeExtractionRepository: ExtractionRepository {
 @MainActor
 private final class FakePlaceResolver: PlaceCandidateResolving {
     private let currentLocationResult: Result<[PlaceCandidate], Error>
+    private let nearbyResult: Result<[PlaceCandidate], Error>
     private let manualResult: Result<[PlaceCandidate], Error>
     private let linkResult: Result<[PlaceCandidate], Error>
     private(set) var currentLocationCallCount = 0
+    private(set) var nearbyCoordinates: [CLLocationCoordinate2D] = []
     private(set) var manualInputs: [ManualPlaceInput] = []
     private(set) var linkInputs: [LinkPlaceInput] = []
 
     init(
         currentLocationCandidates: [PlaceCandidate] = [],
+        nearbyCandidates: [PlaceCandidate] = [],
         manualCandidates: [PlaceCandidate] = [],
         linkCandidates: [PlaceCandidate] = [],
         currentLocationError: Error? = nil,
+        nearbyError: Error? = nil,
         manualError: Error? = nil,
         linkError: Error? = nil
     ) {
@@ -1398,6 +1403,12 @@ private final class FakePlaceResolver: PlaceCandidateResolving {
             self.currentLocationResult = .failure(currentLocationError)
         } else {
             self.currentLocationResult = .success(currentLocationCandidates)
+        }
+
+        if let nearbyError {
+            self.nearbyResult = .failure(nearbyError)
+        } else {
+            self.nearbyResult = .success(nearbyCandidates)
         }
 
         if let manualError {
@@ -1416,6 +1427,11 @@ private final class FakePlaceResolver: PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
         currentLocationCallCount += 1
         return try currentLocationResult.get()
+    }
+
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] {
+        nearbyCoordinates.append(coordinate)
+        return try nearbyResult.get()
     }
 
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
