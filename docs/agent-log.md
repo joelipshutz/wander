@@ -4105,3 +4105,48 @@ Known issues / follow-up:
 
 - TestFlight "What to Test" metadata was not updated because the helper's beta localization lookup is using an App Store Connect filter that this endpoint now rejects. Tester instructions were included in Slack instead.
 - Build 33 and build 34 both completed today; build 34 is the current release candidate because it includes the Clerk login fix.
+
+## 2026-06-20 14:47 PDT - Codex - Feedback Skill Engineering Review Gate
+
+Agent: Codex
+Branch: `codex/feedback-skill-eng-review-gate`
+Worktree: `/private/tmp/recme-shared-agent-skills`
+Starting status: switched the indexed shared-skill worktree from stale
+`codex/shared-agent-skills` to a fresh branch from `origin/main` at `2deb2f9c`.
+The root checkout was on stale branch `codex/issue-review-eng-gate`, so this
+work stayed isolated in the temp worktree.
+
+Goal: harden `recme-testflight-feedback-bug-catcher` so agents treat
+Slack/TestFlight/Linear items as bug or feature work, invoke `plan-eng-review`
+when the scope is complex, and surface architecture/data/test decisions with
+recommendations before implementation.
+
+Plan-eng-review outcome:
+
+- Scope challenge: no app-code change needed; this is a process/skill fix.
+- What already exists: repo-local skill already had a basic Engineering Review
+  Gate, but the indexed `/private/tmp/recme-shared-agent-skills` copy was stale
+  and the gate language still allowed "lens" behavior instead of actual skill
+  invocation.
+- Recommendation applied: make `plan-eng-review` an invocation gate for
+  non-trivial feature/enhancement work, cross-screen behavior, shared contracts,
+  trust/social/search/save semantics, backend/auth/sync/privacy/schema/security,
+  unclear tests/failure modes, or larger diffs.
+- Follow-up amendment: kept the stable skill slug
+  `recme-testflight-feedback-bug-catcher` for automation compatibility, but
+  renamed the human-facing workflow to "rec.me Feedback Feature/Bug Workflow."
+- Follow-up amendment: added a mid-implementation decision checkpoint so agents
+  must stop and surface newly discovered architecture/data/test/performance/
+  scope/product/design/rollout decisions before continuing.
+- Decisions: no product decision needed. This is a workflow correctness fix.
+
+Files expected/touched:
+
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/agent-log.md`
+
+Validation:
+
+- `git diff --check` passed.
+- `scripts/install-agent-skills.sh --check` passed with six existing symlinks
+  present and pointing to `/private/tmp/recme-shared-agent-skills`.
