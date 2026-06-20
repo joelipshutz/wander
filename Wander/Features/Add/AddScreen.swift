@@ -171,7 +171,7 @@ struct AddScreen: View {
                     selectedSource = .manual
                     step = .manual
                 }
-                SourceRow(title: AddSourceType.photo.title, subtitle: "save a photo draft for extraction", systemImage: "photo", isDisabled: isResolvingCandidates) {
+                SourceRow(title: AddSourceType.photo.title, subtitle: "scan text in a photo for a place", systemImage: "photo", isDisabled: isResolvingCandidates) {
                     resolutionMessage = nil
                     selectedSource = .photo
                     step = .photo
@@ -254,7 +254,7 @@ struct AddScreen: View {
 
     private var photoForm: some View {
         let title = isImportingPhoto ? "importing photo..." : "choose a photo"
-        let subtitle = "we'll keep it as a draft for extraction"
+        let subtitle = "we'll scan visible text for a place"
 
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -288,7 +288,7 @@ struct AddScreen: View {
                 InlineMessage(text: resolutionMessage)
             }
 
-            Text("We'll look for a place in the photo. If nothing obvious comes back, it stays as a draft.")
+            Text("We'll scan visible text and search likely place names. If nothing obvious comes back, it stays as a draft.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -816,10 +816,9 @@ struct AddScreen: View {
             let data = try await item.loadTransferable(type: Data.self)
             let byteCount = data?.count ?? 0
             if let data,
-               let recognizedText = await recognizeText(in: data),
-               let photoQuery = PhotoPlaceTextExtractor.searchQuery(from: recognizedText) {
-                await resolvePhotoTextCandidates(query: photoQuery)
-                if !candidates.isEmpty {
+               let recognizedText = await recognizeText(in: data) {
+                let photoQueries = PhotoPlaceTextExtractor.searchQueries(from: recognizedText)
+                if await resolvePhotoTextCandidates(queries: photoQueries) {
                     return
                 }
             }
@@ -846,26 +845,36 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolvePhotoTextCandidates(query: String) async {
+    private func resolvePhotoTextCandidates(queries: [String]) async -> Bool {
         selectedSource = .photo
-        manualName = query
+        guard !queries.isEmpty else { return false }
+
+        manualName = queries[0]
         manualArea = ""
         resolutionMessage = nil
 
-        do {
-            candidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
-            selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility
-            guard !candidates.isEmpty else {
-                resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
-                return
+        for query in queries {
+            do {
+                let resolvedCandidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
+                guard !resolvedCandidates.isEmpty else { continue }
+
+                manualName = query
+                candidates = resolvedCandidates
+                selectedCandidateID = resolvedCandidates.first?.id
+                selectedVisibility = store.defaultVisibility
+                resolutionMessage = nil
+                step = .confirm
+                return true
+            } catch {
+                continue
             }
-            step = .confirm
-        } catch {
-            candidates = []
-            selectedCandidateID = nil
-            resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
         }
+
+        candidates = []
+        selectedCandidateID = nil
+        let firstQuery = queries[0]
+        resolutionMessage = "Read “\(firstQuery)” from the photo, but could not match a place yet."
+        return false
     }
 
     private func recognizeText(in data: Data) async -> String? {
