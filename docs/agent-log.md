@@ -4050,3 +4050,28 @@ Known notes:
 - Simulator test logs still show Clerk keychain `unexpectedStatus(-34018)` warnings; ClerkKit logs these as non-critical and tests passed.
 - Mission Control remained unavailable on `localhost:4000`, so no tracker task was created.
 - Ready to push `codex/fix-clerk-login-regression` and open a PR linked to REC-14. No TestFlight upload or Slack release note from this bug-fix branch until the PR is reviewed/merged.
+
+## 2026-06-20 13:58 PDT - Codex - PR #20 Post-Main Validation
+
+Agent: Codex
+Branch: `codex/fix-clerk-login-regression`
+Starting status: branch was clean, ahead of `origin/codex/fix-clerk-login-regression` after updating from latest `origin/main`.
+
+Goal: after Joe authorized the next merge, update PR #20 (`fix: harden Clerk runtime configuration`) from the just-landed PR #19/build `33` state, resolve any overlap, rerun auth-focused and full validation, then continue the merge/release workflow.
+
+Checkpoint:
+
+- Updated the PR branch from latest `origin/main` after PR #19 and build `33` landed.
+- The only merge conflict was in `docs/agent-log.md`; resolved by preserving both the REC-14 auth-fix entry and the PR #19/build `33` release-blocker entry.
+- `git diff --check` passed after conflict resolution.
+- Focused auth/config validation:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec14-post-main-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests -only-testing:WanderTests/AuthSessionTests`
+  Result: passed with elevated access, `16` tests, `0` failures.
+- Full suite validation:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-rec14-post-main-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: passed with elevated access, `119` tests, `0` failures.
+
+Next steps:
+
+- Push the updated PR #20 branch, verify GitHub mergeability, squash-merge to `main`, then bump the next TestFlight build number to `34`.
+- Build `33` from PR #19 remains not uploaded because export was blocked by signing/cloud-signing permissions; build `34` should supersede it if signing succeeds.
