@@ -33,6 +33,19 @@ struct DiscoverScreen: View {
             .filter { !hiddenIDs.contains($0.id) }
     }
 
+    private var visiblePlaceSignature: String {
+        store.visiblePlaces()
+            .map { visiblePlace in
+                [
+                    visiblePlace.id,
+                    visiblePlace.owner.id,
+                    visiblePlace.userPlace.status.rawValue,
+                    visiblePlace.userPlace.visibility.rawValue
+                ].joined(separator: ":")
+            }
+            .joined(separator: "|")
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -63,6 +76,9 @@ struct DiscoverScreen: View {
                 Task { await refresh() }
             }
             .onChange(of: selectedScope) { _, _ in
+                Task { await refresh() }
+            }
+            .onChange(of: visiblePlaceSignature) { _, _ in
                 Task { await refresh() }
             }
             .sheet(item: $selectedProfile) { profile in

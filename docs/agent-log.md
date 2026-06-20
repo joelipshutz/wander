@@ -4212,3 +4212,47 @@ Validation:
 - `git diff --check` passed.
 - `scripts/install-agent-skills.sh --check` passed with six existing symlinks
   present and pointing to `/private/tmp/recme-shared-agent-skills`.
+
+## 2026-06-20 14:48 PDT - Codex - Followed Social Surfaces Regression
+
+Agent: Codex
+Branch: `codex/fix-followed-social-surfaces`
+Worktree: `/private/tmp/recme-followed-social-fix`
+Starting status: clean branch from latest `origin/main` at `2deb2f9c`; main release worktree `/private/tmp/recme-followed-users-surfaces` has untracked build 34 DerivedData/archive outputs and is intentionally not used for edits.
+
+Goal: run `/plan-eng-review` on the recurring followed-user social surface bug, then fix the real store-level path so followed users' visible places appear consistently in Discover places and the Map social surface.
+
+Context:
+
+- Linear REC-10/REC-7/REC-9 were marked Done by PR #16, but the repo QA checklist explicitly said not to mark those done until two-account social cases passed.
+- The current user report says Ryan's places are still missing from Discover > Places and the social map even though Joe follows him.
+- Mission Control at `localhost:4000` was unavailable, so coordination is recorded here and will be mirrored to Linear.
+
+Expected files:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Plan-eng-review found no branch design doc; proceeded with standard incident review using Linear REC-10/REC-7/REC-9 and the existing M7/M8 review/checklist as source context.
+- Root risk from PR #16: it added social profile backfill but only tested one followed user and did not preserve the two-account QA gate before Linear completion.
+- Implementation in progress: preserve locally known followed IDs across social refresh, refresh Discover results when the visible-place social surface changes, fit initial Map camera to social pins when social is enabled, and add a Maya+Ryan regression.
+
+Outcome:
+
+- PR: https://github.com/joelipshutz/wander/pull/23
+- Fixed the store refresh path so locally known followed users are preserved while the remote social graph refreshes, then every followed user's profile-visible places are fetched for the social surfaces.
+- Updated Discover to refresh its cached results when the shared visible-place surface changes, covering the case where another tab/profile hydration brings Ryan's places into the store.
+- Updated the Map initial camera fit so the social filter does not leave followed-user pins off-screen behind an own-places-only camera region.
+- Expanded the remote social surface regression to cover two followed users, including Ryan, and assert Discover places plus social/owner map filters include both followed users' places.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused simulator regression passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-social-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`.
+- Full simulator suite passed after cleaning the task-generated full-suite DerivedData from an initial local disk-full run: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-followed-social-focused CODE_SIGNING_ALLOWED=NO -jobs 1` (123 tests, 0 failures).
+- Known gap: not yet manually verified with Joe/Ryan production accounts on a simulator; the regression now covers the data path that failed to prove REC-10 before.
