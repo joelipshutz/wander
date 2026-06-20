@@ -3952,3 +3952,21 @@ Merge and build checkpoint:
   Result: passed with elevated access.
 - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build33 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: passed with elevated access, `112` tests, `0` failures.
+
+Release outcome:
+
+- Build-number commit pushed to `main`: `2d13e92` (`chore: bump testflight build 33`).
+- First archive attempt without an explicit App Store Connect API key failed at signing/profile lookup with `No Accounts` and no matching iOS App Development provisioning profile for `com.grayline.wander`.
+- Retried archive with Ryan's local App Store Connect API key (`BU88FB5ZG4`); archive succeeded at `/private/tmp/Wander-0.1-build33.xcarchive`.
+- Recreated upload options at `/private/tmp/WanderExportUpload.plist`.
+- Export/upload attempt:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build33.xcarchive -exportPath /private/tmp/WanderTestFlightUpload33 -exportOptionsPlist /private/tmp/WanderExportUpload.plist -allowProvisioningUpdates -authenticationKeyPath /Users/ryanlieblein/.openclaw/workspace/AuthKey_BU88FB5ZG4.p8 -authenticationKeyID BU88FB5ZG4 -authenticationKeyIssuerID 7f20b667-afd3-456b-b2bc-ca94ab295484`
+  Result: blocked before upload with `exportArchive Cloud signing permission error` and `No profiles for 'com.grayline.wander' were found`.
+- Local signing check found only one valid identity: `Apple Development: Created via API (BU88FB5ZG4)`. No Apple Distribution identity is available locally, and the configured API key does not currently have enough cloud-signing/profile access to export for App Store Connect upload.
+- No `scripts/testflight-release.mjs` run, no TestFlight attachment, no tester-facing Slack note, and no Linear `Done` update for `REC-13` yet because build `33` was not uploaded.
+
+Known issues / next steps:
+
+- `main` has PR #19 merged and build `33` committed; code verification is complete.
+- To finish TestFlight, grant Ryan's App Store Connect API key/account the required distribution/cloud-signing permission or install/provide an Apple Distribution certificate/profile for `com.grayline.wander`, then rerun the export/upload command above from this worktree or from latest `main`.
+- After upload succeeds, run `node scripts/testflight-release.mjs --build-number 33 --timeout-attempts 40 --poll-seconds 30`, move `REC-13` to `Done`, post the required `#testflight-feedback` tester note, and append the final live/approved status to this log.
