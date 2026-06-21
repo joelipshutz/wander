@@ -4307,3 +4307,52 @@ Known issues / follow-up:
   Backend/remote photo extraction jobs remain outside this build's scope.
 - The worktree may still have generated archive DerivedData if not cleaned after
   this log update; do not commit it.
+
+## 2026-06-20 18:50 PDT - Codex - PR #23 Review/Merge And Build 36 Release Complete
+
+Agent: Codex
+Branch: `main`
+Worktrees:
+
+- Review branch: `/private/tmp/recme-followed-social-fix`
+- Release worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: review PR #23 (`fix: keep followed places visible across social surfaces`), merge if clean, then complete the required TestFlight follow-up for REC-10 / REC-7 / REC-9.
+
+Review outcome:
+
+- Used the shared `recme-pr-review-merge-release` workflow plus gstack `review` and `plan-eng-review` because the PR touched social visibility, store hydration, Discover, and Map behavior.
+- No blocking findings. The PR stayed inside existing store/repository/view boundaries and did not introduce a new architecture decision.
+- PR #23 was already open at https://github.com/joelipshutz/wander/pull/23.
+- Updated the PR branch from latest `origin/main`; resolved the only conflict in `docs/agent-log.md` by preserving both the PR implementation log and build 35 release log.
+- Focused regression passed on the PR branch:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-pr23-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`
+- Full PR branch suite passed: `123` tests, `0` failures, using `DerivedData-pr23-full`.
+- Squash-merged PR #23 to `main` as `5eeaaad0` (`fix: keep followed places visible across social surfaces`).
+
+Release outcome:
+
+- Pulled merged `main` into `/private/tmp/recme-followed-users-surfaces`.
+- Bumped `CURRENT_PROJECT_VERSION` from `35` to `36` in `project.yml`.
+- Ran `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflected build `36`.
+- Committed and pushed `3aea4164` (`chore: bump testflight build 36`) to `origin/main`.
+- Build 36 validation passed:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build36 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `BUILD SUCCEEDED`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build36 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `123` tests, `0` failures.
+- First archive attempt failed before app build due local disk pressure (`Macintosh HD` out of space, only ~851 MB free). Removed only generated Xcode artifacts from `/private/tmp`: task-generated `DerivedData-*` directories and old temporary `Wander-0.1-build*.xcarchive` archives. Free space recovered to ~6.6 GB.
+- Archived build `0.1 (36)` at `/private/tmp/Wander-0.1-build36.xcarchive`.
+- Export/upload succeeded with Joe's App Store Connect API key; Xcode output ended with `Uploaded Wander`.
+- TestFlight helper completed:
+  `node scripts/testflight-release.mjs --build-number 36 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build id `7da7f278-1292-4ade-a004-00eb3e28862a`, processing state `VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Linear REC-10, REC-7, and REC-9 were commented with PR #23, merge/build commits, build 36 status, and verification.
+- Tester-facing Slack note posted to `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782006574943709
+
+Known issues / follow-up:
+
+- TestFlight "What to Test" metadata was not updated; tester instructions were included in Slack instead.
+- This is a client social-surface consistency fix. It does not add realtime push refresh; refresh still happens during app/screen/social surface hydration.
+- Generated build/archive outputs may remain in `/private/tmp/recme-followed-users-surfaces` and `/private/tmp/Wander-0.1-build36.xcarchive`; do not commit generated artifacts.
