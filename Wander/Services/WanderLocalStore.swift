@@ -955,10 +955,14 @@ final class WanderStore: ObservableObject {
             return
         }
 
+        let locallyFollowedProfileIDs = Set(following(of: currentUser.id).map(\.id))
         await refreshRemoteSocialGraph(backend: backend)
         await refreshRemoteVisiblePlaces(in: viewport, backend: backend)
 
-        let followedProfileIDs = following(of: currentUser.id).map(\.id)
+        let followedProfileIDs = locallyFollowedProfileIDs
+            .union(following(of: currentUser.id).map(\.id))
+            .subtracting([currentUser.id])
+            .sorted()
         for profileID in followedProfileIDs {
             await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
         }
