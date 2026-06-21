@@ -635,22 +635,44 @@ final class WanderStore: ObservableObject {
     func retryFailedOwnPlaceSyncs(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
 
-        let retryableIDs = userPlaces
-            .filter { userPlace in
-                userPlace.userID == currentUser.id
-                    && userPlace.deletedAt == nil
-                    && userPlace.syncState == .failed
-                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
-            }
-            .map(\.id)
+        let retryableIDs = syncableOwnPlaceIDs { syncState in
+            syncState == .failed
+        }
+        return await syncOwnPlaces(withIDs: retryableIDs, backend: backend)
+    }
 
+    @discardableResult
+    func syncUnsyncedOwnPlaces(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+
+        let syncableIDs = syncableOwnPlaceIDs { syncState in
+            syncState != .synced
+                && syncState != .pendingDelete
+                && syncState != .serverDenied
+                && syncState != .tombstoned
+        }
+        return await syncOwnPlaces(withIDs: syncableIDs, backend: backend)
+    }
+
+    private func syncOwnPlaces(withIDs userPlaceIDs: [String], backend: WanderBackend) async -> Int {
         var syncedCount = 0
-        for userPlaceID in retryableIDs {
+        for userPlaceID in userPlaceIDs {
             if await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend) {
                 syncedCount += 1
             }
         }
         return syncedCount
+    }
+
+    private func syncableOwnPlaceIDs(matching shouldSyncState: (SyncState) -> Bool) -> [String] {
+        userPlaces
+            .filter { userPlace in
+                userPlace.userID == currentUser.id
+                    && userPlace.deletedAt == nil
+                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
+                    && shouldSyncState(userPlace.syncState)
+            }
+            .map(\.id)
     }
 
     func extractionJob(for draft: UnresolvedDraft) -> LocalExtractionJob? {

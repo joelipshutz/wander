@@ -86,7 +86,7 @@ struct WanderRootView: View {
 
         if state.isSignedIn {
             Task {
-                await store.retryFailedOwnPlaceSyncs(backend: backend)
+                await store.syncUnsyncedOwnPlaces(backend: backend)
             }
         }
     }
