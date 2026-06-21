@@ -4356,3 +4356,41 @@ Known issues / follow-up:
 - TestFlight "What to Test" metadata was not updated; tester instructions were included in Slack instead.
 - This is a client social-surface consistency fix. It does not add realtime push refresh; refresh still happens during app/screen/social surface hydration.
 - Generated build/archive outputs may remain in `/private/tmp/recme-followed-users-surfaces` and `/private/tmp/Wander-0.1-build36.xcarchive`; do not commit generated artifacts.
+
+## 2026-06-20 19:11 PDT - Codex - Local Saved Place Backfill
+
+Agent: Codex
+Branch: `codex/local-save-backfill`
+Worktree: `/private/tmp/recme-local-save-backfill`
+Starting status: clean branch from `origin/main` at `e97dfe8b`; root checkout remains on stale `codex/issue-review-eng-gate`, so this work stays isolated.
+
+Goal: fix the split-brain state where Joe/Ryan have local saved places but Supabase has no `places` or `user_places`, preventing followed users' places from appearing socially even though the follow graph is correct.
+
+Context:
+
+- Read-only Supabase audit found active profiles for `jolipshutz` and `ryan_lieblein`, mutual follow edges, no blocks, but `0` backend `places` and `0` backend `user_places`.
+- Ryan has two backend extraction artifacts, both `no_place_found`; those do not create saved places.
+- Root app bug: signed-in startup only retried own places already marked `.failed`, so `.pendingCreate` rows saved while signed out or before backend sync was healthy could remain local-only indefinitely.
+
+Expected files:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/App/WanderRootView.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint 2026-06-20 20:05 PDT:
+
+- User approved implementing the narrow local-save backfill plan.
+- Kept the existing failed-retry API failed-only, and added the broader signed-in startup sync through `syncUnsyncedOwnPlaces`.
+- Added regression coverage for signed-out pending local saves backfilling after sign-in, failed-only retry behavior, and exclusion of social-save/terminal sync states from the broad startup sync.
+
+Validation 2026-06-20 20:12 PDT:
+
+- `git diff --check` passed.
+- Focused simulator regressions passed after rerunning with CoreSimulator/network access:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-local-backfill-focused2 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesBackfillsPendingLocalRowsAfterSignIn -only-testing:WanderTests/WanderStoreTests/testRetryFailedOwnPlaceSyncsMarksRowsSynced -only-testing:WanderTests/WanderStoreTests/testRetryFailedOwnPlaceSyncsLeavesPendingRowsForBackfillPath -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesSkipsSocialSavesAndTerminalRows`
+  Result: 4 tests, 0 failures.
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-local-backfill-focused2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 126 tests, 0 failures.
