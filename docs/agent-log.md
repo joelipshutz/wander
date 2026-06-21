@@ -4394,3 +4394,10 @@ Validation 2026-06-20 20:12 PDT:
 - Full simulator suite passed:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-local-backfill-focused2 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: 126 tests, 0 failures.
+
+Outcome:
+
+- Implementation commit: `6448698a` (`fix: backfill local saves after sign-in`).
+- PR: https://github.com/joelipshutz/wander/pull/24
+- Linear `REC-10` was updated with PR #24, validation, and the split-brain backend/local-save diagnosis.
+- Known follow-up: after this lands and ships, two-account QA still needs to verify Joe/Ryan or Joe/`recme_demo` visible places on TestFlight. Existing local places can only be backfilled if they still exist on-device.
