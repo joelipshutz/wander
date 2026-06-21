@@ -4401,3 +4401,50 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/24
 - Linear `REC-10` was updated with PR #24, validation, and the split-brain backend/local-save diagnosis.
 - Known follow-up: after this lands and ships, two-account QA still needs to verify Joe/Ryan or Joe/`recme_demo` visible places on TestFlight. Existing local places can only be backfilled if they still exist on-device.
+
+## 2026-06-20 20:41 PDT - Codex - PR #24 Merge And Build 37 Release Complete
+
+Agent: Codex automation `rec-me-pr-review-merge-and-testflight-release`
+Branch: `main`
+Worktrees:
+
+- PR worktree: `/private/tmp/recme-local-save-backfill`
+- Release worktree: `/private/tmp/recme-followed-users-surfaces`
+
+Goal: merge PR #24 (`fix: backfill local saves after sign-in`) and ship the required TestFlight follow-up for `REC-10`.
+
+Merge outcome:
+
+- Squash-merged PR #24 to `main` as `e88faf53` (`fix: backfill local saves after sign-in`).
+- The local PR branch was still checked out in `/private/tmp/recme-local-save-backfill`, so GitHub merge could not delete the local branch; the remote PR is merged.
+
+Release outcome:
+
+- Pulled merged `main` into `/private/tmp/recme-followed-users-surfaces`.
+- Bumped `CURRENT_PROJECT_VERSION` from `36` to `37` in `project.yml`.
+- Ran `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflected build `37`.
+- Committed and pushed `f04ffd36` (`chore: bump testflight build 37`) to `origin/main`.
+- Build 37 validation passed:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build37 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `BUILD SUCCEEDED`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build37 CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: `126` tests, `0` failures.
+- Cleared only generated Xcode DerivedData directories before archiving because `/private/tmp` was down to ~1.9 GB free:
+  - `/private/tmp/recme-followed-users-surfaces/DerivedData-build37`
+  - `/private/tmp/recme-local-save-backfill/DerivedData-local-backfill-focused`
+  - `/private/tmp/recme-local-save-backfill/DerivedData-local-backfill-focused2`
+- Archived build `0.1 (37)` at `/private/tmp/Wander-0.1-build37.xcarchive`.
+- Export/upload succeeded with Joe's App Store Connect API key; Xcode output ended with `Uploaded Wander`.
+- First TestFlight helper run found build `37` already `VALID` and set `usesNonExemptEncryption=false`, but failed while setting "What to Test" because App Store Connect rejected the `filter[locale]` beta localization request.
+- Reran helper without "What to Test" copy:
+  `node scripts/testflight-release.mjs --build-number 37 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`
+  Result: build id `27d1c41b-8be6-43ff-ae79-8670a585e425`, processing state `VALID`, `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Tester-facing Slack note posted to `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782013221028069
+- Linear `REC-10` was commented with PR #24, merge/build commits, build 37 status, validation, and TestFlight status, then moved to `Done`.
+
+Known issues / follow-up:
+
+- TestFlight "What to Test" metadata was not updated; tester instructions were included in Slack instead.
+- Build 37 can backfill local-only saves only if those rows still exist on-device. If the app was deleted or local storage was wiped before build 37, those old local-only saves are not recoverable from the backend.
+- Generated build/archive DerivedData was cleared before this log commit. The uploaded archive/export artifacts remain in `/private/tmp`; do not commit generated artifacts.
