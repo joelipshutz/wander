@@ -27,6 +27,18 @@ struct AuthGateCopy: Equatable {
     let secondaryAction: String?
 }
 
+private enum OwnPlaceSyncTrigger: String {
+    case directSave = "direct_save"
+    case failedRetry = "failed_retry"
+    case signedInBackfill = "signed_in_backfill"
+}
+
+private enum OwnPlaceSyncOutcome {
+    case succeeded
+    case failed
+    case skipped
+}
+
 struct ProfileStats: Equatable {
     let been: Int
     let wanna: Int
@@ -132,8 +144,10 @@ final class WanderStore: ObservableObject {
         switch authState {
         case .signedIn(let session):
             apply(session: session)
+            analytics.identify(userID: session.userID)
         case .signedOut, .unavailable:
             applySignedOutProfile()
+            analytics.resetIdentity()
         case .loading:
             break
         }
@@ -520,6 +534,16 @@ final class WanderStore: ObservableObject {
             return localResult
         }
 
+        let syncProperties = ownPlaceSyncProperties(
+            userPlaceID: localResult.userPlaceID,
+            draft: draft,
+            trigger: .directSave
+        )
+        trackOwnPlaceSyncEvent(
+            name: WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            properties: syncProperties
+        )
+
         do {
             let remoteResult = try await backend.saveUserPlace(draft)
             if let placeID = remoteResult.placeID {
@@ -527,12 +551,20 @@ final class WanderStore: ObservableObject {
             }
             markUserPlace(localOrServerID: localResult.userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
             lastRemoteError = nil
+            trackOwnPlaceSyncEvent(
+                name: WanderAnalyticsEvents.ownPlaceSyncSucceeded,
+                properties: syncProperties
+            )
             await refreshRemoteVisiblePlaces(backend: backend)
             return remoteResult
         } catch {
             let message = remoteErrorMessage(error)
             markUserPlace(localOrServerID: localResult.userPlaceID, syncState: .failed, error: message)
             lastRemoteError = message
+            trackOwnPlaceSyncEvent(
+                name: WanderAnalyticsEvents.ownPlaceSyncFailed,
+                properties: syncProperties.merging(["error_kind": remoteErrorKind(error)]) { _, new in new }
+            )
             return SaveResult(userPlaceID: localResult.userPlaceID, syncState: .failed)
         }
     }
@@ -633,17 +665,23 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func retryFailedOwnPlaceSyncs(backend: WanderBackend?) async -> Int {
-        guard let backend else { return 0 }
+        guard let backend else {
+            trackOwnPlaceSyncBatchSkipped(trigger: .failedRetry, reason: "missing_backend")
+            return 0
+        }
 
         let retryableIDs = syncableOwnPlaceIDs { syncState in
             syncState == .failed
         }
-        return await syncOwnPlaces(withIDs: retryableIDs, backend: backend)
+        return await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
     }
 
     @discardableResult
     func syncUnsyncedOwnPlaces(backend: WanderBackend?) async -> Int {
-        guard let backend else { return 0 }
+        guard let backend else {
+            trackOwnPlaceSyncBatchSkipped(trigger: .signedInBackfill, reason: "missing_backend")
+            return 0
+        }
 
         let syncableIDs = syncableOwnPlaceIDs { syncState in
             syncState != .synced
@@ -651,16 +689,44 @@ final class WanderStore: ObservableObject {
                 && syncState != .serverDenied
                 && syncState != .tombstoned
         }
-        return await syncOwnPlaces(withIDs: syncableIDs, backend: backend)
+        return await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
     }
 
-    private func syncOwnPlaces(withIDs userPlaceIDs: [String], backend: WanderBackend) async -> Int {
+    private func syncOwnPlaces(withIDs userPlaceIDs: [String], backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> Int {
         var syncedCount = 0
+        var failedCount = 0
+        var skippedCount = 0
+
+        trackOwnPlaceSyncEvent(
+            name: WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
+            properties: [
+                "trigger": trigger.rawValue,
+                "candidate_count": "\(userPlaceIDs.count)"
+            ]
+        )
+
         for userPlaceID in userPlaceIDs {
-            if await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend) {
+            switch await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend, trigger: trigger) {
+            case .succeeded:
                 syncedCount += 1
+            case .failed:
+                failedCount += 1
+            case .skipped:
+                skippedCount += 1
             }
         }
+
+        trackOwnPlaceSyncEvent(
+            name: WanderAnalyticsEvents.ownPlaceSyncBatchCompleted,
+            properties: [
+                "trigger": trigger.rawValue,
+                "candidate_count": "\(userPlaceIDs.count)",
+                "synced_count": "\(syncedCount)",
+                "failed_count": "\(failedCount)",
+                "skipped_count": "\(skippedCount)"
+            ]
+        )
+
         return syncedCount
     }
 
@@ -1455,8 +1521,49 @@ final class WanderStore: ObservableObject {
         String(describing: error)
     }
 
-    private func retryOwnPlaceSync(userPlaceID: String, backend: WanderBackend) async -> Bool {
-        guard let draft = userPlaceDraft(for: userPlaceID) else { return false }
+    private func remoteErrorKind(_ error: Error) -> String {
+        if let remoteError = error as? WanderRemoteError {
+            switch remoteError {
+            case .notConfigured:
+                return "not_configured"
+            case .notAuthenticated:
+                return "not_authenticated"
+            case .notImplemented:
+                return "not_implemented"
+            case .invalidResponse:
+                return "invalid_response"
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return "network"
+        }
+
+        if error is DecodingError {
+            return "decoding"
+        }
+
+        return "unknown"
+    }
+
+    private func retryOwnPlaceSync(userPlaceID: String, backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> OwnPlaceSyncOutcome {
+        guard let draft = userPlaceDraft(for: userPlaceID) else {
+            trackOwnPlaceSyncEvent(
+                name: WanderAnalyticsEvents.ownPlaceSyncSkipped,
+                properties: [
+                    "trigger": trigger.rawValue,
+                    "reason": "missing_draft"
+                ]
+            )
+            return .skipped
+        }
+
+        let syncProperties = ownPlaceSyncProperties(userPlaceID: userPlaceID, draft: draft, trigger: trigger)
+        trackOwnPlaceSyncEvent(
+            name: WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            properties: syncProperties
+        )
 
         markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
         do {
@@ -1466,14 +1573,66 @@ final class WanderStore: ObservableObject {
             }
             markUserPlace(localOrServerID: userPlaceID, serverID: remoteResult.userPlaceID, syncState: .synced)
             lastRemoteError = nil
+            trackOwnPlaceSyncEvent(
+                name: WanderAnalyticsEvents.ownPlaceSyncSucceeded,
+                properties: syncProperties
+            )
             await refreshRemoteVisiblePlaces(backend: backend)
-            return true
+            return .succeeded
         } catch {
             let message = remoteErrorMessage(error)
             markUserPlace(localOrServerID: userPlaceID, syncState: .failed, error: message)
             lastRemoteError = message
-            return false
+            trackOwnPlaceSyncEvent(
+                name: WanderAnalyticsEvents.ownPlaceSyncFailed,
+                properties: syncProperties.merging(["error_kind": remoteErrorKind(error)]) { _, new in new }
+            )
+            return .failed
         }
+    }
+
+    private func trackOwnPlaceSyncBatchSkipped(trigger: OwnPlaceSyncTrigger, reason: String) {
+        trackOwnPlaceSyncEvent(
+            name: WanderAnalyticsEvents.ownPlaceSyncBatchSkipped,
+            properties: [
+                "trigger": trigger.rawValue,
+                "reason": reason
+            ]
+        )
+    }
+
+    private func trackOwnPlaceSyncEvent(name: String, properties: [String: String]) {
+        analytics.track(AnalyticsEvent(name: name, properties: properties))
+    }
+
+    private func ownPlaceSyncProperties(
+        userPlaceID: String,
+        draft: UserPlaceDraft,
+        trigger: OwnPlaceSyncTrigger
+    ) -> [String: String] {
+        let userPlace = userPlaces.first { $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID }
+        let place = places.first { place in
+            place.localID == draft.place.localID
+                || (draft.place.serverID != nil && place.serverID == draft.place.serverID)
+                || userPlace.map { place.id == $0.placeID } == true
+        }
+
+        return [
+            "trigger": trigger.rawValue,
+            "status": draft.status.rawValue,
+            "visibility": draft.visibility.rawValue,
+            "source_type": draft.sourceType,
+            "sync_state_before": userPlace?.syncState.rawValue ?? "unknown",
+            "attribute_count": "\(draft.attributes.count)",
+            "has_note": boolProperty(draft.note?.isEmpty == false),
+            "nearby_confirmed": boolProperty(draft.nearbyConfirmed),
+            "place_has_server_id": boolProperty((place?.serverID ?? draft.place.serverID) != nil),
+            "user_place_has_server_id": boolProperty(userPlace?.serverID != nil)
+        ]
+    }
+
+    private func boolProperty(_ value: Bool) -> String {
+        value ? "true" : "false"
     }
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {

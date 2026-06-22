@@ -10,6 +10,9 @@ settings:
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
 packages:
+  posthog-ios:
+    url: https://github.com/PostHog/posthog-ios.git
+    from: 3.59.3
   clerk-ios:
     url: https://github.com/clerk/clerk-ios
     from: 1.1.3
@@ -30,6 +33,8 @@ targets:
       properties:
         WANDER_CLERK_FRONTEND_API: $(WANDER_CLERK_FRONTEND_API)
         WANDER_CLERK_PUBLISHABLE_KEY: $(WANDER_CLERK_PUBLISHABLE_KEY)
+        WANDER_POSTHOG_HOST: $(WANDER_POSTHOG_HOST)
+        WANDER_POSTHOG_PROJECT_TOKEN: $(WANDER_POSTHOG_PROJECT_TOKEN)
         WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -49,6 +54,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
+      - package: posthog-ios
+        product: PostHog
       - package: clerk-ios
         product: ClerkKit
       - package: clerk-ios

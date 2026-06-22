@@ -7,10 +7,14 @@ struct AnalyticsEvent: Equatable {
 
 protocol AnalyticsClient {
     func track(_ event: AnalyticsEvent)
+    func identify(userID: String)
+    func resetIdentity()
 }
 
 struct NoopAnalyticsClient: AnalyticsClient {
     func track(_ event: AnalyticsEvent) {}
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }
 
 enum WanderAnalyticsEvents {
@@ -27,6 +31,13 @@ enum WanderAnalyticsEvents {
     static let discoverQueryParsed = "discover_query_parsed"
     static let discoverParseFailed = "discover_parse_failed"
     static let socialPlaceSaved = "social_place_saved"
+    static let ownPlaceSyncAttempted = "own_place_sync_attempted"
+    static let ownPlaceSyncSucceeded = "own_place_sync_succeeded"
+    static let ownPlaceSyncFailed = "own_place_sync_failed"
+    static let ownPlaceSyncSkipped = "own_place_sync_skipped"
+    static let ownPlaceSyncBatchStarted = "own_place_sync_batch_started"
+    static let ownPlaceSyncBatchCompleted = "own_place_sync_batch_completed"
+    static let ownPlaceSyncBatchSkipped = "own_place_sync_batch_skipped"
     static let syncFailed = "sync_failed"
     static let extractionJobStarted = "extraction_job_started"
     static let extractionJobCompleted = "extraction_job_completed"

@@ -4448,3 +4448,67 @@ Known issues / follow-up:
 - TestFlight "What to Test" metadata was not updated; tester instructions were included in Slack instead.
 - Build 37 can backfill local-only saves only if those rows still exist on-device. If the app was deleted or local storage was wiped before build 37, those old local-only saves are not recoverable from the backend.
 - Generated build/archive DerivedData was cleared before this log commit. The uploaded archive/export artifacts remain in `/private/tmp`; do not commit generated artifacts.
+
+## 2026-06-22 10:37 PDT - Codex - REC-18 Saved-Place Sync Diagnostics
+
+Agent: Codex
+Branch: `codex/sync-posthog-diagnostics`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+Starting status: clean branch from `origin/main` at `853fccbc`; root checkout remains on stale `codex/issue-review-eng-gate`, so implementation stays isolated.
+
+Goal: add PostHog-backed diagnostics for build 37 saved-place sync/backfill QA so Joe can save a new place, force quit/reopen, and see whether the app found local candidates, attempted upload, succeeded, or failed without sending place names, notes, coordinates, emails, or handles.
+
+Context:
+
+- Joe and Ryan are both on build 37, but live Supabase still shows `0` backend `user_places` for both accounts while `recme_demo` has 8 rows and appears correctly.
+- Created Linear issue `REC-18` for this follow-up; `REC-10` remains Done for the build 37 fix.
+- Mission Control at `localhost:4000` was unavailable (`curl` exit 7), so this repo log is the durable tracker record for the run.
+- GBrain lookup timed out twice on a PGLite lock; fell back to repo docs/logs.
+- Engineering review gate decision: keep this to observability only, use the existing analytics interface, identify PostHog users by internal auth user id only, and send count/enum diagnostics only. A real rec.me/Wander PostHog project token still needs to be supplied through config; do not reuse other app tokens.
+
+Expected files:
+
+- `project.yml`
+- `Wander/Config/Auth.xcconfig`
+- `Wander/Resources/Info.plist`
+- `Wander/App/WanderApp.swift`
+- `Wander/App/WanderRootView.swift`
+- `Wander/App/WanderBackendConfiguration.swift`
+- `Wander/Services/AnalyticsEvent.swift`
+- `Wander/Services/PostHogAnalyticsClient.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/BuildConfigurationTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/open-questions.md`
+- `docs/decisions.md`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `git diff --check`.
+- Run focused `WanderStoreTests`/`BuildConfigurationTests` coverage for analytics diagnostics and config wiring.
+- Run the full simulator suite if dependency resolution and local simulator resources allow.
+- Open a PR and move/comment `REC-18`; do not merge/release from this feedback workflow.
+
+Checkpoint / outcome:
+
+- Added PostHog through SwiftPM in `project.yml`; `xcodegen generate` updated the Xcode project and resolved `posthog-ios` to `3.61.0`.
+- Added blank tracked PostHog config placeholders in `Auth.xcconfig` and `Info.plist`. Runtime capture remains disabled until a real rec.me/Wander `WANDER_POSTHOG_PROJECT_TOKEN` is supplied outside git.
+- Added `PostHogAnalyticsClient` behind the existing analytics interface. Automatic screen capture, element capture, session replay, and surveys are disabled.
+- Instrumented own-place sync/backfill with non-PII diagnostics: attempted/succeeded/failed/skipped and batch started/completed/skipped events with trigger, enum state, counts, and coarse error kinds only.
+- Added analytics identity on auth state changes using the internal auth user id only; sign-out/unavailable resets analytics identity.
+- Added tests for auth identity, config safety, zero-candidate signed-in backfill batches, batch count diagnostics, and failed direct-save diagnostics.
+- `git diff --check`: passed.
+- Focused simulator validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-posthog-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests -only-testing:WanderTests/WanderStoreTests/testAuthStateIdentifiesAnalyticsWithInternalUserIDOnly -only-testing:WanderTests/WanderStoreTests/testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesTracksZeroCandidateBackfillBatch -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesTracksBackfillBatchCounts`
+  Result: `13` tests, `0` failures.
+- Full simulator validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-posthog-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Build 37 does not include this diagnostics code. Joe's save/force-quit check needs a new TestFlight build after this PR lands and after a rec.me/Wander PostHog project token is configured.
+- Tracked config intentionally leaves the PostHog token blank. Do not reuse PostHog tokens from Essay Press, Coupley, or any other app.
+- The original expected-file list included `Wander/App/WanderBackendConfiguration.swift`, but no backend configuration change was needed.

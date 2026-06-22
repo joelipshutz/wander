@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-06-16
+Last updated: 2026-06-22
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -41,7 +41,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | LLM data minimization | Locked | Send raw query phrase + schema only, not graph/place/contact/user data. |
 | Share extension | Deferred | Build after in-app add/map/social loop works. |
 | Native Contacts | Planned later | Use `FakeContactProvider` in M2/v0.1 baseline. |
-| Analytics provider | Deferred | Define vendor-neutral event interface first. |
+| Analytics provider | Locked for alpha | Use PostHog through the vendor-neutral analytics interface. Keep sync/auth diagnostics non-PII: counts, enum metadata, and internal auth user id only; no place names, notes, coordinates, emails, or handles. |
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
 | Full onboarding | Deferred | Auth gates at save/sync/follow/social-save intents still required. |
 | M3 backend schema/RLS/profile foundation | Project created, migrations applied, webhook verified | New Supabase project `rugmtlgufrhlxwfkumhw` and new Clerk app `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9` are created. Migrations `20260602131500`, `20260602140304`, `20260602143000`, `20260602210000`, and `20260604185000` are applied remotely. Hosted pgTAP tests passed with 29 assertions. Clerk profile mirroring is deployed through Svix -> Supabase Edge Function -> PostgREST RPC, and real create/delete webhook flow was verified. Schema includes custom `question_definitions` plus JSON-backed `place_attributes` so future user-created questions/inputs can be added without answer-column churn. |
