@@ -4512,3 +4512,8 @@ Known issues / next steps:
 - Build 37 does not include this diagnostics code. Joe's save/force-quit check needs a new TestFlight build after this PR lands and after a rec.me/Wander PostHog project token is configured.
 - Tracked config intentionally leaves the PostHog token blank. Do not reuse PostHog tokens from Essay Press, Coupley, or any other app.
 - The original expected-file list included `Wander/App/WanderBackendConfiguration.swift`, but no backend configuration change was needed.
+
+Handoff:
+
+- Committed implementation as `04b8dc8c` (`feat: add PostHog sync diagnostics`) and opened PR #25: https://github.com/joelipshutz/wander/pull/25.
+- Commented `REC-18`, attached the PR, and moved the issue to In Review.
