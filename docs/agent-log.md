@@ -4689,3 +4689,26 @@ Update 2026-06-23 12:51 PDT:
   `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build39 CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Test result bundle:
   `DerivedData-build39/Logs/Test/Test-Wander-2026.06.23_12-47-04--0700.xcresult`
+
+Release outcome:
+
+- Build bump commit pushed to `main`: `7a7c8dc6` (`chore: bump TestFlight build 39`).
+- Initial account-based export failed with Xcode `Failed to Use Accounts`; retried export/upload with the private App Store Connect API key from `/Users/joelipshutz/.openclaw/workspace/.env.keys`.
+- Archive succeeded:
+  `/private/tmp/Wander-0.1-build39.xcarchive`
+- Export/upload succeeded:
+  `/private/tmp/WanderTestFlightUpload39`
+- Ran `node scripts/testflight-release.mjs --build-number 39 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`.
+  - Build id: `c88c94a4-e8d8-4a85-8266-f93bddb48183`
+  - Processing state: `VALID`
+  - Export compliance set to `usesNonExemptEncryption=false`
+  - Attached to `Wander Alpha`
+  - External TestFlight review state: `APPROVED`
+- Posted tester Slack note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782244652989609
+- Added build 39 follow-up comment to Linear `REC-18`.
+
+Known issues / next steps:
+
+- Ryan's backend account still had 0 synced saved places before build 39; he should install/open build 39 and save a new place to verify fresh sync.
+- Build 39 fixes the backend own-place save blocker, but any remaining UI-only saved-state/color issue should stay tracked separately under `REC-17`.
+- This release-log update is docs-only and does not require another build-number bump.
