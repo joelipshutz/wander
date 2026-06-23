@@ -4595,3 +4595,69 @@ Known issues / next steps:
 
 - Build 38 is the logging/diagnostics TestFlight build for REC-18; it improves observability for saved-place force-quit/save reports rather than claiming every saved-place edge case is fixed.
 - Local generated archive/build output remains untracked and should not be committed.
+
+## 2026-06-23 11:30 PDT - Codex - Local Sync Console Debug Logs
+
+Agent: Codex
+Branch: `codex/sync-debug-logs`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+
+Goal: add local Xcode console logs for the saved-place backup failure so Joe can test on device without another TestFlight build.
+
+Context:
+
+- Joe pasted Xcode logs showing PostHog was trying to call invalid hosts like `https://array/...` and `https://batch/?`; root cause was local `WANDER_POSTHOG_HOST = https://...` in `.xcconfig`, where `//` was parsed as a comment. Local config was corrected to `https:/$()/us.i.posthog.com` and verified with `xcodebuild -showBuildSettings`.
+- The same pasted logs showed Clerk token fetch failure: `401 authentication_invalid`, "Unable to authenticate the request, you need to supply an active session." That likely explains why Supabase `save_own_place` cannot run.
+- Engineering gate outcome: diagnostic-only branch, no auth/sync behavior change, no schema changes, no TestFlight release. Logs should be `DEBUG`-only and avoid place names, notes, coordinates, emails, and handles.
+
+Expected files:
+
+- `Wander/Services/WanderDebugLog.swift`
+- `Wander/App/WanderRootView.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `Wander/Services/Auth/AuthSessionProviding.swift`
+- `Wander/Services/Auth/ClerkAuthService.swift`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `git diff --check`.
+- Run a simulator build with `CODE_SIGNING_ALLOWED=NO`.
+
+Update 2026-06-23 11:51 PDT:
+
+- Added the DEBUG-only sync/auth/remote logs and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+- `git diff --check` passed.
+- Started local simulator build validation, but stopped it at Joe's request while Xcode was still compiling Swift package dependencies. No app-code compile failure was reached; no TestFlight build/archive/upload was started.
+- Local test handoff: use branch `codex/sync-debug-logs`, open `Wander.xcodeproj`, run the `Wander` scheme on an iPhone simulator, then filter the Xcode console for `WanderSync` and `WanderRemote` while signing in, saving a place, force-quitting, and reopening.
+- Fixed the Xcode compile error in `AuthSessionProviding.swift` by making the DEBUG log closures explicitly reference `self.state`.
+
+Update 2026-06-23 12:04 PDT:
+
+- Joe's local Xcode logs showed the UI could look signed in while Clerk initially reported `signed_out`; after signing in again, Clerk token minting succeeded and authenticated read RPCs succeeded.
+- The actual save blocker is server-side: `save_own_place` returns 403 with `new row violates row-level security policy for table "places"`.
+- Added hosted migration `20260623120000_fix_save_own_place_rls.sql` to run the controlled `app.save_own_place` RPC as `security definer` with fixed `search_path`, preserving execute access for `authenticated` only.
+- Added targeted SQL regression `supabase/tests/save_own_place.sql` covering initial own-place save and same canonical place upsert.
+- Applied the migration to the linked hosted Supabase project with `npx supabase db push --linked`.
+- Could not run the SQL regression locally via `psql` because `psql` is not installed; did not install new tooling. Next validation is Joe's simulator logs: rerun local app, save/retry sync, and confirm `save_own_place` changes from 403 to success.
+
+Update 2026-06-23 12:11 PDT:
+
+- Joe reran the local Xcode build after the hosted migration.
+- Logs confirmed Clerk signed in, Supabase token minting succeeded, and the signed-in backfill had no remaining candidates: `states=synced=15`.
+- Manual direct save succeeded remotely: `rpc success name=save_own_place status=200` followed by `direct save remote success`.
+- Remaining `NSURLErrorDomain Code=-999 "cancelled"` read RPC logs appear to be cancelled refresh/navigation requests, not the save/backfill blocker.
+
+Update 2026-06-23 12:43 PDT:
+
+- Joe approved merging this fix for TestFlight.
+- Rechecked open PRs targeting `main`; only unrelated draft PR `#26` is open.
+- Release review outcome: branch is scoped to DEBUG-only local sync/auth/remote logging plus the hosted `app.save_own_place` RPC security-definer migration. The RPC remains limited to `authenticated`, uses fixed `search_path`, and continues scoping writes through `app.current_user_id()` rather than caller-supplied user ids.
+- `git diff --check` passed.
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-sync-debug-logs CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures.
+- SQL regression `supabase/tests/save_own_place.sql` is committed for future Supabase test runs; local `psql` was not installed, so this was not run locally. Hosted migration was already applied and validated through Joe's local save logs.
