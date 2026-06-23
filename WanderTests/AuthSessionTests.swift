@@ -31,6 +31,35 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.activeGate?.intent, .socialSave)
     }
 
+    func testBeginSignInPresentsNativeAuthWithRuntimeFallbackConfiguration() {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let service = ClerkAuthService(configuration: configuration) { publishableKey in
+            publishableKey
+        }
+        let store = AuthSessionStore(provider: service)
+
+        store.presentGate(for: .syncPlace)
+        store.beginSignIn()
+
+        XCTAssertNil(store.activeGate)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertEqual(store.state, .signedOut)
+    }
+
+    func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let service = ClerkAuthService(configuration: configuration) { _ in
+            ""
+        }
+
+        XCTAssertEqual(service.state, .unavailable("Missing Clerk publishable key."))
+        XCTAssertFalse(service.canPresentNativeAuth)
+    }
+
     func testSupabaseTokenRequiresSignedInSession() async {
         let signedOutProvider = PreviewAuthSessionProvider(state: .signedOut, token: "token")
         let signedOutStore = AuthSessionStore(provider: signedOutProvider)

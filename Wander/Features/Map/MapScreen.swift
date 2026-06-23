@@ -70,6 +70,13 @@ struct MapScreen: View {
     }
 
     private var initialCameraPlaces: [VisiblePlace] {
+        if selectedFilters.contains(.social) {
+            let socialPlaces = visiblePlaces.filter { $0.owner.id != store.currentUser.id }
+            if !socialPlaces.isEmpty {
+                return visiblePlaces
+            }
+        }
+
         let ownPlaces = store.currentUserVisiblePlaces
         return ownPlaces.isEmpty ? visiblePlaces : ownPlaces
     }
