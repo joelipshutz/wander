@@ -10,13 +10,23 @@ struct WanderRootView: View {
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
-    init(initialTab: WanderTab? = nil, initialPresentation: WanderInitialPresentation? = nil) {
+    init(
+        initialTab: WanderTab? = nil,
+        initialPresentation: WanderInitialPresentation? = nil,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
         _selectedTab = State(initialValue: initialTab ?? Self.resolvedInitialTab())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        _store = StateObject(wrappedValue: WanderStore(fixtures: Self.resolvedFixtures(mode: fixtureMode), persistence: persistence))
+        _store = StateObject(
+            wrappedValue: WanderStore(
+                fixtures: Self.resolvedFixtures(mode: fixtureMode),
+                analytics: analytics,
+                persistence: persistence
+            )
+        )
     }
 
     var body: some View {

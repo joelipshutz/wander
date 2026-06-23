@@ -1,6 +1,6 @@
 # Open Questions
 
-Last updated: 2026-06-09
+Last updated: 2026-06-22
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
@@ -23,7 +23,7 @@ These are the known unresolved questions and risks. Some are intentionally defer
 | Does Clerk's default iOS token work for Supabase RLS? | Resolved: use native Clerk third-party auth, no deprecated JWT template. | 2026-06-04 API smoke passed after adding the Clerk provider connection in Supabase Dashboard with domain `https://growing-pheasant-22.clerk.accounts.dev`. Default Clerk session tokens are accepted by Supabase and authenticated RPCs passed for profile search, follow, visible places, social save, block, unblock, and unfollow. |
 | How should remote row attributes hydrate local UI? | Resolved: hydrate backend `attributes` into local `placeAttributes` on remote place refresh. | Implemented in Build 20. |
 | How should remote relationship/filter metadata hydrate local UI? | Resolved for alpha: backend graph RPCs return followers/following/relationship and the iOS store hydrates remote follow edges. | Implemented in Build 21. |
-| Which analytics provider? | Keep vendor-neutral interface; choose provider later. | PostHog is likely but not locked. |
+| Which analytics provider? | Resolved for alpha: PostHog behind the vendor-neutral analytics interface. | Runtime capture still requires a rec.me/Wander PostHog project token in `WANDER_POSTHOG_PROJECT_TOKEN`; do not reuse another app's token. |
 
 ## Rich Place Profile Follow-Ups
 

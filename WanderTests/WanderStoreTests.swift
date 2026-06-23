@@ -1085,6 +1085,72 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testAuthStateIdentifiesAnalyticsWithInternalUserIDOnly() {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Joe",
+                    handle: "joe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+        store.apply(authState: .signedOut)
+
+        XCTAssertEqual(analytics.identifiedUserIDs, ["user_live"])
+        XCTAssertEqual(analytics.resetCount, 1)
+    }
+
+    func testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository)
+
+        _ = await store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_taco",
+                name: "Taco Table",
+                category: "restaurant",
+                latitude: 34.0522,
+                longitude: -118.2437,
+                confidence: 0.7
+            ),
+            status: .wannaGo,
+            visibility: .mutuals,
+            note: "private note",
+            sourceType: .manual,
+            attributes: [],
+            backend: backend
+        )
+
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            WanderAnalyticsEvents.ownPlaceSyncFailed
+        ])
+
+        let failed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(failed.properties["trigger"], "direct_save")
+        XCTAssertEqual(failed.properties["status"], PlaceStatus.wannaGo.rawValue)
+        XCTAssertEqual(failed.properties["visibility"], PlaceVisibility.mutuals.rawValue)
+        XCTAssertEqual(failed.properties["source_type"], AddSourceType.manual.rawValue)
+        XCTAssertEqual(failed.properties["sync_state_before"], SyncState.pendingCreate.rawValue)
+        XCTAssertEqual(failed.properties["error_kind"], "invalid_response")
+        XCTAssertNil(failed.properties["error"])
+
+        let serializedProperties = failed.properties.values.joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Taco Table"))
+        XCTAssertFalse(serializedProperties.contains("private note"))
+        XCTAssertFalse(serializedProperties.contains("joe@example.com"))
+        XCTAssertFalse(serializedProperties.contains("network down"))
+    }
+
     func testRetryFailedOwnPlaceSyncsMarksRowsSynced() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -1127,6 +1193,31 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(saved?.userPlace.lastSyncError)
     }
 
+    func testSyncUnsyncedOwnPlacesTracksZeroCandidateBackfillBatch() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository())
+        )
+
+        XCTAssertEqual(syncedCount, 0)
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_batch_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
+            WanderAnalyticsEvents.ownPlaceSyncBatchCompleted
+        ])
+        XCTAssertEqual(syncEvents.first?.properties["trigger"], "signed_in_backfill")
+        XCTAssertEqual(syncEvents.first?.properties["candidate_count"], "0")
+
+        let completed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(completed.properties["candidate_count"], "0")
+        XCTAssertEqual(completed.properties["synced_count"], "0")
+        XCTAssertEqual(completed.properties["failed_count"], "0")
+        XCTAssertEqual(completed.properties["skipped_count"], "0")
+    }
+
     func testSyncUnsyncedOwnPlacesBackfillsPendingLocalRowsAfterSignIn() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         _ = store.saveCandidate(
@@ -1166,6 +1257,65 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.serverID, "up_remote_pijja")
         XCTAssertEqual(saved?.userPlace.syncState, .synced)
         XCTAssertNil(saved?.userPlace.lastSyncError)
+    }
+
+    func testSyncUnsyncedOwnPlacesTracksBackfillBatchCounts() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_pijja",
+                name: "Pijja Palace",
+                category: "restaurant",
+                latitude: 34.091,
+                longitude: -118.309,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "saved while signed out",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+            ]
+        )
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_pijja", syncState: .synced, placeID: "place_remote_pijja")
+        )
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(syncedCount, 1)
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
+            WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            WanderAnalyticsEvents.ownPlaceSyncSucceeded,
+            WanderAnalyticsEvents.ownPlaceSyncBatchCompleted
+        ])
+
+        let attempted = try XCTUnwrap(syncEvents.first { $0.name == WanderAnalyticsEvents.ownPlaceSyncAttempted })
+        XCTAssertEqual(attempted.properties["trigger"], "signed_in_backfill")
+        XCTAssertEqual(attempted.properties["status"], PlaceStatus.been.rawValue)
+        XCTAssertEqual(attempted.properties["visibility"], PlaceVisibility.followers.rawValue)
+        XCTAssertEqual(attempted.properties["source_type"], AddSourceType.manual.rawValue)
+        XCTAssertEqual(attempted.properties["sync_state_before"], SyncState.pendingCreate.rawValue)
+        XCTAssertEqual(attempted.properties["attribute_count"], "1")
+        XCTAssertEqual(attempted.properties["has_note"], "true")
+
+        let completed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(completed.properties["candidate_count"], "1")
+        XCTAssertEqual(completed.properties["synced_count"], "1")
+        XCTAssertEqual(completed.properties["failed_count"], "0")
+        XCTAssertEqual(completed.properties["skipped_count"], "0")
+
+        let serializedProperties = syncEvents.flatMap { $0.properties.values }.joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Pijja Palace"))
+        XCTAssertFalse(serializedProperties.contains("saved while signed out"))
     }
 
     func testRetryFailedOwnPlaceSyncsLeavesPendingRowsForBackfillPath() async {
@@ -1699,8 +1849,18 @@ private final class FakeFilterParser: LLMFilterParser {
 
 private final class RecordingAnalyticsClient: AnalyticsClient {
     private(set) var events: [AnalyticsEvent] = []
+    private(set) var identifiedUserIDs: [String] = []
+    private(set) var resetCount = 0
 
     func track(_ event: AnalyticsEvent) {
         events.append(event)
+    }
+
+    func identify(userID: String) {
+        identifiedUserIDs.append(userID)
+    }
+
+    func resetIdentity() {
+        resetCount += 1
     }
 }
