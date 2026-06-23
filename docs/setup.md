@@ -26,7 +26,12 @@ If you are working in Joe's local workspace, the repo path is:
 
 `project.yml` is the source of truth for the Xcode project.
 
-For local live-auth builds, create the ignored auth config first:
+The tracked `Wander/Config/Auth.xcconfig` contains the public Clerk publishable key
+and Supabase anon key for the current alpha backend. These are client-side
+publishable values and are required for simulator, device, and TestFlight builds.
+
+If you need to point a local build at a different Clerk/Supabase project, create
+the ignored override config:
 
 ```bash
 set -a
@@ -60,7 +65,8 @@ Do not commit incidental signing/team changes from Xcode unless intentional.
 xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO
 ```
 
-For a live Clerk/Supabase simulator smoke test, make sure `Wander/Config/LocalAuth.xcconfig` exists, then build normally:
+For a live Clerk/Supabase simulator smoke test against the default alpha backend,
+build normally:
 
 ```bash
 xcodebuild build \
@@ -70,9 +76,11 @@ xcodebuild build \
   -derivedDataPath DerivedData
 ```
 
-`WANDER_SUPABASE_URL` and `WANDER_CLERK_FRONTEND_API` are already checked in as non-secret project defaults for the Wander dev project.
+`WANDER_SUPABASE_URL`, `WANDER_CLERK_FRONTEND_API`, and the public client keys are
+checked in as non-secret project defaults for the Wander alpha project.
 
-Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored.
+Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored and
+only for local overrides.
 
 ## Test
 
