@@ -4608,3 +4608,10 @@ Known issues / next steps:
 
 - PR is intended for Ryan simulator testing before merge.
 - Selecting a newly created tag can temporarily show no matching places until a place has that tag; this matches the current filter semantics.
+
+Handoff:
+
+- Committed implementation as `0ce1dfa` (`fix: add profile filter controls`).
+- Opened draft PR #26 for Ryan simulator testing: https://github.com/joelipshutz/wander/pull/26.
+- Attached the PR to `REC-15` and `REC-16`, commented validation details, and moved both issues to `In Review`.
+- Do not merge until Ryan tests the branch in Simulator. After approval, squash-merge PR #26 to `main` and follow the standard TestFlight release workflow for app-code changes.
