@@ -4589,6 +4589,7 @@ Release:
   - Attached to `Wander Alpha`
   - External TestFlight review state: `APPROVED`
 - Posted tester Slack note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782238965199909
+- Moved Linear `REC-18` to `Done`. A detailed Linear release comment was rejected by the safety reviewer, so no Linear comment was posted.
 
 Known issues / next steps:
 
