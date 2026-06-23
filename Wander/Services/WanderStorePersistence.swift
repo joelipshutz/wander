@@ -113,7 +113,6 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let avatarURL: String?
         let bio: String?
         let homeArea: String?
-        let metadataJSON: String?
         let defaultVisibilityRaw: String
         let syncStateRaw: String
         let localUpdatedAt: Date
@@ -131,7 +130,6 @@ struct WanderStoreSnapshot: Codable, Equatable {
             avatarURL = profile.avatarURL
             bio = profile.bio
             homeArea = profile.homeArea
-            metadataJSON = profile.metadataJSON
             defaultVisibilityRaw = profile.defaultVisibilityRaw
             syncStateRaw = profile.syncStateRaw
             localUpdatedAt = profile.localUpdatedAt
@@ -151,7 +149,6 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 avatarURL: avatarURL,
                 bio: bio,
                 homeArea: homeArea,
-                metadataJSON: metadataJSON,
                 defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? .followers,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,

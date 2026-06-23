@@ -4615,3 +4615,57 @@ Handoff:
 - Opened draft PR #26 for Ryan simulator testing: https://github.com/joelipshutz/wander/pull/26.
 - Attached the PR to `REC-15` and `REC-16`, commented validation details, and moved both issues to `In Review`.
 - Do not merge until Ryan tests the branch in Simulator. After approval, squash-merge PR #26 to `main` and follow the standard TestFlight release workflow for app-code changes.
+
+## 2026-06-23 12:02 PDT - Codex - PR #26 Profile List Revisions
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. Root checkout remains untouched.
+
+Goal: update open PR #26 after Ryan's simulator review request:
+
+- Remove the `+` control from profile Been/Wanna tags and replace the horizontal tag carousel with a searchable dropdown.
+- Make the Been stat tile green to avoid confusion with terracotta/blue me/social map colors.
+- Make places in the Been/Wanna profile lists clickable and show the same saved-place detail sheet used from the map.
+
+Linear tracking:
+
+- Created `REC-19` for the searchable profile tag dropdown.
+- Created `REC-20` for the green Been tile.
+- Attempted to create the clickable place-detail issue, but the Linear tool call was rejected by automatic review/capacity; do not retry without explicit approval after reporting.
+
+Expected files to touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `WanderTests/ProfileMetadataTagParserTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Implementation:
+
+- Replaced the Been/Wanna profile tag carousel and add-tag plus button with an inline searchable dropdown sourced only from tags on saved places.
+- Removed the local profile metadata persistence path that existed only to support custom profile filter tags.
+- Updated the Been profile stat tile to use the green success/sage treatment.
+- Made Been/Wanna profile list rows tappable and present the saved-place detail sheet using the same `PlaceSheet` component as map saved-place taps.
+- Opened map sheet model/view types for reuse by the profile screen and added an explicit initializer for `PlaceSheet`.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-revisions-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/ProfileMetadataTagParserTests`
+  Result: `1` test, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-revisions-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- PR #26 remains intended for Ryan simulator testing before merge.
+- Moved `REC-19` and `REC-20` to `In Review` with implementation and validation comments.
+- The third Linear item for clickable Been/Wanna place rows was not created because the Linear tool call was rejected by automatic review/capacity; report this instead of retrying silently.

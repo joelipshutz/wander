@@ -1580,7 +1580,7 @@ private struct WanderMapPin: View {
     }
 }
 
-private enum PlaceSheetAction {
+enum PlaceSheetAction {
     case add
     case edit
     case none
@@ -1602,14 +1602,14 @@ private enum PlaceSheetAction {
     }
 }
 
-private struct PlaceSaveSummary: Identifiable {
+struct PlaceSaveSummary: Identifiable {
     let visiblePlace: VisiblePlace
     let attributes: [LocalPlaceAttribute]
 
     var id: String { visiblePlace.userPlace.id }
 }
 
-private struct PlaceSheetPlace {
+struct PlaceSheetPlace {
     let id: String
     let name: String
     let category: String
@@ -2339,7 +2339,7 @@ private struct MapSaveWrappingChipLayout: Layout {
     }
 }
 
-private struct PlaceSheet: View {
+struct PlaceSheet: View {
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
     let currentUserID: String
@@ -2347,6 +2347,22 @@ private struct PlaceSheet: View {
     @Binding var isExpanded: Bool
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
+
+    init(
+        place: PlaceSheetPlace,
+        saves: [PlaceSaveSummary],
+        currentUserID: String,
+        action: PlaceSheetAction,
+        isExpanded: Binding<Bool>,
+        onAction: @escaping () -> Void
+    ) {
+        self.place = place
+        self.saves = saves
+        self.currentUserID = currentUserID
+        self.action = action
+        self._isExpanded = isExpanded
+        self.onAction = onAction
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {

@@ -92,7 +92,12 @@ struct ProfileScreen: View {
             Button {
                 savedListMode = .been
             } label: {
-                StatTile(value: "\(store.stats.been)", label: "BEEN", color: WanderTheme.terracotta.color, fill: WanderTheme.terracottaTint.color)
+                StatTile(
+                    value: "\(store.stats.been)",
+                    label: "BEEN",
+                    color: WanderTheme.stateSuccess.color,
+                    fill: WanderTheme.categorySage.color.opacity(0.22)
+                )
             }
             .buttonStyle(ProfileStatButtonStyle())
             .accessibilityLabel("Open been places")
@@ -406,8 +411,9 @@ private struct SavedPlacesListScreen: View {
     @State private var query = ""
     @State private var selectedCategory: String?
     @State private var selectedMetadataTag: String?
-    @State private var isAddingMetadataTag = false
-    @State private var newMetadataTag = ""
+    @State private var isTagFilterExpanded = false
+    @State private var tagFilterQuery = ""
+    @State private var selectedPlace: VisiblePlace?
 
     private var places: [VisiblePlace] {
         store.currentUserVisiblePlaces
@@ -429,9 +435,13 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var metadataTags: [String] {
-        ProfileMetadataTagParser.uniqueTags(
-            allModePlaces.flatMap(metadataTags(for:)) + store.profileFilterTags(for: mode.status)
-        )
+        ProfileMetadataTagParser.uniqueTags(allModePlaces.flatMap(metadataTags(for:)))
+    }
+
+    private var filteredMetadataTags: [String] {
+        let normalized = tagFilterQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return metadataTags }
+        return metadataTags.filter { $0.lowercased().contains(normalized) }
     }
 
     var body: some View {
@@ -439,16 +449,19 @@ private struct SavedPlacesListScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 searchField
                 filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                filterSection(title: "tags", values: metadataTags, selectedValue: $selectedMetadataTag) {
-                    newMetadataTag = ""
-                    isAddingMetadataTag = true
-                }
+                tagFilterDropdown
 
                 if places.isEmpty {
                     SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
                 } else {
                     ForEach(places) { visiblePlace in
-                        ProfilePlaceRow(visiblePlace: visiblePlace)
+                        Button {
+                            selectedPlace = visiblePlace
+                        } label: {
+                            ProfilePlaceRow(visiblePlace: visiblePlace)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows saved place details")
                     }
                 }
             }
@@ -458,20 +471,12 @@ private struct SavedPlacesListScreen: View {
         .wanderScreen()
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
-        .alert("add tag filter", isPresented: $isAddingMetadataTag) {
-            TextField("filter name", text: $newMetadataTag)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Button("add") {
-                if let tag = store.addProfileFilterTag(newMetadataTag, for: mode.status) {
-                    selectedMetadataTag = tag
-                }
-                newMetadataTag = ""
-            }
-            .disabled(newMetadataTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("cancel", role: .cancel) {
-                newMetadataTag = ""
-            }
+        .sheet(item: $selectedPlace) { visiblePlace in
+            ProfileSavedPlaceDetailSheet(
+                visiblePlace: visiblePlace,
+                saves: saveSummaries(for: visiblePlace),
+                currentUserID: store.currentUser.id
+            )
         }
     }
 
@@ -492,8 +497,7 @@ private struct SavedPlacesListScreen: View {
     private func filterSection(
         title: String,
         values: [String],
-        selectedValue: Binding<String?>,
-        addAction: (() -> Void)? = nil
+        selectedValue: Binding<String?>
     ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
@@ -517,23 +521,120 @@ private struct SavedPlacesListScreen: View {
                         }
                         .buttonStyle(.plain)
                     }
-
-                    if let addAction {
-                        Button(action: addAction) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 13, weight: .black))
-                                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                                .background(WanderTheme.surfaceSand.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(WanderTheme.borderHairline.color.opacity(0.7), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Add tag filter")
-                    }
                 }
             }
         }
+    }
+
+    private var tagFilterDropdown: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("tags")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Button {
+                withAnimation(.easeOut(duration: 0.16)) {
+                    isTagFilterExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "tag.fill")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text(selectedMetadataTag ?? "all tags")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(selectedMetadataTag == nil ? WanderTheme.textMuted.color : WanderTheme.textInk.color)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .rotationEffect(.degrees(isTagFilterExpanded ? 180 : 0))
+                }
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Tag filter")
+
+            if isTagFilterExpanded {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                        TextField("search tags", text: $tagFilterQuery)
+                            .textFieldStyle(.plain)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 40)
+                    .background(WanderTheme.surfaceSand.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                            tagOption(title: "all tags", value: nil)
+
+                            if filteredMetadataTags.isEmpty {
+                                Text(metadataTags.isEmpty ? "no tags saved yet" : "no matching tags")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                                    .padding(.horizontal, WanderTheme.spacing2)
+                            } else {
+                                ForEach(filteredMetadataTags, id: \.self) { tag in
+                                    tagOption(title: tag, value: tag)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 220)
+                }
+                .padding(WanderTheme.spacing2)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func tagOption(title: String, value: String?) -> some View {
+        Button {
+            selectedMetadataTag = value
+            tagFilterQuery = ""
+            withAnimation(.easeOut(duration: 0.16)) {
+                isTagFilterExpanded = false
+            }
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                Spacer()
+                if selectedMetadataTag == value {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                }
+            }
+            .frame(minHeight: 40)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(selectedMetadataTag == value ? WanderTheme.categorySage.color.opacity(0.18) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        }
+        .buttonStyle(.plain)
     }
 
     private func matchesSelectedCategory(_ visiblePlace: VisiblePlace) -> Bool {
@@ -564,6 +665,40 @@ private struct SavedPlacesListScreen: View {
     private func metadataTags(for visiblePlace: VisiblePlace) -> [String] {
         store.attributes(for: visiblePlace.userPlace.id)
             .flatMap { ProfileMetadataTagParser.tags(from: $0.valueJSON) }
+    }
+
+    private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces
+            .filter { $0.place.id == selectedPlace.place.id }
+            .map { visiblePlace in
+                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            }
+    }
+}
+
+private struct ProfileSavedPlaceDetailSheet: View {
+    let visiblePlace: VisiblePlace
+    let saves: [PlaceSaveSummary]
+    let currentUserID: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack {
+            Spacer(minLength: WanderTheme.spacing4)
+            PlaceSheet(
+                place: PlaceSheetPlace(visiblePlace: visiblePlace),
+                saves: saves,
+                currentUserID: currentUserID,
+                action: .none,
+                isExpanded: $isExpanded
+            ) {}
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WanderTheme.canvasWarm.color)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
