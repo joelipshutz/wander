@@ -4661,3 +4661,31 @@ Update 2026-06-23 12:43 PDT:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-sync-debug-logs CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `132` tests, `0` failures.
 - SQL regression `supabase/tests/save_own_place.sql` is committed for future Supabase test runs; local `psql` was not installed, so this was not run locally. Hosted migration was already applied and validated through Joe's local save logs.
+
+## 2026-06-23 12:48 PDT - Codex - TestFlight Build 39 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+
+Goal: ship the own-place sync unblock fix to TestFlight after merging PR `#27`.
+
+Context:
+
+- PR `#27` (`fix: unblock own place sync`) was squash-merged into `main` at `03f70d244aeb5852438a23a9f47bd8cd62dabb8b`.
+- This release includes the hosted `app.save_own_place` RLS migration, DEBUG-only local diagnostics, and the SQL regression for future Supabase test runs.
+- Bumped `CURRENT_PROJECT_VERSION` from `38` to `39` in `project.yml` and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+
+Planned validation/release:
+
+- Run `git diff --check`.
+- Run simulator build/test for build `39`.
+- Archive and upload build `39`, run `scripts/testflight-release.mjs`, then post tester Slack notes.
+
+Update 2026-06-23 12:51 PDT:
+
+- `git diff --check` passed after the build bump.
+- Full simulator suite for build `39` exited successfully:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build39 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Test result bundle:
+  `DerivedData-build39/Logs/Test/Test-Wander-2026.06.23_12-47-04--0700.xcresult`
