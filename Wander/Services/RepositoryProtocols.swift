@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 struct ProfileShell: Identifiable, Equatable {
@@ -356,6 +357,7 @@ protocol BlockRepository {
 @MainActor
 protocol PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate]
 }

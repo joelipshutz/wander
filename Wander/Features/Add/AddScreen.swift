@@ -171,7 +171,7 @@ struct AddScreen: View {
                     selectedSource = .manual
                     step = .manual
                 }
-                SourceRow(title: AddSourceType.photo.title, subtitle: "save a photo draft for extraction", systemImage: "photo", isDisabled: isResolvingCandidates) {
+                SourceRow(title: AddSourceType.photo.title, subtitle: "scan text in a photo for a place", systemImage: "photo", isDisabled: isResolvingCandidates) {
                     resolutionMessage = nil
                     selectedSource = .photo
                     step = .photo
@@ -254,7 +254,7 @@ struct AddScreen: View {
 
     private var photoForm: some View {
         let title = isImportingPhoto ? "importing photo..." : "choose a photo"
-        let subtitle = "we'll keep it as a draft for extraction"
+        let subtitle = "we'll scan visible text and photo location"
 
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -288,7 +288,7 @@ struct AddScreen: View {
                 InlineMessage(text: resolutionMessage)
             }
 
-            Text("We'll look for a place in the photo. If nothing obvious comes back, it stays as a draft.")
+            Text("We'll search likely place names and nearby photo locations. If we read a name but cannot match it, you can edit the search before saving.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -815,11 +815,16 @@ struct AddScreen: View {
         do {
             let data = try await item.loadTransferable(type: Data.self)
             let byteCount = data?.count ?? 0
-            if let data,
-               let recognizedText = await recognizeText(in: data),
-               let photoQuery = PhotoPlaceTextExtractor.searchQuery(from: recognizedText) {
-                await resolvePhotoTextCandidates(query: photoQuery)
-                if !candidates.isEmpty {
+            if let data {
+                let recognizedText = await recognizeText(in: data)
+                let photoCoordinate = PhotoPlaceMetadataExtractor.coordinate(from: data)
+                let resolution = await PhotoPlaceImportResolver.resolve(
+                    recognizedText: recognizedText,
+                    photoCoordinate: photoCoordinate,
+                    searcher: store
+                )
+
+                if applyPhotoImportResolution(resolution) {
                     return
                 }
             }
@@ -846,25 +851,32 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolvePhotoTextCandidates(query: String) async {
-        selectedSource = .photo
-        manualName = query
-        manualArea = ""
-        resolutionMessage = nil
+    private func applyPhotoImportResolution(_ resolution: PhotoPlaceImportResolution) -> Bool {
+        switch resolution.outcome {
+        case .candidates:
+            guard !resolution.candidates.isEmpty else { return false }
 
-        do {
-            candidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
-            selectedCandidateID = candidates.first?.id
+            selectedSource = .photo
+            manualName = resolution.manualName ?? resolution.candidates.first?.name ?? ""
+            manualArea = ""
+            candidates = resolution.candidates
+            selectedCandidateID = resolution.candidates.first?.id
             selectedVisibility = store.defaultVisibility
-            guard !candidates.isEmpty else {
-                resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
-                return
-            }
+            resolutionMessage = resolution.message
             step = .confirm
-        } catch {
+            return true
+        case .manualRescue:
+            selectedSource = .manual
+            manualName = resolution.manualName ?? ""
+            manualArea = ""
             candidates = []
             selectedCandidateID = nil
-            resolutionMessage = "Read “\(query)” from the photo, but could not match a place yet."
+            resolutionMessage = resolution.message
+            step = .manual
+            return true
+        case .draft:
+            resolutionMessage = resolution.message
+            return false
         }
     }
 
@@ -1005,11 +1017,11 @@ private enum AddStep {
         case .source: "Start with where you are, a name, a link, or a photo."
         case .link: "Paste the link; we'll look for the place."
         case .manual: "Name is enough; area helps."
-        case .photo: "Choose a photo to save as an extraction draft."
+        case .photo: "Choose a photo; we'll look for a place."
         case .confirm: "Pick the place, status, and who can see it."
         case .details: "optional taps for future you."
         case .saved: "it is ready on your map."
-        case .draft: "we kept the input without pretending extraction works."
+        case .draft: "we could not find enough place info yet."
         }
     }
 
