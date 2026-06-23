@@ -1,5 +1,5 @@
 {
-  "originHash" : "fa78bf32810ee7a8aefa2cb933fce7a2b8f4a39dd074066a7d5e75cc2f682e2e",
+  "originHash" : "a078aca018e7ad44a90f10d19aa0447e8f1353e7d7f9cc9bb3e28140316197c4",
   "pins" : [
     {
       "identity" : "clerk-ios",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "169ab10234347fb19b37441f2867ace896a284b0",
         "version" : "4.3.0"
+      }
+    },
+    {
+      "identity" : "posthog-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PostHog/posthog-ios.git",
+      "state" : {
+        "revision" : "6e70aa24bbd3778182fe039f7f5800a17674a6d6",
+        "version" : "3.61.1"
       }
     },
     {

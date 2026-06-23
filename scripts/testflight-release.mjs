@@ -24,6 +24,10 @@ Options:
   --project <path>        Project YAML path. Default: project.yml.
   --app-id <id>           App Store Connect app id. Default: ${DEFAULTS.appId}.
   --group <name>          TestFlight beta group name. Default: ${DEFAULTS.groupName}.
+  --locale <locale>       Beta build localization locale. Default: en-US.
+  --what-to-test <text>   TestFlight "What to Test" copy for this build.
+  --what-to-test-file <path>
+                           Read TestFlight "What to Test" copy from a file.
   --env <path>            Local env file with ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH.
                            Default: ${DEFAULTS.envPath}
   --timeout-attempts <n>  Poll attempts before failing. Default: ${DEFAULTS.timeoutAttempts}.
@@ -33,7 +37,8 @@ Options:
 
 This script assumes xcodebuild archive/export upload already succeeded. It waits for the
 uploaded build to become VALID, sets export compliance to usesNonExemptEncryption=false,
-attaches the build to the public TestFlight group, and submits external beta review.`);
+sets optional TestFlight "What to Test" copy, attaches the build to the public
+TestFlight group, and submits external beta review.`);
 }
 
 function parseArgs(argv) {
@@ -43,10 +48,13 @@ function parseArgs(argv) {
     dryRun: false,
     envPath: DEFAULTS.envPath,
     groupName: DEFAULTS.groupName,
+    locale: "en-US",
     pollSeconds: DEFAULTS.pollSeconds,
     projectPath: DEFAULTS.projectPath,
     publicLink: DEFAULTS.publicLink,
     timeoutAttempts: DEFAULTS.timeoutAttempts,
+    whatToTest: null,
+    whatToTestFile: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -73,6 +81,9 @@ function parseArgs(argv) {
       case "--group":
         options.groupName = next();
         break;
+      case "--locale":
+        options.locale = next();
+        break;
       case "--help":
       case "-h":
         options.help = true;
@@ -89,6 +100,14 @@ function parseArgs(argv) {
       case "--timeout-attempts":
         options.timeoutAttempts = Number.parseInt(next(), 10);
         break;
+      case "--what-to-test":
+      case "--whats-new":
+        options.whatToTest = next();
+        break;
+      case "--what-to-test-file":
+      case "--whats-new-file":
+        options.whatToTestFile = next();
+        break;
       default:
         throw new Error(`Unknown option: ${arg}`);
     }
@@ -99,6 +118,12 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.timeoutAttempts) || options.timeoutAttempts < 1) {
     throw new Error("--timeout-attempts must be a positive integer");
+  }
+  if (options.whatToTest && options.whatToTestFile) {
+    throw new Error("Use either --what-to-test or --what-to-test-file, not both");
+  }
+  if (!options.locale || !/^[a-z]{2}(-[A-Z]{2})?$/.test(options.locale)) {
+    throw new Error("--locale must look like en-US");
   }
 
   return options;
@@ -128,6 +153,20 @@ function readBuildNumber(projectPath) {
   const match = text.match(/CURRENT_PROJECT_VERSION:\s*["']?([^"'\n]+)["']?/);
   if (!match) throw new Error(`Could not find CURRENT_PROJECT_VERSION in ${projectPath}`);
   return match[1].trim();
+}
+
+function readWhatToTest(options) {
+  const value = options.whatToTestFile
+    ? fs.readFileSync(options.whatToTestFile, "utf8")
+    : options.whatToTest;
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 4000) {
+    throw new Error("TestFlight What to Test copy must be 4000 characters or fewer");
+  }
+  return trimmed;
 }
 
 function base64url(input) {
@@ -296,6 +335,87 @@ async function setExportCompliance(api, build) {
   }
 }
 
+async function getBetaBuildLocalization(api, buildId, locale) {
+  const params = new URLSearchParams({
+    "filter[locale]": locale,
+    "fields[betaBuildLocalizations]": "locale,whatsNew",
+    limit: "1",
+  });
+  const body = await api(`/builds/${buildId}/betaBuildLocalizations?${params.toString()}`);
+  return body.data?.[0] ?? null;
+}
+
+async function setWhatToTest(api, build, locale, whatsNew) {
+  if (!whatsNew) {
+    console.log("No TestFlight What to Test copy provided.");
+    return null;
+  }
+
+  const existing = await getBetaBuildLocalization(api, build.id, locale);
+  if (existing) {
+    if (existing.attributes?.whatsNew === whatsNew) {
+      console.log(`TestFlight What to Test copy already set for ${locale}.`);
+      return existing;
+    }
+
+    const body = await api(`/betaBuildLocalizations/${existing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        data: {
+          type: "betaBuildLocalizations",
+          id: existing.id,
+          attributes: {
+            whatsNew,
+          },
+        },
+      }),
+    });
+    console.log(`Updated TestFlight What to Test copy for ${locale}.`);
+    return body.data ?? null;
+  }
+
+  try {
+    const body = await api("/betaBuildLocalizations", {
+      method: "POST",
+      body: JSON.stringify({
+        data: {
+          type: "betaBuildLocalizations",
+          attributes: {
+            locale,
+            whatsNew,
+          },
+          relationships: {
+            build: { data: { type: "builds", id: build.id } },
+          },
+        },
+      }),
+    });
+    console.log(`Created TestFlight What to Test copy for ${locale}.`);
+    return body.data ?? null;
+  } catch (error) {
+    const code = error.body?.errors?.[0]?.code;
+    if (error.status === 409 || code === "ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE") {
+      const duplicate = await getBetaBuildLocalization(api, build.id, locale);
+      if (!duplicate) throw error;
+      const body = await api(`/betaBuildLocalizations/${duplicate.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          data: {
+            type: "betaBuildLocalizations",
+            id: duplicate.id,
+            attributes: {
+              whatsNew,
+            },
+          },
+        }),
+      });
+      console.log(`Updated existing TestFlight What to Test copy for ${locale}.`);
+      return body.data ?? null;
+    }
+    throw error;
+  }
+}
+
 async function getBetaGroup(api, appId, groupName) {
   const params = new URLSearchParams({
     "filter[app]": appId,
@@ -381,6 +501,7 @@ async function main() {
   if (!options.buildNumber) {
     options.buildNumber = readBuildNumber(options.projectPath);
   }
+  const whatToTest = readWhatToTest(options);
 
   loadEnv(options.envPath);
 
@@ -389,10 +510,12 @@ async function main() {
     buildNumber: options.buildNumber,
     envPath: options.envPath,
     groupName: options.groupName,
+    locale: options.locale,
     pollSeconds: options.pollSeconds,
     projectPath: options.projectPath,
     publicLink: options.publicLink,
     timeoutAttempts: options.timeoutAttempts,
+    whatToTest: whatToTest ? `${whatToTest.length} chars` : null,
   };
 
   if (options.dryRun) {
@@ -405,6 +528,7 @@ async function main() {
 
   const build = await waitForBuild(api, options);
   await setExportCompliance(api, build);
+  await setWhatToTest(api, build, options.locale, whatToTest);
   const group = await getBetaGroup(api, options.appId, options.groupName);
   await attachBuildToGroup(api, build, group, options.groupName);
   await submitForReview(api, build);

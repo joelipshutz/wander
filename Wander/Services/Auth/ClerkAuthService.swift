@@ -8,22 +8,38 @@ final class ClerkAuthService: AuthSessionProviding {
     private(set) var state: AuthState = .signedOut
     private let configuration: WanderBackendConfiguration
 
-    init(configuration: WanderBackendConfiguration) {
+    #if canImport(ClerkKit)
+    init(
+        configuration: WanderBackendConfiguration,
+        configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
+    ) {
         self.configuration = configuration
 
-        #if canImport(ClerkKit)
         if let publishableKey = configuration.clerkPublishableKey {
-            Clerk.configure(publishableKey: publishableKey)
+            let configuredPublishableKey = configureClerk(publishableKey)
+            if configuredPublishableKey.isEmpty {
+                state = .unavailable("Missing Clerk publishable key.")
+            }
         } else {
             state = .unavailable("Missing Clerk publishable key.")
         }
-        #else
-        state = .unavailable("ClerkKit is not linked.")
-        #endif
     }
+    #else
+    init(configuration: WanderBackendConfiguration) {
+        self.configuration = configuration
+
+        state = .unavailable("ClerkKit is not linked.")
+    }
+    #endif
 
     var canPresentNativeAuth: Bool {
-        configuration.isClerkConfigured
+        guard configuration.isClerkConfigured else {
+            return false
+        }
+        if case .unavailable = state {
+            return false
+        }
+        return true
     }
 
     func refreshSession() async {

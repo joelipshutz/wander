@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import Wander
 
@@ -806,7 +807,8 @@ final class WanderStoreTests: XCTestCase {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: nil, bio: nil, relationship: .follower)
-        let remotePlace = VisiblePlace(
+        let ryan = ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .follower)
+        let mayaPlace = VisiblePlace(
             id: "up_remote_maya_speranza",
             place: LocalPlace(
                 localID: "remote_place_speranza",
@@ -836,9 +838,47 @@ final class WanderStoreTests: XCTestCase {
                 syncState: .synced
             )
         )
-        let followRepository = FakeFollowRepository(following: [maya], relationships: ["user_maya": .follower])
+        let ryanPlace = VisiblePlace(
+            id: "up_remote_ryan_dama",
+            place: LocalPlace(
+                localID: "remote_place_dama",
+                serverID: "place_remote_dama",
+                canonicalName: "Dama",
+                category: "restaurant",
+                latitude: 34.033,
+                longitude: -118.229,
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: "remote_up_ryan_dama",
+                serverID: "up_remote_ryan_dama",
+                userID: "user_ryan",
+                placeID: "place_remote_dama",
+                status: .been,
+                visibility: .followers,
+                note: "order the prawns",
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "remote_profile_ryan",
+                serverID: "user_ryan",
+                handle: "ryan",
+                displayName: "Ryan",
+                syncState: .synced
+            )
+        )
+        let followRepository = FakeFollowRepository(
+            following: [maya, ryan],
+            relationships: ["user_maya": .follower, "user_ryan": .follower]
+        )
         let placeRepository = FakePlaceRepository(places: [])
-        let userPlaceRepository = FakeUserPlaceRepository(userPlacesByUserID: ["user_maya": [remotePlace]])
+        let userPlaceRepository = FakeUserPlaceRepository(
+            userPlacesByUserID: [
+                "user_maya": [mayaPlace],
+                "user_ryan": [ryanPlace]
+            ]
+        )
         let backend = WanderBackend(
             followRepository: followRepository,
             placeRepository: placeRepository,
@@ -847,12 +887,16 @@ final class WanderStoreTests: XCTestCase {
 
         await store.refreshRemoteSocialSurfaces(backend: backend)
 
-        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya"])
-        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza", "Dama"])
         XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_maya"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_ryan"])).map(\.place.canonicalName), ["Dama"])
+        let discoverPlaces = await store.discover(query: "", scope: .everyone, backend: backend).places
+        XCTAssertEqual(discoverPlaces.map(\.owner.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(discoverPlaces.map(\.place.canonicalName), ["Speranza", "Dama"])
         XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
         XCTAssertEqual(placeRepository.viewports.count, 1)
-        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya"])
+        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya", "user_ryan"])
     }
 
     func testRemoteSocialSaveMarksLocalCopySynced() async {
@@ -1041,6 +1085,72 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testAuthStateIdentifiesAnalyticsWithInternalUserIDOnly() {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Joe",
+                    handle: "joe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+        store.apply(authState: .signedOut)
+
+        XCTAssertEqual(analytics.identifiedUserIDs, ["user_live"])
+        XCTAssertEqual(analytics.resetCount, 1)
+    }
+
+    func testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository)
+
+        _ = await store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_taco",
+                name: "Taco Table",
+                category: "restaurant",
+                latitude: 34.0522,
+                longitude: -118.2437,
+                confidence: 0.7
+            ),
+            status: .wannaGo,
+            visibility: .mutuals,
+            note: "private note",
+            sourceType: .manual,
+            attributes: [],
+            backend: backend
+        )
+
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            WanderAnalyticsEvents.ownPlaceSyncFailed
+        ])
+
+        let failed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(failed.properties["trigger"], "direct_save")
+        XCTAssertEqual(failed.properties["status"], PlaceStatus.wannaGo.rawValue)
+        XCTAssertEqual(failed.properties["visibility"], PlaceVisibility.mutuals.rawValue)
+        XCTAssertEqual(failed.properties["source_type"], AddSourceType.manual.rawValue)
+        XCTAssertEqual(failed.properties["sync_state_before"], SyncState.pendingCreate.rawValue)
+        XCTAssertEqual(failed.properties["error_kind"], "invalid_response")
+        XCTAssertNil(failed.properties["error"])
+
+        let serializedProperties = failed.properties.values.joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Taco Table"))
+        XCTAssertFalse(serializedProperties.contains("private note"))
+        XCTAssertFalse(serializedProperties.contains("joe@example.com"))
+        XCTAssertFalse(serializedProperties.contains("network down"))
+    }
+
     func testRetryFailedOwnPlaceSyncsMarksRowsSynced() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -1081,6 +1191,279 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.serverID, "up_remote_taco")
         XCTAssertEqual(saved?.userPlace.syncState, .synced)
         XCTAssertNil(saved?.userPlace.lastSyncError)
+    }
+
+    func testSyncUnsyncedOwnPlacesTracksZeroCandidateBackfillBatch() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: FakeUserPlaceRepository())
+        )
+
+        XCTAssertEqual(syncedCount, 0)
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_batch_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
+            WanderAnalyticsEvents.ownPlaceSyncBatchCompleted
+        ])
+        XCTAssertEqual(syncEvents.first?.properties["trigger"], "signed_in_backfill")
+        XCTAssertEqual(syncEvents.first?.properties["candidate_count"], "0")
+
+        let completed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(completed.properties["candidate_count"], "0")
+        XCTAssertEqual(completed.properties["synced_count"], "0")
+        XCTAssertEqual(completed.properties["failed_count"], "0")
+        XCTAssertEqual(completed.properties["skipped_count"], "0")
+    }
+
+    func testSyncUnsyncedOwnPlacesBackfillsPendingLocalRowsAfterSignIn() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_pijja",
+                name: "Pijja Palace",
+                category: "restaurant",
+                latitude: 34.091,
+                longitude: -118.309,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "saved while signed out",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+            ]
+        )
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_pijja", syncState: .synced, placeID: "place_remote_pijja")
+        )
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].place.canonicalName, "Pijja Palace")
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].attributes.map(\.questionKey), ["rating_signal"])
+        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Pijja Palace" }
+        XCTAssertEqual(saved?.userPlace.userID, "user_live")
+        XCTAssertEqual(saved?.place.serverID, "place_remote_pijja")
+        XCTAssertEqual(saved?.userPlace.serverID, "up_remote_pijja")
+        XCTAssertEqual(saved?.userPlace.syncState, .synced)
+        XCTAssertNil(saved?.userPlace.lastSyncError)
+    }
+
+    func testSyncUnsyncedOwnPlacesTracksBackfillBatchCounts() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_pijja",
+                name: "Pijja Palace",
+                category: "restaurant",
+                latitude: 34.091,
+                longitude: -118.309,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "saved while signed out",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+            ]
+        )
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_pijja", syncState: .synced, placeID: "place_remote_pijja")
+        )
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(syncedCount, 1)
+        let syncEvents = analytics.events.filter { $0.name.hasPrefix("own_place_sync_") }
+        XCTAssertEqual(syncEvents.map(\.name), [
+            WanderAnalyticsEvents.ownPlaceSyncBatchStarted,
+            WanderAnalyticsEvents.ownPlaceSyncAttempted,
+            WanderAnalyticsEvents.ownPlaceSyncSucceeded,
+            WanderAnalyticsEvents.ownPlaceSyncBatchCompleted
+        ])
+
+        let attempted = try XCTUnwrap(syncEvents.first { $0.name == WanderAnalyticsEvents.ownPlaceSyncAttempted })
+        XCTAssertEqual(attempted.properties["trigger"], "signed_in_backfill")
+        XCTAssertEqual(attempted.properties["status"], PlaceStatus.been.rawValue)
+        XCTAssertEqual(attempted.properties["visibility"], PlaceVisibility.followers.rawValue)
+        XCTAssertEqual(attempted.properties["source_type"], AddSourceType.manual.rawValue)
+        XCTAssertEqual(attempted.properties["sync_state_before"], SyncState.pendingCreate.rawValue)
+        XCTAssertEqual(attempted.properties["attribute_count"], "1")
+        XCTAssertEqual(attempted.properties["has_note"], "true")
+
+        let completed = try XCTUnwrap(syncEvents.last)
+        XCTAssertEqual(completed.properties["candidate_count"], "1")
+        XCTAssertEqual(completed.properties["synced_count"], "1")
+        XCTAssertEqual(completed.properties["failed_count"], "0")
+        XCTAssertEqual(completed.properties["skipped_count"], "0")
+
+        let serializedProperties = syncEvents.flatMap { $0.properties.values }.joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Pijja Palace"))
+        XCTAssertFalse(serializedProperties.contains("saved while signed out"))
+    }
+
+    func testRetryFailedOwnPlaceSyncsLeavesPendingRowsForBackfillPath() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_pending",
+                name: "Pending Bakery",
+                category: "bakery",
+                latitude: 34.093,
+                longitude: -118.31,
+                confidence: 0.8
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: []
+        )
+        let failed = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_failed",
+                name: "Failed Deli",
+                category: "restaurant",
+                latitude: 34.094,
+                longitude: -118.311,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "retry only this",
+            sourceType: .manual,
+            attributes: []
+        )
+        store.userPlaces.first { $0.id == failed.userPlaceID }?.syncStateRaw = SyncState.failed.rawValue
+
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_failed", syncState: .synced, placeID: "place_remote_failed")
+        )
+        let retriedCount = await store.retryFailedOwnPlaceSyncs(
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(retriedCount, 1)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.place.canonicalName), ["Failed Deli"])
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Pending Bakery" }?.userPlace.syncState, .pendingCreate)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Failed Deli" }?.userPlace.syncState, .synced)
+    }
+
+    func testSyncUnsyncedOwnPlacesSkipsSocialSavesAndTerminalRows() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_backfill",
+                name: "Backfill Cafe",
+                category: "coffee",
+                latitude: 34.095,
+                longitude: -118.312,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: []
+        )
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_social",
+                name: "Social Copy",
+                category: "restaurant",
+                latitude: 34.096,
+                longitude: -118.313,
+                confidence: 0.8
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .socialSave,
+            attributes: []
+        )
+        let pendingDelete = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_pending_delete",
+                name: "Pending Delete",
+                category: "bar",
+                latitude: 34.097,
+                longitude: -118.314,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: []
+        )
+        let serverDenied = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_denied",
+                name: "Denied Place",
+                category: "shop",
+                latitude: 34.098,
+                longitude: -118.315,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: []
+        )
+        let tombstoned = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_tombstoned",
+                name: "Tombstoned Place",
+                category: "park",
+                latitude: 34.099,
+                longitude: -118.316,
+                confidence: 0.8
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: []
+        )
+        store.userPlaces.first { $0.id == pendingDelete.userPlaceID }?.syncStateRaw = SyncState.pendingDelete.rawValue
+        store.userPlaces.first { $0.id == serverDenied.userPlaceID }?.syncStateRaw = SyncState.serverDenied.rawValue
+        store.userPlaces.first { $0.id == tombstoned.userPlaceID }?.syncStateRaw = SyncState.tombstoned.rawValue
+
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: "up_remote_backfill", syncState: .synced, placeID: "place_remote_backfill")
+        )
+        let syncedCount = await store.syncUnsyncedOwnPlaces(
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.place.canonicalName), ["Backfill Cafe"])
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Backfill Cafe" }?.userPlace.syncState, .synced)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Social Copy" }?.userPlace.syncState, .pendingCreate)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Pending Delete" }?.userPlace.syncState, .pendingDelete)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Denied Place" }?.userPlace.syncState, .serverDenied)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Tombstoned Place" }?.userPlace.syncState, .tombstoned)
     }
 
     func testRemoteFollowFailureLeavesFailedLocalFollow() async {
@@ -1380,17 +1763,21 @@ private final class FakeExtractionRepository: ExtractionRepository {
 @MainActor
 private final class FakePlaceResolver: PlaceCandidateResolving {
     private let currentLocationResult: Result<[PlaceCandidate], Error>
+    private let nearbyResult: Result<[PlaceCandidate], Error>
     private let manualResult: Result<[PlaceCandidate], Error>
     private let linkResult: Result<[PlaceCandidate], Error>
     private(set) var currentLocationCallCount = 0
+    private(set) var nearbyCoordinates: [CLLocationCoordinate2D] = []
     private(set) var manualInputs: [ManualPlaceInput] = []
     private(set) var linkInputs: [LinkPlaceInput] = []
 
     init(
         currentLocationCandidates: [PlaceCandidate] = [],
+        nearbyCandidates: [PlaceCandidate] = [],
         manualCandidates: [PlaceCandidate] = [],
         linkCandidates: [PlaceCandidate] = [],
         currentLocationError: Error? = nil,
+        nearbyError: Error? = nil,
         manualError: Error? = nil,
         linkError: Error? = nil
     ) {
@@ -1398,6 +1785,12 @@ private final class FakePlaceResolver: PlaceCandidateResolving {
             self.currentLocationResult = .failure(currentLocationError)
         } else {
             self.currentLocationResult = .success(currentLocationCandidates)
+        }
+
+        if let nearbyError {
+            self.nearbyResult = .failure(nearbyError)
+        } else {
+            self.nearbyResult = .success(nearbyCandidates)
         }
 
         if let manualError {
@@ -1416,6 +1809,11 @@ private final class FakePlaceResolver: PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
         currentLocationCallCount += 1
         return try currentLocationResult.get()
+    }
+
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] {
+        nearbyCoordinates.append(coordinate)
+        return try nearbyResult.get()
     }
 
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
@@ -1451,8 +1849,18 @@ private final class FakeFilterParser: LLMFilterParser {
 
 private final class RecordingAnalyticsClient: AnalyticsClient {
     private(set) var events: [AnalyticsEvent] = []
+    private(set) var identifiedUserIDs: [String] = []
+    private(set) var resetCount = 0
 
     func track(_ event: AnalyticsEvent) {
         events.append(event)
+    }
+
+    func identify(userID: String) {
+        identifiedUserIDs.append(userID)
+    }
+
+    func resetIdentity() {
+        resetCount += 1
     }
 }
