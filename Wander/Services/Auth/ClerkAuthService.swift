@@ -46,6 +46,9 @@ final class ClerkAuthService: AuthSessionProviding {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
             state = .unavailable("Missing Clerk publishable key.")
+            #if DEBUG
+            WanderDebugLog.remote.error("clerk refresh skipped reason=missing_publishable_key")
+            #endif
             return
         }
 
@@ -62,11 +65,20 @@ final class ClerkAuthService: AuthSessionProviding {
                     email: user.primaryEmailAddress?.emailAddress
                 )
             )
+            #if DEBUG
+            WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(user.id), privacy: .public)")
+            #endif
         } else {
             state = .signedOut
+            #if DEBUG
+            WanderDebugLog.remote.debug("clerk refresh signed_out")
+            #endif
         }
         #else
         state = .unavailable("ClerkKit is not linked.")
+        #if DEBUG
+        WanderDebugLog.remote.error("clerk refresh unavailable reason=clerkkit_not_linked")
+        #endif
         #endif
     }
 
@@ -85,16 +97,38 @@ final class ClerkAuthService: AuthSessionProviding {
     func supabaseAccessToken() async throws -> String {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
+            #if DEBUG
+            WanderDebugLog.remote.error("clerk supabase token skipped reason=missing_publishable_key")
+            #endif
             throw AuthSessionError.notConfigured
         }
         guard Clerk.shared.user != nil else {
+            #if DEBUG
+            WanderDebugLog.remote.error("clerk supabase token skipped reason=no_current_user")
+            #endif
             throw AuthSessionError.notSignedIn
         }
-        guard let token = try await Clerk.shared.auth.getToken() else {
-            throw AuthSessionError.tokenUnavailable
+        do {
+            guard let token = try await Clerk.shared.auth.getToken() else {
+                #if DEBUG
+                WanderDebugLog.remote.error("clerk supabase token failed reason=nil_token")
+                #endif
+                throw AuthSessionError.tokenUnavailable
+            }
+            #if DEBUG
+            WanderDebugLog.remote.debug("clerk supabase token succeeded")
+            #endif
+            return token
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("clerk supabase token failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
+            throw error
         }
-        return token
         #else
+        #if DEBUG
+        WanderDebugLog.remote.error("clerk supabase token unavailable reason=clerkkit_not_linked")
+        #endif
         throw AuthSessionError.notConfigured
         #endif
     }
