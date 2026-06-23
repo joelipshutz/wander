@@ -94,7 +94,7 @@ struct ProfileScreen: View {
             } label: {
                 StatTile(value: "\(store.stats.been)", label: "BEEN", color: WanderTheme.terracotta.color, fill: WanderTheme.terracottaTint.color)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileStatButtonStyle())
             .accessibilityLabel("Open been places")
 
             Button {
@@ -102,7 +102,7 @@ struct ProfileScreen: View {
             } label: {
                 StatTile(value: "\(store.stats.wanna)", label: "WANNA", color: WanderTheme.stateWarning.color, fill: WanderTheme.sunTint.color)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileStatButtonStyle())
             .accessibilityLabel("Open wanna places")
         }
     }
@@ -406,6 +406,8 @@ private struct SavedPlacesListScreen: View {
     @State private var query = ""
     @State private var selectedCategory: String?
     @State private var selectedMetadataTag: String?
+    @State private var isAddingMetadataTag = false
+    @State private var newMetadataTag = ""
 
     private var places: [VisiblePlace] {
         store.currentUserVisiblePlaces
@@ -427,7 +429,9 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var metadataTags: [String] {
-        Array(Set(allModePlaces.flatMap(metadataTags(for:)))).sorted()
+        ProfileMetadataTagParser.uniqueTags(
+            allModePlaces.flatMap(metadataTags(for:)) + store.profileFilterTags(for: mode.status)
+        )
     }
 
     var body: some View {
@@ -435,7 +439,10 @@ private struct SavedPlacesListScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 searchField
                 filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                filterSection(title: "tags", values: metadataTags, selectedValue: $selectedMetadataTag)
+                filterSection(title: "tags", values: metadataTags, selectedValue: $selectedMetadataTag) {
+                    newMetadataTag = ""
+                    isAddingMetadataTag = true
+                }
 
                 if places.isEmpty {
                     SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
@@ -451,6 +458,21 @@ private struct SavedPlacesListScreen: View {
         .wanderScreen()
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("add tag filter", isPresented: $isAddingMetadataTag) {
+            TextField("filter name", text: $newMetadataTag)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("add") {
+                if let tag = store.addProfileFilterTag(newMetadataTag, for: mode.status) {
+                    selectedMetadataTag = tag
+                }
+                newMetadataTag = ""
+            }
+            .disabled(newMetadataTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("cancel", role: .cancel) {
+                newMetadataTag = ""
+            }
+        }
     }
 
     private var searchField: some View {
@@ -467,7 +489,12 @@ private struct SavedPlacesListScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
     }
 
-    private func filterSection(title: String, values: [String], selectedValue: Binding<String?>) -> some View {
+    private func filterSection(
+        title: String,
+        values: [String],
+        selectedValue: Binding<String?>,
+        addAction: (() -> Void)? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
                 .font(.system(size: 13, weight: .bold))
@@ -489,6 +516,20 @@ private struct SavedPlacesListScreen: View {
                             WanderChip(title: value, isSelected: selectedValue.wrappedValue == value)
                         }
                         .buttonStyle(.plain)
+                    }
+
+                    if let addAction {
+                        Button(action: addAction) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .black))
+                                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                                .background(WanderTheme.surfaceSand.color)
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(WanderTheme.borderHairline.color.opacity(0.7), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add tag filter")
                     }
                 }
             }
@@ -533,19 +574,28 @@ enum ProfileMetadataTagParser {
         else { return [] }
 
         if let string = value as? String {
-            return cleanedTags([string])
+            return uniqueTags([string])
         }
         if let strings = value as? [String] {
-            return cleanedTags(strings)
+            return uniqueTags(strings)
         }
         return []
     }
 
-    private static func cleanedTags(_ tags: [String]) -> [String] {
-        tags.compactMap { tag in
+    static func uniqueTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var unique: [String] = []
+
+        for tag in tags {
             let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            unique.append(trimmed)
         }
+
+        return unique.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }
 
@@ -682,17 +732,44 @@ private struct StatTile: View {
     let fill: Color
 
     var body: some View {
-        VStack(spacing: WanderTheme.spacing1) {
-            Text(value)
-                .font(.system(size: 26, weight: .black))
-                .foregroundStyle(color)
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                Text(value)
+                    .font(.system(size: 28, weight: .black))
+                    .foregroundStyle(color)
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .black))
+                    .frame(width: 28, height: 28)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.85))
+                    .foregroundStyle(color)
+                    .clipShape(Circle())
+            }
+
             Text(label)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
+        .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: 72)
         .background(fill)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(color.opacity(0.28), lineWidth: 1.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private struct ProfileStatButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

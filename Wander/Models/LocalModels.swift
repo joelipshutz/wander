@@ -11,6 +11,7 @@ final class LocalProfile {
     var avatarURL: String?
     var bio: String?
     var homeArea: String?
+    var metadataJSON: String?
     var defaultVisibilityRaw: String
     var syncStateRaw: String
     var localUpdatedAt: Date
@@ -28,6 +29,7 @@ final class LocalProfile {
         avatarURL: String? = nil,
         bio: String? = nil,
         homeArea: String? = nil,
+        metadataJSON: String? = nil,
         defaultVisibility: PlaceVisibility = .followers,
         syncState: SyncState = .localOnly,
         localUpdatedAt: Date = .now,
@@ -45,6 +47,7 @@ final class LocalProfile {
         self.avatarURL = avatarURL
         self.bio = bio
         self.homeArea = homeArea
+        self.metadataJSON = metadataJSON
         self.defaultVisibilityRaw = defaultVisibility.rawValue
         self.syncStateRaw = syncState.rawValue
         self.localUpdatedAt = localUpdatedAt

@@ -51,6 +51,14 @@ struct SmartFilter: Identifiable, Equatable {
     let query: String
 }
 
+private struct ProfileMetadata: Codable, Equatable {
+    var profileFilters: [String: [String]] = [:]
+
+    enum CodingKeys: String, CodingKey {
+        case profileFilters = "profile_filters"
+    }
+}
+
 @MainActor
 final class WanderStore: ObservableObject {
     @Published private(set) var currentUser: LocalProfile
@@ -95,6 +103,11 @@ final class WanderStore: ObservableObject {
         SmartFilter(id: "coffee-work", title: "coffee to work from", query: "coffee work friendly"),
         SmartFilter(id: "patio-bars", title: "patio bars", query: "bars patio"),
         SmartFilter(id: "friends-liked", title: "friends liked", query: "friends been")
+    ]
+
+    private static let defaultProfileFilters: [PlaceStatus: [String]] = [
+        .been: ["worth it", "easy", "cozy", "bring friends", "date night", "workable", "patio", "views"],
+        .wannaGo: ["date night", "bring friends", "patio", "cozy", "workable", "weekend", "nearby", "special occasion"]
     ]
 
     init(
@@ -177,6 +190,36 @@ final class WanderStore: ObservableObject {
 
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
+    }
+
+    func profileFilterTags(for status: PlaceStatus) -> [String] {
+        let defaults = Self.defaultProfileFilters[status] ?? []
+        let metadata = currentProfileMetadata()
+        let custom = metadata.profileFilters[status.rawValue] ?? []
+        return Self.uniquedProfileFilterTags(defaults + custom)
+    }
+
+    @discardableResult
+    func addProfileFilterTag(_ rawTag: String, for status: PlaceStatus) -> String? {
+        guard let tag = Self.cleanedProfileFilterTag(rawTag) else { return nil }
+        guard !profileFilterTags(for: status).contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else {
+            return nil
+        }
+
+        var metadata = currentProfileMetadata()
+        metadata.profileFilters[status.rawValue, default: []].append(tag)
+
+        objectWillChange.send()
+        currentUser.metadataJSON = encodedProfileMetadata(metadata)
+        currentUser.updatedAt = .now
+        currentUser.localUpdatedAt = .now
+        if let profile = profiles.first(where: { $0.localID == currentUser.localID || $0.id == currentUser.id }) {
+            profile.metadataJSON = currentUser.metadataJSON
+            profile.updatedAt = currentUser.updatedAt
+            profile.localUpdatedAt = currentUser.localUpdatedAt
+        }
+        persist()
+        return tag
     }
 
     func visiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
@@ -1986,6 +2029,46 @@ final class WanderStore: ObservableObject {
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func currentProfileMetadata() -> ProfileMetadata {
+        guard let metadataJSON = currentUser.metadataJSON,
+              let data = metadataJSON.data(using: .utf8),
+              let metadata = try? JSONDecoder().decode(ProfileMetadata.self, from: data)
+        else { return ProfileMetadata() }
+
+        return metadata
+    }
+
+    private func encodedProfileMetadata(_ metadata: ProfileMetadata) -> String {
+        guard let data = try? JSONEncoder().encode(metadata),
+              let json = String(data: data, encoding: .utf8)
+        else { return "{}" }
+
+        return json
+    }
+
+    private static func uniquedProfileFilterTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for tag in tags {
+            guard let cleaned = cleanedProfileFilterTag(tag) else { continue }
+            let key = cleaned.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(cleaned)
+        }
+
+        return result
+    }
+
+    private static func cleanedProfileFilterTag(_ tag: String) -> String? {
+        let cleaned = tag
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(32))
     }
 
     private func normalizedSourceInput(originalInput: String?, localAssetRef: String?) -> String {

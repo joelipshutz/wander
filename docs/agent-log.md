@@ -4550,3 +4550,61 @@ Merge outcome:
 - No TestFlight build bump/archive/upload was started yet because the requested logging build would no-op without a real rec.me/Wander `WANDER_POSTHOG_PROJECT_TOKEN`.
 - Keep REC-18 in `In Review` until a token is configured and the next TestFlight build is uploaded/approved.
 - Next action: create/provide the rec.me/Wander PostHog project token, add it to local private config for archive builds, then bump to build 38 and run the normal TestFlight release workflow.
+
+## 2026-06-23 10:55 PDT - Codex - REC-15/REC-16 Profile Filters PR
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch from `origin/main` at `2615d08`; root checkout `/Users/ryanlieblein/Developer/wander` is `main` behind latest `origin/main` and intentionally left untouched.
+
+Linear issues:
+
+- `REC-15` - Add more profile filters and save them in user metadata
+- `REC-16` - Make "Been" and "Wanna" on the profile tab look clickable
+
+Goal: implement both profile-surface backlog items together, open a PR for simulator testing, and leave merge/TestFlight release for after Ryan verifies the simulator.
+
+Initial notes:
+
+- Moved both Linear issues from `Backlog` to `In Progress` and assigned them to Ryan.
+- Both issues originate from Slack-linked feedback in `#testflight-feedback`, with no additional requirements beyond the Linear descriptions.
+- Scope should stay in the profile UI and local user metadata persistence; avoid unrelated map/add/sync changes.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Models/LocalModels.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Inspect current profile filter implementation and local metadata model.
+- Add focused tests for metadata persistence / profile filter behavior.
+- Run `git diff --check`, focused tests, and the relevant simulator build/test gate before opening a draft PR.
+
+Checkpoint / implementation:
+
+- Added `metadataJSON` to `LocalProfile` and snapshot persistence so local profile metadata can survive relaunches without introducing a remote contract yet.
+- Added default Been/Wanna profile filter tags plus local custom tag storage under `profile_filters` in the current user's metadata.
+- Added the plus control to the profile Been/Wanna tag filter row; new tags are cleaned, de-duped case-insensitively, persisted, and selected after creation.
+- Updated the Been/Wanna stat tiles to read as tappable buttons with a chevron affordance, border, and pressed state.
+- Added tests for profile metadata tag persistence and tag parsing de-dupe behavior.
+
+Validation:
+
+- `git diff --check` passed.
+- First test attempt using the documented `iPhone 16 Plus,OS=18.6` destination could not run because this machine only has iOS 26.5 simulator runtimes available.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/ProfileMetadataTagParserTests -only-testing:WanderTests/WanderStoreTests/testProfileFilterTagsPersistInCurrentUserMetadata`
+  Result: `2` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `133` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- PR is intended for Ryan simulator testing before merge.
+- Selecting a newly created tag can temporarily show no matching places until a place has that tag; this matches the current filter semantics.

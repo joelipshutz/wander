@@ -351,6 +351,24 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags", "rating_signal"])
     }
 
+    func testProfileFilterTagsPersistInCurrentUserMetadata() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertTrue(firstStore.profileFilterTags(for: .been).contains("worth it"))
+        XCTAssertNil(firstStore.addProfileFilterTag("   ", for: .been))
+        XCTAssertEqual(firstStore.addProfileFilterTag("  Rooftop   dinner  ", for: .wannaGo), "Rooftop dinner")
+        XCTAssertNil(firstStore.addProfileFilterTag("rooftop dinner", for: .wannaGo))
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertTrue(relaunchedStore.profileFilterTags(for: .wannaGo).contains("Rooftop dinner"))
+        XCTAssertFalse(relaunchedStore.profileFilterTags(for: .been).contains("Rooftop dinner"))
+        XCTAssertTrue(relaunchedStore.currentUser.metadataJSON?.contains("profile_filters") == true)
+    }
+
     func testFilePersistenceRestoresDraftsAndSocialGraphAfterRelaunch() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
