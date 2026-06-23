@@ -4517,3 +4517,36 @@ Handoff:
 
 - Committed implementation as `04b8dc8c` (`feat: add PostHog sync diagnostics`) and opened PR #25: https://github.com/joelipshutz/wander/pull/25.
 - Commented `REC-18`, attached the PR, and moved the issue to In Review.
+
+## 2026-06-23 10:49 PDT - Codex Automation - PR #25 Logging Merge
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+
+Goal: Joe asked to merge the logging PR. Ran the shared `recme-pr-review-merge-release` workflow against PR #25, `Add PostHog saved-place sync diagnostics`.
+
+Review outcome:
+
+- PR #25 was the only open PR targeting `main`.
+- Applied the engineering review gate because the change adds an external analytics SDK and saved-place sync diagnostics.
+- No blocking code findings: analytics uses the existing vendor-neutral `AnalyticsClient`, identifies only by internal auth user id, disables PostHog screen capture/element capture/session replay/surveys, and tracks count/enum/coarse-error diagnostics without place names, notes, coordinates, emails, or handles.
+- Release blocker found: `/Users/joelipshutz/.openclaw/workspace/.env.keys` does not currently define `WANDER_POSTHOG_PROJECT_TOKEN`. It does define a Coupley PostHog token, but that must not be reused for rec.me.
+
+Validation:
+
+- `git diff --check origin/main...HEAD` passed.
+- First sandboxed focused test attempt failed before app code due CoreSimulator and SwiftPM network restrictions; reran elevated.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-posthog-review CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/BuildConfigurationTests -only-testing:WanderTests/WanderStoreTests/testAuthStateIdentifiesAnalyticsWithInternalUserIDOnly -only-testing:WanderTests/WanderStoreTests/testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesTracksZeroCandidateBackfillBatch -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesTracksBackfillBatchCounts`
+  Result: `13` tests, `0` failures.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-posthog-review CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures.
+
+Merge outcome:
+
+- Squash-merged PR #25 to `main`: `828f18ce` (`Add PostHog saved-place sync diagnostics (#25)`).
+- No TestFlight build bump/archive/upload was started yet because the requested logging build would no-op without a real rec.me/Wander `WANDER_POSTHOG_PROJECT_TOKEN`.
+- Keep REC-18 in `In Review` until a token is configured and the next TestFlight build is uploaded/approved.
+- Next action: create/provide the rec.me/Wander PostHog project token, add it to local private config for archive builds, then bump to build 38 and run the normal TestFlight release workflow.
