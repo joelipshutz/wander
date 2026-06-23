@@ -4550,3 +4550,47 @@ Merge outcome:
 - No TestFlight build bump/archive/upload was started yet because the requested logging build would no-op without a real rec.me/Wander `WANDER_POSTHOG_PROJECT_TOKEN`.
 - Keep REC-18 in `In Review` until a token is configured and the next TestFlight build is uploaded/approved.
 - Next action: create/provide the rec.me/Wander PostHog project token, add it to local private config for archive builds, then bump to build 38 and run the normal TestFlight release workflow.
+
+## 2026-06-23 11:25 PDT - Codex Automation - Build 38 TestFlight Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+
+Goal: Joe added the rec.me/Wander PostHog token to the local env and asked to finish the TestFlight build for the logging PR.
+
+Outcome:
+
+- Created ignored local archive config `Wander/Config/LocalAuth.xcconfig` from `/Users/joelipshutz/.openclaw/workspace/.env.keys` with `WANDER_POSTHOG_PROJECT_TOKEN` and `WANDER_POSTHOG_HOST`.
+- Corrected the xcconfig host escaping to `https:/$()/us.i.posthog.com`; unescaped `https://...` was parsed as an xcconfig comment and produced an invalid resolved host.
+- Bumped `CURRENT_PROJECT_VERSION` to build `38` in `project.yml`, regenerated `Wander.xcodeproj`, committed `66e0814b` (`chore: bump testflight build 38`), and pushed to `origin/main`.
+- Verified the archived app resolves `WANDER_POSTHOG_HOST` to `https://us.i.posthog.com` and contains a non-empty PostHog token without printing the token.
+
+Validation:
+
+- Simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build38 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build38 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures.
+- Rebuilt after the host escaping correction and rechecked the processed app Info.plist.
+
+Release:
+
+- First archive attempt failed because `/private/tmp` ran out of disk space while writing Xcode activity logs; removed only generated local build artifacts and retried.
+- Archive succeeded:
+  `/private/tmp/Wander-0.1-build38.xcarchive`
+- Export/upload succeeded:
+  `/private/tmp/WanderTestFlightUpload38`
+- Ran `node scripts/testflight-release.mjs --build-number 38 --timeout-attempts 40 --poll-seconds 30`.
+  - Build id: `ad1286e4-d8b5-4f9e-80cd-45fc8f7ce396`
+  - Processing state: `VALID`
+  - Export compliance set to `usesNonExemptEncryption=false`
+  - Attached to `Wander Alpha`
+  - External TestFlight review state: `APPROVED`
+- Posted tester Slack note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782238965199909
+
+Known issues / next steps:
+
+- Build 38 is the logging/diagnostics TestFlight build for REC-18; it improves observability for saved-place force-quit/save reports rather than claiming every saved-place edge case is fixed.
+- Local generated archive/build output remains untracked and should not be committed.
