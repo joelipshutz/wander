@@ -4551,6 +4551,167 @@ Merge outcome:
 - Keep REC-18 in `In Review` until a token is configured and the next TestFlight build is uploaded/approved.
 - Next action: create/provide the rec.me/Wander PostHog project token, add it to local private config for archive builds, then bump to build 38 and run the normal TestFlight release workflow.
 
+## 2026-06-23 11:25 PDT - Codex Automation - Build 38 TestFlight Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+
+Goal: Joe added the rec.me/Wander PostHog token to the local env and asked to finish the TestFlight build for the logging PR.
+
+Outcome:
+
+- Created ignored local archive config `Wander/Config/LocalAuth.xcconfig` from `/Users/joelipshutz/.openclaw/workspace/.env.keys` with `WANDER_POSTHOG_PROJECT_TOKEN` and `WANDER_POSTHOG_HOST`.
+- Corrected the xcconfig host escaping to `https:/$()/us.i.posthog.com`; unescaped `https://...` was parsed as an xcconfig comment and produced an invalid resolved host.
+- Bumped `CURRENT_PROJECT_VERSION` to build `38` in `project.yml`, regenerated `Wander.xcodeproj`, committed `66e0814b` (`chore: bump testflight build 38`), and pushed to `origin/main`.
+- Verified the archived app resolves `WANDER_POSTHOG_HOST` to `https://us.i.posthog.com` and contains a non-empty PostHog token without printing the token.
+
+Validation:
+
+- Simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData-build38 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build38 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures.
+- Rebuilt after the host escaping correction and rechecked the processed app Info.plist.
+
+Release:
+
+- First archive attempt failed because `/private/tmp` ran out of disk space while writing Xcode activity logs; removed only generated local build artifacts and retried.
+- Archive succeeded:
+  `/private/tmp/Wander-0.1-build38.xcarchive`
+- Export/upload succeeded:
+  `/private/tmp/WanderTestFlightUpload38`
+- Ran `node scripts/testflight-release.mjs --build-number 38 --timeout-attempts 40 --poll-seconds 30`.
+  - Build id: `ad1286e4-d8b5-4f9e-80cd-45fc8f7ce396`
+  - Processing state: `VALID`
+  - Export compliance set to `usesNonExemptEncryption=false`
+  - Attached to `Wander Alpha`
+  - External TestFlight review state: `APPROVED`
+- Posted tester Slack note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782238965199909
+- Moved Linear `REC-18` to `Done`. A detailed Linear release comment was rejected by the safety reviewer, so no Linear comment was posted.
+
+Known issues / next steps:
+
+- Build 38 is the logging/diagnostics TestFlight build for REC-18; it improves observability for saved-place force-quit/save reports rather than claiming every saved-place edge case is fixed.
+- Local generated archive/build output remains untracked and should not be committed.
+
+## 2026-06-23 11:30 PDT - Codex - Local Sync Console Debug Logs
+
+Agent: Codex
+Branch: `codex/sync-debug-logs`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+
+Goal: add local Xcode console logs for the saved-place backup failure so Joe can test on device without another TestFlight build.
+
+Context:
+
+- Joe pasted Xcode logs showing PostHog was trying to call invalid hosts like `https://array/...` and `https://batch/?`; root cause was local `WANDER_POSTHOG_HOST = https://...` in `.xcconfig`, where `//` was parsed as a comment. Local config was corrected to `https:/$()/us.i.posthog.com` and verified with `xcodebuild -showBuildSettings`.
+- The same pasted logs showed Clerk token fetch failure: `401 authentication_invalid`, "Unable to authenticate the request, you need to supply an active session." That likely explains why Supabase `save_own_place` cannot run.
+- Engineering gate outcome: diagnostic-only branch, no auth/sync behavior change, no schema changes, no TestFlight release. Logs should be `DEBUG`-only and avoid place names, notes, coordinates, emails, and handles.
+
+Expected files:
+
+- `Wander/Services/WanderDebugLog.swift`
+- `Wander/App/WanderRootView.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `Wander/Services/Auth/AuthSessionProviding.swift`
+- `Wander/Services/Auth/ClerkAuthService.swift`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Run `xcodegen generate`.
+- Run `git diff --check`.
+- Run a simulator build with `CODE_SIGNING_ALLOWED=NO`.
+
+Update 2026-06-23 11:51 PDT:
+
+- Added the DEBUG-only sync/auth/remote logs and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+- `git diff --check` passed.
+- Started local simulator build validation, but stopped it at Joe's request while Xcode was still compiling Swift package dependencies. No app-code compile failure was reached; no TestFlight build/archive/upload was started.
+- Local test handoff: use branch `codex/sync-debug-logs`, open `Wander.xcodeproj`, run the `Wander` scheme on an iPhone simulator, then filter the Xcode console for `WanderSync` and `WanderRemote` while signing in, saving a place, force-quitting, and reopening.
+- Fixed the Xcode compile error in `AuthSessionProviding.swift` by making the DEBUG log closures explicitly reference `self.state`.
+
+Update 2026-06-23 12:04 PDT:
+
+- Joe's local Xcode logs showed the UI could look signed in while Clerk initially reported `signed_out`; after signing in again, Clerk token minting succeeded and authenticated read RPCs succeeded.
+- The actual save blocker is server-side: `save_own_place` returns 403 with `new row violates row-level security policy for table "places"`.
+- Added hosted migration `20260623120000_fix_save_own_place_rls.sql` to run the controlled `app.save_own_place` RPC as `security definer` with fixed `search_path`, preserving execute access for `authenticated` only.
+- Added targeted SQL regression `supabase/tests/save_own_place.sql` covering initial own-place save and same canonical place upsert.
+- Applied the migration to the linked hosted Supabase project with `npx supabase db push --linked`.
+- Could not run the SQL regression locally via `psql` because `psql` is not installed; did not install new tooling. Next validation is Joe's simulator logs: rerun local app, save/retry sync, and confirm `save_own_place` changes from 403 to success.
+
+Update 2026-06-23 12:11 PDT:
+
+- Joe reran the local Xcode build after the hosted migration.
+- Logs confirmed Clerk signed in, Supabase token minting succeeded, and the signed-in backfill had no remaining candidates: `states=synced=15`.
+- Manual direct save succeeded remotely: `rpc success name=save_own_place status=200` followed by `direct save remote success`.
+- Remaining `NSURLErrorDomain Code=-999 "cancelled"` read RPC logs appear to be cancelled refresh/navigation requests, not the save/backfill blocker.
+
+Update 2026-06-23 12:43 PDT:
+
+- Joe approved merging this fix for TestFlight.
+- Rechecked open PRs targeting `main`; only unrelated draft PR `#26` is open.
+- Release review outcome: branch is scoped to DEBUG-only local sync/auth/remote logging plus the hosted `app.save_own_place` RPC security-definer migration. The RPC remains limited to `authenticated`, uses fixed `search_path`, and continues scoping writes through `app.current_user_id()` rather than caller-supplied user ids.
+- `git diff --check` passed.
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-sync-debug-logs CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures.
+- SQL regression `supabase/tests/save_own_place.sql` is committed for future Supabase test runs; local `psql` was not installed, so this was not run locally. Hosted migration was already applied and validated through Joe's local save logs.
+
+## 2026-06-23 12:48 PDT - Codex - TestFlight Build 39 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-sync-posthog-diagnostics`
+
+Goal: ship the own-place sync unblock fix to TestFlight after merging PR `#27`.
+
+Context:
+
+- PR `#27` (`fix: unblock own place sync`) was squash-merged into `main` at `03f70d244aeb5852438a23a9f47bd8cd62dabb8b`.
+- This release includes the hosted `app.save_own_place` RLS migration, DEBUG-only local diagnostics, and the SQL regression for future Supabase test runs.
+- Bumped `CURRENT_PROJECT_VERSION` from `38` to `39` in `project.yml` and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+
+Planned validation/release:
+
+- Run `git diff --check`.
+- Run simulator build/test for build `39`.
+- Archive and upload build `39`, run `scripts/testflight-release.mjs`, then post tester Slack notes.
+
+Update 2026-06-23 12:51 PDT:
+
+- `git diff --check` passed after the build bump.
+- Full simulator suite for build `39` exited successfully:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-build39 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Test result bundle:
+  `DerivedData-build39/Logs/Test/Test-Wander-2026.06.23_12-47-04--0700.xcresult`
+
+Release outcome:
+
+- Build bump commit pushed to `main`: `7a7c8dc6` (`chore: bump TestFlight build 39`).
+- Initial account-based export failed with Xcode `Failed to Use Accounts`; retried export/upload with the private App Store Connect API key from `/Users/joelipshutz/.openclaw/workspace/.env.keys`.
+- Archive succeeded:
+  `/private/tmp/Wander-0.1-build39.xcarchive`
+- Export/upload succeeded:
+  `/private/tmp/WanderTestFlightUpload39`
+- Ran `node scripts/testflight-release.mjs --build-number 39 --timeout-attempts 40 --poll-seconds 30 --env /Users/joelipshutz/.openclaw/workspace/.env.keys`.
+  - Build id: `c88c94a4-e8d8-4a85-8266-f93bddb48183`
+  - Processing state: `VALID`
+  - Export compliance set to `usesNonExemptEncryption=false`
+  - Attached to `Wander Alpha`
+  - External TestFlight review state: `APPROVED`
+- Posted tester Slack note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782244652989609
+- Added build 39 follow-up comment to Linear `REC-18`.
+
+Known issues / next steps:
+
+- Ryan's backend account still had 0 synced saved places before build 39; he should install/open build 39 and save a new place to verify fresh sync.
+- Build 39 fixes the backend own-place save blocker, but any remaining UI-only saved-state/color issue should stay tracked separately under `REC-17`.
+- This release-log update is docs-only and does not require another build-number bump.
 ## 2026-06-23 10:55 PDT - Codex - REC-15/REC-16 Profile Filters PR
 
 Agent: Codex

@@ -145,10 +145,19 @@ final class WanderStore: ObservableObject {
         case .signedIn(let session):
             apply(session: session)
             analytics.identify(userID: session.userID)
+            #if DEBUG
+            WanderDebugLog.sync.debug("store auth signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
+            #endif
         case .signedOut, .unavailable:
             applySignedOutProfile()
             analytics.resetIdentity()
+            #if DEBUG
+            WanderDebugLog.sync.debug("store auth signed_out_or_unavailable pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
+            #endif
         case .loading:
+            #if DEBUG
+            WanderDebugLog.sync.debug("store auth loading pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
+            #endif
             break
         }
     }
@@ -517,6 +526,9 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {
+        #if DEBUG
+        WanderDebugLog.sync.debug("direct save requested source=\(sourceType.rawValue, privacy: .public) status=\(status.rawValue, privacy: .public) visibility=\(visibility.rawValue, privacy: .public) category=\(candidate.category, privacy: .public) backend_available=\((backend != nil), privacy: .public)")
+        #endif
         let localResult = saveCandidate(
             candidate,
             status: status,
@@ -525,12 +537,21 @@ final class WanderStore: ObservableObject {
             sourceType: sourceType,
             attributes: attributes
         )
+        #if DEBUG
+        WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
+        #endif
 
         guard let backend else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("direct save skipped remote reason=missing_backend user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
+            #endif
             return localResult
         }
 
         guard let draft = userPlaceDraft(for: localResult.userPlaceID) else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("direct save skipped remote reason=missing_draft user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
+            #endif
             return localResult
         }
 
@@ -543,6 +564,9 @@ final class WanderStore: ObservableObject {
             name: WanderAnalyticsEvents.ownPlaceSyncAttempted,
             properties: syncProperties
         )
+        #if DEBUG
+        WanderDebugLog.sync.debug("direct save remote attempt user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) place_has_server_id=\((draft.place.serverID != nil), privacy: .public) attribute_count=\(draft.attributes.count, privacy: .public)")
+        #endif
 
         do {
             let remoteResult = try await backend.saveUserPlace(draft)
@@ -555,6 +579,9 @@ final class WanderStore: ObservableObject {
                 name: WanderAnalyticsEvents.ownPlaceSyncSucceeded,
                 properties: syncProperties
             )
+            #if DEBUG
+            WanderDebugLog.sync.debug("direct save remote success local_user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) remote_user_place=\(WanderDebugLog.shortID(remoteResult.userPlaceID), privacy: .public) remote_place=\(WanderDebugLog.shortID(remoteResult.placeID), privacy: .public)")
+            #endif
             await refreshRemoteVisiblePlaces(backend: backend)
             return remoteResult
         } catch {
@@ -565,6 +592,9 @@ final class WanderStore: ObservableObject {
                 name: WanderAnalyticsEvents.ownPlaceSyncFailed,
                 properties: syncProperties.merging(["error_kind": remoteErrorKind(error)]) { _, new in new }
             )
+            #if DEBUG
+            WanderDebugLog.sync.error("direct save remote failed user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(message), privacy: .public)")
+            #endif
             return SaveResult(userPlaceID: localResult.userPlaceID, syncState: .failed)
         }
     }
@@ -667,12 +697,18 @@ final class WanderStore: ObservableObject {
     func retryFailedOwnPlaceSyncs(backend: WanderBackend?) async -> Int {
         guard let backend else {
             trackOwnPlaceSyncBatchSkipped(trigger: .failedRetry, reason: "missing_backend")
+            #if DEBUG
+            WanderDebugLog.sync.debug("failed retry skipped reason=missing_backend")
+            #endif
             return 0
         }
 
         let retryableIDs = syncableOwnPlaceIDs { syncState in
             syncState == .failed
         }
+        #if DEBUG
+        WanderDebugLog.sync.debug("failed retry candidates count=\(retryableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
+        #endif
         return await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
     }
 
@@ -680,6 +716,9 @@ final class WanderStore: ObservableObject {
     func syncUnsyncedOwnPlaces(backend: WanderBackend?) async -> Int {
         guard let backend else {
             trackOwnPlaceSyncBatchSkipped(trigger: .signedInBackfill, reason: "missing_backend")
+            #if DEBUG
+            WanderDebugLog.sync.debug("signed-in backfill skipped reason=missing_backend states=\(self.syncCandidateStateSummary(), privacy: .public)")
+            #endif
             return 0
         }
 
@@ -689,6 +728,9 @@ final class WanderStore: ObservableObject {
                 && syncState != .serverDenied
                 && syncState != .tombstoned
         }
+        #if DEBUG
+        WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
+        #endif
         return await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
     }
 
@@ -704,6 +746,9 @@ final class WanderStore: ObservableObject {
                 "candidate_count": "\(userPlaceIDs.count)"
             ]
         )
+        #if DEBUG
+        WanderDebugLog.sync.debug("sync batch started trigger=\(trigger.rawValue, privacy: .public) candidate_count=\(userPlaceIDs.count, privacy: .public)")
+        #endif
 
         for userPlaceID in userPlaceIDs {
             switch await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend, trigger: trigger) {
@@ -726,6 +771,9 @@ final class WanderStore: ObservableObject {
                 "skipped_count": "\(skippedCount)"
             ]
         )
+        #if DEBUG
+        WanderDebugLog.sync.debug("sync batch completed trigger=\(trigger.rawValue, privacy: .public) synced=\(syncedCount, privacy: .public) failed=\(failedCount, privacy: .public) skipped=\(skippedCount, privacy: .public)")
+        #endif
 
         return syncedCount
     }
@@ -1556,6 +1604,9 @@ final class WanderStore: ObservableObject {
                     "reason": "missing_draft"
                 ]
             )
+            #if DEBUG
+            WanderDebugLog.sync.debug("own-place sync skipped trigger=\(trigger.rawValue, privacy: .public) reason=missing_draft user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public)")
+            #endif
             return .skipped
         }
 
@@ -1564,6 +1615,9 @@ final class WanderStore: ObservableObject {
             name: WanderAnalyticsEvents.ownPlaceSyncAttempted,
             properties: syncProperties
         )
+        #if DEBUG
+        WanderDebugLog.sync.debug("own-place sync attempt trigger=\(trigger.rawValue, privacy: .public) user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) place_has_server_id=\((draft.place.serverID != nil), privacy: .public) attribute_count=\(draft.attributes.count, privacy: .public)")
+        #endif
 
         markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
         do {
@@ -1577,6 +1631,9 @@ final class WanderStore: ObservableObject {
                 name: WanderAnalyticsEvents.ownPlaceSyncSucceeded,
                 properties: syncProperties
             )
+            #if DEBUG
+            WanderDebugLog.sync.debug("own-place sync success trigger=\(trigger.rawValue, privacy: .public) local_user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) remote_user_place=\(WanderDebugLog.shortID(remoteResult.userPlaceID), privacy: .public) remote_place=\(WanderDebugLog.shortID(remoteResult.placeID), privacy: .public)")
+            #endif
             await refreshRemoteVisiblePlaces(backend: backend)
             return .succeeded
         } catch {
@@ -1587,6 +1644,9 @@ final class WanderStore: ObservableObject {
                 name: WanderAnalyticsEvents.ownPlaceSyncFailed,
                 properties: syncProperties.merging(["error_kind": remoteErrorKind(error)]) { _, new in new }
             )
+            #if DEBUG
+            WanderDebugLog.sync.error("own-place sync failed trigger=\(trigger.rawValue, privacy: .public) user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(message), privacy: .public)")
+            #endif
             return .failed
         }
     }
@@ -1603,6 +1663,24 @@ final class WanderStore: ObservableObject {
 
     private func trackOwnPlaceSyncEvent(name: String, properties: [String: String]) {
         analytics.track(AnalyticsEvent(name: name, properties: properties))
+    }
+
+    private func syncCandidateStateSummary() -> String {
+        let counts = userPlaces
+            .filter { userPlace in
+                userPlace.userID == currentUser.id
+                    && userPlace.deletedAt == nil
+                    && userPlace.sourceType != AddSourceType.socialSave.rawValue
+            }
+            .reduce(into: [String: Int]()) { counts, userPlace in
+                counts[userPlace.syncState.rawValue, default: 0] += 1
+            }
+
+        guard !counts.isEmpty else { return "none" }
+        return counts
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
     }
 
     private func ownPlaceSyncProperties(

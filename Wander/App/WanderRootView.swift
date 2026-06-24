@@ -91,13 +91,32 @@ struct WanderRootView: View {
     }
 
     private func applyAuthStateIfNeeded(_ state: AuthState) {
-        guard fixtureMode == .empty else { return }
+        guard fixtureMode == .empty else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("auth apply skipped fixture_mode=\(String(describing: fixtureMode), privacy: .public)")
+            #endif
+            return
+        }
         store.apply(authState: state)
 
         if state.isSignedIn {
             Task {
-                await store.syncUnsyncedOwnPlaces(backend: backend)
+                #if DEBUG
+                if case .signedIn(let session) = state {
+                    WanderDebugLog.sync.debug("signed-in backfill trigger user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
+                } else {
+                    WanderDebugLog.sync.debug("signed-in backfill trigger remote=\(backend.canUseRemoteData, privacy: .public)")
+                }
+                #endif
+                let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
+                #if DEBUG
+                WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public)")
+                #endif
             }
+        } else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("auth state applied without backfill state=\(state.debugSummary, privacy: .public)")
+            #endif
         }
     }
 

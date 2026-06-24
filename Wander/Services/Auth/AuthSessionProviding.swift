@@ -12,6 +12,23 @@ enum AuthState: Equatable {
     }
 }
 
+#if DEBUG
+extension AuthState {
+    var debugSummary: String {
+        switch self {
+        case .signedOut:
+            return "signed_out"
+        case .loading:
+            return "loading"
+        case .signedIn(let session):
+            return "signed_in:\(WanderDebugLog.shortID(session.userID))"
+        case .unavailable:
+            return "unavailable"
+        }
+    }
+}
+#endif
+
 struct AuthSession: Equatable, Identifiable {
     let userID: String
     let displayName: String?
@@ -125,8 +142,14 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func refreshSession() async {
+        #if DEBUG
+        WanderDebugLog.remote.debug("auth store refresh start current_state=\(self.state.debugSummary, privacy: .public)")
+        #endif
         await provider.refreshSession()
         state = provider.state
+        #if DEBUG
+        WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
+        #endif
     }
 
     func requireSignIn(for intent: AuthGateIntent, action: () -> Void) {
@@ -155,7 +178,21 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func supabaseAccessToken() async throws -> String {
-        try await provider.supabaseAccessToken()
+        #if DEBUG
+        WanderDebugLog.remote.debug("auth store supabase token requested state=\(self.state.debugSummary, privacy: .public)")
+        #endif
+        do {
+            let token = try await provider.supabaseAccessToken()
+            #if DEBUG
+            WanderDebugLog.remote.debug("auth store supabase token succeeded")
+            #endif
+            return token
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("auth store supabase token failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
+            throw error
+        }
     }
 
     func signOut() async throws {
