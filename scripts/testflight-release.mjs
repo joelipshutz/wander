@@ -337,12 +337,11 @@ async function setExportCompliance(api, build) {
 
 async function getBetaBuildLocalization(api, buildId, locale) {
   const params = new URLSearchParams({
-    "filter[locale]": locale,
     "fields[betaBuildLocalizations]": "locale,whatsNew",
-    limit: "1",
+    limit: "200",
   });
   const body = await api(`/builds/${buildId}/betaBuildLocalizations?${params.toString()}`);
-  return body.data?.[0] ?? null;
+  return body.data?.find((localization) => localization.attributes?.locale === locale) ?? null;
 }
 
 async function setWhatToTest(api, build, locale, whatsNew) {

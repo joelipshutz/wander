@@ -4981,4 +4981,22 @@ Release implementation:
 - Elevated full simulator validation passed:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build40 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
-- Next: commit/push build `40` to `main`, archive/upload, run `scripts/testflight-release.mjs`, update Linear, and post Slack notes.
+- Committed and pushed build-number bump to `main`: `70729dcfd` (`chore: bump testflight build 40`).
+- Archived build `40` successfully:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build40.xcarchive -derivedDataPath /private/tmp/DerivedData-build40-archive -allowProvisioningUpdates ...`
+  Result: `** ARCHIVE SUCCEEDED **`.
+- Exported and uploaded build `40` successfully:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build40.xcarchive -exportPath /private/tmp/WanderTestFlightUpload40 -exportOptionsPlist /private/tmp/WanderExportUpload40.plist -allowProvisioningUpdates ...`
+  Result: `Uploaded Wander`, `** EXPORT SUCCEEDED **`.
+- First TestFlight helper run set export compliance but failed while updating "What to Test" because App Store Connect rejected `filter[locale]` on `/builds/{id}/betaBuildLocalizations`.
+- Patched `scripts/testflight-release.mjs` to fetch build localizations and filter by locale locally so future release helper runs can set "What to Test" copy.
+- Reran helper successfully:
+  `node scripts/testflight-release.mjs --build-number 40 --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build40-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`
+  Result: build `40` id `bb57c5da-77c3-42e7-8f34-0c9b274cefb4` is `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external TestFlight review `APPROVED`.
+- Linear: `REC-15` and `REC-16` were already `Done` from PR merge automation. Marked `REC-23` through `REC-29` `Done` and added release comments linking PR #26, build `40`, validation, and the public TestFlight link.
+- Slack: posted tester-facing build `40` release note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782285666503389
+
+Known issues / next steps:
+
+- Photo/link extraction remains tracked separately; this build focused on saved-place Profile/Map consistency.
+- Final housekeeping: commit and push this release log plus the TestFlight helper API compatibility patch to `main`. This is process-only and does not require another app build-number bump.
