@@ -4943,3 +4943,42 @@ Known issues / next steps:
 
 - Pushed implementation commit `dd55f82` to PR #26 for Ryan simulator testing.
 - Next step: Ryan should test the Been/Wanna profile list detail overlay, shared-place notes, marker rings, and `wanna` pill color in the simulator before squash-merge.
+
+## 2026-06-24 00:01 PDT - Codex - PR #26 Merge and Build 40 Release
+
+Agent: Codex
+Branch: `codex/pr26-merge-release`
+Worktree: `/private/tmp/recme-pr26-merge-release`
+Starting status: clean release worktree created from `origin/main`; fetched `origin`, read latest worktrees/status, and inspected recent `docs/agent-log.md` entries before release work. Root checkout remained on `main` and was not used for edits.
+
+Goal: after Ryan confirmed simulator testing passed, squash-merge PR #26 into `main`, increment the TestFlight build number, archive/upload a new build, run the TestFlight helper, update Linear, and post the usual Slack release note.
+
+Pre-merge checks:
+
+- PR #26 branch `codex/rec-15-16-profile-filters` was updated from latest `origin/main`.
+- Local merge simulation initially found only a `docs/agent-log.md` conflict; resolved by preserving current `origin/main` log content and appending the PR #26 entries.
+- Full elevated validation on the updated PR branch passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-after-main-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Re-ran `git merge-tree --write-tree origin/main origin/codex/rec-15-16-profile-filters`; result was clean with tree `3a919478922c6e9fbaf6ce354661106a9874e0e5`.
+- GitHub CLI auth was already valid for `ryanlane23`; no re-auth code was needed.
+
+Merge:
+
+- Marked PR #26 ready for review via `gh pr ready` because the GitHub connector could not transition draft state.
+- Squash-merged PR #26 with exact head guard `bf0f71bbe9ffeb79b0c1bfe17da68106a7c395d8`.
+- Merge commit on `main`: `814d41b58f7c8cb414e9fa4697f4e0bf1991a972`.
+- Fast-forwarded release worktree to `origin/main` after merge.
+
+Release implementation:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `39` to `40` in `project.yml`.
+- Regenerated `Wander.xcodeproj` with `xcodegen generate`; local generator attempted unrelated project-file churn, so the project file was restored to `origin/main` shape and only the intended `CURRENT_PROJECT_VERSION = 40` changes were kept.
+- `git diff --check` passed.
+- Elevated simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build40 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full simulator validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build40 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Next: commit/push build `40` to `main`, archive/upload, run `scripts/testflight-release.mjs`, update Linear, and post Slack notes.
