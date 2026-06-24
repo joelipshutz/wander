@@ -64,6 +64,26 @@ enum AddSourceType: String, Codable, CaseIterable, Equatable {
 }
 
 extension PlaceVisibility {
+    var normalizedForStealthMode: PlaceVisibility {
+        self == .selfOnly ? .selfOnly : .followers
+    }
+
+    var isStealthModeEnabled: Bool {
+        normalizedForStealthMode == .selfOnly
+    }
+
+    static func visibilityForStealthMode(isPrivate: Bool) -> PlaceVisibility {
+        isPrivate ? .selfOnly : .followers
+    }
+
+    var stealthModeHelperCopy: String {
+        if isStealthModeEnabled {
+            return "Private. Only you can see this place."
+        }
+
+        return "Not private. People who follow you can see it."
+    }
+
     var displayTitle: String {
         switch self {
         case .followers: "Everyone"

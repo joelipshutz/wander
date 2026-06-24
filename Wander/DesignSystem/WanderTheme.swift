@@ -158,6 +158,49 @@ struct PlaceVisibilityIconPill: View {
     }
 }
 
+struct PlaceVisibilityStealthToggle: View {
+    let title: String
+    @Binding var visibility: PlaceVisibility
+    var showsContainer = true
+
+    init(
+        title: String = "stealth mode",
+        visibility: Binding<PlaceVisibility>,
+        showsContainer: Bool = true
+    ) {
+        self.title = title
+        _visibility = visibility
+        self.showsContainer = showsContainer
+    }
+
+    var body: some View {
+        Toggle(isOn: isPrivate) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text(visibility.stealthModeHelperCopy)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(WanderTheme.textInk.color)
+        .padding(showsContainer ? WanderTheme.spacing3 : 0)
+        .background(showsContainer ? WanderTheme.surfaceBone.color : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: showsContainer ? WanderTheme.radiusLarge : 0))
+        .accessibilityValue(visibility.isStealthModeEnabled ? "Private" : "Not private")
+    }
+
+    private var isPrivate: Binding<Bool> {
+        Binding(
+            get: { visibility.isStealthModeEnabled },
+            set: { visibility = PlaceVisibility.visibilityForStealthMode(isPrivate: $0) }
+        )
+    }
+}
+
 private extension PlaceVisibility {
     var primaryIconName: String {
         switch self {

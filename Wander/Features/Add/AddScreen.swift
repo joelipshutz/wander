@@ -355,21 +355,6 @@ struct AddScreen: View {
                 }
             }
 
-            PickerBlock(title: "who can see this") {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(PlaceVisibility.allCases, id: \.rawValue) { visibility in
-                            ChoicePill(title: visibility.displayTitle, isSelected: selectedVisibility == visibility) {
-                                selectedVisibility = visibility
-                            }
-                        }
-                    }
-                    Text(selectedVisibility.helperCopy)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-
             WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
                 prepareDetails()
             }
@@ -385,7 +370,7 @@ struct AddScreen: View {
                         Text(selectedCandidate.name)
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text("\(selectedStatus.displayTitle) · \(selectedVisibility.displayTitle)")
+                        Text(selectedStatus.displayTitle)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
@@ -421,6 +406,8 @@ struct AddScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             }
 
+            PlaceVisibilityStealthToggle(visibility: $selectedVisibility)
+
             WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
                 Task {
                     await saveSelectedCandidate()
@@ -439,7 +426,7 @@ struct AddScreen: View {
             VStack(spacing: WanderTheme.spacing2) {
                 Text("it's on your map")
                     .font(.system(size: 26, weight: .black))
-                Text("saved as \(selectedStatus.displayTitle), visible to \(selectedVisibility.displayTitle.lowercased()).")
+                Text(selectedVisibility.isStealthModeEnabled ? "saved as \(selectedStatus.displayTitle) in stealth mode." : "saved as \(selectedStatus.displayTitle).")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
@@ -501,7 +488,7 @@ struct AddScreen: View {
         candidates = []
         selectedCandidateID = nil
         selectedStatus = .been
-        selectedVisibility = store.defaultVisibility
+        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -525,7 +512,7 @@ struct AddScreen: View {
         candidates = []
         selectedCandidateID = nil
         selectedStatus = .been
-        selectedVisibility = store.defaultVisibility
+        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -663,7 +650,7 @@ struct AddScreen: View {
         do {
             candidates = try await store.currentLocationCandidates()
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility
+            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -692,7 +679,7 @@ struct AddScreen: View {
                 category: manualCategory
             )
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility
+            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -717,7 +704,7 @@ struct AddScreen: View {
         do {
             candidates = try await store.linkCandidates(linkInput)
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility
+            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -861,7 +848,7 @@ struct AddScreen: View {
             manualArea = ""
             candidates = resolution.candidates
             selectedCandidateID = resolution.candidates.first?.id
-            selectedVisibility = store.defaultVisibility
+            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
             resolutionMessage = resolution.message
             step = .confirm
             return true
@@ -915,7 +902,7 @@ struct AddScreen: View {
         selectedSource = source
         candidates = resolvedCandidates
         selectedCandidateID = resolvedCandidates.first?.id
-        selectedVisibility = store.defaultVisibility
+        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
         resolutionMessage = nil
         step = .confirm
         return true
@@ -1018,7 +1005,7 @@ private enum AddStep {
         case .link: "Paste the link; we'll look for the place."
         case .manual: "Name is enough; area helps."
         case .photo: "Choose a photo; we'll look for a place."
-        case .confirm: "Pick the place, status, and who can see it."
+        case .confirm: "Pick the place and status."
         case .details: "optional taps for future you."
         case .saved: "it is ready on your map."
         case .draft: "we could not find enough place info yet."
