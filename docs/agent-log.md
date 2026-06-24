@@ -5477,3 +5477,27 @@ Known issues / next steps:
 - Deploy `supabase/functions/extraction-worker` after setting the Supabase secret.
 - Ryan confirmed on 2026-06-24 that the team is not rotating the OpenAI project key; still keep it out of git and local checked-in config.
 - Follow-up category metadata work should persist `subcategory`, `category_source`, and `category_confidence` intentionally instead of relying on ignored extra candidate JSON.
+
+## 2026-06-24 16:15 PDT - Codex - PR #31 Merge Without TestFlight
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`, with PR branch work in `/private/tmp/recme-openai-category-classifier`.
+Starting status: root checkout was clean on `main`; fetched `origin`, inspected worktrees/status and recent `docs/agent-log.md`, and confirmed Ryan requested a squash merge with no TestFlight push.
+
+Goal: squash-merge PR #31 (`Add OpenAI category classifier to extraction worker`) into `main`, keep the OpenAI key server-side only, and intentionally skip build-number bump/archive/upload/TestFlight/Slack release steps.
+
+Merge gate:
+
+- Rebasing PR #31 onto current `origin/main` produced only `docs/agent-log.md` conflicts; resolved by preserving current main history and appending the OpenAI classifier implementation entry.
+- Pre-landing review found no blocking issues. The worker sends only the Ryan-approved place metadata payload to OpenAI, uses `store: false`, validates structured model output, and falls back to deterministic classification on missing secret, timeout, or invalid response.
+- Confirmed official OpenAI docs list `gpt-5.4-nano` as a Responses API model suited for classification/extraction workloads.
+- `git diff --check origin/main...HEAD` passed.
+- `/private/tmp/deno-openai-classifier-check/deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts` passed.
+- No iOS build/test run because this changes the Supabase worker plus docs only.
+
+Merge outcome:
+
+- Marked PR #31 ready for review and squash-merged it to `main` as `9f847735b` (`Add OpenAI category classifier to extraction worker`).
+- Fast-forwarded local `main` to `origin/main`.
+- No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
+- Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
