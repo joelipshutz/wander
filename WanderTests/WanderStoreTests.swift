@@ -955,6 +955,40 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(socialSaveRepository.requests.isEmpty)
     }
 
+    func testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser() {
+        let store = makeStore()
+        let socialPlace = store.visiblePlaces().first { $0.owner.id == "user_maya" }!
+
+        _ = store.saveVisiblePlace(socialPlace)
+
+        let matchingPlaces = store.visiblePlaces().filter {
+            VisiblePlaceGrouping.key(for: $0) == VisiblePlaceGrouping.key(for: socialPlace)
+        }
+        let groups = VisiblePlaceGrouping.groups(from: matchingPlaces, currentUserID: store.currentUser.id)
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].saveCount, 2)
+        XCTAssertEqual(groups[0].otherSaveCount, 1)
+        XCTAssertEqual(groups[0].primary.owner.id, store.currentUser.id)
+    }
+
+    func testSocialSaveFlowContextPrefillsSourceStatusAndTags() {
+        let store = makeStore()
+        let socialPlace = store.visiblePlaces().first { $0.owner.id == "user_maya" }!
+        let attributes = store.attributes(for: socialPlace.userPlace.id)
+
+        let context = MapPlaceSaveContext.addVisiblePlace(
+            socialPlace,
+            defaultVisibility: .followers,
+            attributes: attributes
+        )
+
+        XCTAssertEqual(context.initialStatus, .been)
+        XCTAssertEqual(context.initialVisibility, .followers)
+        XCTAssertEqual(context.initialAnswers["strenuousness"], Set(["easy"]))
+        XCTAssertEqual(context.initialAnswers["hike_tags"], Set(["sunset", "views"]))
+    }
+
     func testRemoteOwnPlaceSaveMarksLocalRowsSynced() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

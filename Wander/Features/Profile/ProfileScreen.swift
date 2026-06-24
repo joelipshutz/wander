@@ -41,6 +41,8 @@ struct ProfileScreen: View {
             .navigationDestination(item: $savedListMode) { mode in
                 SavedPlacesListScreen(mode: mode)
                     .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
             }
             .task(id: auth.isSignedIn) {
                 guard auth.isSignedIn else { return }
@@ -407,6 +409,8 @@ private enum SavedPlacesListMode: String, Identifiable {
 
 private struct SavedPlacesListScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let mode: SavedPlacesListMode
     @State private var query = ""
     @State private var selectedCategory: String?
@@ -414,6 +418,7 @@ private struct SavedPlacesListScreen: View {
     @State private var isTagFilterExpanded = false
     @State private var tagFilterQuery = ""
     @State private var selectedPlace: VisiblePlace?
+    @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var isPlaceDetailExpanded = true
 
     private var places: [VisiblePlace] {
@@ -485,13 +490,20 @@ private struct SavedPlacesListScreen: View {
                     place: PlaceSheetPlace(visiblePlace: selectedPlace),
                     saves: saveSummaries(for: selectedPlace),
                     currentUserID: store.currentUser.id,
-                    action: .none,
+                    action: .edit,
                     isExpanded: $isPlaceDetailExpanded
-                ) {}
+                ) {
+                    beginEditSelectedPlace(selectedPlace)
+                }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.bottom, WanderTheme.spacing3)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(2)
+            }
+        }
+        .sheet(item: $placeSaveFlow) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await saveProfileFlowSubmission(submission)
             }
         }
         .wanderScreen()
@@ -706,6 +718,52 @@ private struct SavedPlacesListScreen: View {
             if lhs.visiblePlace.id == selectedPlace.id { return true }
             if rhs.visiblePlace.id == selectedPlace.id { return false }
             return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+        }
+    }
+
+    private func beginEditSelectedPlace(_ visiblePlace: VisiblePlace) {
+        let context = MapPlaceSaveContext.editVisiblePlace(
+            visiblePlace,
+            attributes: store.attributes(for: visiblePlace.userPlace.id)
+        )
+        selectedPlace = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            placeSaveFlow = context
+        }
+    }
+
+    @MainActor
+    private func saveProfileFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        switch submission.context.mode {
+        case .add(let sourceType):
+            let result = await store.saveCandidate(
+                submission.context.candidate,
+                status: submission.status,
+                visibility: submission.visibility,
+                note: submission.note,
+                sourceType: sourceType,
+                attributes: submission.attributes,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            if !auth.isSignedIn {
+                auth.presentGate(for: .syncPlace)
+            }
+            return result
+        case .edit(let visiblePlace):
+            let result = await store.saveCandidate(
+                submission.context.candidate,
+                status: submission.status,
+                visibility: submission.visibility,
+                note: submission.note,
+                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+                attributes: submission.attributes,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            if !auth.isSignedIn {
+                auth.presentGate(for: .syncPlace)
+            }
+            return result
         }
     }
 }

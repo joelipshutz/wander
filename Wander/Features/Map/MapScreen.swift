@@ -675,7 +675,8 @@ struct MapScreen: View {
         case .add:
             mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
-                defaultVisibility: store.defaultVisibility
+                defaultVisibility: store.defaultVisibility,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
         case .edit:
             mapSaveFlow = MapPlaceSaveContext.editVisiblePlace(
@@ -831,8 +832,7 @@ struct MapScreen: View {
         let normalized = Self.normalized(query)
         guard !normalized.isEmpty else { return [] }
 
-        var seenPlaceIDs = Set<String>()
-        return baseVisiblePlaces
+        let sortedMatches = baseVisiblePlaces
             .filter { visiblePlace in
                 matchesTypeahead(visiblePlace, normalizedQuery: normalized)
             }
@@ -842,11 +842,13 @@ struct MapScreen: View {
                 if lhsIsMine != rhsIsMine { return lhsIsMine }
                 return lhs.place.canonicalName.localizedCaseInsensitiveCompare(rhs.place.canonicalName) == .orderedAscending
             }
-            .compactMap { visiblePlace in
-                let placeID = visiblePlace.place.id
-                guard !seenPlaceIDs.contains(placeID) else { return nil }
-                seenPlaceIDs.insert(placeID)
-                return MapSearchSuggestion.saved(visiblePlace)
+
+        return VisiblePlaceGrouping.groups(
+            from: sortedMatches,
+            currentUserID: store.currentUser.id
+        )
+            .map { group in
+                MapSearchSuggestion.saved(group.primary, saveCount: group.saveCount)
             }
             .prefix(3)
             .map { $0 }
@@ -1246,9 +1248,16 @@ private struct MapSearchSuggestion: Identifiable {
     let category: String
     let source: Source
 
-    static func saved(_ visiblePlace: VisiblePlace) -> MapSearchSuggestion {
+    static func saved(_ visiblePlace: VisiblePlace, saveCount: Int = 1) -> MapSearchSuggestion {
+        let saveLabel: String
+        if saveCount > 1 {
+            saveLabel = "\(visiblePlace.owner.displayName) + \(saveCount - 1) \(saveCount == 2 ? "other" : "others") saved"
+        } else {
+            saveLabel = "\(visiblePlace.owner.displayName) saved it"
+        }
+
         let subtitle = [
-            visiblePlace.owner.displayName,
+            saveLabel,
             visiblePlace.place.locality,
             visiblePlace.place.category
         ]
@@ -1837,12 +1846,12 @@ struct PlaceSheetPlace {
     }
 }
 
-private enum MapPlaceSaveMode {
+enum MapPlaceSaveMode {
     case add(AddSourceType)
     case edit(VisiblePlace)
 }
 
-private struct MapPlaceSaveContext: Identifiable {
+struct MapPlaceSaveContext: Identifiable {
     let id = UUID()
     let candidate: PlaceCandidate
     let mode: MapPlaceSaveMode
@@ -1895,15 +1904,16 @@ private struct MapPlaceSaveContext: Identifiable {
 
     static func addVisiblePlace(
         _ visiblePlace: VisiblePlace,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        attributes: [LocalPlaceAttribute] = []
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .add(.socialSave),
-            initialStatus: .wannaGo,
+            initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
             initialNote: "",
-            initialAnswers: [:]
+            initialAnswers: initialAnswers(from: attributes)
         )
     }
 
@@ -1959,7 +1969,7 @@ private struct MapPlaceSaveContext: Identifiable {
     }
 }
 
-private struct MapPlaceSaveSubmission {
+struct MapPlaceSaveSubmission {
     let context: MapPlaceSaveContext
     let status: PlaceStatus
     let visibility: PlaceVisibility
@@ -1972,7 +1982,7 @@ private enum MapPlaceSaveStep {
     case details
 }
 
-private struct MapPlaceSaveFlowSheet: View {
+struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     @Environment(\.dismiss) private var dismiss
@@ -2062,7 +2072,7 @@ private struct MapPlaceSaveFlowSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             candidateCard
 
-            MapSavePickerBlock(title: "I've...") {
+            MapSavePickerBlock(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
                     MapSaveChoicePill(title: "been", isSelected: selectedStatus == .been) {
                         selectedStatus = .been
@@ -2941,13 +2951,10 @@ private struct SaveReviewCard: View {
             }
 
             if !facts.isEmpty {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 104), spacing: WanderTheme.spacing2)],
-                    alignment: .leading,
-                    spacing: WanderTheme.spacing2
-                ) {
+                MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
                     ForEach(facts) { fact in
                         PlaceFactPill(title: fact.title, systemImage: fact.systemImage)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }

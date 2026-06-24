@@ -9,6 +9,7 @@ struct DiscoverScreen: View {
     @State private var contacts: [ContactMatch] = []
     @State private var selectedProfile: SelectedProfile?
     @State private var selectedPlace: SelectedDiscoverPlace?
+    @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var selectedScope: DiscoverPlaceScope = .everyone
     @State private var parsedChips: [DiscoverFilterChip] = []
@@ -44,6 +45,10 @@ struct DiscoverScreen: View {
                 ].joined(separator: ":")
             }
             .joined(separator: "|")
+    }
+
+    private var placeGroups: [VisiblePlaceGroup] {
+        VisiblePlaceGrouping.groups(from: results.places, currentUserID: store.currentUser.id)
     }
 
     var body: some View {
@@ -94,9 +99,16 @@ struct DiscoverScreen: View {
                     isSavedByCurrentUser: isSavedByCurrentUser(selection.visiblePlace),
                     currentUserID: store.currentUser.id
                 ) {
-                    saveDiscoverPlace(selection.visiblePlace)
+                    beginSaveDiscoverPlace(selection.visiblePlace)
+                } edit: {
+                    beginEditDiscoverPlace(selection.visiblePlace)
                 } openProfile: {
                     openProfileFromPlace(selection.visiblePlace.owner.id)
+                }
+            }
+            .sheet(item: $placeSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveDiscoverFlowSubmission(submission)
                 }
             }
             .alert("Saved to your map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
@@ -240,28 +252,106 @@ struct DiscoverScreen: View {
             if results.places.isEmpty {
                 EmptyPanel(title: "No places here yet", action: selectedScope == .myPlaces ? "try friends or everyone" : "try another search")
             } else {
-                ForEach(results.places) { visiblePlace in
+                ForEach(placeGroups) { group in
                     DiscoverPlaceRow(
-                        visiblePlace: visiblePlace,
-                        isSavedByCurrentUser: isSavedByCurrentUser(visiblePlace)
+                        visiblePlace: group.primary,
+                        saveCount: group.saveCount,
+                        isSavedByCurrentUser: isSavedByCurrentUser(group.primary)
                     ) {
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace)
+                        selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
                     } save: {
-                        saveDiscoverPlace(visiblePlace)
+                        beginSaveDiscoverPlace(group.primary)
+                    } edit: {
+                        beginEditDiscoverPlace(group.primary)
                     }
                 }
             }
         }
     }
 
-    private func saveDiscoverPlace(_ visiblePlace: VisiblePlace) {
+    private func beginSaveDiscoverPlace(_ visiblePlace: VisiblePlace) {
         auth.requireSignIn(for: .socialSave) {
-            Task {
-                let result = await store.saveVisiblePlace(visiblePlace, backend: backend)
-                selectedPlace = nil
-                await refresh()
-                savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            presentPlaceSaveFlow(MapPlaceSaveContext.addVisiblePlace(
+                visiblePlace,
+                defaultVisibility: store.defaultVisibility,
+                attributes: attributes(for: visiblePlace)
+            ))
+        }
+    }
+
+    private func beginEditDiscoverPlace(_ visiblePlace: VisiblePlace) {
+        guard let currentUserSave = currentUserSave(matching: visiblePlace) else {
+            beginSaveDiscoverPlace(visiblePlace)
+            return
+        }
+
+        presentPlaceSaveFlow(MapPlaceSaveContext.editVisiblePlace(
+            currentUserSave,
+            attributes: store.attributes(for: currentUserSave.userPlace.id)
+        ))
+    }
+
+    private func presentPlaceSaveFlow(_ context: MapPlaceSaveContext) {
+        guard selectedPlace != nil else {
+            placeSaveFlow = context
+            return
+        }
+
+        selectedPlace = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            placeSaveFlow = context
+        }
+    }
+
+    @MainActor
+    private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        switch submission.context.mode {
+        case .add(let sourceType):
+            if sourceType == .socialSave, !auth.isSignedIn {
+                placeSaveFlow = nil
+                auth.presentGate(for: .socialSave)
+                return nil
             }
+
+            let result = await store.saveCandidate(
+                submission.context.candidate,
+                status: submission.status,
+                visibility: submission.visibility,
+                note: submission.note,
+                sourceType: sourceType,
+                attributes: submission.attributes,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            await refresh()
+            savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+            if !auth.isSignedIn {
+                auth.presentGate(for: .syncPlace)
+            }
+            return result
+        case .edit(let visiblePlace):
+            let result = await store.saveCandidate(
+                submission.context.candidate,
+                status: submission.status,
+                visibility: submission.visibility,
+                note: submission.note,
+                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+                attributes: submission.attributes,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            await refresh()
+            savedMessage = result.syncState == .synced ? "Updated." : "Saved here. We'll retry sync."
+            if !auth.isSignedIn {
+                auth.presentGate(for: .syncPlace)
+            }
+            return result
+        }
+    }
+
+    private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
+        let key = VisiblePlaceGrouping.key(for: visiblePlace)
+        return store.currentUserVisiblePlaces.first { currentUserPlace in
+            VisiblePlaceGrouping.key(for: currentUserPlace) == key
         }
     }
 
@@ -459,9 +549,11 @@ private struct ProfileMiniCard: View {
 
 private struct DiscoverPlaceRow: View {
     let visiblePlace: VisiblePlace
+    let saveCount: Int
     let isSavedByCurrentUser: Bool
     let openPlace: () -> Void
     let save: () -> Void
+    let edit: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
@@ -474,7 +566,7 @@ private struct DiscoverPlaceRow: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(1)
-                        Text("\(visiblePlace.owner.displayName) saved it · \(visiblePlace.userPlace.status.displayTitle)")
+                        Text("\(saveSummary) · \(visiblePlace.userPlace.status.displayTitle)")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .lineLimit(1)
@@ -492,13 +584,25 @@ private struct DiscoverPlaceRow: View {
             Spacer()
 
             if isSavedByCurrentUser {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 14, weight: .black))
-                    .frame(width: 38, height: 38)
-                    .background(WanderTheme.surfaceSand.color)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
-                    .accessibilityLabel("\(visiblePlace.place.canonicalName) is already on my map")
+                HStack(spacing: WanderTheme.spacing1) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .black))
+                        .frame(width: 38, height: 38)
+                        .background(WanderTheme.surfaceSand.color)
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .clipShape(Circle())
+                        .accessibilityLabel("\(visiblePlace.place.canonicalName) is already on my map")
+
+                    Button(action: edit) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .black))
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.textInk.color)
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Edit \(visiblePlace.place.canonicalName)")
+                }
             } else {
                 Button(action: save) {
                     Image(systemName: "plus")
@@ -515,6 +619,13 @@ private struct DiscoverPlaceRow: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
+
+    private var saveSummary: String {
+        if saveCount > 1 {
+            return "\(visiblePlace.owner.displayName) + \(saveCount - 1) \(saveCount == 2 ? "other" : "others") saved it"
+        }
+        return "\(visiblePlace.owner.displayName) saved it"
+    }
 }
 
 private struct DiscoverPlaceDetailSheet: View {
@@ -523,6 +634,7 @@ private struct DiscoverPlaceDetailSheet: View {
     let isSavedByCurrentUser: Bool
     let currentUserID: String
     let save: () -> Void
+    let edit: () -> Void
     let openProfile: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -608,13 +720,25 @@ private struct DiscoverPlaceDetailSheet: View {
     @ViewBuilder
     private var mapAction: some View {
         if isSavedByCurrentUser {
-            Image(systemName: "checkmark")
-                .font(.system(size: 17, weight: .black))
-                .frame(width: 44, height: 44)
-                .background(WanderTheme.surfaceSand.color)
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .clipShape(Circle())
-                .accessibilityLabel("Already on your map")
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 17, weight: .black))
+                    .frame(width: 44, height: 44)
+                    .background(WanderTheme.surfaceSand.color)
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .clipShape(Circle())
+                    .accessibilityLabel("Already on your map")
+
+                Button(action: edit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 17, weight: .black))
+                        .frame(width: 44, height: 44)
+                        .background(WanderTheme.textInk.color)
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .clipShape(Circle())
+                }
+                .accessibilityLabel("Edit saved place")
+            }
         } else {
             Button(action: save) {
                 Image(systemName: "plus")

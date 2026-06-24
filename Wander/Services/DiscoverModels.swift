@@ -61,6 +61,109 @@ struct DiscoverResults {
     let profiles: [ProfileShell]
 }
 
+struct VisiblePlaceGroup: Identifiable {
+    let key: String
+    let places: [VisiblePlace]
+    let currentUserID: String
+
+    var id: String { key }
+
+    var primary: VisiblePlace {
+        places.first { $0.owner.id == currentUserID } ?? places[0]
+    }
+
+    var saveCount: Int {
+        places.count
+    }
+
+    var otherSaveCount: Int {
+        max(0, saveCount - 1)
+    }
+
+    var isSavedByCurrentUser: Bool {
+        places.contains { $0.owner.id == currentUserID }
+    }
+}
+
+enum VisiblePlaceGrouping {
+    static func groups(
+        from places: [VisiblePlace],
+        currentUserID: String
+    ) -> [VisiblePlaceGroup] {
+        var orderedKeys: [String] = []
+        var grouped: [String: [VisiblePlace]] = [:]
+
+        for visiblePlace in places {
+            let key = key(for: visiblePlace)
+            if grouped[key] == nil {
+                orderedKeys.append(key)
+                grouped[key] = []
+            }
+            grouped[key]?.append(visiblePlace)
+        }
+
+        return orderedKeys.compactMap { key in
+            guard let places = grouped[key], !places.isEmpty else { return nil }
+            return VisiblePlaceGroup(
+                key: key,
+                places: places.sorted { lhs, rhs in
+                    if lhs.owner.id == currentUserID { return true }
+                    if rhs.owner.id == currentUserID { return false }
+                    return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
+                },
+                currentUserID: currentUserID
+            )
+        }
+    }
+
+    static func representativePlaces(
+        from places: [VisiblePlace],
+        currentUserID: String
+    ) -> [VisiblePlace] {
+        groups(from: places, currentUserID: currentUserID).map(\.primary)
+    }
+
+    static func matchingGroup(
+        for selectedPlace: VisiblePlace,
+        in places: [VisiblePlace],
+        currentUserID: String
+    ) -> VisiblePlaceGroup? {
+        let selectedKey = key(for: selectedPlace)
+        return groups(from: places, currentUserID: currentUserID)
+            .first { $0.key == selectedKey }
+    }
+
+    static func key(for visiblePlace: VisiblePlace) -> String {
+        let place = visiblePlace.place
+
+        let providerID = normalized(place.sourceProviderPlaceID)
+        if !providerID.isEmpty {
+            return "provider:\(normalized(place.sourceProvider)):\(providerID)"
+        }
+
+        let name = normalized(place.canonicalName)
+        let category = normalized(place.category)
+        let address = normalized(place.address)
+        let locality = normalized(place.locality)
+        let region = normalized(place.region)
+
+        if !address.isEmpty || !locality.isEmpty || !region.isEmpty {
+            return "text:\([name, category, address, locality, region].joined(separator: "|"))"
+        }
+
+        let roundedLatitude = (place.latitude * 10_000).rounded() / 10_000
+        let roundedLongitude = (place.longitude * 10_000).rounded() / 10_000
+        return "coordinate:\([name, category, "\(roundedLatitude)", "\(roundedLongitude)"].joined(separator: "|"))"
+    }
+
+    private static func normalized(_ value: String?) -> String {
+        (value ?? "")
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 enum DiscoverPlaceScope: String, CaseIterable, Identifiable, Equatable {
     case myPlaces = "my_places"
     case friendsPlaces = "friends_places"

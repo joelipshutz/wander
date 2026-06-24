@@ -5000,3 +5000,73 @@ Known issues / next steps:
 
 - Photo/link extraction remains tracked separately; this build focused on saved-place Profile/Map consistency.
 - Final housekeeping: commit and push this release log plus the TestFlight helper API compatibility patch to `main`. This is process-only and does not require another app build-number bump.
+
+## 2026-06-24 00:50 PDT - Codex - REC-22 Discover/Profile Save Edit Bundle
+
+Agent: Codex
+Branch: `codex/rec-22-discover-profile-edits`
+Worktree: `/private/tmp/recme-rec-22-discover-profile-edits`
+Starting status: root checkout clean on `main` at `origin/main`; fetched `origin`, inspected worktrees, read recent `docs/agent-log.md`, then created a fresh isolated worktree from `origin/main`.
+
+Goal: open a new PR that fixes `REC-22`, compares and handles `REC-21` vs `REC-31`, and fixes `REC-32`, `REC-33`, and `REC-34` in the same branch for Ryan simulator testing.
+
+Linear triage:
+
+- `REC-22`: dedupe duplicate saved places in Discover search/typeahead results and display a single entry with save-count context.
+- `REC-21`: Discover Friends save action should open the normal current-user save flow, and saved Discover places should expose an edit affordance after saving.
+- `REC-31`: saved Friends/Everyone places in Discover should show a pencil affordance next to the saved checkmark.
+- `REC-21` and `REC-31` overlap, but they are not identical. `REC-31` is the edit affordance subset; `REC-21` also includes the initial save flow from Discover Friends. Treat both as in scope rather than deduping either issue.
+- `REC-32`: saved places opened from Profile Been/Wanna need a top-right edit action that opens the usual edit-place view.
+- `REC-33`: replace the edit-place prompt copy `I've` with wording that works for both `been` and `wanna go`.
+- `REC-34`: fix `MY NOTES` tag alignment in saved-place cards, especially parks.
+
+Engineering review gate:
+
+- Triggered because this changes cross-screen save/edit entry points and shared Discover/Profile place-detail behavior.
+- Smallest complete version: reuse the existing add/edit place sheet and local store save paths; add missing buttons/entry points; dedupe Discover search results by place identity; adjust tag layout. Do not introduce new persisted state, backend changes, new tabs, or a separate edit screen.
+- Data flow:
+  `Discover/Profile tap -> existing place/save model -> existing edit/save sheet -> WanderLocalStore -> refreshed Discover/Profile/Map place summaries`.
+- Failure modes:
+  - If a social save is edited instead of the current user's save, user notes could overwrite the wrong display state. Mitigation: resolve/edit only the current user's matching save, otherwise open the normal save flow.
+  - If search dedupe collapses distinct places with similar names, users may miss a real option. Mitigation: key by stable place id when present and fall back to normalized name plus address/category coordinates only when needed.
+  - If Profile edit entry points do not dismiss correctly, users could see nested sheets. Mitigation: route through the existing single edit sheet state and test Profile Been/Wanna selection.
+- Test plan: add focused tests for Discover dedupe/count metadata and any pure helper logic; run `git diff --check`, focused tests, and full `xcodebuild test`. Manual simulator check for Discover saved/edit affordances, Profile edit button, prompt copy, and tag alignment.
+- Decision: no unresolved product/architecture decisions; proceed with the minimal reuse-based implementation.
+
+Expected files to touch:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/*`
+- `docs/agent-log.md`
+
+Implementation:
+
+- Added `VisiblePlaceGrouping` so Discover and map typeahead can collapse multiple saves of the same real place while preferring Ryan/current-user saves as the representative row.
+- Updated map typeahead saved-place suggestions to use grouped save counts, showing `+ 1 other saved` / `+ N others saved` context instead of duplicate rows.
+- Reused `MapPlaceSaveFlowSheet` from Discover and Profile instead of creating a parallel edit screen.
+- Discover save actions now open the normal save flow with source status/tags prefilled; saved Discover rows and detail sheets now show a pencil affordance.
+- Profile Been/Wanna place details now expose the existing edit flow from the top-right action.
+- Changed the add/edit status prompt copy from `I've...` to `save as` so it works for both `been` and `wanna go`.
+- Updated `MY NOTES` fact/tag chips to use the shared wrapping chip layout to avoid the park/category alignment issue.
+- Added focused store tests for grouped duplicate saves and prefilled social-save context.
+
+Validation:
+
+- First focused elevated `xcodebuild test` attempt failed before compile because Xcode reported a locked DerivedData build database at `/private/tmp/DerivedData-rec22-focused`.
+- Second focused elevated attempt exposed a Swift compile error in `VisiblePlaceGrouping.key(for:)`; fixed the non-optional normalized provider id binding.
+- `git diff --check` passed after the fix.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec22-focused-2 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser -only-testing:WanderTests/WanderStoreTests/testSocialSaveFlowContextPrefillsSourceStatusAndTags`
+  Result: `2` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec22-focused-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `141` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Manual simulator checks still needed for Discover Friends/Everyone save/edit affordances, Profile Been/Wanna edit affordance, typeahead dedupe copy, prompt copy, and MY NOTES tag alignment before merge.
+- Next step: commit, push, open PR, move `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, and `REC-34` to `In Review`, and open the worktree project in Xcode for Ryan testing.
