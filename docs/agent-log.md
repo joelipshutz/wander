@@ -4669,3 +4669,50 @@ Known issues / next steps:
 - PR #26 remains intended for Ryan simulator testing before merge.
 - Moved `REC-19` and `REC-20` to `In Review` with implementation and validation comments.
 - The third Linear item for clickable Been/Wanna place rows was not created because the Linear tool call was rejected by automatic review/capacity; report this instead of retrying silently.
+
+## 2026-06-23 22:55 PDT - Codex - PR #26 Map Empty Filter Regression
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. `origin/main` advanced from `56e0119` to `ff6bfa5`, but this PR branch is intentionally being updated in place for Ryan testing.
+
+Goal: fix the map filter regression where deselecting all owner filters (`you` and `social`) or all status filters (`been` and `wanna`) causes the map to fall back to showing every saved place.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `docs/agent-log.md`
+
+Linear tracking:
+
+- Created `REC-23` for the map empty-filter fallback bug and attached PR #26.
+
+Planned validation:
+
+- Add focused unit coverage for map filter selection semantics.
+- Run `git diff --check`.
+- Run focused map filter tests and the relevant simulator test gate.
+
+Implementation:
+
+- Added `MapFilterSelection.placeFilters(...)` so the map can distinguish no selected criteria from unrestricted criteria.
+- `MapScreen` now returns no saved-place annotations when either owner scope (`you`/`social`) or status scope (`been`/`wanna`) is empty.
+- Kept `WanderStore.visiblePlaces(filters: PlaceFilters())` semantics unchanged because other callers rely on empty filters meaning all visible places.
+- Added focused map filter selection tests to the existing map test file already included in the Xcode project.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-empty-filter-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/MapFilterSelectionTests`
+  Result: `4` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-empty-filter-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `136` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Push this commit to PR #26 for Ryan simulator testing.
+- Move `REC-23` to `In Review` after pushing.

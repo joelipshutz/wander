@@ -38,7 +38,8 @@ struct MapScreen: View {
     private let initialPlaceQuery: String?
 
     private var baseVisiblePlaces: [VisiblePlace] {
-        store.visiblePlaces(filters: filters)
+        guard let mapPlaceFilters else { return [] }
+        return store.visiblePlaces(filters: mapPlaceFilters)
     }
 
     init(
@@ -70,6 +71,8 @@ struct MapScreen: View {
     }
 
     private var initialCameraPlaces: [VisiblePlace] {
+        guard mapPlaceFilters != nil else { return [] }
+
         if selectedFilters.contains(.social) {
             let socialPlaces = visiblePlaces.filter { $0.owner.id != store.currentUser.id }
             if !socialPlaces.isEmpty {
@@ -81,24 +84,11 @@ struct MapScreen: View {
         return ownPlaces.isEmpty ? visiblePlaces : ownPlaces
     }
 
-    private var filters: PlaceFilters {
-        var filters = PlaceFilters()
-
-        if selectedFilters.contains(.been) && !selectedFilters.contains(.wanna) {
-            filters.statuses = [.been]
-        } else if selectedFilters.contains(.wanna) && !selectedFilters.contains(.been) {
-            filters.statuses = [.wannaGo]
-        }
-
-        var scopes: Set<String> = []
-        if selectedFilters.contains(.you) { scopes.insert("you") }
-        if selectedFilters.contains(.social) { scopes.insert("social") }
-        filters.ownerScopes = scopes
-        if let selectedSocialOwnerID, selectedFilters.contains(.social) {
-            filters.ownerIDs = [selectedSocialOwnerID]
-        }
-
-        return filters
+    private var mapPlaceFilters: PlaceFilters? {
+        MapFilterSelection.placeFilters(
+            selectedFilters: selectedFilters,
+            selectedSocialOwnerID: selectedSocialOwnerID
+        )
     }
 
     private var socialOwnerOptions: [MapSocialOwnerOption] {
@@ -1103,7 +1093,7 @@ enum MapHitTesting {
     }
 }
 
-private enum MapFilter: String, CaseIterable, Identifiable {
+enum MapFilter: String, CaseIterable, Identifiable {
     case you
     case social
     case been
@@ -1168,6 +1158,36 @@ private enum MapFilter: String, CaseIterable, Identifiable {
             lineCap: .round,
             dash: self == .wanna ? [1, 4] : []
         )
+    }
+}
+
+enum MapFilterSelection {
+    static func placeFilters(selectedFilters: Set<MapFilter>, selectedSocialOwnerID: String?) -> PlaceFilters? {
+        let includesBeen = selectedFilters.contains(.been)
+        let includesWanna = selectedFilters.contains(.wanna)
+        guard includesBeen || includesWanna else { return nil }
+
+        let includesYou = selectedFilters.contains(.you)
+        let includesSocial = selectedFilters.contains(.social)
+        guard includesYou || includesSocial else { return nil }
+
+        var filters = PlaceFilters()
+        if includesBeen && !includesWanna {
+            filters.statuses = [.been]
+        } else if includesWanna && !includesBeen {
+            filters.statuses = [.wannaGo]
+        }
+
+        var scopes: Set<String> = []
+        if includesYou { scopes.insert("you") }
+        if includesSocial { scopes.insert("social") }
+        filters.ownerScopes = scopes
+
+        if let selectedSocialOwnerID, includesSocial {
+            filters.ownerIDs = [selectedSocialOwnerID]
+        }
+
+        return filters
     }
 }
 
