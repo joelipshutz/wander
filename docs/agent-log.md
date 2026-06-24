@@ -5069,4 +5069,8 @@ Validation:
 Known issues / next steps:
 
 - Manual simulator checks still needed for Discover Friends/Everyone save/edit affordances, Profile Been/Wanna edit affordance, typeahead dedupe copy, prompt copy, and MY NOTES tag alignment before merge.
-- Next step: commit, push, open PR, move `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, and `REC-34` to `In Review`, and open the worktree project in Xcode for Ryan testing.
+- Implementation commit: `5014935f9` (`fix: add discover and profile saved place editing`).
+- Draft PR opened for Ryan simulator testing: https://github.com/joelipshutz/wander/pull/29
+- Linear: moved `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, and `REC-34` to `In Review` and added PR/test comments to each issue.
+- Xcode testing path: `/private/tmp/recme-rec-22-discover-profile-edits/Wander.xcodeproj`.
+- Next step: Ryan simulator testing. If it passes, mark PR #29 ready and proceed with the normal squash-merge/release workflow.
