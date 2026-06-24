@@ -5193,3 +5193,34 @@ Validation:
 - Elevated full test suite passed on installed iPhone 17 Pro simulator:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-build42-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `141` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Build-number commit:
+
+- Committed and pushed build-number bump to `main`: `35130b8d5` (`chore: bump testflight build 42`).
+
+Archive, upload, and TestFlight:
+
+- Archived build `0.1 (42)` to `/private/tmp/Wander-0.1-build42.xcarchive`.
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build42.xcarchive -derivedDataPath /private/tmp/DerivedData-build42-archive -allowProvisioningUpdates ...`
+  Result: `** ARCHIVE SUCCEEDED **`.
+- Verified archive `CFBundleVersion = 42` before upload.
+- Export options were written to `/private/tmp/WanderExportUpload42.plist` with `manageAppVersionAndBuildNumber=false`.
+- Exported and uploaded build `42` to App Store Connect.
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build42.xcarchive -exportPath /private/tmp/WanderTestFlightUpload42 -exportOptionsPlist /private/tmp/WanderExportUpload42.plist -allowProvisioningUpdates ...`
+  Result: `Uploaded Wander`, `** EXPORT SUCCEEDED **`.
+- Verified archive upload metadata reported `uploadedBuildNumber = 42`.
+- Ran TestFlight helper:
+  `node scripts/testflight-release.mjs --build-number 42 --archive-path /private/tmp/Wander-0.1-build42.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build42-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`
+  Result: build `0.1 (42)` id `bcc45498-bb97-421c-a085-3eda224b1853` is `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+
+Linear and Slack:
+
+- Confirmed `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, and `REC-34` were already `Done` from PR automation.
+- Marked `REC-38` Done.
+- Added build `42` release comments to `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, `REC-34`, and `REC-38`.
+- Posted tester-facing build `42` release note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782331849965729
+
+Known issues / next steps:
+
+- Link/photo extraction reliability remains a separate area to keep testing carefully.
+- This final log update is docs-only and does not require another build-number bump.
