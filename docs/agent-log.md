@@ -4712,3 +4712,234 @@ Known issues / next steps:
 - Ryan's backend account still had 0 synced saved places before build 39; he should install/open build 39 and save a new place to verify fresh sync.
 - Build 39 fixes the backend own-place save blocker, but any remaining UI-only saved-state/color issue should stay tracked separately under `REC-17`.
 - This release-log update is docs-only and does not require another build-number bump.
+## 2026-06-23 10:55 PDT - Codex - REC-15/REC-16 Profile Filters PR
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch from `origin/main` at `2615d08`; root checkout `/Users/ryanlieblein/Developer/wander` is `main` behind latest `origin/main` and intentionally left untouched.
+
+Linear issues:
+
+- `REC-15` - Add more profile filters and save them in user metadata
+- `REC-16` - Make "Been" and "Wanna" on the profile tab look clickable
+
+Goal: implement both profile-surface backlog items together, open a PR for simulator testing, and leave merge/TestFlight release for after Ryan verifies the simulator.
+
+Initial notes:
+
+- Moved both Linear issues from `Backlog` to `In Progress` and assigned them to Ryan.
+- Both issues originate from Slack-linked feedback in `#testflight-feedback`, with no additional requirements beyond the Linear descriptions.
+- Scope should stay in the profile UI and local user metadata persistence; avoid unrelated map/add/sync changes.
+
+Expected files to inspect/touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Models/LocalModels.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Inspect current profile filter implementation and local metadata model.
+- Add focused tests for metadata persistence / profile filter behavior.
+- Run `git diff --check`, focused tests, and the relevant simulator build/test gate before opening a draft PR.
+
+Checkpoint / implementation:
+
+- Added `metadataJSON` to `LocalProfile` and snapshot persistence so local profile metadata can survive relaunches without introducing a remote contract yet.
+- Added default Been/Wanna profile filter tags plus local custom tag storage under `profile_filters` in the current user's metadata.
+- Added the plus control to the profile Been/Wanna tag filter row; new tags are cleaned, de-duped case-insensitively, persisted, and selected after creation.
+- Updated the Been/Wanna stat tiles to read as tappable buttons with a chevron affordance, border, and pressed state.
+- Added tests for profile metadata tag persistence and tag parsing de-dupe behavior.
+
+Validation:
+
+- `git diff --check` passed.
+- First test attempt using the documented `iPhone 16 Plus,OS=18.6` destination could not run because this machine only has iOS 26.5 simulator runtimes available.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/ProfileMetadataTagParserTests -only-testing:WanderTests/WanderStoreTests/testProfileFilterTagsPersistInCurrentUserMetadata`
+  Result: `2` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `133` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- PR is intended for Ryan simulator testing before merge.
+- Selecting a newly created tag can temporarily show no matching places until a place has that tag; this matches the current filter semantics.
+
+Handoff:
+
+- Committed implementation as `0ce1dfa` (`fix: add profile filter controls`).
+- Opened draft PR #26 for Ryan simulator testing: https://github.com/joelipshutz/wander/pull/26.
+- Attached the PR to `REC-15` and `REC-16`, commented validation details, and moved both issues to `In Review`.
+- Do not merge until Ryan tests the branch in Simulator. After approval, squash-merge PR #26 to `main` and follow the standard TestFlight release workflow for app-code changes.
+
+## 2026-06-23 12:02 PDT - Codex - PR #26 Profile List Revisions
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. Root checkout remains untouched.
+
+Goal: update open PR #26 after Ryan's simulator review request:
+
+- Remove the `+` control from profile Been/Wanna tags and replace the horizontal tag carousel with a searchable dropdown.
+- Make the Been stat tile green to avoid confusion with terracotta/blue me/social map colors.
+- Make places in the Been/Wanna profile lists clickable and show the same saved-place detail sheet used from the map.
+
+Linear tracking:
+
+- Created `REC-19` for the searchable profile tag dropdown.
+- Created `REC-20` for the green Been tile.
+- Attempted to create the clickable place-detail issue, but the Linear tool call was rejected by automatic review/capacity; do not retry without explicit approval after reporting.
+
+Expected files to touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `WanderTests/ProfileMetadataTagParserTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Implementation:
+
+- Replaced the Been/Wanna profile tag carousel and add-tag plus button with an inline searchable dropdown sourced only from tags on saved places.
+- Removed the local profile metadata persistence path that existed only to support custom profile filter tags.
+- Updated the Been profile stat tile to use the green success/sage treatment.
+- Made Been/Wanna profile list rows tappable and present the saved-place detail sheet using the same `PlaceSheet` component as map saved-place taps.
+- Opened map sheet model/view types for reuse by the profile screen and added an explicit initializer for `PlaceSheet`.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-revisions-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/ProfileMetadataTagParserTests`
+  Result: `1` test, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec15-16-revisions-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `132` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- PR #26 remains intended for Ryan simulator testing before merge.
+- Moved `REC-19` and `REC-20` to `In Review` with implementation and validation comments.
+- The third Linear item for clickable Been/Wanna place rows was not created because the Linear tool call was rejected by automatic review/capacity; report this instead of retrying silently.
+
+## 2026-06-23 22:55 PDT - Codex - PR #26 Map Empty Filter Regression
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. `origin/main` advanced from `56e0119` to `ff6bfa5`, but this PR branch is intentionally being updated in place for Ryan testing.
+
+Goal: fix the map filter regression where deselecting all owner filters (`you` and `social`) or all status filters (`been` and `wanna`) causes the map to fall back to showing every saved place.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `docs/agent-log.md`
+
+Linear tracking:
+
+- Created `REC-23` for the map empty-filter fallback bug and attached PR #26.
+
+Planned validation:
+
+- Add focused unit coverage for map filter selection semantics.
+- Run `git diff --check`.
+- Run focused map filter tests and the relevant simulator test gate.
+
+Implementation:
+
+- Added `MapFilterSelection.placeFilters(...)` so the map can distinguish no selected criteria from unrestricted criteria.
+- `MapScreen` now returns no saved-place annotations when either owner scope (`you`/`social`) or status scope (`been`/`wanna`) is empty.
+- Kept `WanderStore.visiblePlaces(filters: PlaceFilters())` semantics unchanged because other callers rely on empty filters meaning all visible places.
+- Added focused map filter selection tests to the existing map test file already included in the Xcode project.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-empty-filter-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/MapFilterSelectionTests`
+  Result: `4` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-empty-filter-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `136` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Pushed implementation commit `5b914fd` to PR #26 for Ryan simulator testing.
+- Moved `REC-23` to `In Review` with implementation and validation details.
+
+## 2026-06-23 23:22 PDT - Codex - PR #26 Saved Place Consistency Revisions
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. Root checkout remains untouched.
+
+Goal: update PR #26 after Ryan's simulator review of saved-place behavior:
+
+- Remove the duplicate background/system sheet when opening a place from profile Been/Wanna lists.
+- Open profile Been/Wanna place details fully expanded by default.
+- Show dual terracotta/blue map marker outlines when a place is saved by both the current user and social users, with solid/dotted line styles based on each save status.
+- Make saved-place tiles consistent across map and profile by showing the same multi-saver notes for the same place.
+- Change saved-place detail section copy from `your save` to `MY NOTES`.
+- Ensure `wanna` status pills on saved-place tiles use the profile Wanna yellow treatment throughout the app.
+
+Expected files to touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Create Linear tracking issues for each requested item.
+- Add focused tests for dual-save marker style metadata if possible.
+- Run `git diff --check`.
+- Run focused tests and the full simulator test suite.
+
+Linear tracking:
+
+- Created `REC-24` for removing the duplicate profile saved-place sheet background.
+- Created `REC-25` for opening profile saved-place detail fully expanded.
+- Created `REC-26` for combined personal/social marker outlines.
+- Created `REC-27` for map/profile saved-place note consistency.
+- Created `REC-28` for changing `your save` to `MY NOTES`.
+- Created `REC-29` for using the profile Wanna yellow on saved-place `wanna` status pills.
+
+Implementation:
+
+- Replaced the profile Been/Wanna system sheet wrapper with an in-screen bottom `PlaceSheet` overlay so tapping a saved place no longer shows a second larger sheet/card behind the real place detail.
+- Profile saved-place details now open with `isPlaceDetailExpanded = true` and can be dismissed by tapping the backdrop.
+- Profile saved-place detail summaries now mirror the map detail source by reading all visible saves for the selected place, de-duping by user-place id, and sorting the current user's save first.
+- Map annotations now collapse duplicate visible saves for the same place into one representative marker, preferring the current user's save when present.
+- Added marker outline style metadata so a shared saved place can display both current-user terracotta and social blue outlines, with dotted/dashed outlines for `wanna` saves and solid outlines for `been` saves.
+- Updated saved-place section copy from `your save` to `MY NOTES`.
+- Updated saved-place `wanna` status pills to use `WanderTheme.sunTint` plus the profile Wanna warning color in map/profile detail and discover tiles.
+- Added unit coverage for single personal, personal+social, and multiple-social marker outline states.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-saved-place-consistency-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/MapPinOutlineBuilderTests`
+  Result: `3` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-saved-place-consistency-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Pushed implementation commit `dd55f82` to PR #26 for Ryan simulator testing.
+- Next step: Ryan should test the Been/Wanna profile list detail overlay, shared-place notes, marker rings, and `wanna` pill color in the simulator before squash-merge.
