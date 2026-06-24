@@ -5410,3 +5410,9 @@ Merge gate:
   - generic simulator build: `** BUILD SUCCEEDED **`
   - physical-device build/install/launch on `Ry’s iPhone`: `** BUILD SUCCEEDED **`, app installed and launched
 - `git diff --check` passed during the merge gate.
+
+Merge outcome:
+
+- Marked PR #33 ready for review, confirmed GitHub reported `MERGEABLE`, and squash-merged it to `main` as `4af06be9cea66bc1e22d0dfa53afc5a859c2b7e6`.
+- Deleted remote branch `codex/stealth-lock-indicator` via GitHub merge cleanup and fast-forwarded local `main` to `origin/main`.
+- No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly requested no new TestFlight build yet; this app-code change will ride in the next explicit TestFlight batch.
