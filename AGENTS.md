@@ -225,8 +225,8 @@ Required release workflow:
 - Run `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects the new build number.
 - Commit and push both `project.yml` and `Wander.xcodeproj/project.pbxproj` to `main`.
 - Run the relevant `xcodebuild` build/test command after regenerating the project.
-- Archive and upload the binary with that incremented build number.
-- Set/confirm export compliance and attach the uploaded build to the public TestFlight group by running `node scripts/testflight-release.mjs` after upload succeeds.
+- Archive and upload the binary with that incremented build number. The export options plist must set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently upload a different build number.
+- Set/confirm export compliance and attach the uploaded build to the public TestFlight group by running `node scripts/testflight-release.mjs --archive-path <archive>` after upload succeeds. Passing the archive path lets the helper detect and process the actual uploaded build number if App Store Connect reports a different one.
 - Update `docs/agent-log.md` with the build number, commit hash, tests run, archive path, upload status, TestFlight status, and known issues.
 - Only after archive/upload has completed should an agent post a tester-facing Slack note. If the binary is still processing or not yet externally approved, the Slack note must say that plainly.
 - If the build is attached to TestFlight or confirmed available, follow the Slack release-note rules below and state the live/approved status.
@@ -253,7 +253,7 @@ For broad announcements only, `#all-recme` (`C0B9FU1QNG2`) exists, but TestFligh
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
 
 ```bash
 node scripts/testflight-release.mjs
@@ -262,6 +262,7 @@ node scripts/testflight-release.mjs
 Useful overrides:
 
 - `--build-number <n>` to process a specific build instead of the current `project.yml` value.
+- `--archive-path <path>` to read Xcode's archive upload metadata and process the actual uploaded build number when it differs from the requested build number.
 - `--dry-run` to verify the resolved app id, group, and build number without calling App Store Connect.
 - `--what-to-test "<copy>"` or `--what-to-test-file <path>` to set the TestFlight "What to Test" description for the build.
 - `--locale <locale>` to set a non-default TestFlight beta build localization. Default: `en-US`.

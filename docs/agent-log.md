@@ -5119,3 +5119,44 @@ Validation:
 Known issues / next steps:
 
 - Ryan should visually verify Map selected-place cards, Profile Been/Wanna rows, and Discover saved-by cards before PR #29 is marked ready.
+
+## 2026-06-24 10:10 PDT - Codex - Build 40 TestFlight Mismatch Investigation
+
+Agent: Codex
+Branch: `main`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean `main` at `origin/main`; fetched `origin`, inspected worktrees/status, read recent `docs/agent-log.md`, and used the `/investigate` plus rec.me TestFlight feedback workflows.
+
+Goal: investigate Ryan's report that downloaded TestFlight build `40` did not include any PR #26 fixes.
+
+Findings:
+
+- PR #26 did merge into `main` as `814d41b58f7c8cb414e9fa4697f4e0bf1991a972`.
+- The build bump commit `70729dcfd` followed PR #26 and set `CURRENT_PROJECT_VERSION` to `40`.
+- The local archive at `/private/tmp/Wander-0.1-build40.xcarchive` contains app `CFBundleVersion = 40`, but its Xcode distribution metadata says `uploadedBuildNumber = 41`.
+- App Store Connect confirmed build `40` (`bb57c5da-77c3-42e7-8f34-0c9b274cefb4`) was uploaded on `2026-06-23 12:57 PDT`, before PR #26 merged.
+- App Store Connect confirmed build `41` (`f944ac13-9e45-41ea-b56a-c710774d557a`) was uploaded on `2026-06-24 00:17 PDT`, immediately after the PR #26 release archive/upload.
+- Root cause: Xcode/App Store Connect auto-managed the uploaded build number during export/upload because the export options plist did not set `manageAppVersionAndBuildNumber` to `false`. The release helper then processed build `40` from `project.yml`, which attached/reviewed the stale pre-PR #26 build instead of the actual uploaded build `41`.
+
+Fix:
+
+- Ran the TestFlight helper for build `41`:
+  `node scripts/testflight-release.mjs --build-number 41 --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build41-what-to-test.txt --timeout-attempts 5 --poll-seconds 5`
+  Result: build `41` is `VALID`, `usesNonExemptEncryption=false`, What to Test updated, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+- Updated `project.yml` and `Wander.xcodeproj/project.pbxproj` to `CURRENT_PROJECT_VERSION = 41` so the repo now matches App Store Connect's actual latest build.
+- Updated `scripts/testflight-release.mjs` with `--archive-path`; when passed an archive, the helper reads Xcode's `uploadedBuildNumber` metadata and processes that actual uploaded build if it differs from the requested/project build number.
+- Verified the new helper guard with:
+  `node scripts/testflight-release.mjs --build-number 40 --archive-path /private/tmp/Wander-0.1-build40.xcarchive --dry-run --env /Users/ryanlieblein/.openclaw/workspace/.env.keys`
+  Result: it detected uploaded build `41` and resolved `buildNumber` to `41`.
+- Updated `AGENTS.md`, `docs/setup.md`, and `agent-skills/recme-pr-review-merge-release/SKILL.md` to require `manageAppVersionAndBuildNumber=false` in export options and `--archive-path` when running the helper.
+- Posted corrected build `41` tester note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782321304432659
+- Added build `41` release correction comments to `REC-23`, `REC-24`, `REC-25`, `REC-26`, `REC-27`, `REC-28`, and `REC-29`.
+
+Validation:
+
+- `node --check scripts/testflight-release.mjs` passed.
+- `git diff --check` passed.
+
+Known issues / next steps:
+
+- Commit and push the build-number alignment, helper guard, docs/skill updates, and this investigation log to `main`.
