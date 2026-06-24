@@ -5341,3 +5341,9 @@ Validation:
 - `git diff --check` passed.
 - Stale-rule grep found no remaining auto-TestFlight phrases in `AGENTS.md`, `agent-skills/`, or `docs/decisions.md`.
 - No app build/test run; this is docs/process/skill-only.
+
+Handoff:
+
+- Commit: `01c7efe3` (`docs: require explicit testflight releases`).
+- PR: https://github.com/joelipshutz/wander/pull/32
+- This is process-only and should not trigger a TestFlight build.
