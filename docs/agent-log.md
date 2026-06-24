@@ -5347,3 +5347,9 @@ Handoff:
 - Commit: `01c7efe3` (`docs: require explicit testflight releases`).
 - PR: https://github.com/joelipshutz/wander/pull/32
 - This is process-only and should not trigger a TestFlight build.
+
+Merge outcome:
+
+- Joe clarified the target was remote `main`; PR #32 was squash-merged as `3cd49d9488142fdd2b531fb59873ff61f632a854`.
+- Pre-landing validation remained process-only: `git diff --check` passed, stale auto-TestFlight phrasing grep returned no matches, and no app build/test was run.
+- No build-number bump, archive, upload, TestFlight helper, or Slack release note was run because the request was merge-only and the PR is docs/process/skill-only.
