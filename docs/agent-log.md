@@ -5224,3 +5224,56 @@ Known issues / next steps:
 
 - Link/photo extraction reliability remains a separate area to keep testing carefully.
 - This final log update is docs-only and does not require another build-number bump.
+## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
+
+Agent: Codex
+Branch: `main`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Starting status: clean `main` at `origin/main`; inspected `git status --short --branch`, `git worktree list`, latest `docs/agent-log.md`, `AGENTS.md`, `DESIGN.md`, and product spec. Existing auxiliary worktrees under `/private/tmp` are present, but this pass is read-mostly and not editing overlapping implementation files.
+
+Goal: compare the current rec.me/Wander place/profile detail experience against the provided Beli restaurant profile screenshot from a senior design/PM perspective, pull current app screenshots where possible, and propose a reimagined direction grounded in the app's map-first trusted-place-memory purpose.
+
+Expected files touched:
+
+- `docs/agent-log.md` only, unless Joe explicitly asks to turn the critique into implementation.
+
+Notes:
+
+- Mission Control `localhost:4000` task creation failed with connection error, so this log is the durable tracker for now.
+- GBrain search timed out twice on a transient PGLite lock; direct repo/KB Markdown review is being used as fallback.
+
+Outcome:
+
+- Captured actual local simulator screenshots from iPhone 17 Pro `066417CD-C3D5-4209-BA1F-46152B1A6AAC`:
+  - `/private/tmp/recme-design-review/current-launch.png`
+  - `/private/tmp/recme-design-review/current-profile.png`
+  - `/private/tmp/recme-design-review/current-map-zoom.png`
+- Important caveat: the fresh current simulator build failed because the Mac volume had only a few hundred MB free and Xcode hit `No space left on device` while compiling PostHog into temporary DerivedData. The captured app is the available local simulator build at `DerivedData/Build/Products/Debug-iphonesimulator/Wander.app`, `CFBundleVersion = 24`, so it is useful visual evidence but not a complete build 42 representation.
+- Profile and map shell were reviewed against the Beli place-profile screenshot, `DESIGN.md`, `docs/specs/wander-ios-product-spec.md`, and `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`.
+- Main design recommendation: borrow Beli's dense, clear place-detail hierarchy, not its restaurant-only/ranking/commerce model. rec.me should make place profiles answer: where is this, why did trusted people care, does it fit my moment, and what can I do next?
+
+Known issues / next steps:
+
+- Free disk space before trying another current simulator build or screenshot pass.
+- If Joe wants implementation, create a short-lived branch/worktree and start with the selected-place/place-detail sheet hierarchy before changing broader Profile chrome.
+
+## 2026-06-24 15:09 PDT - Codex - Rating System Plan Eng Review
+
+Agent: Codex
+Branch: `main`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Starting status: `main` clean except an existing uncommitted `docs/agent-log.md` design-review log entry not made by this pass; fetched/latest state already on `origin/main`.
+
+Goal: run `/plan-eng-review` for replacing the current four-bucket `rating_signal` system with a 1-5 numeric rating slider, Supabase migration/backfill, and Recommended average scores on profile/place surfaces.
+
+Expected files touched:
+
+- `docs/agent-log.md`
+- Possible plan/review artifact under `docs/reviews/` or `docs/plans/` after decisions are locked
+
+Decisions so far:
+
+- Recommended score only counts `been` saves, not `wanna_go` saves.
+- Add `user_places.rating_score smallint` as the active source of truth.
+- Migrate existing `rating_signal` values to numbers and keep deprecated `rating_signal` for one release as fallback/rollback data.
+- Compute `recommended_score` and `recommended_count` in Supabase visible-place/profile RPCs, with iOS local fallback only for offline/local fixtures.
