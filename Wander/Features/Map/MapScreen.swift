@@ -2927,9 +2927,6 @@ private struct SaveReviewCard: View {
                 }
                 Spacer()
                 StatusBadge(status: userPlace.status)
-                if owner.id == currentUserID {
-                    PlaceVisibilityIconPill(visibility: userPlace.visibility, size: 30)
-                }
             }
 
             if let note {

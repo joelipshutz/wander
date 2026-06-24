@@ -5224,6 +5224,36 @@ Known issues / next steps:
 
 - Link/photo extraction reliability remains a separate area to keep testing carefully.
 - This final log update is docs-only and does not require another build-number bump.
+
+## 2026-06-24 15:41 PDT - Codex - Stealth lock tile indicator
+
+- Agent/tool: Codex in the main Xcode workspace.
+- Branch/worktree: `codex/stealth-lock-indicator` at `/Users/ryanlieblein/Developer/wander`, created from latest `origin/main`.
+- Starting status: clean (`## main...origin/main`) before branching; GitHub CLI authenticated as `ryanlane23`.
+- Goal: show a single lock affordance at the top of saved place tiles when stealth mode is true/private, show no icon when stealth mode is false, remove the duplicate lock affordance from the notes section, open a PR, and start a physical-device build for Ryan to test.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, possibly related shared tile/detail components, tests if a display helper exists or is added, and `docs/agent-log.md`.
+- Coordination: using the root checkout intentionally so Xcode points at the test branch. Existing separate worktrees are unrelated; this touches the high-conflict map UI area, so keep the diff narrow and avoid unrelated project churn.
+
+Checkpoint:
+
+- Changed the shared `PlaceVisibilityIconPill` to render only for stealth/private saves (`.selfOnly`); non-private saves, including legacy `.mutuals`, now render no icon.
+- Removed the duplicate visibility icon from `SaveReviewCard` so the lock does not appear again inside the notes section.
+- Added `PlaceVisibility.showsTileLockIndicator` and regression coverage that only stealth mode shows the tile lock indicator.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated focused simulator tests passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-stealth-lock-indicator CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisibilityPolicyTests`
+  Result: `7` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-stealth-lock-indicator CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Connected device: `Ry’s iPhone` (`iPhone 15 Pro`, `871CDC6E-9974-5BB8-B0FE-300B5589AF97`).
+- Elevated physical-device build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS,id=871CDC6E-9974-5BB8-B0FE-300B5589AF97' -derivedDataPath /private/tmp/DerivedData-stealth-lock-device -allowProvisioningUpdates -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Installed and launched `com.grayline.wander` on `Ry’s iPhone` from `/private/tmp/DerivedData-stealth-lock-device/Build/Products/Debug-iphoneos/Wander.app`.
 ## 2026-06-24 14:30 PDT - Codex - Stealth mode save/edit toggle
 
 - Agent/tool: Codex in isolated worktree.

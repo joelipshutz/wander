@@ -37,4 +37,10 @@ final class VisibilityPolicyTests: XCTestCase {
         XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: true), .selfOnly)
         XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: false), .followers)
     }
+
+    func testOnlyStealthModeShowsTileLockIndicator() {
+        XCTAssertFalse(PlaceVisibility.followers.showsTileLockIndicator)
+        XCTAssertFalse(PlaceVisibility.mutuals.showsTileLockIndicator)
+        XCTAssertTrue(PlaceVisibility.selfOnly.showsTileLockIndicator)
+    }
 }
