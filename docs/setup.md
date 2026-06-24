@@ -143,6 +143,21 @@ The hosted migrations and Clerk profile webhook have been pushed/deployed. The l
 
 The `extraction-worker` Edge Function was last deployed from branch `codex/m6-roadmap-next` on 2026-06-15. It supports coordinate-backed Google Maps, Apple Maps, and generic coordinate metadata links while leaving unsupported/photo/social sources as drafts/manual rescue.
 
+The `extraction-worker` can optionally enrich extracted candidate categories through OpenAI. The API key must stay server-side as a Supabase Edge Function secret, never in the iOS app bundle or tracked config:
+
+```bash
+npx supabase secrets set OPENAI_API_KEY=<openai-project-key> --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+```
+
+Runtime knobs:
+
+- `OPENAI_API_KEY` or `WANDER_OPENAI_API_KEY`: required to enable model-backed classification.
+- `WANDER_OPENAI_CATEGORY_MODEL`: optional model override; defaults to `gpt-5.4-nano`.
+- `WANDER_OPENAI_CATEGORY_MODE`: optional mode; defaults to `ambiguous`, which calls OpenAI only when deterministic inference falls back to `place`. Set to `all` to classify every coordinate-backed extraction candidate.
+- `WANDER_OPENAI_CATEGORY_TIMEOUT_MS`: optional timeout override; defaults to `3500` and caps at `10000`.
+
+The worker sends only the approved place classification payload to OpenAI: place name, address/locality/region/country, source provider, source type, and current inferred category. Requests set `store: false`; if the secret is missing or the call fails, extraction falls back to deterministic category inference.
+
 Current hosted SQL test status:
 
 ```text
