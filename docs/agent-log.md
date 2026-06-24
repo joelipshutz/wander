@@ -5390,3 +5390,23 @@ Handoff:
 - Implementation commit: `405ddad60` (`Show stealth lock only on place tiles`).
 - Draft PR opened for Ryan testing: https://github.com/joelipshutz/wander/pull/33
 - Next step: Ryan should verify a stealth/private saved place shows one lock at the top of the place tile, a non-stealth saved place shows no visibility icon, and the notes section no longer repeats the lock.
+
+## 2026-06-24 16:11 PDT - Codex - PR #33 Merge Without TestFlight
+
+Agent: Codex
+Branch/worktree: `codex/stealth-lock-indicator` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: clean branch tracking `origin/codex/stealth-lock-indicator`; fetched `origin`, inspected worktrees and recent `docs/agent-log.md`, and confirmed Ryan requested squash-merge only with no new TestFlight build yet.
+
+Goal: squash-merge PR #33 (`[codex] Show stealth lock only on place tiles`) to `main`, push/update main, and intentionally skip build-number bump/archive/upload/Slack TestFlight release because this is not an explicit TestFlight release request.
+
+Merge gate:
+
+- PR #33 is open as a draft, targets `main`, has no labels, and has no configured status checks.
+- GitHub reports PR #33 as `MERGEABLE` after rebasing onto latest `origin/main`.
+- Local dry merge against latest `origin/main` returned a tree SHA only, with no conflicts.
+- Pre-landing review found the source diff limited to the private-only tile lock display rule, duplicate notes-section lock removal, and matching regression coverage.
+- Validation from PR setup remains applicable after the rebase because no app source changed during conflict resolution:
+  - focused `VisibilityPolicyTests`: `7` tests, `0` failures, `** TEST SUCCEEDED **`
+  - generic simulator build: `** BUILD SUCCEEDED **`
+  - physical-device build/install/launch on `Ry’s iPhone`: `** BUILD SUCCEEDED **`, app installed and launched
+- `git diff --check` passed during the merge gate.
