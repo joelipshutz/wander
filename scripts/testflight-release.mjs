@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 
 const DEFAULTS = {
@@ -21,6 +22,7 @@ function printUsage() {
 
 Options:
   --build-number <n>      Build number to process. Defaults to CURRENT_PROJECT_VERSION in project.yml.
+  --archive-path <path>   Optional .xcarchive path. If present, verifies/uses Xcode's uploaded build number.
   --project <path>        Project YAML path. Default: project.yml.
   --app-id <id>           App Store Connect app id. Default: ${DEFAULTS.appId}.
   --group <name>          TestFlight beta group name. Default: ${DEFAULTS.groupName}.
@@ -44,6 +46,7 @@ TestFlight group, and submits external beta review.`);
 function parseArgs(argv) {
   const options = {
     appId: DEFAULTS.appId,
+    archivePath: null,
     buildNumber: null,
     dryRun: false,
     envPath: DEFAULTS.envPath,
@@ -68,6 +71,9 @@ function parseArgs(argv) {
     switch (arg) {
       case "--app-id":
         options.appId = next();
+        break;
+      case "--archive-path":
+        options.archivePath = next();
         break;
       case "--build-number":
         options.buildNumber = next();
@@ -153,6 +159,58 @@ function readBuildNumber(projectPath) {
   const match = text.match(/CURRENT_PROJECT_VERSION:\s*["']?([^"'\n]+)["']?/);
   if (!match) throw new Error(`Could not find CURRENT_PROJECT_VERSION in ${projectPath}`);
   return match[1].trim();
+}
+
+function readArchiveValue(plistPath, keyPath) {
+  try {
+    return execFileSync("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readArchiveUploadMetadata(archivePath) {
+  if (!archivePath) return null;
+  const plistPath = `${archivePath.replace(/\/$/, "")}/Info.plist`;
+  if (!fs.existsSync(plistPath)) {
+    throw new Error(`Archive Info.plist not found at ${plistPath}`);
+  }
+
+  return {
+    archivedBuildNumber: readArchiveValue(plistPath, ":ApplicationProperties:CFBundleVersion"),
+    uploadedBuildNumber: readArchiveValue(plistPath, ":Distributions:0:uploadedBuildNumber"),
+  };
+}
+
+function resolveUploadedBuildNumber(options) {
+  const metadata = readArchiveUploadMetadata(options.archivePath);
+  if (!metadata) return;
+
+  if (
+    metadata.archivedBuildNumber &&
+    String(metadata.archivedBuildNumber) !== String(options.buildNumber)
+  ) {
+    console.log(
+      `Archive CFBundleVersion is ${metadata.archivedBuildNumber}; requested helper build number is ${options.buildNumber}.`,
+    );
+  }
+
+  if (!metadata.uploadedBuildNumber) {
+    console.log("Archive has no uploadedBuildNumber yet; using requested build number.");
+    return;
+  }
+
+  if (String(metadata.uploadedBuildNumber) === String(options.buildNumber)) {
+    console.log(`Archive upload metadata confirms build ${metadata.uploadedBuildNumber}.`);
+    return;
+  }
+
+  console.log(
+    `Archive upload metadata says App Store Connect uploaded build ${metadata.uploadedBuildNumber}, not ${options.buildNumber}. Processing uploaded build ${metadata.uploadedBuildNumber}.`,
+  );
+  options.buildNumber = String(metadata.uploadedBuildNumber);
 }
 
 function readWhatToTest(options) {
@@ -500,12 +558,14 @@ async function main() {
   if (!options.buildNumber) {
     options.buildNumber = readBuildNumber(options.projectPath);
   }
+  resolveUploadedBuildNumber(options);
   const whatToTest = readWhatToTest(options);
 
   loadEnv(options.envPath);
 
   const resolved = {
     appId: options.appId,
+    archivePath: options.archivePath,
     buildNumber: options.buildNumber,
     envPath: options.envPath,
     groupName: options.groupName,

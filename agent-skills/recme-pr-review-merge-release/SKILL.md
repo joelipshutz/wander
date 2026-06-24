@@ -186,11 +186,14 @@ After a successful app-code, UI, schema, testable behavior, or QA-relevant merge
    - A short concrete checklist of what to test.
    - Known/deferred areas when useful.
    - Keep it under 4000 characters.
-7. Upload the archive/build to TestFlight using the repo's documented or discoverable upload path and available signing credentials. If upload is blocked by credentials, signing, or missing workflow, stop after the pushed build-number bump and report the blocker clearly.
+7. Upload the archive/build to TestFlight using the repo's documented or discoverable upload path and available signing credentials. The export options plist must set `manageAppVersionAndBuildNumber` to `false`; otherwise Xcode may silently upload a different build number than the one in `project.yml`. If upload is blocked by credentials, signing, or missing workflow, stop after the pushed build-number bump and report the blocker clearly.
 8. Run `node scripts/testflight-release.mjs` after upload succeeds to set export compliance, set TestFlight "What to Test" copy when provided, attach the build to the public group, and submit external beta review. Prefer:
-   `node scripts/testflight-release.mjs --build-number <n> --what-to-test-file <path>`
+   `node scripts/testflight-release.mjs --build-number <n> --archive-path <archive> --what-to-test-file <path>`
    or:
-   `node scripts/testflight-release.mjs --build-number <n> --what-to-test "<copy>"`
+   `node scripts/testflight-release.mjs --build-number <n> --archive-path <archive> --what-to-test "<copy>"`
+   Always pass `--archive-path` when an archive exists so the helper can detect
+   and process Xcode's actual uploaded build number if App Store Connect reports
+   one that differs from the requested build number.
    If the helper cannot set the description, continue the release, record the
    limitation, and include the same testing copy in Slack.
 9. Update `docs/agent-log.md` with build number, merge/commit hash, tests run, archive path, upload status, TestFlight status, TestFlight description status, Linear status updates, known issues, and next steps.
