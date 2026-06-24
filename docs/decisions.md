@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-06-22
+Last updated: 2026-06-24
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -22,6 +22,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Block behavior | Locked | Hard block; remove follow edges and hide profiles/content both ways. |
 | People finding | Locked for v0.1 | Username search plus contacts-shaped UI. Native Contacts later. |
 | Following not-yet-on-app users | Deferred | Track later; not in v0.1. |
+| Rec.me-owned place taxonomy | Planned | Provider place types from MapKit, Google Maps links, Google Places, web metadata, OCR, or future sources are inputs, not canonical UX. Save/place filters should evolve toward `canonicalCategory`, `subcategory`, and per-user `personalLabels`; see `docs/plans/2026-06-24-place-category-taxonomy-save-flow.md`. |
 
 ## Technical Decisions
 
