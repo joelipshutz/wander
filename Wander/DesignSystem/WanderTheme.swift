@@ -132,29 +132,22 @@ struct PlaceVisibilityIconPill: View {
     var includeBackground = true
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: visibility.primaryIconName)
-                .font(.system(size: iconSize, weight: .black))
-
-            if let secondaryIconName = visibility.secondaryIconName {
-                Image(systemName: secondaryIconName)
-                    .font(.system(size: max(9, iconSize - 3), weight: .bold))
+        if visibility.showsTileLockIndicator {
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: iconSize, weight: .black))
             }
+            .frame(minWidth: size, minHeight: size)
+            .padding(.horizontal, 0)
+            .background(includeBackground ? WanderTheme.surfaceSand.color : Color.clear)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .accessibilityLabel("Stealth mode enabled")
         }
-        .frame(minWidth: size, minHeight: size)
-        .padding(.horizontal, includeBackground ? horizontalPadding : 0)
-        .background(includeBackground ? WanderTheme.surfaceSand.color : Color.clear)
-        .foregroundStyle(WanderTheme.textInk.color)
-        .clipShape(Capsule())
-        .accessibilityLabel(visibility.iconAccessibilityLabel)
     }
 
     private var iconSize: CGFloat {
         max(12, size * 0.48)
-    }
-
-    private var horizontalPadding: CGFloat {
-        visibility.secondaryIconName == nil ? 0 : 7
     }
 }
 
@@ -201,29 +194,6 @@ struct PlaceVisibilityStealthToggle: View {
     }
 }
 
-private extension PlaceVisibility {
-    var primaryIconName: String {
-        switch self {
-        case .followers, .mutuals: "lock.open.fill"
-        case .selfOnly: "lock.fill"
-        }
-    }
-
-    var secondaryIconName: String? {
-        switch self {
-        case .followers, .selfOnly: nil
-        case .mutuals: "person.2.fill"
-        }
-    }
-
-    var iconAccessibilityLabel: String {
-        switch self {
-        case .followers: "Visible to everyone"
-        case .mutuals: "Visible to friends"
-        case .selfOnly: "Visible only to me"
-        }
-    }
-}
 
 struct WanderSegmentOption: Identifiable, Equatable {
     let id: String

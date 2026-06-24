@@ -5224,6 +5224,7 @@ Known issues / next steps:
 
 - Link/photo extraction reliability remains a separate area to keep testing carefully.
 - This final log update is docs-only and does not require another build-number bump.
+
 ## 2026-06-24 14:30 PDT - Codex - Stealth mode save/edit toggle
 
 - Agent/tool: Codex in isolated worktree.
@@ -5353,3 +5354,59 @@ Merge outcome:
 - Joe clarified the target was remote `main`; PR #32 was squash-merged as `3cd49d9488142fdd2b531fb59873ff61f632a854`.
 - Pre-landing validation remained process-only: `git diff --check` passed, stale auto-TestFlight phrasing grep returned no matches, and no app build/test was run.
 - No build-number bump, archive, upload, TestFlight helper, or Slack release note was run because the request was merge-only and the PR is docs/process/skill-only.
+
+## 2026-06-24 15:41 PDT - Codex - Stealth lock tile indicator
+
+- Agent/tool: Codex in the main Xcode workspace.
+- Branch/worktree: `codex/stealth-lock-indicator` at `/Users/ryanlieblein/Developer/wander`, created from latest `origin/main`.
+- Starting status: clean (`## main...origin/main`) before branching; GitHub CLI authenticated as `ryanlane23`.
+- Goal: show a single lock affordance at the top of saved place tiles when stealth mode is true/private, show no icon when stealth mode is false, remove the duplicate lock affordance from the notes section, open a PR, and start a physical-device build for Ryan to test.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, possibly related shared tile/detail components, tests if a display helper exists or is added, and `docs/agent-log.md`.
+- Coordination: using the root checkout intentionally so Xcode points at the test branch. Existing separate worktrees are unrelated; this touches the high-conflict map UI area, so keep the diff narrow and avoid unrelated project churn.
+
+Checkpoint:
+
+- Changed the shared `PlaceVisibilityIconPill` to render only for stealth/private saves (`.selfOnly`); non-private saves, including legacy `.mutuals`, now render no icon.
+- Removed the duplicate visibility icon from `SaveReviewCard` so the lock does not appear again inside the notes section.
+- Added `PlaceVisibility.showsTileLockIndicator` and regression coverage that only stealth mode shows the tile lock indicator.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated focused simulator tests passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-stealth-lock-indicator CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisibilityPolicyTests`
+  Result: `7` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-stealth-lock-indicator CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Connected device: `Ry’s iPhone` (`iPhone 15 Pro`, `871CDC6E-9974-5BB8-B0FE-300B5589AF97`).
+- Elevated physical-device build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS,id=871CDC6E-9974-5BB8-B0FE-300B5589AF97' -derivedDataPath /private/tmp/DerivedData-stealth-lock-device -allowProvisioningUpdates -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Installed and launched `com.grayline.wander` on `Ry’s iPhone` from `/private/tmp/DerivedData-stealth-lock-device/Build/Products/Debug-iphoneos/Wander.app`.
+
+Handoff:
+
+- Implementation commit: `405ddad60` (`Show stealth lock only on place tiles`).
+- Draft PR opened for Ryan testing: https://github.com/joelipshutz/wander/pull/33
+- Next step: Ryan should verify a stealth/private saved place shows one lock at the top of the place tile, a non-stealth saved place shows no visibility icon, and the notes section no longer repeats the lock.
+
+## 2026-06-24 16:11 PDT - Codex - PR #33 Merge Without TestFlight
+
+Agent: Codex
+Branch/worktree: `codex/stealth-lock-indicator` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: clean branch tracking `origin/codex/stealth-lock-indicator`; fetched `origin`, inspected worktrees and recent `docs/agent-log.md`, and confirmed Ryan requested squash-merge only with no new TestFlight build yet.
+
+Goal: squash-merge PR #33 (`[codex] Show stealth lock only on place tiles`) to `main`, push/update main, and intentionally skip build-number bump/archive/upload/Slack TestFlight release because this is not an explicit TestFlight release request.
+
+Merge gate:
+
+- PR #33 is open as a draft, targets `main`, has no labels, and has no configured status checks.
+- GitHub reports PR #33 as `MERGEABLE` after rebasing onto latest `origin/main`.
+- Local dry merge against latest `origin/main` returned a tree SHA only, with no conflicts.
+- Pre-landing review found the source diff limited to the private-only tile lock display rule, duplicate notes-section lock removal, and matching regression coverage.
+- Validation from PR setup remains applicable after the rebase because no app source changed during conflict resolution:
+  - focused `VisibilityPolicyTests`: `7` tests, `0` failures, `** TEST SUCCEEDED **`
+  - generic simulator build: `** BUILD SUCCEEDED **`
+  - physical-device build/install/launch on `Ry’s iPhone`: `** BUILD SUCCEEDED **`, app installed and launched
+- `git diff --check` passed during the merge gate.

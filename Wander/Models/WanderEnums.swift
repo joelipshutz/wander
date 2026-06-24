@@ -84,6 +84,10 @@ extension PlaceVisibility {
         return "Not private. People who follow you can see it."
     }
 
+    var showsTileLockIndicator: Bool {
+        isStealthModeEnabled
+    }
+
     var displayTitle: String {
         switch self {
         case .followers: "Everyone"
