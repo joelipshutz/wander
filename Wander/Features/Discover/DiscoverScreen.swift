@@ -788,9 +788,12 @@ private struct DiscoverPlaceDetailSheet: View {
                     Text("\(visiblePlace.owner.displayName) saved it")
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text("@\(visiblePlace.owner.handle) · \(visiblePlace.userPlace.visibility.displayTitle)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    HStack(spacing: WanderTheme.spacing1) {
+                        Text("@\(visiblePlace.owner.handle)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                        PlaceVisibilityIconPill(visibility: visiblePlace.userPlace.visibility, size: 22)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")

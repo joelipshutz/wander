@@ -994,9 +994,7 @@ private struct ProfilePlaceRow: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
             Spacer()
-            Text(visiblePlace.userPlace.visibility.displayTitle)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            PlaceVisibilityIconPill(visibility: visiblePlace.userPlace.visibility, size: 30)
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)

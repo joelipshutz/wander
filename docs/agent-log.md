@@ -5074,3 +5074,48 @@ Known issues / next steps:
 - Linear: moved `REC-21`, `REC-22`, `REC-31`, `REC-32`, `REC-33`, and `REC-34` to `In Review` and added PR/test comments to each issue.
 - Xcode testing path: `/private/tmp/recme-rec-22-discover-profile-edits/Wander.xcodeproj`.
 - Next step: Ryan simulator testing. If it passes, mark PR #29 ready and proceed with the normal squash-merge/release workflow.
+
+## 2026-06-24 11:59 PDT - Codex - REC-38 Place Tile Visibility Icons
+
+Agent: Codex
+Branch: `codex/rec-22-discover-profile-edits`
+Worktree: `/private/tmp/recme-rec-22-discover-profile-edits`
+Starting status: fetched `origin`; worktree clean on `codex/rec-22-discover-profile-edits` tracking `origin/codex/rec-22-discover-profile-edits`; inspected worktrees and recent `docs/agent-log.md`.
+
+Goal: add one more PR #29 fix so place tiles/cards show compact visibility icons instead of the words `Everyone`, `Friends`, and `Self`, while leaving privacy settings copy unchanged.
+
+Linear:
+
+- Created `REC-38` (`Use visibility icons instead of text on place tiles`) and linked it to PR #29.
+
+Expected files to touch:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `docs/agent-log.md`
+
+Implementation:
+
+- Added shared `PlaceVisibilityIconPill` in `Wander/DesignSystem/WanderTheme.swift`.
+- Updated place-card/tile visibility surfaces in Map, Profile, and Discover to show icons instead of `Everyone`, `Friends`, or `Self`.
+- Icon mapping: followers/everyone uses an unlocked icon; self-only uses a locked icon; mutuals/friends uses unlocked plus a neutral two-person icon.
+- Left privacy settings and save/edit picker copy as text so users can still choose visibility clearly.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-pr29-rec38 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Documented test destination unavailable:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-pr29-rec38-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: failed before app code because this machine only has iOS 26.5 simulators installed.
+- Elevated full test suite passed on installed iPhone 17 Pro simulator:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-pr29-rec38-tests17 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `141` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Installed and launched the updated build on iPhone 17 Pro simulator `DD656EC3-75E6-4377-A808-FB805E27A17C`.
+
+Known issues / next steps:
+
+- Ryan should visually verify Map selected-place cards, Profile Been/Wanna rows, and Discover saved-by cards before PR #29 is marked ready.

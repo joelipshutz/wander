@@ -2940,6 +2940,9 @@ private struct SaveReviewCard: View {
                 }
                 Spacer()
                 StatusBadge(status: userPlace.status)
+                if owner.id == currentUserID {
+                    PlaceVisibilityIconPill(visibility: userPlace.visibility, size: 30)
+                }
             }
 
             if let note {
@@ -2984,10 +2987,6 @@ private struct SaveReviewCard: View {
 
     private var facts: [PlaceFact] {
         var facts: [PlaceFact] = []
-
-        if owner.id == currentUserID {
-            facts.append(PlaceFact(title: userPlace.visibility.displayTitle, systemImage: "eye.fill"))
-        }
 
         if let ratingSignal = userPlace.ratingSignal,
            !summary.attributes.contains(where: { $0.questionKey == "rating_signal" }) {
@@ -3050,13 +3049,7 @@ private struct SocialProofRow: View {
                 .lineLimit(1)
             Spacer()
             if let visibility {
-                Text(visibility.displayTitle)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.vertical, WanderTheme.spacing1)
-                    .background(WanderTheme.surfaceSand.color)
-                    .clipShape(Capsule())
+                PlaceVisibilityIconPill(visibility: visibility, size: 30)
             }
         }
     }
