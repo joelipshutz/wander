@@ -67,3 +67,43 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(filters?.ownerIDs, Set(["user_maya"]))
     }
 }
+
+final class MapPinOutlineBuilderTests: XCTestCase {
+    func testPersonalBeenSaveProducesOneSolidPersonalOutline() {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .currentUser, status: .been)
+            ]
+        )
+
+        XCTAssertEqual(outlines.map(\.ownership), [.currentUser])
+        XCTAssertEqual(outlines.map(\.status), [.been])
+        XCTAssertEqual(outlines.first?.dashPattern ?? [], [CGFloat]())
+    }
+
+    func testPersonalAndSocialSavesProduceTwoStatusAwareOutlines() {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .currentUser, status: .wannaGo),
+                MapPinSaveState(ownership: .social, status: .been)
+            ]
+        )
+
+        XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
+        XCTAssertEqual(outlines.map(\.status), [.wannaGo, .been])
+        XCTAssertEqual(outlines.first?.dashPattern ?? [], [5, 4])
+        XCTAssertEqual(outlines.last?.dashPattern ?? [], [CGFloat]())
+    }
+
+    func testMultipleSocialSavesCollapseToOneSocialOutline() {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .social, status: .wannaGo),
+                MapPinSaveState(ownership: .social, status: .been)
+            ]
+        )
+
+        XCTAssertEqual(outlines.map(\.ownership), [.social])
+        XCTAssertEqual(outlines.map(\.status), [.wannaGo])
+    }
+}

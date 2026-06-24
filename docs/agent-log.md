@@ -4716,3 +4716,68 @@ Known issues / next steps:
 
 - Pushed implementation commit `5b914fd` to PR #26 for Ryan simulator testing.
 - Moved `REC-23` to `In Review` with implementation and validation details.
+
+## 2026-06-23 23:22 PDT - Codex - PR #26 Saved Place Consistency Revisions
+
+Agent: Codex
+Branch: `codex/rec-15-16-profile-filters`
+Worktree: `/private/tmp/recme-rec-15-16-profile-filters`
+Starting status: clean branch tracking `origin/codex/rec-15-16-profile-filters`; fetched `origin` before edits. Root checkout remains untouched.
+
+Goal: update PR #26 after Ryan's simulator review of saved-place behavior:
+
+- Remove the duplicate background/system sheet when opening a place from profile Been/Wanna lists.
+- Open profile Been/Wanna place details fully expanded by default.
+- Show dual terracotta/blue map marker outlines when a place is saved by both the current user and social users, with solid/dotted line styles based on each save status.
+- Make saved-place tiles consistent across map and profile by showing the same multi-saver notes for the same place.
+- Change saved-place detail section copy from `your save` to `MY NOTES`.
+- Ensure `wanna` status pills on saved-place tiles use the profile Wanna yellow treatment throughout the app.
+
+Expected files to touch:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Create Linear tracking issues for each requested item.
+- Add focused tests for dual-save marker style metadata if possible.
+- Run `git diff --check`.
+- Run focused tests and the full simulator test suite.
+
+Linear tracking:
+
+- Created `REC-24` for removing the duplicate profile saved-place sheet background.
+- Created `REC-25` for opening profile saved-place detail fully expanded.
+- Created `REC-26` for combined personal/social marker outlines.
+- Created `REC-27` for map/profile saved-place note consistency.
+- Created `REC-28` for changing `your save` to `MY NOTES`.
+- Created `REC-29` for using the profile Wanna yellow on saved-place `wanna` status pills.
+
+Implementation:
+
+- Replaced the profile Been/Wanna system sheet wrapper with an in-screen bottom `PlaceSheet` overlay so tapping a saved place no longer shows a second larger sheet/card behind the real place detail.
+- Profile saved-place details now open with `isPlaceDetailExpanded = true` and can be dismissed by tapping the backdrop.
+- Profile saved-place detail summaries now mirror the map detail source by reading all visible saves for the selected place, de-duping by user-place id, and sorting the current user's save first.
+- Map annotations now collapse duplicate visible saves for the same place into one representative marker, preferring the current user's save when present.
+- Added marker outline style metadata so a shared saved place can display both current-user terracotta and social blue outlines, with dotted/dashed outlines for `wanna` saves and solid outlines for `been` saves.
+- Updated saved-place section copy from `your save` to `MY NOTES`.
+- Updated saved-place `wanna` status pills to use `WanderTheme.sunTint` plus the profile Wanna warning color in map/profile detail and discover tiles.
+- Added unit coverage for single personal, personal+social, and multiple-social marker outline states.
+
+Validation:
+
+- `git diff --check` passed.
+- Focused elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-saved-place-consistency-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/MapPinOutlineBuilderTests`
+  Result: `3` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Full elevated validation passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-pr26-saved-place-consistency-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Known issues / next steps:
+
+- Ready to commit and push to PR #26 for Ryan simulator testing.

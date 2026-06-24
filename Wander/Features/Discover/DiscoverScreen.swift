@@ -899,8 +899,8 @@ private struct DiscoverStatusPill: View {
             .font(.system(size: 12, weight: .black))
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(minHeight: 28)
-            .background(status == .been ? WanderTheme.categorySage.color.opacity(0.22) : WanderTheme.surfaceSand.color)
-            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.textInk.color)
+            .background(status == .been ? WanderTheme.categorySage.color.opacity(0.22) : WanderTheme.sunTint.color)
+            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
             .clipShape(Capsule())
     }
 }

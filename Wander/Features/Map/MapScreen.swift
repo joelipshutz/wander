@@ -66,6 +66,25 @@ struct MapScreen: View {
         }
     }
 
+    private var mapAnnotationPlaces: [VisiblePlace] {
+        var orderedPlaceIDs: [String] = []
+        var representatives: [String: VisiblePlace] = [:]
+
+        for visiblePlace in visiblePlaces {
+            let placeID = visiblePlace.place.id
+            if let current = representatives[placeID] {
+                if shouldPreferMapRepresentative(visiblePlace, over: current) {
+                    representatives[placeID] = visiblePlace
+                }
+            } else {
+                orderedPlaceIDs.append(placeID)
+                representatives[placeID] = visiblePlace
+            }
+        }
+
+        return orderedPlaceIDs.compactMap { representatives[$0] }
+    }
+
     private var visiblePlaceIDs: [String] {
         visiblePlaces.map(\.id)
     }
@@ -145,7 +164,7 @@ struct MapScreen: View {
             Map(position: $position, selection: $selectedMapFeature) {
                 UserAnnotation()
 
-                ForEach(visiblePlaces) { visiblePlace in
+                ForEach(mapAnnotationPlaces) { visiblePlace in
                     Annotation(
                         visiblePlace.place.canonicalName,
                         coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
@@ -158,8 +177,9 @@ struct MapScreen: View {
                         } label: {
                             MapPlaceMarker(
                                 visiblePlace: visiblePlace,
-                                isCurrentUser: visiblePlace.owner.id == store.currentUser.id,
-                                isSelected: selectedPlaceID == visiblePlace.id
+                                saves: saveSummaries(for: visiblePlace),
+                                currentUserID: store.currentUser.id,
+                                isSelected: isSelectedMapRepresentative(visiblePlace)
                             )
                         }
                         .buttonStyle(.plain)
@@ -420,6 +440,29 @@ struct MapScreen: View {
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {
         saveSummaries(for: selectedPlace).map(\.visiblePlace.owner)
+    }
+
+    private func shouldPreferMapRepresentative(_ candidate: VisiblePlace, over current: VisiblePlace) -> Bool {
+        let candidateIsCurrentUser = candidate.owner.id == store.currentUser.id
+        let currentIsCurrentUser = current.owner.id == store.currentUser.id
+
+        if candidateIsCurrentUser != currentIsCurrentUser {
+            return candidateIsCurrentUser
+        }
+
+        if candidate.id == selectedPlaceID {
+            return true
+        }
+
+        if current.id == selectedPlaceID {
+            return false
+        }
+
+        return false
+    }
+
+    private func isSelectedMapRepresentative(_ visiblePlace: VisiblePlace) -> Bool {
+        selectedPlace?.place.id == visiblePlace.place.id
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
@@ -1550,24 +1593,45 @@ private struct SearchResultMarker: View {
 
 private struct MapPlaceMarker: View {
     let visiblePlace: VisiblePlace
-    let isCurrentUser: Bool
+    let saves: [PlaceSaveSummary]
+    let currentUserID: String
     let isSelected: Bool
 
     var body: some View {
-        WanderMapPin(visiblePlace: visiblePlace, isCurrentUser: isCurrentUser, isSelected: isSelected)
+        WanderMapPin(
+            visiblePlace: visiblePlace,
+            outlines: MapPinOutlineBuilder.outlines(for: saveStates),
+            isSelected: isSelected
+        )
         .scaleEffect(isSelected ? 1.08 : 1)
         .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isSelected)
+    }
+
+    private var saveStates: [MapPinSaveState] {
+        let states = saves.map { summary in
+            MapPinSaveState(
+                ownership: summary.visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                status: summary.visiblePlace.userPlace.status
+            )
+        }
+
+        if states.isEmpty {
+            return [
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            ]
+        }
+
+        return states
     }
 }
 
 private struct WanderMapPin: View {
     let visiblePlace: VisiblePlace
-    let isCurrentUser: Bool
+    let outlines: [MapPinOutline]
     let isSelected: Bool
-
-    private var pinColor: Color {
-        isCurrentUser ? WanderTheme.pinYou.color : WanderTheme.pinSocial.color
-    }
 
     var body: some View {
         Image(systemName: symbol)
@@ -1575,28 +1639,112 @@ private struct WanderMapPin: View {
             .frame(width: isSelected ? 42 : 38, height: isSelected ? 42 : 38)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(
-                        pinColor,
-                        style: StrokeStyle(
-                            lineWidth: isSelected ? 4 : 3,
-                            lineCap: .round,
-                            dash: visiblePlace.userPlace.status == .wannaGo ? [5, 4] : []
-                        )
-                    )
-            )
+            .overlay(outlineLayer)
             .overlay(
                 Circle()
                     .stroke(WanderTheme.textInk.color.opacity(isSelected ? 0.2 : 0), lineWidth: 1)
                     .padding(-4)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: isSelected ? 9 : 6, x: 0, y: 2)
-            .accessibilityLabel("\(isCurrentUser ? "Your" : "Social") \(visiblePlace.userPlace.status.displayTitle) \(visiblePlace.place.category), \(visiblePlace.place.canonicalName)")
+            .accessibilityLabel("\(accessibilityOwnershipLabel) \(visiblePlace.place.category), \(visiblePlace.place.canonicalName)")
+    }
+
+    private var outlineLayer: some View {
+        ForEach(Array(outlines.indices), id: \.self) { index in
+            Circle()
+                .stroke(
+                    outlines[index].color,
+                    style: StrokeStyle(
+                        lineWidth: outlineLineWidth,
+                        lineCap: .round,
+                        dash: outlines[index].dashPattern
+                    )
+                )
+                .padding(outlinePadding(for: index))
+        }
     }
 
     private var symbol: String {
         WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+    }
+
+    private var outlineLineWidth: CGFloat {
+        outlines.count > 1 ? (isSelected ? 3 : 2.5) : (isSelected ? 4 : 3)
+    }
+
+    private func outlinePadding(for index: Int) -> CGFloat {
+        guard outlines.count > 1 else { return 0 }
+        return index == 0 ? 0 : -5
+    }
+
+    private var accessibilityOwnershipLabel: String {
+        let hasCurrentUser = outlines.contains { $0.ownership == .currentUser }
+        let hasSocial = outlines.contains { $0.ownership == .social }
+
+        if hasCurrentUser && hasSocial {
+            return "Your and social saved place"
+        }
+
+        return hasCurrentUser ? "Your saved place" : "Social saved place"
+    }
+}
+
+enum MapPinSaveOwnership: Equatable {
+    case currentUser
+    case social
+
+    var key: String {
+        switch self {
+        case .currentUser: "current_user"
+        case .social: "social"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .currentUser: WanderTheme.pinYou.color
+        case .social: WanderTheme.pinSocial.color
+        }
+    }
+}
+
+struct MapPinSaveState: Equatable {
+    let ownership: MapPinSaveOwnership
+    let status: PlaceStatus
+}
+
+struct MapPinOutline: Identifiable, Equatable {
+    let ownership: MapPinSaveOwnership
+    let status: PlaceStatus
+
+    var id: String {
+        "\(ownership.key)-\(status.rawValue)"
+    }
+
+    var color: Color {
+        ownership.color
+    }
+
+    var dashPattern: [CGFloat] {
+        status == .wannaGo ? [5, 4] : []
+    }
+}
+
+enum MapPinOutlineBuilder {
+    static func outlines(for states: [MapPinSaveState]) -> [MapPinOutline] {
+        [
+            firstOutline(for: .currentUser, in: states),
+            firstOutline(for: .social, in: states)
+        ]
+        .compactMap { $0 }
+    }
+
+    private static func firstOutline(
+        for ownership: MapPinSaveOwnership,
+        in states: [MapPinSaveState]
+    ) -> MapPinOutline? {
+        guard let state = states.first(where: { $0.ownership == ownership }) else { return nil }
+        return MapPinOutline(ownership: ownership, status: state.status)
     }
 }
 
@@ -2466,7 +2614,7 @@ struct PlaceSheet: View {
 
             if let ownSave {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    sectionTitle("your save")
+                    sectionTitle("MY NOTES")
                     SaveReviewCard(summary: ownSave, currentUserID: currentUserID, emphasis: true)
                 }
             }
@@ -2981,7 +3129,7 @@ private struct StatusBadge: View {
             .padding(.horizontal, WanderTheme.spacing2)
             .padding(.vertical, WanderTheme.spacing1)
             .background(status == .been ? WanderTheme.stateSuccess.color.opacity(0.16) : WanderTheme.sunTint.color)
-            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.textInk.color)
+            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
             .clipShape(Capsule())
     }
 }

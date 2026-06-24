@@ -414,6 +414,7 @@ private struct SavedPlacesListScreen: View {
     @State private var isTagFilterExpanded = false
     @State private var tagFilterQuery = ""
     @State private var selectedPlace: VisiblePlace?
+    @State private var isPlaceDetailExpanded = true
 
     private var places: [VisiblePlace] {
         store.currentUserVisiblePlaces
@@ -445,39 +446,58 @@ private struct SavedPlacesListScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                searchField
-                filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                tagFilterDropdown
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    searchField
+                    filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                    tagFilterDropdown
 
-                if places.isEmpty {
-                    SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
-                } else {
-                    ForEach(places) { visiblePlace in
-                        Button {
-                            selectedPlace = visiblePlace
-                        } label: {
-                            ProfilePlaceRow(visiblePlace: visiblePlace)
+                    if places.isEmpty {
+                        SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                    } else {
+                        ForEach(places) { visiblePlace in
+                            Button {
+                                isPlaceDetailExpanded = true
+                                selectedPlace = visiblePlace
+                            } label: {
+                                ProfilePlaceRow(visiblePlace: visiblePlace)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows saved place details")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows saved place details")
                     }
                 }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, selectedPlace == nil ? WanderTheme.spacing8 : 360)
             }
-            .padding(WanderTheme.spacing4)
-            .padding(.bottom, WanderTheme.spacing8)
+
+            if let selectedPlace {
+                Color.black.opacity(0.08)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        self.selectedPlace = nil
+                    }
+                    .transition(.opacity)
+                    .zIndex(1)
+
+                PlaceSheet(
+                    place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                    saves: saveSummaries(for: selectedPlace),
+                    currentUserID: store.currentUser.id,
+                    action: .none,
+                    isExpanded: $isPlaceDetailExpanded
+                ) {}
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing3)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(2)
+            }
         }
         .wanderScreen()
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $selectedPlace) { visiblePlace in
-            ProfileSavedPlaceDetailSheet(
-                visiblePlace: visiblePlace,
-                saves: saveSummaries(for: visiblePlace),
-                currentUserID: store.currentUser.id
-            )
-        }
+        .animation(.spring(response: 0.24, dampingFraction: 0.82), value: selectedPlace?.id)
     }
 
     private var searchField: some View {
@@ -668,37 +688,25 @@ private struct SavedPlacesListScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        store.currentUserVisiblePlaces
+        var seen = Set<String>()
+        let summaries = store.visiblePlaces()
             .filter { $0.place.id == selectedPlace.place.id }
+            .filter { visiblePlace in
+                guard !seen.contains(visiblePlace.userPlace.id) else { return false }
+                seen.insert(visiblePlace.userPlace.id)
+                return true
+            }
             .map { visiblePlace in
                 PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
             }
-    }
-}
 
-private struct ProfileSavedPlaceDetailSheet: View {
-    let visiblePlace: VisiblePlace
-    let saves: [PlaceSaveSummary]
-    let currentUserID: String
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack {
-            Spacer(minLength: WanderTheme.spacing4)
-            PlaceSheet(
-                place: PlaceSheetPlace(visiblePlace: visiblePlace),
-                saves: saves,
-                currentUserID: currentUserID,
-                action: .none,
-                isExpanded: $isExpanded
-            ) {}
-            .padding(.horizontal, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing3)
+        return summaries.sorted { lhs, rhs in
+            if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
+            if rhs.visiblePlace.owner.id == store.currentUser.id { return false }
+            if lhs.visiblePlace.id == selectedPlace.id { return true }
+            if rhs.visiblePlace.id == selectedPlace.id { return false }
+            return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WanderTheme.canvasWarm.color)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 
