@@ -5304,3 +5304,40 @@ Known issues / next steps:
 
 - Link/photo extraction reliability remains a separate area to keep testing carefully.
 - This final log update is docs-only and does not require another build-number bump.
+
+## 2026-06-24 16:05 PDT - Codex - Explicit TestFlight Release Policy
+
+Agent: Codex
+Branch/worktree: `codex/explicit-testflight-release` at `/private/tmp/recme-release-gate-skill`
+Starting status: clean branch from latest `origin/main`; root checkout `/Users/joelipshutz/Developer/Wander (nametbd)` has unrelated in-progress rating-system docs changes, so this process update is isolated.
+
+Goal: update repo-owned agent skills and workflow docs so merging app PRs to `main` no longer automatically triggers a TestFlight build. Preserve the full build-number/archive/upload/TestFlight/Slack rules for explicit TestFlight release requests.
+
+Open questions clarified as defaults:
+
+- Explicit TestFlight request means Joe or Ryan asks to push/upload/release a TestFlight/TF build, including wording like "go push in your build"; a merge-only request is not enough.
+- The next explicit TestFlight release should package the latest `main`, including all eligible app changes merged since the last completed TestFlight release, and bump the build number once.
+- Linear `Done` should no longer require TestFlight for ordinary implementation work; keep TestFlight as the completion gate only for issues explicitly scoped to release/QA/TestFlight validation.
+
+Expected files:
+
+- `AGENTS.md`
+- `agent-skills/recme-pr-review-merge-release/SKILL.md`
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/decisions.md`
+- `docs/agent-log.md`
+
+Outcome:
+
+- Updated `AGENTS.md` to make TestFlight explicit-only: app-code merges are candidates for the next release, but agents must not bump/archive/upload/announce unless Joe or Ryan explicitly asks for a TestFlight/TF build or release.
+- Updated `recme-pr-review-merge-release` so PR landing and TestFlight release are separate modes. Merge-only requests now stop after merge/status updates; explicit releases package latest `main`, include all eligible merged app changes since the last completed TestFlight build, and bump once.
+- Updated both shared skills' Linear status contract so ordinary product/app issues can move to `Done` after merge plus validation, while TestFlight remains the gate for issues explicitly scoped to release/QA/TestFlight.
+- Added the release-policy decision to `docs/decisions.md`.
+- Ran `scripts/install-agent-skills.sh --check`; it reported six existing conflicts because the local indexed skill locations are symlinks to `/private/tmp/recme-shared-agent-skills` instead of the repo worktree.
+- Synced the two updated skill files into `/private/tmp/recme-shared-agent-skills/agent-skills/` so the currently indexed local skill copies match this branch.
+
+Validation:
+
+- `git diff --check` passed.
+- Stale-rule grep found no remaining auto-TestFlight phrases in `AGENTS.md`, `agent-skills/`, or `docs/decisions.md`.
+- No app build/test run; this is docs/process/skill-only.

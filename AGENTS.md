@@ -214,13 +214,15 @@ Core rules:
 
 ## App Store Build Numbers
 
-Default assumption: every app-code merge to `main` is a TestFlight candidate unless Joe explicitly says it is not. After merging app-code, UI, schema, testable behavior, or QA-relevant changes into `main`, immediately create a follow-up build-number commit, archive/upload that build, and only then post a tester-facing Slack note. Do not wait for a separate reminder.
+Default assumption: merging to `main` does not automatically trigger TestFlight. Every app-code, UI, schema, testable behavior, or QA-relevant merge is a candidate for the next explicit TestFlight release, but agents must not increment the build number, archive, upload, attach, or post tester-facing Slack release notes unless Joe or Ryan explicitly asks for a TestFlight/TF build or release. Examples of explicit release language include "push the TestFlight build", "upload the TF build", "release this to TestFlight", and "go push in your build". A merge-only request means review/merge/update durable status, then stop.
+
+An explicit TestFlight release should package the latest `main`, not just the most recent PR. Before bumping, inspect merged app changes since the last completed TestFlight build, include them in the tester-facing notes, and increment the build number once for that release batch.
 
 Any `main` update that is intended to ship to App Store Connect or TestFlight must increment the App Store build number before upload. Do not reuse a build number for the same marketing version; App Store Connect requires monotonically increasing build numbers.
 
 Required release workflow:
 
-- Merge the implementation PR to `main`.
+- Start from latest `main` after the intended implementation PRs have merged.
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml`.
 - Run `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects the new build number.
 - Commit and push both `project.yml` and `Wander.xcodeproj/project.pbxproj` to `main`.
@@ -231,7 +233,7 @@ Required release workflow:
 - Only after archive/upload has completed should an agent post a tester-facing Slack note. If the binary is still processing or not yet externally approved, the Slack note must say that plainly.
 - If the build is attached to TestFlight or confirmed available, follow the Slack release-note rules below and state the live/approved status.
 
-Docs-only or process-only commits to `main` do not need a build-number bump unless they are being packaged into a new TestFlight/App Store build. If an agent intentionally skips the bump for a `main` update, note that in `docs/agent-log.md`.
+Docs-only or process-only commits to `main` do not need a build-number bump unless they are being packaged into a new TestFlight/App Store build. App-code merges also skip the bump until an explicit TestFlight release request arrives; note the skip in `docs/agent-log.md` when the merge workflow would previously have released automatically.
 
 ## TestFlight Release Notes
 

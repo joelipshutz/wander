@@ -34,8 +34,10 @@ external references have been migrated. The human-facing workflow name is
   or message attachments on Linear issues are context only.
 - Do not reply in Slack or use Slack reactions from this workflow unless Joe explicitly asks otherwise.
 - Do not merge, upload TestFlight, or post Slack analysis from this workflow.
-- Do not move product/app issues to `Done`; the PR review/merge/TestFlight release
-  workflow owns `Done` after merge plus TestFlight availability.
+- Do not move product/app issues to `Done`; the PR review/merge/explicit
+  TestFlight release workflow owns `Done` after merge completion, with
+  TestFlight as the gate only for issues explicitly scoped to release/QA
+  validation.
 - Treat Joe and Ryan's requested changes in Linear issues as approved by default only when the direction and implementation path are clear and safe.
 - Surface approval-needed instead of implementing when direction is ambiguous, the implementation plan is unclear, the fix requires a real product/design/engineering decision, or the issue is privacy/security-sensitive, backend/schema/migration-heavy, or likely to change auth/sync/visibility semantics in a non-obvious way.
 - Do not treat "came from Slack/TestFlight" as permission to skip planning. Many
@@ -65,16 +67,19 @@ Use the `recme` team's existing statuses this way:
 - `Backlog`: captured or identified, but not yet accepted for implementation.
 - `Todo`: accepted and ready to build, but no active implementation owner yet.
 - `In Progress`: assigned or actively being built; a branch/worktree may exist.
-- `In Review`: implementation PR is open, or the PR has merged but the app change
+- `In Review`: implementation PR is open, the merge/review gate is actively in
+  progress, or the issue is explicitly TestFlight-gated and the requested build
   has not yet reached TestFlight.
-- `Done`: current pre-production completion state. The issue is merged to `main`
-  and the relevant build has been uploaded/attached/approved or is otherwise
-  available in TestFlight. A PR merge alone is not Done.
+- `Done`: implementation is merged to `main`, required validation passed, and no
+  further app change is required. For issues explicitly scoped to TestFlight QA,
+  release validation, or a user-requested TestFlight push, `Done` still requires
+  the relevant build to be uploaded/attached/approved or otherwise available in
+  TestFlight.
 - `Canceled` / `Duplicate`: inactive; skip unless Joe explicitly asks for cleanup.
 
 When production releases exist, update this contract so `Done` means shipped in a
 production App Store version and introduce or rename a separate TestFlight
-checkpoint if needed. Until then, TestFlight availability is the completion gate.
+checkpoint if needed.
 
 ## Linear Issue Scan
 
@@ -245,9 +250,9 @@ Record the `plan-eng-review` outcome in the final Codex report:
 - This workflow is complete when it has either produced an implementation PR and
   moved the Linear issue to `In Review`, or it has left a clear approval-needed /
   follow-up-needed Linear comment without pretending the issue is done.
-- Do not mark a Linear issue `Done`; `Done` requires merge to `main` plus
-  TestFlight availability and is owned by the PR review/merge/TestFlight release
-  skill.
+- Do not mark a Linear issue `Done`; `Done` requires merge to `main` plus any
+  issue-specific release gate, and is owned by the PR review/merge/explicit
+  TestFlight release skill.
 - If one Linear issue contains multiple actionable requests, move it to
   `In Review` only after every in-scope request has an open implementation PR or
   an explicit Joe-approved non-implementation outcome. Otherwise split the issue
