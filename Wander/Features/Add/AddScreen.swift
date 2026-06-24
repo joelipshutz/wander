@@ -348,7 +348,7 @@ struct AddScreen: View {
                 }
             }
 
-            PickerBlock(title: "I've...") {
+            PickerBlock(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
                     ChoicePill(title: "been", isSelected: selectedStatus == .been) { selectedStatus = .been }
                     ChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) { selectedStatus = .wannaGo }
