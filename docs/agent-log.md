@@ -5416,3 +5416,64 @@ Merge outcome:
 - Marked PR #33 ready for review, confirmed GitHub reported `MERGEABLE`, and squash-merged it to `main` as `4af06be9cea66bc1e22d0dfa53afc5a859c2b7e6`.
 - Deleted remote branch `codex/stealth-lock-indicator` via GitHub merge cleanup and fast-forwarded local `main` to `origin/main`.
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly requested no new TestFlight build yet; this app-code change will ride in the next explicit TestFlight batch.
+
+## 2026-06-24 15:01 PDT - Codex - OpenAI Category Classifier Integration
+
+Agent: Codex
+Branch: `codex/openai-category-classifier`
+Worktree: `/private/tmp/recme-openai-category-classifier`
+Starting status: clean worktree created from latest `origin/main` at `f3f7cd71a`; root checkout was on unrelated `codex/stealth-mode-toggle` work and was not edited. Fetched `origin`, inspected worktrees/status, read recent `docs/agent-log.md`, and used the OpenAI docs/source path before edits.
+
+Security note:
+
+- Ryan pasted an OpenAI project API key in chat. Treating it as sensitive and not writing it to source, docs, git, local env files, or logs. It should be installed only as a server-side Supabase Edge Function secret.
+
+Goal: integrate OpenAI as an optional cheap category classifier for extraction-worker candidates, behind `OPENAI_API_KEY` / `WANDER_OPENAI_API_KEY`, without changing iOS metadata persistence yet. Category metadata/subcategory schema work will follow separately.
+
+Expected files to touch:
+
+- `supabase/functions/extraction-worker/index.ts`
+- `docs/setup.md`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- Type-check or run the extraction worker with Deno if available.
+- `git diff --check`
+- No iOS build expected unless Swift/source files change.
+
+Checkpoint:
+
+- Confirmed there is no existing OpenAI integration in the repo.
+- Determined the safe integration boundary should be server-side in `supabase/functions/extraction-worker`, not in the iOS bundle, so the OpenAI key is never shipped to clients.
+- Attempted to add an optional OpenAI category classifier behind `OPENAI_API_KEY` / `WANDER_OPENAI_API_KEY`, defaulting to deterministic fallback when the key is absent.
+- Blocked by data-export safety review until Ryan explicitly approved the Supabase extraction worker sending approved place metadata to OpenAI for category/subcategory classification.
+
+Approval and implementation checkpoint:
+
+- Ryan explicitly approved sending place name, address/locality/region/country, source provider, source type, and current inferred category to OpenAI for category/subcategory classification.
+- Implemented the optional classifier server-side in `supabase/functions/extraction-worker/index.ts`; no iOS bundle secret or client-side OpenAI call is used.
+- The worker reads `OPENAI_API_KEY` first and `WANDER_OPENAI_API_KEY` second, uses `store: false`, and preserves deterministic fallback when the secret is absent, the timeout is hit, or OpenAI returns an invalid response.
+- Added optional candidate JSON fields `subcategory`, `category_source`, and `category_confidence` for future metadata work; current iOS decoding should ignore them until the category metadata phase.
+- Documented Supabase secret storage and runtime knobs in `docs/setup.md`.
+
+Validation:
+
+- `git diff --check` passed.
+- Downloaded a temporary Deno binary to `/private/tmp/deno-openai-classifier-check/deno` for validation only.
+- `deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts` passed after allowing Deno to fetch the Supabase functions type package.
+- No iOS build/test run because no Swift/iOS source changed.
+
+Secret storage status:
+
+- Intended storage: hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`; fallback env name in code is `WANDER_OPENAI_API_KEY`.
+- The key has not been written into git, iOS config, local env files, or logs.
+- Could not store the hosted Supabase secret from this shell because `supabase`, `npx`, `npm`, and Supabase auth/access token are unavailable locally. Once a logged-in Supabase CLI or access token is available, run:
+  `npx supabase secrets set OPENAI_API_KEY=<openai-project-key> --project-ref rugmtlgufrhlxwfkumhw`
+
+Known issues / next steps:
+
+- Draft PR opened: https://github.com/joelipshutz/wander/pull/31
+- Deploy `supabase/functions/extraction-worker` after setting the Supabase secret.
+- Ryan confirmed on 2026-06-24 that the team is not rotating the OpenAI project key; still keep it out of git and local checked-in config.
+- Follow-up category metadata work should persist `subcategory`, `category_source`, and `category_confidence` intentionally instead of relying on ignored extra candidate JSON.
