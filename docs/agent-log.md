@@ -5160,3 +5160,36 @@ Validation:
 Known issues / next steps:
 
 - Commit and push the build-number alignment, helper guard, docs/skill updates, and this investigation log to `main`.
+
+## 2026-06-24 12:39 PDT - Codex - PR #29 Merge and TestFlight Release
+
+Agent: Codex
+Branch: `codex/pr29-merge-release`
+Worktree: `/private/tmp/recme-pr29-merge-release`
+Starting status: root checkout clean on `main` at `origin/main`; fetched `origin`; inspected worktrees/status and recent `docs/agent-log.md`; created isolated release worktree from `origin/main`.
+
+Goal: Ryan confirmed PR #29 simulator testing passed. Squash-merge PR #29, bump the TestFlight build number, archive/upload the build, run the TestFlight helper, update Linear, and post the required tester-facing Slack note.
+
+Planned checks before merge:
+
+- Inspect PR #29 metadata, diff, checks, and mergeability.
+- Confirm the PR branch merges cleanly with latest `origin/main`.
+- Run release validation before uploading.
+
+Merge and release checkpoint:
+
+- PR #29 initially had one conflict against latest `origin/main` in `docs/agent-log.md` only; preserved both log entries and confirmed no source conflicts.
+- Updated PR branch `codex/rec-22-discover-profile-edits` from `origin/main`, resolved the log conflict, and ran full tests on iPhone 17 Pro simulator `DD656EC3-75E6-4377-A808-FB805E27A17C`.
+- PR #29 was marked ready and squash-merged to `main`; merge commit `228965f69dd49e3f4c4de3ec9f28f99e7658084e`.
+- Bumped `CURRENT_PROJECT_VERSION` from `41` to `42` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; it produced unrelated project churn, so the project file was restored and only the build-number lines were reapplied manually.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build42 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full test suite passed on installed iPhone 17 Pro simulator:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-build42-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `141` tests, `0` failures, `** TEST SUCCEEDED **`.
