@@ -5249,3 +5249,9 @@ Validation:
 - Elevated full simulator test suite passed:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-stealth-mode CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `143` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Handoff:
+
+- Implementation commit: `fb59b5aec` (`Add stealth mode visibility toggle`).
+- Draft PR opened for simulator testing: https://github.com/joelipshutz/wander/pull/30
+- Next step: Ryan should test the add/edit place details flow in Xcode from branch `codex/stealth-mode-toggle`, especially the bottom-of-page `stealth mode` toggle and absence of the Friends picker.
