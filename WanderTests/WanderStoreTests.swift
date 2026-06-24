@@ -285,18 +285,21 @@ final class WanderStoreTests: XCTestCase {
             visibility: .followers,
             note: "has answers",
             sourceType: .manual,
+            ratingScore: 4,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great"),
                 PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes"),
                 PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
             ]
         )
 
         let attributes = store.attributes(for: result.userPlaceID)
-        XCTAssertEqual(attributes.map(\.questionKey), ["coffee_tags", "rating_signal", "work_setup"])
-        XCTAssertEqual(attributes.first { $0.questionKey == "rating_signal" }?.valueJSON, "\"great\"")
+        XCTAssertEqual(attributes.map(\.questionKey), ["coffee_tags", "work_setup"])
         XCTAssertEqual(attributes.first { $0.questionKey == "coffee_tags" }?.valueJSON, "[\"wifi solid\",\"quiet\"]")
-        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.id == result.userPlaceID }?.userPlace.ratingSignal, "great")
+        let visiblePlace = store.currentUserVisiblePlaces.first { $0.id == result.userPlaceID }
+        XCTAssertEqual(visiblePlace?.userPlace.ratingScore, 4)
+        XCTAssertEqual(visiblePlace?.userPlace.recommendedScore, 4)
+        XCTAssertEqual(visiblePlace?.userPlace.recommendedCount, 1)
+        XCTAssertNil(visiblePlace?.userPlace.ratingSignal)
     }
 
     func testFilePersistenceRestoresSavedPlaceAfterRelaunch() {
@@ -329,8 +332,8 @@ final class WanderStoreTests: XCTestCase {
             visibility: .mutuals,
             note: "window table",
             sourceType: .manual,
+            ratingScore: 5,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great"),
                 PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
             ]
         )
@@ -347,8 +350,62 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.status, .been)
         XCTAssertEqual(saved?.userPlace.visibility, .mutuals)
         XCTAssertEqual(saved?.userPlace.note, "window table")
-        XCTAssertEqual(saved?.userPlace.ratingSignal, "great")
-        XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags", "rating_signal"])
+        XCTAssertEqual(saved?.userPlace.ratingScore, 5)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, 5)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 1)
+        XCTAssertNil(saved?.userPlace.ratingSignal)
+        XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags"])
+    }
+
+    func testOldPersistenceSnapshotClearsSavedPlaceDataButKeepsAccountGraph() throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        firstStore.defaultVisibility = .mutuals
+        firstStore.follow(userID: "user_maya", source: .profile)
+        firstStore.block(userID: "user_ryan")
+        _ = firstStore.createUnresolvedDraft(sourceType: .link, originalInput: "https://maps.app.goo.gl/stale")
+        _ = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_stale_maru",
+                name: "Stale Maru",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "old local row",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+
+        let url = fixture.directory.appendingPathComponent("store.json")
+        let data = try Data(contentsOf: url)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "savedPlaceResetVersion")
+        let oldSnapshotData = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try oldSnapshotData.write(to: url)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertEqual(relaunchedStore.currentUser.id, "user_live")
+        XCTAssertEqual(relaunchedStore.defaultVisibility, .mutuals)
+        XCTAssertEqual(relaunchedStore.relationship(to: "user_maya"), .follower)
+        XCTAssertEqual(relaunchedStore.blockedProfiles().map(\.id), ["user_ryan"])
+        XCTAssertTrue(relaunchedStore.visiblePlaces().isEmpty)
+        XCTAssertTrue(relaunchedStore.unresolvedDrafts.isEmpty)
+        XCTAssertTrue(relaunchedStore.sourceArtifacts.isEmpty)
+        XCTAssertTrue(relaunchedStore.extractionJobs.isEmpty)
+
+        let cleanedData = try Data(contentsOf: url)
+        let cleanedSnapshot = try XCTUnwrap(JSONSerialization.jsonObject(with: cleanedData) as? [String: Any])
+        XCTAssertEqual(cleanedSnapshot["savedPlaceResetVersion"] as? Int, WanderStoreSnapshot.currentSavedPlaceResetVersion)
+        XCTAssertEqual((cleanedSnapshot["places"] as? [Any])?.count, 0)
+        XCTAssertEqual((cleanedSnapshot["userPlaces"] as? [Any])?.count, 0)
     }
 
     func testFilePersistenceRestoresDraftsAndSocialGraphAfterRelaunch() {
@@ -387,23 +444,31 @@ final class WanderStoreTests: XCTestCase {
             note: "changed answers",
             sourceType: .manual,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "good")
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"])
             ]
         )
 
         let attributes = store.attributes(for: result.userPlaceID)
-        XCTAssertEqual(attributes.map(\.questionKey), ["rating_signal"])
-        XCTAssertEqual(attributes[0].valueJSON, "\"good\"")
+        XCTAssertEqual(attributes.map(\.questionKey), ["coffee_tags"])
+        XCTAssertEqual(attributes[0].valueJSON, "[\"quiet\"]")
     }
 
-    func testSaveQuestionTemplatesUseEmojiRatingsAndMultiBestFor() {
+    func testPlaceRatingsNormalizeForBeenSavesOnly() {
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: nil), 3)
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 0), 1)
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 6), 5)
+        XCTAssertNil(PlaceRating.scoreForSave(status: .wannaGo, score: 5))
+        XCTAssertEqual(PlaceRating.averageDisplay(4.5), "4.5")
+        XCTAssertEqual(PlaceRating.averageDisplay(5), "5")
+    }
+
+    func testSaveQuestionTemplatesUseSliderRatingAndMultiBestFor() {
         let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
-        let rating = restaurantBlocks.first { $0.key == "rating_signal" }
         let occasion = restaurantBlocks.first { $0.key == "occasion" }
         let tags = restaurantBlocks.first { $0.key == "restaurant_tags" }
 
-        XCTAssertEqual(rating?.options, ["😐", "🙂", "😍", "🤯"])
-        XCTAssertEqual(rating?.defaultValues, ["😍"])
+        XCTAssertFalse(restaurantBlocks.contains { $0.key == "rating_signal" })
+        XCTAssertEqual(restaurantBlocks.map(\.key), ["price", "occasion", "restaurant_tags"])
         XCTAssertEqual(occasion?.kind, .multiTag)
         XCTAssertEqual(occasion?.valueType, "multi_tag")
         XCTAssertTrue((occasion?.defaultValues.count ?? 0) > 1)
@@ -415,7 +480,7 @@ final class WanderStoreTests: XCTestCase {
         let coffeeBlocks = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)
         let hikeBlocks = AddQuestionTemplates.blocks(category: "hike", status: .wannaGo)
 
-        XCTAssertEqual(restaurantBlocks.map(\.key), ["rating_signal", "occasion", "restaurant_tags"])
+        XCTAssertEqual(restaurantBlocks.map(\.key), ["interest_signal", "occasion", "restaurant_tags"])
         XCTAssertEqual(restaurantBlocks.first?.title, "how excited are you?")
         XCTAssertEqual(restaurantBlocks.first?.options, ["curious", "excited", "must go"])
         XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
@@ -423,11 +488,11 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
         XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, [])
 
-        XCTAssertEqual(coffeeBlocks.map(\.key), ["rating_signal", "coffee_tags"])
+        XCTAssertEqual(coffeeBlocks.map(\.key), ["interest_signal", "coffee_tags"])
         XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
         XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
 
-        XCTAssertEqual(hikeBlocks.map(\.key), ["rating_signal", "hike_tags"])
+        XCTAssertEqual(hikeBlocks.map(\.key), ["interest_signal", "hike_tags"])
         XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
         XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("easy maybe"), true)
     }
@@ -1009,8 +1074,9 @@ final class WanderStoreTests: XCTestCase {
             visibility: .followers,
             note: "window table",
             sourceType: .currentLocation,
+            ratingScore: 4,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid"])
             ],
             backend: backend
         )
@@ -1018,14 +1084,16 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(result, SaveResult(userPlaceID: "up_remote_maru", syncState: .synced, placeID: "place_remote_maru"))
         XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
         XCTAssertEqual(userPlaceRepository.savedDrafts[0].place.canonicalName, "Maru Coffee")
-        XCTAssertEqual(userPlaceRepository.savedDrafts[0].attributes.map(\.questionKey), ["rating_signal"])
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].ratingScore, 4)
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].attributes.map(\.questionKey), ["coffee_tags"])
 
         let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Maru Coffee" }
         XCTAssertEqual(saved?.place.serverID, "place_remote_maru")
         XCTAssertEqual(saved?.userPlace.serverID, "up_remote_maru")
         XCTAssertEqual(saved?.userPlace.placeID, "place_remote_maru")
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
         XCTAssertEqual(saved?.userPlace.syncState, .synced)
-        XCTAssertEqual(store.attributes(for: "up_remote_maru").map(\.questionKey), ["rating_signal"])
+        XCTAssertEqual(store.attributes(for: "up_remote_maru").map(\.questionKey), ["coffee_tags"])
     }
 
     func testRemoteOwnPlaceSaveRefreshesVisiblePlaceCache() async {
@@ -1267,8 +1335,9 @@ final class WanderStoreTests: XCTestCase {
             visibility: .followers,
             note: "saved while signed out",
             sourceType: .manual,
+            ratingScore: 4,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+                PlaceAttributeDraft(questionKey: "restaurant_tags", valueType: "multi_tag", stringValues: ["date night"])
             ]
         )
 
@@ -1284,11 +1353,13 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(syncedCount, 1)
         XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
         XCTAssertEqual(userPlaceRepository.savedDrafts[0].place.canonicalName, "Pijja Palace")
-        XCTAssertEqual(userPlaceRepository.savedDrafts[0].attributes.map(\.questionKey), ["rating_signal"])
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].ratingScore, 4)
+        XCTAssertEqual(userPlaceRepository.savedDrafts[0].attributes.map(\.questionKey), ["restaurant_tags"])
         let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Pijja Palace" }
         XCTAssertEqual(saved?.userPlace.userID, "user_live")
         XCTAssertEqual(saved?.place.serverID, "place_remote_pijja")
         XCTAssertEqual(saved?.userPlace.serverID, "up_remote_pijja")
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
         XCTAssertEqual(saved?.userPlace.syncState, .synced)
         XCTAssertNil(saved?.userPlace.lastSyncError)
     }
@@ -1309,8 +1380,9 @@ final class WanderStoreTests: XCTestCase {
             visibility: .followers,
             note: "saved while signed out",
             sourceType: .manual,
+            ratingScore: 4,
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great")
+                PlaceAttributeDraft(questionKey: "restaurant_tags", valueType: "multi_tag", stringValues: ["date night"])
             ]
         )
 

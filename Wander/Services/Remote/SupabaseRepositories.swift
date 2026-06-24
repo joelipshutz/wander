@@ -543,6 +543,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let visibility: String
     let note: String?
     let ratingSignal: String?
+    let ratingScore: Int?
     let nearbyConfirmed: Bool
     let sourceType: String
 
@@ -550,7 +551,8 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         self.status = draft.status.rawValue
         self.visibility = draft.visibility.rawValue
         self.note = draft.note
-        self.ratingSignal = draft.ratingSignal
+        self.ratingSignal = nil
+        self.ratingScore = draft.ratingScore
         self.nearbyConfirmed = draft.nearbyConfirmed
         self.sourceType = draft.sourceType
     }
@@ -560,6 +562,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         case visibility
         case note
         case ratingSignal = "rating_signal"
+        case ratingScore = "rating_score"
         case nearbyConfirmed = "nearby_confirmed"
         case sourceType = "source_type"
     }

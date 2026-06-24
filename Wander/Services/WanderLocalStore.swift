@@ -109,6 +109,7 @@ final class WanderStore: ObservableObject {
         self.analytics = analytics
         self.persistence = persistence
 
+        var shouldPersistAfterRestore = false
         if let restored = persistence?.load()?.restoredState(contactProvider: fixtures.contactProvider) {
             self.currentUser = restored.currentUser
             self.profiles = restored.profiles
@@ -122,6 +123,7 @@ final class WanderStore: ObservableObject {
             self.extractionJobs = restored.extractionJobs
             self.contactProvider = restored.contactProvider
             self.defaultVisibility = restored.defaultVisibility
+            shouldPersistAfterRestore = restored.didApplySavedPlaceReset
         } else {
             self.currentUser = fixtures.currentUser
             self.profiles = fixtures.profiles
@@ -132,6 +134,10 @@ final class WanderStore: ObservableObject {
             self.blocks = fixtures.blocks
             self.contactProvider = fixtures.contactProvider
             self.defaultVisibility = fixtures.currentUser.defaultVisibility
+        }
+
+        if shouldPersistAfterRestore {
+            persist()
         }
     }
 
@@ -470,14 +476,19 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
+        ratingScore: Int? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let place = upsertPlace(from: candidate, sourceType: sourceType)
+        let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
             existing.statusRaw = status.rawValue
             existing.visibilityRaw = visibility.rawValue
             existing.note = note
+            existing.ratingScore = savedRatingScore
+            existing.recommendedScore = savedRatingScore.map(Double.init)
+            existing.recommendedCount = savedRatingScore == nil ? 0 : 1
             if let attributes {
                 existing.ratingSignal = ratingSignal(from: attributes)
                 replaceAttributes(for: existing.id, with: attributes, syncState: .pendingUpdate)
@@ -498,6 +509,9 @@ final class WanderStore: ObservableObject {
             visibility: visibility,
             note: note,
             ratingSignal: attributes.flatMap { ratingSignal(from: $0) },
+            ratingScore: savedRatingScore,
+            recommendedScore: savedRatingScore.map(Double.init),
+            recommendedCount: savedRatingScore == nil ? 0 : 1,
             nearbyConfirmed: sourceType == .currentLocation,
             sourceType: sourceType.rawValue,
             syncState: .pendingCreate
@@ -523,6 +537,7 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
+        ratingScore: Int? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {
@@ -535,6 +550,7 @@ final class WanderStore: ObservableObject {
             visibility: visibility,
             note: note,
             sourceType: sourceType,
+            ratingScore: ratingScore,
             attributes: attributes
         )
         #if DEBUG
@@ -1336,6 +1352,7 @@ final class WanderStore: ObservableObject {
             visibility: userPlace.visibility,
             note: userPlace.note,
             ratingSignal: userPlace.ratingSignal,
+            ratingScore: userPlace.ratingScore,
             nearbyConfirmed: userPlace.nearbyConfirmed,
             sourceType: userPlace.sourceType,
             attributes: attributeDrafts

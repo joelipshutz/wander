@@ -13,6 +13,7 @@ struct AddScreen: View {
     @State private var selectedCandidateID: String?
     @State private var selectedStatus: PlaceStatus = .been
     @State private var selectedVisibility: PlaceVisibility = .followers
+    @State private var selectedRatingScore = PlaceRating.defaultScore
     @State private var selectedSource: AddSourceType = .manual
     @State private var note = ""
     @State private var manualName = ""
@@ -381,6 +382,10 @@ struct AddScreen: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
+            if selectedStatus == .been {
+                PlaceRatingSlider(score: $selectedRatingScore)
+            }
+
             ForEach(currentQuestionBlocks) { block in
                 QuestionBlock(title: block.title, tag: block.tag) {
                     SelectableQuestionOptions(
@@ -489,6 +494,7 @@ struct AddScreen: View {
         selectedCandidateID = nil
         selectedStatus = .been
         selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -513,6 +519,7 @@ struct AddScreen: View {
         selectedCandidateID = nil
         selectedStatus = .been
         selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -628,6 +635,7 @@ struct AddScreen: View {
             visibility: selectedVisibility,
             note: note.isEmpty ? nil : note,
             sourceType: selectedSource,
+            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             attributes: attributeDrafts(),
             backend: auth.isSignedIn ? backend : nil
         )

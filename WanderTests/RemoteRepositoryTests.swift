@@ -45,7 +45,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "been",
             "visibility": "followers",
             "note": "Easy sunset win.",
-            "rating_signal": "great",
+            "rating_signal": null,
+            "rating_score": 5,
+            "recommended_score": 4.5,
+            "recommended_count": 2,
             "source_type": "manual",
             "attributes": [
               {
@@ -70,6 +73,9 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(places.map { $0.place.canonicalName }, ["Griffith Observatory Trail"])
         XCTAssertEqual(places[0].userPlace.status, .been)
         XCTAssertEqual(places[0].userPlace.visibility, .followers)
+        XCTAssertEqual(places[0].userPlace.ratingScore, 5)
+        XCTAssertEqual(places[0].userPlace.recommendedScore, 4.5)
+        XCTAssertEqual(places[0].userPlace.recommendedCount, 2)
         XCTAssertEqual(places[0].attributes.map(\.questionKey), ["strenuousness"])
         XCTAssertEqual(places[0].attributes[0].valueJSON, "\"easy\"")
         XCTAssertEqual(rpc.calls.map(\.name), ["visible_places_in_view"])
@@ -130,6 +136,9 @@ final class RemoteRepositoryTests: XCTestCase {
             "visibility": "mutuals",
             "note": "rainy night",
             "rating_signal": null,
+            "rating_score": null,
+            "recommended_score": null,
+            "recommended_count": 0,
             "source_type": "manual",
             "attributes": []
           }
@@ -169,6 +178,9 @@ final class RemoteRepositoryTests: XCTestCase {
             "visibility": "followers",
             "note": null,
             "rating_signal": null,
+            "rating_score": null,
+            "recommended_score": null,
+            "recommended_count": 0,
             "source_type": "manual",
             "attributes": []
           }
@@ -227,11 +239,10 @@ final class RemoteRepositoryTests: XCTestCase {
             status: .been,
             visibility: .followers,
             note: "window table",
-            ratingSignal: "great",
+            ratingScore: 4,
             nearbyConfirmed: true,
             sourceType: "current_location",
             attributes: [
-                PlaceAttributeDraft(questionKey: "rating_signal", valueType: "emoji_scale", stringValue: "great"),
                 PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
             ]
         )
@@ -251,11 +262,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(userPlace?["status"] as? String, "been")
         XCTAssertEqual(userPlace?["visibility"] as? String, "followers")
         XCTAssertEqual(userPlace?["nearby_confirmed"] as? Bool, true)
+        XCTAssertEqual(userPlace?["rating_score"] as? Int, 4)
+        XCTAssertNil(userPlace?["rating_signal"])
 
         let attributes = body["input_attributes"] as? [[String: Any]]
-        XCTAssertEqual(attributes?.map { $0["question_key"] as? String }, ["rating_signal", "coffee_tags"])
-        XCTAssertEqual(attributes?.first?["value"] as? String, "great")
-        XCTAssertEqual(attributes?[1]["value"] as? [String], ["wifi solid", "quiet"])
+        XCTAssertEqual(attributes?.map { $0["question_key"] as? String }, ["coffee_tags"])
+        XCTAssertEqual(attributes?.first?["value"] as? [String], ["wifi solid", "quiet"])
     }
 
     func testUnblockCallsExpectedRPC() async throws {

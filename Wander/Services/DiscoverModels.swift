@@ -54,6 +54,23 @@ struct VisiblePlace: Identifiable {
     let userPlace: LocalUserPlace
     let owner: LocalProfile
     var attributes: [LocalPlaceAttribute] = []
+
+    var recommendedScore: Double? {
+        if let score = userPlace.recommendedScore, userPlace.recommendedCount > 0 {
+            return score
+        }
+        guard userPlace.status == .been,
+              let ratingScore = userPlace.ratingScore
+        else { return nil }
+        return Double(ratingScore)
+    }
+
+    var recommendedCount: Int {
+        if userPlace.recommendedCount > 0 {
+            return userPlace.recommendedCount
+        }
+        return userPlace.status == .been && userPlace.ratingScore != nil ? 1 : 0
+    }
 }
 
 struct DiscoverResults {
@@ -78,6 +95,25 @@ struct VisiblePlaceGroup: Identifiable {
 
     var otherSaveCount: Int {
         max(0, saveCount - 1)
+    }
+
+    var recommendedScore: Double? {
+        let scores = places
+            .filter { $0.userPlace.status == .been }
+            .compactMap(\.userPlace.ratingScore)
+
+        guard !scores.isEmpty else {
+            return primary.recommendedScore
+        }
+
+        return Double(scores.reduce(0, +)) / Double(scores.count)
+    }
+
+    var recommendedCount: Int {
+        let localCount = places
+            .filter { $0.userPlace.status == .been && $0.userPlace.ratingScore != nil }
+            .count
+        return max(localCount, primary.recommendedCount)
     }
 
     var isSavedByCurrentUser: Bool {

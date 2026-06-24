@@ -45,6 +45,9 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let visibility: String
     let note: String?
     let ratingSignal: String?
+    let ratingScore: Int?
+    let recommendedScore: Double?
+    let recommendedCount: Int?
     let sourceType: String
     let attributes: [RemotePlaceAttributeDTO]
 
@@ -62,6 +65,9 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case visibility
         case note
         case ratingSignal = "rating_signal"
+        case ratingScore = "rating_score"
+        case recommendedScore = "recommended_score"
+        case recommendedCount = "recommended_count"
         case sourceType = "source_type"
         case attributes
     }
@@ -99,6 +105,9 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             visibility: parsedVisibility,
             note: note,
             ratingSignal: ratingSignal,
+            ratingScore: ratingScore,
+            recommendedScore: recommendedScore,
+            recommendedCount: recommendedCount ?? 0,
             sourceType: sourceType,
             syncState: .synced
         )

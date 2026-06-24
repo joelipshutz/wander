@@ -185,6 +185,9 @@ final class LocalUserPlace {
     var statusRaw: String
     var note: String?
     var ratingSignal: String?
+    var ratingScore: Int?
+    var recommendedScore: Double?
+    var recommendedCount: Int
     var visibilityRaw: String
     var nearbyConfirmed: Bool
     var visitedAt: Date?
@@ -201,7 +204,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Int? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -209,6 +212,9 @@ final class LocalUserPlace {
         self.statusRaw = status.rawValue
         self.note = note
         self.ratingSignal = ratingSignal
+        self.ratingScore = PlaceRating.normalized(ratingScore)
+        self.recommendedScore = recommendedScore
+        self.recommendedCount = recommendedCount
         self.visibilityRaw = visibility.rawValue
         self.nearbyConfirmed = nearbyConfirmed
         self.visitedAt = visitedAt

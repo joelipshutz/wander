@@ -2,29 +2,10 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(2);
+select plan(4);
 
 insert into public.profiles (id, handle, display_name)
 values ('user_save_owner', 'saveowner', 'Save Owner');
-
-insert into public.question_definitions (
-  id,
-  owner_user_id,
-  question_key,
-  prompt,
-  value_type,
-  options,
-  is_system
-)
-values (
-  '30000000-0000-0000-0000-000000000101',
-  null,
-  'rating_signal',
-  'how much did you like it?',
-  'emoji_scale',
-  '["meh", "fine", "good", "great"]',
-  true
-);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_save_owner', true);
@@ -46,16 +27,27 @@ select isnt_empty(
         "status": "been",
         "visibility": "followers",
         "nearby_confirmed": true,
-        "source_type": "manual"
+        "source_type": "manual",
+        "rating_score": 4
       }'::jsonb,
       '[{
-        "question_key": "rating_signal",
-        "value_type": "emoji_scale",
-        "value": "great"
+        "question_key": "coffee_tags",
+        "value_type": "multi_tag",
+        "value": ["wifi solid"]
       }]'::jsonb
     )
   $$,
   'save_own_place creates an own place for an authenticated Clerk caller'
+);
+
+select is(
+  (
+    select rating_score::int
+    from public.user_places
+    where user_id = 'user_save_owner'
+  ),
+  4,
+  'save_own_place stores numeric rating score for been places'
 );
 
 select isnt_empty(
@@ -75,12 +67,23 @@ select isnt_empty(
         "status": "wanna_go",
         "visibility": "mutuals",
         "nearby_confirmed": false,
-        "source_type": "manual"
+        "source_type": "manual",
+        "rating_score": 5
       }'::jsonb,
       '[]'::jsonb
     )
   $$,
   'save_own_place can upsert an existing canonical place through the RPC'
+);
+
+select is_empty(
+  $$
+    select 1
+    from public.user_places
+    where user_id = 'user_save_owner'
+      and rating_score is not null
+  $$,
+  'save_own_place clears rating score for wanna go places'
 );
 
 select * from finish();
