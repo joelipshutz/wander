@@ -4780,4 +4780,5 @@ Validation:
 
 Known issues / next steps:
 
-- Ready to commit and push to PR #26 for Ryan simulator testing.
+- Pushed implementation commit `dd55f82` to PR #26 for Ryan simulator testing.
+- Next step: Ryan should test the Been/Wanna profile list detail overlay, shared-place notes, marker rings, and `wanna` pill color in the simulator before squash-merge.
