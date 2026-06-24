@@ -5255,3 +5255,33 @@ Handoff:
 - Implementation commit: `fb59b5aec` (`Add stealth mode visibility toggle`).
 - Draft PR opened for simulator testing: https://github.com/joelipshutz/wander/pull/30
 - Next step: Ryan should test the add/edit place details flow in Xcode from branch `codex/stealth-mode-toggle`, especially the bottom-of-page `stealth mode` toggle and absence of the Friends picker.
+
+## 2026-06-24 15:18 PDT - Codex - PR #30 Merge and TestFlight Release
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: root checkout was clean on `codex/stealth-mode-toggle`; fetched `origin`, inspected status/worktrees and recent `docs/agent-log.md`, confirmed PR #30 was mergeable with no review threads or CI checks configured, and verified a dry merge against `origin/main` had no conflicts.
+
+Goal: Ryan confirmed the stealth mode toggle worked on-device. Squash-merge PR #30, bump the TestFlight build number, archive/upload the build, run the TestFlight helper, and post the required tester-facing Slack note.
+
+Merge checkpoint:
+
+- PR #30 was marked ready after Ryan's physical-device test.
+- Squash-merged PR #30 to `main` with expected head SHA `4c2e1fe38949c8ef8d5e63613f49f5e975fd3823`.
+- Merge commit on `main`: `326660e0b` (`Add stealth mode visibility toggle`).
+- Bumping `CURRENT_PROJECT_VERSION` from `42` to `43` for the TestFlight candidate.
+
+Build-number checkpoint:
+
+- Updated `project.yml` and `Wander.xcodeproj/project.pbxproj` to `CURRENT_PROJECT_VERSION = 43`.
+- Ran `/Users/ryanlieblein/.local/bin/xcodegen generate`; it again produced unrelated project setting churn, so only the intended build-number lines were kept in `Wander.xcodeproj/project.pbxproj`.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build43 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-build43 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `143` tests, `0` failures, `** TEST SUCCEEDED **`.
