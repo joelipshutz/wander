@@ -26,4 +26,15 @@ final class VisibilityPolicyTests: XCTestCase {
         XCTAssertFalse(policy.canSeePlace(viewerID: nil, ownerID: "user_b", visibility: .followers, relationship: .nonFollower, isBlocked: false))
         XCTAssertFalse(policy.canSeePlace(viewerID: "user_a", ownerID: "user_b", visibility: .followers, relationship: .mutual, isBlocked: true))
     }
+
+    func testStealthModeNormalizesLegacyFriendsToNotPrivate() {
+        XCTAssertEqual(PlaceVisibility.followers.normalizedForStealthMode, .followers)
+        XCTAssertEqual(PlaceVisibility.mutuals.normalizedForStealthMode, .followers)
+        XCTAssertEqual(PlaceVisibility.selfOnly.normalizedForStealthMode, .selfOnly)
+    }
+
+    func testStealthModeToggleWritesOnlyPrivateOrFollowersVisibility() {
+        XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: true), .selfOnly)
+        XCTAssertEqual(PlaceVisibility.visibilityForStealthMode(isPrivate: false), .followers)
+    }
 }

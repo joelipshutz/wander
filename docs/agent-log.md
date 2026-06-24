@@ -5224,3 +5224,34 @@ Known issues / next steps:
 
 - Link/photo extraction reliability remains a separate area to keep testing carefully.
 - This final log update is docs-only and does not require another build-number bump.
+## 2026-06-24 14:30 PDT - Codex - Stealth mode save/edit toggle
+
+- Agent/tool: Codex in isolated worktree.
+- Branch/worktree: `codex/stealth-mode-toggle` at `/private/tmp/recme-stealth-mode-toggle`, created from latest `origin/main`.
+- Starting status: clean (`## codex/stealth-mode-toggle...origin/main`).
+- Goal: move place visibility out of the first save/edit step, replace the three-way "who can see this" picker with a two-state "stealth mode" private toggle at the bottom of the details page above `update my map`, open a PR, and point Ryan's Xcode checkout to the branch for simulator testing.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Add/AddScreen.swift`, `Wander/Models/WanderEnums.swift`, tests if a small visibility helper is added, and `docs/agent-log.md`.
+- Coordination: root checkout was clean on `main`; existing worktrees are unrelated. This touches high-conflict map/add UI files, so implementation is isolated from Ryan/Joe's main checkout until ready to test.
+
+Checkpoint:
+
+- Implemented a shared `PlaceVisibilityStealthToggle` and two-state helper API so save/edit flows can only write `.selfOnly` when stealth is on or `.followers` when stealth is off. Legacy `.mutuals` values are normalized to not-private for the new UI rather than exposed as a selectable option.
+- Moved visibility out of the first add/save confirmation step and placed the `stealth mode` switch at the bottom of the details page immediately above `save to my map` / `update my map`.
+- Updated settings from the old three-option default place visibility picker to a default stealth mode toggle, and updated the privacy/trust copy to remove the Friends option.
+- Updated tests for the settings trust surface and added stealth-mode normalization/write contract coverage.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-stealth-mode CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-stealth-mode CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `143` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Handoff:
+
+- Implementation commit: `fb59b5aec` (`Add stealth mode visibility toggle`).
+- Draft PR opened for simulator testing: https://github.com/joelipshutz/wander/pull/30
+- Next step: Ryan should test the add/edit place details flow in Xcode from branch `codex/stealth-mode-toggle`, especially the bottom-of-page `stealth mode` toggle and absence of the Friends picker.

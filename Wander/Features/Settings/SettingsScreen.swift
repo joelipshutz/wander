@@ -142,22 +142,17 @@ struct SettingsScreen: View {
 
     private var visibilitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("default place visibility")
-
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(PlaceVisibility.allCases, id: \.rawValue) { visibility in
-                    Button {
-                        store.defaultVisibility = visibility
-                    } label: {
-                        WanderChip(title: visibility.displayTitle, isSelected: store.defaultVisibility == visibility)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Text(store.defaultVisibility.helperCopy)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            SettingsSectionTitle("default stealth mode")
+            PlaceVisibilityStealthToggle(
+                visibility: Binding(
+                    get: { store.defaultVisibility.normalizedForStealthMode },
+                    set: { store.defaultVisibility = $0 }
+                ),
+                showsContainer: false
+            )
+        }
+        .onAppear {
+            store.defaultVisibility = store.defaultVisibility.normalizedForStealthMode
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
@@ -322,14 +317,14 @@ struct SettingsTrustSurface {
         TrustFact(
             id: "everyone",
             icon: "eye.slash",
-            title: "Everyone means followers",
-            body: "Places saved to Everyone are visible to people who follow you. They are not a public internet feed."
+            title: "Not private means followers",
+            body: "Places saved outside stealth mode are visible to people who follow you. They are not a public internet feed."
         ),
         TrustFact(
-            id: "friends",
-            icon: "person.2",
-            title: "Friends means mutual follows",
-            body: "Friends places are for people you follow who also follow you back."
+            id: "stealth",
+            icon: "lock",
+            title: "Stealth mode means private",
+            body: "Stealth places stay on your map for you only."
         ),
         TrustFact(
             id: "location",

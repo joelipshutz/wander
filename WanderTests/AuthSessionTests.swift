@@ -141,12 +141,12 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(SettingsTrustSurface.sheetAccessibilityID, "settings.privacyTrust.sheet")
 
         let facts = SettingsTrustSurface.facts
-        XCTAssertEqual(facts.map(\.id), ["everyone", "friends", "location", "extraction", "blocks", "contacts"])
+        XCTAssertEqual(facts.map(\.id), ["everyone", "stealth", "location", "extraction", "blocks", "contacts"])
         XCTAssertEqual(Set(facts.map(\.id)).count, facts.count)
 
         XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("people who follow you") == true)
         XCTAssertTrue(facts.first { $0.id == "everyone" }?.body.contains("not a public internet feed") == true)
-        XCTAssertTrue(facts.first { $0.id == "friends" }?.body.contains("follow you back") == true)
+        XCTAssertTrue(facts.first { $0.id == "stealth" }?.body.contains("you only") == true)
         XCTAssertTrue(facts.first { $0.id == "location" }?.body.contains("does not broadcast live location") == true)
         XCTAssertTrue(facts.first { $0.id == "extraction" }?.body.contains("never auto-save") == true)
         XCTAssertTrue(facts.first { $0.id == "blocks" }?.body.contains("hides profiles, places, search results, and map content") == true)

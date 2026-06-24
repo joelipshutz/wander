@@ -1872,7 +1872,7 @@ struct MapPlaceSaveContext: Identifiable {
     var subtitle: String {
         switch mode {
         case .add:
-            "pick status, visibility, and a few details."
+            "pick status and a few details."
         case .edit:
             "update what future you sees on the map."
         }
@@ -1998,7 +1998,7 @@ struct MapPlaceSaveFlowSheet: View {
         self.context = context
         self.onSave = onSave
         _selectedStatus = State(initialValue: context.initialStatus)
-        _selectedVisibility = State(initialValue: context.initialVisibility)
+        _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _note = State(initialValue: context.initialNote)
     }
@@ -2083,21 +2083,6 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
 
-            MapSavePickerBlock(title: "who can see this") {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(PlaceVisibility.allCases, id: \.rawValue) { visibility in
-                            MapSaveChoicePill(title: visibility.displayTitle, isSelected: selectedVisibility == visibility) {
-                                selectedVisibility = visibility
-                            }
-                        }
-                    }
-                    Text(selectedVisibility.helperCopy)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-
             WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
                 prepareDetails()
             }
@@ -2143,6 +2128,8 @@ struct MapPlaceSaveFlowSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
+            PlaceVisibilityStealthToggle(visibility: $selectedVisibility)
+
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
                 systemImage: "checkmark",
@@ -2167,7 +2154,7 @@ struct MapPlaceSaveFlowSheet: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
-                Text("\(selectedStatus.displayTitle) · \(selectedVisibility.displayTitle)")
+                Text(selectedStatus.displayTitle)
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
             }
