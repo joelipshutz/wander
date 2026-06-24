@@ -5285,3 +5285,22 @@ Validation:
 - Elevated full simulator test suite passed:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-build43 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `143` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Release:
+
+- Build-number commit pushed to `main`: `c14268b10` (`chore: bump testflight build 43`).
+- Archived build `43` at `/private/tmp/Wander-0.1-build43.xcarchive`.
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build43.xcarchive -derivedDataPath /private/tmp/DerivedData-build43-archive -allowProvisioningUpdates ...`
+  Result: `** ARCHIVE SUCCEEDED **`; archive metadata confirmed `CFBundleVersion = 43`.
+- Exported and uploaded build `43` to App Store Connect.
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build43.xcarchive -exportPath /private/tmp/WanderTestFlightUpload43 -exportOptionsPlist /private/tmp/WanderExportUpload43.plist -allowProvisioningUpdates ...`
+  Result: `Uploaded Wander`, `** EXPORT SUCCEEDED **`.
+- Ran TestFlight helper:
+  `node scripts/testflight-release.mjs --build-number 43 --archive-path /private/tmp/Wander-0.1-build43.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build43-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`
+  Result: build `0.1 (43)` id `d68b6c3b-d107-42db-845d-50fd739c2c8b` is `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, and external TestFlight review is `APPROVED`.
+- Posted tester-facing build `43` release note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782340764899819
+
+Known issues / next steps:
+
+- Link/photo extraction reliability remains a separate area to keep testing carefully.
+- This final log update is docs-only and does not require another build-number bump.
