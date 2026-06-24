@@ -4982,3 +4982,47 @@ Release implementation:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build40 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: `139` tests, `0` failures, `** TEST SUCCEEDED **`.
 - Next: commit/push build `40` to `main`, archive/upload, run `scripts/testflight-release.mjs`, update Linear, and post Slack notes.
+
+## 2026-06-24 00:15 PDT - Codex - Place Category Taxonomy Planning
+
+Agent: Codex
+Branch: `codex/place-category-taxonomy`
+Worktree: `/private/tmp/recme-place-category-taxonomy`
+Starting status: clean docs worktree created from latest `origin/main`; root checkout `/Users/ryanlieblein/Developer/wander` remains on stale `main` and is not used for edits. Fetched `origin`, inspected worktrees/status, and read recent `docs/agent-log.md` before editing.
+
+Goal: document the Rec.me-owned canonical place category model, rename `Travel & Transit` to `Transportation & Transit`, include the exhaustive UX taxonomy and save-place/place-type picker mockups, create a Linear implementation issue, and post a progress note to Slack `#testflight-feedback`.
+
+Expected files to touch:
+
+- `docs/plans/2026-06-24-place-category-taxonomy-save-flow.md`
+- `docs/decisions.md`
+- `docs/agent-log.md`
+
+Planned validation:
+
+- `git diff --check`
+- No app build/tests planned because this is docs/product planning only.
+
+Checkpoint:
+
+- Added `docs/plans/2026-06-24-place-category-taxonomy-save-flow.md` with the Rec.me-owned canonical category model, exhaustive UX taxonomy, `Transportation & Transit` naming, save-place mockup, place-type picker mockup, defaulting rules, implementation notes, and open questions.
+- Updated `docs/decisions.md` with a planned decision that provider types are inputs and Rec.me owns canonical category/subcategory/personal-label UX.
+- `git diff --check` passed.
+- Created Linear issue `REC-35` (`Implement place category taxonomy and save-place type picker`) in team `recme`, project `mvp`, status `Backlog`, priority `Medium`, label `Feature`.
+
+Outcome:
+
+- Docs commit pushed: `8cff27be5` (`docs: add place category taxonomy plan`).
+- PR opened against `main`: https://github.com/joelipshutz/wander/pull/28
+- Attached PR #28 to Linear `REC-35`: https://linear.app/recme/issue/REC-35/implement-place-category-taxonomy-and-save-place-type-picker
+- Posted progress note to Slack `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782285610396919
+
+Validation:
+
+- `git diff --check` passed.
+- No app build/tests run because this was docs/product planning only.
+
+Known issues / next steps:
+
+- No app behavior changed and no TestFlight build is associated with this docs PR.
+- Next implementation should use `REC-35` to migrate from the current single `LocalPlace.category` model toward canonical category, subcategory, raw provider type metadata, and per-user personal labels.
