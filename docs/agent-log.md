@@ -4714,5 +4714,5 @@ Validation:
 
 Known issues / next steps:
 
-- Push this commit to PR #26 for Ryan simulator testing.
-- Move `REC-23` to `In Review` after pushing.
+- Pushed implementation commit `5b914fd` to PR #26 for Ryan simulator testing.
+- Moved `REC-23` to `In Review` with implementation and validation details.
