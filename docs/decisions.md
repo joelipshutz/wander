@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-06-22
+Last updated: 2026-06-24
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -45,6 +45,13 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
 | Full onboarding | Deferred | Auth gates at save/sync/follow/social-save intents still required. |
 | M3 backend schema/RLS/profile foundation | Project created, migrations applied, webhook verified | New Supabase project `rugmtlgufrhlxwfkumhw` and new Clerk app `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9` are created. Migrations `20260602131500`, `20260602140304`, `20260602143000`, `20260602210000`, and `20260604185000` are applied remotely. Hosted pgTAP tests passed with 29 assertions. Clerk profile mirroring is deployed through Svix -> Supabase Edge Function -> PostgREST RPC, and real create/delete webhook flow was verified. Schema includes custom `question_definitions` plus JSON-backed `place_attributes` so future user-created questions/inputs can be added without answer-column churn. |
+
+## Release Decisions
+
+| Decision | Status | Notes |
+|---|---|---|
+| Explicit TestFlight releases | Locked | Merging app changes to `main` no longer automatically triggers a build-number bump, archive, upload, TestFlight attachment, or tester Slack note. App-code merges are candidates for the next explicit TestFlight release. Only push a TestFlight/TF build when Joe or Ryan explicitly asks, with wording such as "push the TestFlight build", "upload the TF build", "release this to TestFlight", or "go push in your build". The next explicit release packages latest `main`, includes all eligible app changes since the last completed TestFlight build, and bumps the build number once. |
+| Linear completion after merge | Locked | Ordinary product/app issues can move to `Done` once the implementation is merged to `main` and required validation passes. TestFlight remains the `Done` gate only when the issue or user request explicitly requires TestFlight QA, release validation, or a TestFlight push. |
 
 ## Design Decisions
 
