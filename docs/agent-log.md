@@ -5721,3 +5721,49 @@ Engineering review outcome:
 - Open decisions are captured in the review doc: rating labels/source semantics, fit evidence thresholds, unsaved note/rating persistence behavior, and whether Website/Call require remote metadata in v1.
 - Committed review/fix changes in `5974021`.
 - Opened draft PR #35: https://github.com/joelipshutz/wander/pull/35
+
+## 2026-06-24 18:05 PDT - Codex - Place Profile Local Testable V1
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: branch rebased onto `origin/main` at `628a1dc` after resolving `docs/agent-log.md` by preserving both the Build 44 release entry and the place-profile review entry.
+
+Goal: make the redesigned place-profile direction locally testable in the native app by wiring deterministic actual/fit ratings and common tags into the existing map place sheet, without adding OpenAI scoring or paid provider ratings.
+
+Decisions for v1:
+
+- Actual rating: explicit human rating only. Saved/current-user places show the user's own rating when present; unsaved/social places show the visible trusted aggregate from `recommended_score`/`recommended_count` or local grouped `been` ratings.
+- Fit score: deterministic 0-10 score computed from already loaded local data. Inputs are current user's high-rated/category/tag history, common tags, selected/trusted actual rating, and save/social proof. Hide the numeric score when evidence is thin.
+- Common tags: repeated structured attributes only. Include a tag when it appears on the user's save plus another save, or on at least two trusted saves. Defer note parsing and LLM extraction.
+
+Expected files touched:
+
+- `Wander/Models/PlaceProfilePresentation.swift` or equivalent helper file
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `project.yml`/Xcode project only if generation requires it
+- `docs/agent-log.md`
+
+Implementation checkpoint:
+
+- Added deterministic `PlaceProfilePresenter` with actual rating, fit rating, and common-tag helpers.
+- Moved `PlaceSaveSummary` out of `MapScreen.swift` into the place-profile model helper.
+- Wired `PlaceSheet` compact/expanded states to show fit rating, actual rating, common tags, and a `why it fits` section.
+- Kept unsaved state quiet: removed the explicit `not saved yet` badge and preserved the plus action.
+- Reordered external actions so Directions appears before Website/Call and the action row remains above `why it fits`.
+- Updated per-save note cards to show the individual `Rated n/5` value instead of repeating the aggregate recommended score.
+- Added `PlaceProfilePresentationTests` for tag thresholds, actual rating source semantics, thin-evidence fit hiding, and fit scoring with trusted/category/tag evidence.
+- Ran `xcodegen generate`; `Wander.xcodeproj/project.pbxproj` changed to include the new Swift files.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated focused simulator tests passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-local CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests`
+  Result: `6` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Built app bundle exists at `/private/tmp/DerivedData-place-profile-local/Build/Products/Debug-iphonesimulator/Wander.app`.
+
+Local launch note:
+
+- A later `xcrun simctl list devices booted` attempt was rejected by the Codex escalation approval layer due a temporary usage limit, not by CoreSimulator itself. The app is built and testable from Xcode or once elevated simulator access is available.

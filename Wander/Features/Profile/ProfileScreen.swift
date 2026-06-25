@@ -489,6 +489,7 @@ private struct SavedPlacesListScreen: View {
                 PlaceSheet(
                     place: PlaceSheetPlace(visiblePlace: selectedPlace),
                     saves: saveSummaries(for: selectedPlace),
+                    tasteSaves: tasteSummaries,
                     currentUserID: store.currentUser.id,
                     action: .edit,
                     isExpanded: $isPlaceDetailExpanded
@@ -719,6 +720,12 @@ private struct SavedPlacesListScreen: View {
             if lhs.visiblePlace.id == selectedPlace.id { return true }
             if rhs.visiblePlace.id == selectedPlace.id { return false }
             return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+        }
+    }
+
+    private var tasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
         }
     }
 
