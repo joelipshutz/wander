@@ -5699,6 +5699,41 @@ Notes:
 - Mission Control task creation failed because `localhost:4000` was not reachable.
 - Build number before release: `44`; target build number: `45`.
 
+Validation:
+
+- Pushed build-number commit `3f59dc2` (`chore: bump testflight build 45`) to `main`.
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build45 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build45 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build45.xcarchive`.
+- Archived `CFBundleVersion` verified as `45`.
+- Export options: `/private/tmp/WanderExportUpload45.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Account-based `xcodebuild -exportArchive` failed with `Failed to Use Accounts`; retrying with the local App Store Connect API key succeeded.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package.
+- Ran `node scripts/testflight-release.mjs --build-number 45 --archive-path /private/tmp/Wander-0.1-build45.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build45-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (45)` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Slack:
+
+- Attempted to post the required tester-facing release note to `#testflight-feedback` (`C0BAA7DG2AC`), but the Codex Slack connector returned `token_expired`.
+- Checked `/Users/joelipshutz/.openclaw/workspace/.env.keys` for alternate Slack key names without printing values; no Slack token entries were present.
+- Slack release note remains the only incomplete external step for this release.
+
+Known tester-facing behavior:
+
+- Build 45 includes the redesigned map place preview and full place profile surfaces.
+- Places can show deterministic fit rating, actual rating, common tags, trusted notes, and cleaner saved/unsaved actions.
+- Sparse/no-data places should avoid ghost-town copy such as `Signal is still thin here.`
+- Website and Call actions only appear when metadata exists.
+- Build 44's one-time place-data reset behavior still applies for users updating from older builds.
+
 ## 2026-06-24 17:29 PDT - Codex - Place Profile Eng Review After Ratings Merge
 
 Agent: Codex
