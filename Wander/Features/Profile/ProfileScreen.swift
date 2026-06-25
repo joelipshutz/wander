@@ -419,7 +419,6 @@ private struct SavedPlacesListScreen: View {
     @State private var tagFilterQuery = ""
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
-    @State private var isPlaceDetailExpanded = true
 
     private var places: [VisiblePlace] {
         store.currentUserVisiblePlaces
@@ -451,56 +450,43 @@ private struct SavedPlacesListScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    searchField
-                    filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                    tagFilterDropdown
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                searchField
+                filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                tagFilterDropdown
 
-                    if places.isEmpty {
-                        SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
-                    } else {
-                        ForEach(places) { visiblePlace in
-                            Button {
-                                isPlaceDetailExpanded = true
-                                selectedPlace = visiblePlace
-                            } label: {
-                                ProfilePlaceRow(visiblePlace: visiblePlace)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Shows saved place details")
+                if places.isEmpty {
+                    SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                } else {
+                    ForEach(places) { visiblePlace in
+                        Button {
+                            selectedPlace = visiblePlace
+                        } label: {
+                            ProfilePlaceRow(visiblePlace: visiblePlace)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows saved place details")
                     }
                 }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, selectedPlace == nil ? WanderTheme.spacing8 : 360)
             }
-
-            if let selectedPlace {
-                Color.black.opacity(0.08)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        self.selectedPlace = nil
-                    }
-                    .transition(.opacity)
-                    .zIndex(1)
-
-                PlaceSheet(
-                    place: PlaceSheetPlace(visiblePlace: selectedPlace),
-                    saves: saveSummaries(for: selectedPlace),
-                    tasteSaves: tasteSummaries,
-                    currentUserID: store.currentUser.id,
-                    action: .edit,
-                    isExpanded: $isPlaceDetailExpanded
-                ) {
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing8)
+        }
+        .fullScreenCover(item: $selectedPlace) { selectedPlace in
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                saves: saveSummaries(for: selectedPlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .edit,
+                onBack: {
+                    self.selectedPlace = nil
+                },
+                onAction: {
                     beginEditSelectedPlace(selectedPlace)
                 }
-                .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing3)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(2)
-            }
+            )
         }
         .sheet(item: $placeSaveFlow) { context in
             MapPlaceSaveFlowSheet(context: context) { submission in
@@ -510,7 +496,6 @@ private struct SavedPlacesListScreen: View {
         .wanderScreen()
         .navigationTitle(mode.title)
         .navigationBarTitleDisplayMode(.inline)
-        .animation(.spring(response: 0.24, dampingFraction: 0.82), value: selectedPlace?.id)
     }
 
     private var searchField: some View {

@@ -5999,3 +5999,48 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+
+## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch from `origin/main` at `3d6cf52` after build 45 release log.
+
+Goal: make the place profile open as a true full-screen detail page across entrypoints instead of a sheet that shows map/background at top or bottom. Decide and implement detail-page chrome without bottom tabs for this full-screen context unless the existing code makes that unsafe.
+
+Coordination:
+
+- Root checkout is on stale `codex/rating-score-reset`; this work is isolated in the temporary worktree above.
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- GBrain search timed out on a transient PGLite lock; the lock directory was gone on inspection, so this pass is using repo docs and implementation context.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Potential place-profile entrypoints in `Wander/Features/Profile/` and `Wander/Features/Discover/`
+- Focused tests if presentation behavior is covered or can be covered cleanly.
+
+Checkpoint:
+
+- Decided full place profile should not show bottom tabs. It is a task-level detail surface, not one of the four root app tabs, and keeping tabs visible was the source of the sheet/background bleed.
+- Changed the map selected-place flow so the map keeps the compact preview card, then opens the full place profile in a `fullScreenCover`.
+- Changed Discover and Profile saved-place entrypoints from bottom-sheet presentation to the same full-screen place profile surface.
+- Routed full-screen save/edit actions through the existing save/edit flows after dismissing the full-screen detail, avoiding stacked sheet state.
+- Updated the shared back button accessibility label from map-specific copy to `Close place profile`.
+
+Verification:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 152 tests, 0 failures.
+
+Known issues:
+
+- Visual simulator screenshot pass was not run in this session. The implementation is compile/test verified, but final visual QA should still tap through Map, Discover, and Profile on a simulator before TestFlight.
+
+Outcome:
+
+- Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
+- PR: https://github.com/joelipshutz/wander/pull/38

@@ -21,45 +21,79 @@ struct PlaceProfileMapSurface: View {
     }
 
     var body: some View {
-        Group {
-            if isExpanded {
-                PlaceProfileFullView(
-                    place: place,
-                    presentation: presentation,
-                    saves: saves,
-                    currentUserID: currentUserID,
-                    action: action,
-                    onBack: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            isExpanded = false
-                        }
-                    },
-                    onAction: onAction
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                VStack {
-                    Spacer(minLength: 0)
-                    PlaceProfilePreviewCard(
-                        place: place,
-                        presentation: presentation,
-                        saves: saves,
-                        currentUserID: currentUserID,
-                        action: action,
-                        onOpen: {
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                isExpanded = true
-                            }
-                        },
-                        onAction: onAction
-                    )
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing3)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+        VStack {
+            Spacer(minLength: 0)
+            PlaceProfilePreviewCard(
+                place: place,
+                presentation: presentation,
+                saves: saves,
+                currentUserID: currentUserID,
+                action: action,
+                onOpen: {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                        isExpanded = true
+                    }
+                },
+                onAction: onAction
+            )
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing3)
         }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.spring(response: 0.30, dampingFraction: 0.86), value: isExpanded)
+        .fullScreenCover(isPresented: $isExpanded) {
+            PlaceProfileFullScreen(
+                place: place,
+                saves: saves,
+                tasteSaves: tasteSaves,
+                currentUserID: currentUserID,
+                action: action,
+                onBack: {
+                    isExpanded = false
+                },
+                onAction: {
+                    isExpanded = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        onAction()
+                    }
+                }
+            )
+        }
+    }
+}
+
+struct PlaceProfileFullScreen: View {
+    let place: PlaceSheetPlace
+    let saves: [PlaceSaveSummary]
+    let tasteSaves: [PlaceSaveSummary]
+    let currentUserID: String
+    let action: PlaceSheetAction
+    let onBack: () -> Void
+    let onAction: () -> Void
+
+    private var presentation: PlaceProfilePresentation {
+        PlaceProfilePresenter.presentation(
+            placeID: place.id,
+            category: place.category,
+            saves: saves,
+            tasteSaves: tasteSaves,
+            currentUserID: currentUserID
+        )
+    }
+
+    var body: some View {
+        PlaceProfileFullView(
+            place: place,
+            presentation: presentation,
+            saves: saves,
+            currentUserID: currentUserID,
+            action: action,
+            onBack: onBack,
+            onAction: onAction
+        )
+        .preferredColorScheme(.light)
+        .interactiveDismissDisabled(false)
     }
 }
 
@@ -577,7 +611,7 @@ private struct PlaceProfileMapHeader: View {
                             .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Back to map preview")
+                    .accessibilityLabel("Close place profile")
 
                     Spacer()
 
