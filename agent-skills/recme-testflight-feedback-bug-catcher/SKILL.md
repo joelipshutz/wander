@@ -111,16 +111,20 @@ For each actionable Linear issue:
 1. Read the Linear title, description, comments, labels, project, assignee,
    attachments, and any Slack permalink attached to the issue.
 2. Triage in Codex first.
-3. Comment in Linear with the triage summary when the issue needs a durable
+3. Use `recme-linear-log-triage` only when logs or hosted data can materially
+   change the diagnosis, especially for auth, save/sync, Supabase/RLS/RPC,
+   backend data, social visibility, missing saved places, or timestamped
+   screenshot reports. Do not run log triage for every issue.
+4. Comment in Linear with the triage summary when the issue needs a durable
    decision, implementation plan, or handoff.
-4. Classify the issue type first: `bug/regression`, `feature/enhancement`,
+5. Classify the issue type first: `bug/regression`, `feature/enhancement`,
    `design/UX`, `backend/data`, `release/process`, or `decision-only`.
-5. Classify severity (`P0`, `P1`, `P2`, `P3`), likely app area, likely cause, recommended fix path, test plan, and open questions with recommended answers.
-6. Run the Engineering Review Gate below before implementation when the issue
+6. Classify severity (`P0`, `P1`, `P2`, `P3`), likely app area, likely cause, recommended fix path, test plan, and open questions with recommended answers.
+7. Run the Engineering Review Gate below before implementation when the issue
    scope warrants it. Otherwise note why the gate was skipped.
-7. Apply plan-design-review lens for UX, visual hierarchy, copy, affordance, accessibility, screen composition, or interaction issues.
-8. Apply both lenses when cross-cutting.
-9. Respect Wander/rec.me rules:
+8. Apply plan-design-review lens for UX, visual hierarchy, copy, affordance, accessibility, screen composition, or interaction issues.
+9. Apply both lenses when cross-cutting.
+10. Respect Wander/rec.me rules:
    - native iOS SwiftUI
    - Swift 6
    - iOS 17+
