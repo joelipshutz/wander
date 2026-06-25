@@ -5858,6 +5858,16 @@ Checkpoint, 2026-06-25 00:44 PDT:
 - Visual verification:
   - Full profile screenshot: `/private/tmp/recme-place-profile-fern-demo-full.png`
   - Updated preview screenshot: `/private/tmp/recme-place-profile-fern-demo-preview.png`
+
+Merge gate checkpoint, 2026-06-25 00:55 PDT:
+
+- Joe asked whether to merge and push to TestFlight. Started the rec.me PR landing workflow for PR #35.
+- GitHub initially reported PR #35 as draft and `CONFLICTING` against newer `main`.
+- Merged `origin/main` into `codex/place-profile-eng-review`; the only conflict was `docs/agent-log.md`, resolved by preserving both the place-profile entries and the newer REC-45/observability entries from `main`.
+- `git diff --check origin/main...HEAD` passed after the merge.
+- Full elevated simulator suite passed on the updated branch:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-merge-gate CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
 ## 2026-06-24 23:44 PDT - Codex - REC-45 save RPC security regression
 
 Agent: Codex
