@@ -103,10 +103,12 @@ private struct PlaceProfilePreviewCard: View {
                             .lineLimit(1)
                     }
 
-                    Text(fitSentence)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
+                    if let fitSentence {
+                        Text(fitSentence)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(2)
+                    }
 
                     PlaceProfileTagRail(tags: displayTags, compact: true)
                 }
@@ -152,7 +154,7 @@ private struct PlaceProfilePreviewCard: View {
         if let rating = presentation.actualRating {
             let names = participantNames(limit: 2)
             let prefix = names.isEmpty ? rating.title : names.joined(separator: " + ")
-            return "\(prefix) · ★ \(rating.displayScore) (\(rating.count))"
+            return "\(prefix) · ★ \(rating.displayScore)"
         }
 
         let names = participantNames(limit: 2)
@@ -167,7 +169,7 @@ private struct PlaceProfilePreviewCard: View {
         PlaceProfileCopy.heroMetadata(for: place)
     }
 
-    private var fitSentence: String {
+    private var fitSentence: String? {
         PlaceProfileCopy.fitSentence(place: place, presentation: presentation)
     }
 
@@ -218,10 +220,12 @@ private struct PlaceProfileFullView: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     heading
 
-                    Text(fitSentence)
-                        .font(.system(size: 19, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let fitSentence {
+                        Text(fitSentence)
+                            .font(.system(size: 19, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     PlaceProfileTagRail(tags: displayTags, compact: false)
 
@@ -301,7 +305,7 @@ private struct PlaceProfileFullView: View {
             }
         } else {
             PlaceProfileSubtleCard(
-                text: "Not enough trusted ratings or repeated tags yet. Save it to start building your own signal."
+                text: "Add your rating and tags when this place belongs on your map."
             )
         }
     }
@@ -336,30 +340,33 @@ private struct PlaceProfileFullView: View {
         }
     }
 
+    @ViewBuilder
     private var whyItFitsSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionLabel("Why it fits")
-            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                PlaceProfileFacepile(saves: saves, currentUserID: currentUserID)
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(whyItFitsPrimary)
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
+        if hasWhyItFitsEvidence {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                sectionLabel("Why it fits")
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                    PlaceProfileFacepile(saves: saves, currentUserID: currentUserID)
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text(whyItFitsPrimary)
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    Text(whyItFitsSecondary)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text(whyItFitsSecondary)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceSand.color)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceSand.color)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
         }
     }
 
@@ -388,7 +395,7 @@ private struct PlaceProfileFullView: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             sectionLabel("Trusted notes")
             if trustedSaves.isEmpty {
-                PlaceProfileSubtleCard(text: "No trusted notes visible yet.")
+                PlaceProfileSubtleCard(text: "No one you follow has a note here.")
             } else {
                 ForEach(trustedSaves) { save in
                     PlaceProfileSaveCard(summary: save, currentUserID: currentUserID, emphasis: false)
@@ -423,12 +430,19 @@ private struct PlaceProfileFullView: View {
         PlaceProfileCopy.heroMetadata(for: place)
     }
 
-    private var fitSentence: String {
+    private var fitSentence: String? {
         PlaceProfileCopy.fitSentence(place: place, presentation: presentation)
     }
 
     private var displayTags: [String] {
         PlaceProfileCopy.displayTags(place: place, presentation: presentation)
+    }
+
+    private var hasWhyItFitsEvidence: Bool {
+        !presentation.whyItFits.isEmpty
+            || presentation.actualRating != nil
+            || !displayTags.isEmpty
+            || trustedSaves.count >= 2
     }
 
     private var actionItems: [PlaceExternalAction] {
@@ -467,23 +481,23 @@ private struct PlaceProfileFullView: View {
         if trustedSaves.count >= 2 {
             return "\(trustedSaves.count) people you follow saved this place."
         }
-        return "rec.me does not have enough trusted signal here yet."
+        return "Save it to make this place yours."
     }
 
     private var whyItFitsSecondary: String {
         if presentation.fitRating != nil {
-            return "Based on your saved ratings and trusted place signal."
+            return "Based on places you saved and people you follow."
         }
         if presentation.actualRating != nil {
-            return "Fit rating appears after more matching saved-place evidence."
+            return "Your map gets more personal as you save places."
         }
         if displayTags.count >= 2 {
-            return "Common signal: \(displayTags.prefix(3).joined(separator: ", "))."
+            return "People mention: \(displayTags.prefix(3).joined(separator: ", "))."
         }
         if let category = PlaceProfileCopy.categoryDisplay(for: place) {
-            return "Category signal: \(category)."
+            return "Category: \(category)."
         }
-        return "No numeric fit rating until there is enough evidence."
+        return "Save it to add your own context."
     }
 
     private var addressLine: String? {
@@ -1055,7 +1069,7 @@ private enum PlaceProfileCopy {
         return category.replacingOccurrences(of: "_", with: " ")
     }
 
-    static func fitSentence(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> String {
+    static func fitSentence(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> String? {
         let tags = displayTags(place: place, presentation: presentation).map { $0.lowercased() }
         let category = categoryDisplay(for: place)?.lowercased()
 
@@ -1082,7 +1096,7 @@ private enum PlaceProfileCopy {
             }
         }
 
-        return category == nil ? "Signal is still thin here." : "Saved place signal is still thin here."
+        return nil
     }
 
     static func displayTags(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> [String] {

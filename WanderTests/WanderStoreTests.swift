@@ -93,6 +93,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(names.contains("Woodcat Coffee"))
         XCTAssertTrue(names.contains("Griffith Observatory Trail"))
         XCTAssertTrue(names.contains("Larchmont Noodles"))
+        XCTAssertTrue(names.contains("Fern Desk Coffee"))
+        XCTAssertTrue(names.contains("Juniper Table"))
     }
 
     func testBlockRemovesFollowEdgesAndVisiblePlaces() {
@@ -501,12 +503,12 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertEqual(store.followers(of: store.currentUser.id).map(\.id), ["user_ryan"])
-        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_demo", "user_maya", "user_ryan"])
 
         store.block(userID: "user_ryan")
 
         XCTAssertTrue(store.followers(of: store.currentUser.id).isEmpty)
-        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya"])
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_demo", "user_maya"])
     }
 
     func testLinkAndPhotoCreateUnresolvedDrafts() {
@@ -758,7 +760,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(mine.places.allSatisfy { $0.owner.id == "user_joe" })
         XCTAssertFalse(friends.places.isEmpty)
         XCTAssertTrue(friends.places.allSatisfy { $0.owner.id == "user_ryan" })
-        XCTAssertEqual(Set(everyone.places.map(\.owner.id)), ["user_joe", "user_maya", "user_ryan"])
+        XCTAssertEqual(Set(everyone.places.map(\.owner.id)), ["user_demo", "user_joe", "user_maya", "user_ryan"])
     }
 
     func testDiscoverMergesRemoteProfileSearch() async {

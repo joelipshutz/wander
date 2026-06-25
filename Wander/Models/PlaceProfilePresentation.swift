@@ -198,7 +198,7 @@ enum PlaceProfilePresenter {
             weightedTotal += ratingFit * weight
             totalWeight += weight
             evidence += actualRating.source == .own ? 2 : 1
-            reasons.append(actualRating.source == .own ? "You rated this \(actualRating.displayScore)/5." : "\(actualRating.subtitle.capitalized) average \(actualRating.displayScore)/5.")
+            reasons.append(actualRating.source == .own ? "You rated this \(actualRating.displayScore)/5." : "\(actualRating.subtitle) average \(actualRating.displayScore)/5.")
         }
 
         let tasteProfile = TasteProfile(

@@ -5828,3 +5828,33 @@ Checkpoint, 2026-06-25 00:14 PDT:
   - `/private/tmp/recme-place-profile-circuit-preview.png`
   - `/private/tmp/recme-place-profile-circuit-full.png`
   - `/private/tmp/recme-place-profile-woodcat-fallback.png`
+
+Checkpoint, 2026-06-25 00:31 PDT:
+
+- Joe flagged that early/no-data place-profile states feel too much like a ghost town.
+- Copy direction:
+  - Remove `rec.me does not have enough trusted signal here yet.`
+  - Do not show a `Why it fits` section when there is no real fit/trusted/tag evidence.
+  - Change empty trusted-note copy to `No one you follow has a note here.`
+  - Avoid empty-state copy that implies "none of us do ratings and tags"; make no-data states feel like a normal early product state and invite the user's own save/rating/tags.
+- Later spec/release requests were cancelled before implementation; this branch is staying scoped to the place-profile PR.
+
+Checkpoint, 2026-06-25 00:44 PDT:
+
+- Finished the no-data state cleanup:
+  - `fitSentence` is optional and hidden when there is no evidence, removing the visible `Signal is still thin here.` fallback.
+  - `Why it fits` only renders when there is fit, rating, repeated tag, or multi-person trusted evidence.
+  - Empty trusted notes copy is now `No one you follow has a note here.`
+  - Empty rating card now invites the user to add their own rating/tags without implying the network failed.
+  - Preview rating line no longer shows the review count in parentheses; it now reads like `Demo + Maya · ★ 4.7`.
+- Added a followed Demo account plus richer unsaved demo places:
+  - `Fern Desk Coffee` with repeated coffee/work tags and trusted ratings/notes.
+  - `Juniper Table` with repeated restaurant/date-night tags and trusted ratings/notes.
+- Updated fixture-sensitive tests for the added followed account and visible places.
+- `git diff --check` passed.
+- Full elevated simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-empty-state CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Visual verification:
+  - Full profile screenshot: `/private/tmp/recme-place-profile-fern-demo-full.png`
+  - Updated preview screenshot: `/private/tmp/recme-place-profile-fern-demo-preview.png`
