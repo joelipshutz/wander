@@ -5719,3 +5719,5 @@ Engineering review outcome:
 - Fit score should ship as a deterministic, local/server-cheap v1 over already loaded user/trusted rating/category/tag data; do not use OpenAI for fit without a separate privacy/evaluation contract.
 - Common tags should be derived from repeated structured tags and notes with a minimum support threshold, shown as horizontal chips, and hidden when evidence is thin.
 - Open decisions are captured in the review doc: rating labels/source semantics, fit evidence thresholds, unsaved note/rating persistence behavior, and whether Website/Call require remote metadata in v1.
+- Committed review/fix changes in `5974021`.
+- Opened draft PR #35: https://github.com/joelipshutz/wander/pull/35
