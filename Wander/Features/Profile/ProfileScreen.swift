@@ -992,7 +992,7 @@ private struct ProfilePlaceRow: View {
                 Text(visiblePlace.place.canonicalName)
                     .font(.system(size: 15, weight: .bold))
                     .lineLimit(1)
-                Text("\(visiblePlace.place.locality ?? "Los Angeles") · \(visiblePlace.userPlace.status.displayTitle)")
+                Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -1010,6 +1010,14 @@ private struct ProfilePlaceRow: View {
 
     private var icon: String {
         WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+    }
+
+    private var subtitle: String {
+        let locality = visiblePlace.place.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let locality, !locality.isEmpty else {
+            return visiblePlace.userPlace.status.displayTitle
+        }
+        return "\(locality) · \(visiblePlace.userPlace.status.displayTitle)"
     }
 }
 

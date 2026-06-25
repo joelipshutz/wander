@@ -5678,3 +5678,44 @@ Known tester-facing behavior:
 - No reinstall or sign-out should be required.
 - New `Been` saves use the 1-5 slider where `5` is best; `Wanna go` saves do not get rated.
 - Recommended scores average visible `Been` ratings.
+
+## 2026-06-24 17:29 PDT - Codex - Place Profile Eng Review After Ratings Merge
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: clean branch from `origin/main` at `1cdc434` (`feat: add numeric place ratings (#34)`); root checkout has a separate `codex/rating-score-reset` worktree and is not being edited in this pass.
+
+Goal: rerun `/plan-eng-review` for the Beli/AllTrails-inspired place profile redesign against the newly landed numeric ratings code on `main`, account for actual rating, fit rating, common tags, preview/full states, and make only clear low-risk adjustments if needed.
+
+Expected files touched:
+
+- `docs/agent-log.md`
+- Possible review/test-plan artifact under `docs/reviews/` or `~/.gstack/projects/`
+- Implementation files only if the review finds a concrete fix that should be made now.
+
+Notes:
+
+- Mission Control `localhost:4000` task creation failed with connection error, so this log is the durable tracker for now.
+- The review intentionally uses an isolated worktree to avoid mixing with the prior dirty/local rating branch state.
+
+Final checkpoint:
+
+- Confirmed latest `origin/main` includes PR #34 (`feat: add numeric place ratings`) plus build 44 bump, then rebased this review branch onto latest `origin/main`.
+- Ran `/plan-eng-review` against the current code and the place-profile redesign mock/design doc.
+- Added `docs/reviews/2026-06-24-place-profile-redesign-after-ratings-plan-eng-review.md`.
+- Added `docs/qa/2026-06-24-place-profile-redesign-eng-review-test-plan.md` and copied the same test plan to the gstack project review path.
+- Made one low-risk implementation adjustment in `Wander/Features/Profile/ProfileScreen.swift`: profile place rows no longer fall back to a hardcoded `Los Angeles` city when remote visible-place metadata lacks locality; they now show just the save status until real locality is available.
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-eng-review CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+
+Engineering review outcome:
+
+- Numeric actual ratings have landed and should be reused; do not rebuild that contract.
+- The main blocker for the redesigned full/preview place profile is remote visible-place metadata: current visible/profile RPC DTOs do not return enough place metadata for city, full address, website, phone, or richer source/provenance display.
+- Place detail rendering is duplicated across Map/Profile and Discover; implementation should introduce a shared place-profile presentation layer before building the new UI states.
+- Fit score should ship as a deterministic, local/server-cheap v1 over already loaded user/trusted rating/category/tag data; do not use OpenAI for fit without a separate privacy/evaluation contract.
+- Common tags should be derived from repeated structured tags and notes with a minimum support threshold, shown as horizontal chips, and hidden when evidence is thin.
+- Open decisions are captured in the review doc: rating labels/source semantics, fit evidence thresholds, unsaved note/rating persistence behavior, and whether Website/Call require remote metadata in v1.
