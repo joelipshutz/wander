@@ -746,7 +746,7 @@ private struct SavedPlacesListScreen: View {
         switch submission.context.mode {
         case .add(let sourceType):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -761,7 +761,7 @@ private struct SavedPlacesListScreen: View {
             return result
         case .edit(let visiblePlace):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,

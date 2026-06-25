@@ -5502,6 +5502,40 @@ Merge outcome:
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
 
+## 2026-06-25 11:21 PDT - Codex - Edit Place Category Schema UX
+
+Agent: Codex
+Branch/worktree: `codex/edit-category-schema` at `/private/tmp/recme-edit-category-schema`, created from latest `origin/main`.
+Starting status: root checkout `/Users/ryanlieblein/Developer/wander` was clean on `main` before branch work; fetched `origin`, inspected worktrees/status and recent `docs/agent-log.md`. Existing worktrees are unrelated, and this work is isolated because it touches the high-conflict map save/edit sheet.
+
+Goal: implement a PR for the edit-place category schema UX: keep canonical category/subcategory separate from personal labels and smart-question answers, skip the confirm/save-as step for edits, keep a been/wanna selector on the edit details page, and provide inline mockups for review without compiling Xcode.
+
+Expected files:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- supporting model/helper files under `Wander/Models` or `Wander/Services`
+- focused tests under `WanderTests`
+- docs/mockup handoff file
+- `docs/agent-log.md`
+
+Validation plan:
+
+- `git diff --check`
+- focused unit tests for category taxonomy/question behavior if feasible
+- iOS build/test only if Swift changes require broader compiler validation and the environment allows it
+
+Checkpoint:
+
+- Implemented category display metadata with canonical category/subcategory separation, including `Transportation & transit`, provider subtype normalization for smart questions, and a personal-label attribute key.
+- Updated the Map save/edit sheet so edit flows open directly on details, expose a been/wanna selector, allow category/subcategory correction, and persist `personal_labels` separately from smart-question answers.
+- Threaded edited candidates through Map/Profile/Discover save callbacks so category corrections can update local place metadata instead of only UI state.
+- Added review-only mockups in `docs/mockups/edit-place-category-schema.md`.
+- `git diff --check` passed.
+- The repo-standard iPhone 16 Plus iOS 18.6 simulator was unavailable on this machine; reran on installed iPhone 17 Pro simulator `DD656EC3-75E6-4377-A808-FB805E27A17C`.
+- Final focused elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testUpdatingCandidateCanPersistCategoryCorrectionAndPersonalLabels` (`8` tests, `0` failures).
+- Final full elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema-full CODE_SIGNING_ALLOWED=NO -jobs 1` (`155` tests, `0` failures).
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex

@@ -315,7 +315,7 @@ struct DiscoverScreen: View {
             }
 
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -331,7 +331,7 @@ struct DiscoverScreen: View {
             return result
         case .edit(let visiblePlace):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,

@@ -455,6 +455,37 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(attributes[0].valueJSON, "[\"quiet\"]")
     }
 
+    func testUpdatingCandidateCanPersistCategoryCorrectionAndPersonalLabels() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "place_woodcat",
+            name: "Woodcat Coffee",
+            category: "coffee shop",
+            latitude: 34.077,
+            longitude: -118.260,
+            confidence: 1
+        )
+
+        let result = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "separate labels from smart answers",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "work_setup", valueType: "single_choice", stringValue: "yes"),
+                PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["work-friendly", "joe rec"])
+            ]
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        let attributes = store.attributes(for: result.userPlaceID)
+
+        XCTAssertEqual(saved?.place.category, "coffee shop")
+        XCTAssertEqual(attributes.map(\.questionKey), [PlaceMemoryAttributeKeys.personalLabels, "work_setup"])
+        XCTAssertEqual(attributes.first { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }?.valueJSON, "[\"work-friendly\",\"joe rec\"]")
+    }
+
     func testPlaceRatingsNormalizeForBeenSavesOnly() {
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: nil), 3)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 0), 1)

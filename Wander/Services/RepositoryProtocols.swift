@@ -96,6 +96,28 @@ struct PlaceActionLink: Equatable, Codable, Identifiable {
 }
 
 extension PlaceCandidate {
+    func recategorized(as category: String) -> PlaceCandidate {
+        PlaceCandidate(
+            id: id,
+            name: name,
+            category: category,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            distanceMeters: distanceMeters,
+            websiteURLString: websiteURLString,
+            phoneNumber: phoneNumber,
+            timeZoneIdentifier: timeZoneIdentifier,
+            actionLinksJSON: actionLinksJSON,
+            confidence: confidence
+        )
+    }
+
     var actionLinks: [PlaceActionLink] {
         PlaceActionLink.decode(actionLinksJSON)
     }

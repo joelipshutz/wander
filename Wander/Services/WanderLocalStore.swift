@@ -1767,6 +1767,10 @@ final class WanderStore: ObservableObject {
     private func mergeBusinessMetadata(from candidate: PlaceCandidate, into place: LocalPlace) {
         var didChange = false
 
+        if shouldUpdateCategory(from: candidate.category, existing: place.category) {
+            place.category = candidate.category
+            didChange = true
+        }
         didChange = mergeMetadataValue(normalizedMetadata(candidate.websiteURLString), into: &place.websiteURLString) || didChange
         didChange = mergeMetadataValue(normalizedMetadata(candidate.phoneNumber), into: &place.phoneNumber) || didChange
         didChange = mergeMetadataValue(normalizedMetadata(candidate.timeZoneIdentifier), into: &place.timeZoneIdentifier) || didChange
@@ -1776,6 +1780,20 @@ final class WanderStore: ObservableObject {
             place.updatedAt = .now
             place.localUpdatedAt = .now
         }
+    }
+
+    private func shouldUpdateCategory(from candidateCategory: String, existing existingCategory: String) -> Bool {
+        let candidate = candidateCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existing = existingCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty, candidate.caseInsensitiveCompare(existing) != .orderedSame else {
+            return false
+        }
+
+        if candidate.lowercased() == "place", existing.lowercased() != "place" {
+            return false
+        }
+
+        return true
     }
 
     private func mergeMetadataValue(_ candidateValue: String?, into storedValue: inout String?) -> Bool {
