@@ -2,7 +2,26 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(4);
+select plan(6);
+
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
+  ),
+  true,
+  'save_own_place runs as security definer for controlled canonical place upserts'
+);
+
+select ok(
+  (
+    select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
+  ),
+  'save_own_place pins search_path to public, app'
+);
 
 insert into public.profiles (id, handle, display_name)
 values ('user_save_owner', 'saveowner', 'Save Owner');

@@ -5678,3 +5678,42 @@ Known tester-facing behavior:
 - No reinstall or sign-out should be required.
 - New `Been` saves use the 1-5 slider where `5` is best; `Wanna go` saves do not get rated.
 - Recommended scores average visible `Been` ratings.
+
+## 2026-06-24 23:44 PDT - Codex - REC-45 save RPC security regression
+
+Agent: Codex
+Branch: `codex/rec45-save-rpc-security`
+Worktree: `/private/tmp/recme-rec45-save-rpc-security`
+Starting status: clean branch from `origin/main` / build 44 release commit `628a1dc`.
+
+Goal: fix Linear `REC-45` where saves after the build 44 data reset appear to stay local-only and are not visible to followed testers.
+
+Coordination:
+
+- Joe said another agent is working in the same codebase. This work is isolated to the temporary worktree above; do not edit the shared root checkout.
+- Root checkout remains on a stale `codex/rating-score-reset` branch and is intentionally untouched.
+- Expected files: a new Supabase migration, `supabase/tests/save_own_place.sql`, and this coordination log.
+
+Triage:
+
+- Likely regression is `supabase/migrations/20260624223000_rating_score_reset.sql` recreating `app.save_own_place(jsonb,jsonb,jsonb)` as `security invoker`.
+- The prior fix migration `20260623120000_fix_save_own_place_rls.sql` made the RPC `security definer` with a pinned `search_path` so canonical place upserts can pass RLS through the controlled save path.
+- Plan-eng-review gate for this P1/backend auth-sync regression: restore the RPC security posture, add a regression assertion so future function recreation cannot silently undo it, apply the hosted migration, then open a PR and move Linear to review. No app/TestFlight build should be required if the hosted RPC fix resolves REC-45.
+
+Checkpoint:
+
+- Added migration `20260625064500_restore_save_own_place_security_definer.sql` to restore `app.save_own_place(jsonb,jsonb,jsonb)` to `security definer`, pin `search_path = public, app`, revoke public/anon execute, and grant execute to authenticated.
+- Updated `supabase/tests/save_own_place.sql` from 4 to 6 assertions so the test now checks the RPC security posture before exercising save/upsert behavior.
+- Applied the migration to hosted Supabase with `npx supabase db push --linked --yes`; remote migration list now shows local/remote `20260625064500` aligned.
+- Verified hosted metadata with `npx supabase db query --linked`: `prosecdef=true`, `proconfig=["search_path=public, app"]`.
+- Ran a rollback-only hosted smoke save by setting role `authenticated` and `request.jwt.claim.sub=rec45_smoke_user`; `app.save_own_place` returned a `been` row with `rating_score=4`.
+- `npx supabase test db --linked supabase/tests/save_own_place.sql` could not run because the Supabase pgTAP runner requires Docker Desktop and Docker is not available/running in this environment.
+
+Outcome:
+
+- Commit: `fix: restore save RPC security definer` on branch `codex/rec45-save-rpc-security`.
+- PR: https://github.com/joelipshutz/wander/pull/36
+- Linear: `REC-45` moved to `In Review` with PR link and verification comment.
+- Mission Control task creation was attempted after implementation, but `localhost:4000` was unreachable (`curl` exit code 7).
+- The hosted backend fix is already applied. No new TestFlight build should be required for build 44 to resume remote saves.
+- Tester next step: Joe/Ryan should force quit and reopen build 44, save a new place, and confirm the follower account can see it. Existing failed local own-place saves that still exist on-device should retry through the normal sync path on reopen/auth refresh.
