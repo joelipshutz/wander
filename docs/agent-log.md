@@ -5536,6 +5536,13 @@ Checkpoint:
 - Final focused elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testUpdatingCandidateCanPersistCategoryCorrectionAndPersonalLabels` (`8` tests, `0` failures).
 - Final full elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema-full CODE_SIGNING_ALLOWED=NO -jobs 1` (`155` tests, `0` failures).
 
+Outcome:
+
+- Implementation commit: `c3ea8dae486e0682dcea733505c00ef6b0aa280d` (`feat: add edit place category metadata controls`).
+- PR: https://github.com/joelipshutz/wander/pull/39
+- Known issue: no simulator screenshots were captured because the request explicitly asked for inline mockups rather than compiling in Xcode; the ASCII mockups are included in both the PR body and `docs/mockups/edit-place-category-schema.md`.
+- Next step: Ryan/Joe review the edit-place taxonomy and mockups, especially whether the initial editable subcategory list is the right MVP breadth before a backend/schema implementation pass.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
