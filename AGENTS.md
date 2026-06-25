@@ -103,6 +103,7 @@ Current shared skills:
 
 - `recme-pr-review-merge-release` - use when asked to review, merge, land, ship, or release a rec.me/Wander PR.
 - `recme-testflight-feedback-bug-catcher` - use when checking or acting on rec.me/Wander Linear issues or TestFlight feedback.
+- `recme-linear-log-triage` - use when a rec.me/Wander Linear issue would benefit from PostHog/Supabase evidence, especially auth, save, sync, visibility, backend, data, or screenshot-with-timestamp bugs.
 
 ## Tech Stack
 
@@ -162,6 +163,57 @@ Core rules:
 - `project.yml` is the Xcode source of truth. Regenerate with XcodeGen instead of hand-editing project membership.
 - Link/photo capture in M2 is an honest unresolved-draft shell until backend extraction jobs exist.
 - Native Contacts permission is planned later; M2 uses `FakeContactProvider` plus username search.
+
+## Supabase Schema, RLS, And RPC Policy
+
+Supabase migrations are app behavior, not incidental backend plumbing. Treat
+schema, RLS, grants, and RPC definitions as production contracts.
+
+Rules:
+
+- Before creating, replacing, dropping, or resetting a Supabase function, inspect
+  all prior migrations that define or alter that function. Preserve and restate
+  its required security posture, `search_path`, grants, volatility, return type,
+  and RLS assumptions in the new migration.
+- Do not recreate an RPC as `security invoker` or `security definer` by default.
+  Choose explicitly and document why in the migration or agent log.
+- `security definer` RPCs must be narrow, grant execute only to required roles,
+  pin `search_path`, and scope user-owned writes through `app.current_user_id()`
+  or an equivalent authenticated-claim helper. Callers must not be able to choose
+  another user's id.
+- Any migration that changes auth, sync, visibility, save flows, follows,
+  profiles, RLS, policies, or RPC contracts must include a regression test or a
+  direct hosted verification query that checks the relevant policy/security
+  posture. For recreated RPCs, add metadata assertions for `prosecdef`,
+  `proconfig`, and grants when relevant.
+- Prefer `supabase db push --linked --yes` only after the local migration has
+  been reviewed and the target project is confirmed. After applying a hosted
+  migration, verify with `supabase migration list --linked` and, for sensitive
+  functions, `supabase db query --linked` against `pg_proc`, `pg_namespace`,
+  and grants.
+- If `supabase test db` or pgTAP cannot run because Docker or local tooling is
+  unavailable, do not call that a pass. Record the blocker, run the strongest
+  hosted metadata/smoke verification available, and leave the exact gap in the
+  PR, Linear issue, and `docs/agent-log.md`.
+- For data resets, backfills, or migrations that intentionally delete or rewrite
+  tester data, document what persists, what is wiped, whether local app state can
+  rehydrate stale rows, and the TestFlight/user-facing consequence.
+
+Observability policy:
+
+- For Linear issues involving auth, save/sync, social visibility, backend data,
+  RLS, Supabase RPCs, or a screenshot/report with a useful timestamp, check
+  PostHog and/or Supabase evidence when it can materially reduce guesswork.
+- Do not make log pulls mandatory for every issue. Skip them for pure copy,
+  visual polish, straightforward local UI bugs, or cases where logs cannot change
+  the next action.
+- Keep analytics and Linear comments non-PII by default: use internal user ids,
+  event names, coarse error categories, counts, sync states, build numbers, and
+  timestamps. Do not paste place notes, emails, precise coordinates, auth tokens,
+  API keys, or raw private payloads.
+- When evidence is insufficient, say exactly what is missing: build number,
+  tester, approximate timestamp, screenshot, repro steps, or local Xcode console
+  logs.
 
 ## Current Priorities
 
