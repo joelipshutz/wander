@@ -5679,6 +5679,195 @@ Known tester-facing behavior:
 - New `Been` saves use the 1-5 slider where `5` is best; `Wanna go` saves do not get rated.
 - Recommended scores average visible `Been` ratings.
 
+## 2026-06-24 17:29 PDT - Codex - Place Profile Eng Review After Ratings Merge
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: clean branch from `origin/main` at `1cdc434` (`feat: add numeric place ratings (#34)`); root checkout has a separate `codex/rating-score-reset` worktree and is not being edited in this pass.
+
+Goal: rerun `/plan-eng-review` for the Beli/AllTrails-inspired place profile redesign against the newly landed numeric ratings code on `main`, account for actual rating, fit rating, common tags, preview/full states, and make only clear low-risk adjustments if needed.
+
+Expected files touched:
+
+- `docs/agent-log.md`
+- Possible review/test-plan artifact under `docs/reviews/` or `~/.gstack/projects/`
+- Implementation files only if the review finds a concrete fix that should be made now.
+
+Notes:
+
+- Mission Control `localhost:4000` task creation failed with connection error, so this log is the durable tracker for now.
+- The review intentionally uses an isolated worktree to avoid mixing with the prior dirty/local rating branch state.
+
+Final checkpoint:
+
+- Confirmed latest `origin/main` includes PR #34 (`feat: add numeric place ratings`) plus build 44 bump, then rebased this review branch onto latest `origin/main`.
+- Ran `/plan-eng-review` against the current code and the place-profile redesign mock/design doc.
+- Added `docs/reviews/2026-06-24-place-profile-redesign-after-ratings-plan-eng-review.md`.
+- Added `docs/qa/2026-06-24-place-profile-redesign-eng-review-test-plan.md` and copied the same test plan to the gstack project review path.
+- Made one low-risk implementation adjustment in `Wander/Features/Profile/ProfileScreen.swift`: profile place rows no longer fall back to a hardcoded `Los Angeles` city when remote visible-place metadata lacks locality; they now show just the save status until real locality is available.
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-eng-review CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+
+Engineering review outcome:
+
+- Numeric actual ratings have landed and should be reused; do not rebuild that contract.
+- The main blocker for the redesigned full/preview place profile is remote visible-place metadata: current visible/profile RPC DTOs do not return enough place metadata for city, full address, website, phone, or richer source/provenance display.
+- Place detail rendering is duplicated across Map/Profile and Discover; implementation should introduce a shared place-profile presentation layer before building the new UI states.
+- Fit score should ship as a deterministic, local/server-cheap v1 over already loaded user/trusted rating/category/tag data; do not use OpenAI for fit without a separate privacy/evaluation contract.
+- Common tags should be derived from repeated structured tags and notes with a minimum support threshold, shown as horizontal chips, and hidden when evidence is thin.
+- Open decisions are captured in the review doc: rating labels/source semantics, fit evidence thresholds, unsaved note/rating persistence behavior, and whether Website/Call require remote metadata in v1.
+- Committed review/fix changes in `5974021`.
+- Opened draft PR #35: https://github.com/joelipshutz/wander/pull/35
+
+## 2026-06-24 18:05 PDT - Codex - Place Profile Local Testable V1
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: branch rebased onto `origin/main` at `628a1dc` after resolving `docs/agent-log.md` by preserving both the Build 44 release entry and the place-profile review entry.
+
+Goal: make the redesigned place-profile direction locally testable in the native app by wiring deterministic actual/fit ratings and common tags into the existing map place sheet, without adding OpenAI scoring or paid provider ratings.
+
+Decisions for v1:
+
+- Actual rating: explicit human rating only. Saved/current-user places show the user's own rating when present; unsaved/social places show the visible trusted aggregate from `recommended_score`/`recommended_count` or local grouped `been` ratings.
+- Fit score: deterministic 0-10 score computed from already loaded local data. Inputs are current user's high-rated/category/tag history, common tags, selected/trusted actual rating, and save/social proof. Hide the numeric score when evidence is thin.
+- Common tags: repeated structured attributes only. Include a tag when it appears on the user's save plus another save, or on at least two trusted saves. Defer note parsing and LLM extraction.
+
+Expected files touched:
+
+- `Wander/Models/PlaceProfilePresentation.swift` or equivalent helper file
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `project.yml`/Xcode project only if generation requires it
+- `docs/agent-log.md`
+
+Implementation checkpoint:
+
+- Added deterministic `PlaceProfilePresenter` with actual rating, fit rating, and common-tag helpers.
+- Moved `PlaceSaveSummary` out of `MapScreen.swift` into the place-profile model helper.
+- Wired `PlaceSheet` compact/expanded states to show fit rating, actual rating, common tags, and a `why it fits` section.
+- Kept unsaved state quiet: removed the explicit `not saved yet` badge and preserved the plus action.
+- Reordered external actions so Directions appears before Website/Call and the action row remains above `why it fits`.
+- Updated per-save note cards to show the individual `Rated n/5` value instead of repeating the aggregate recommended score.
+- Added `PlaceProfilePresentationTests` for tag thresholds, actual rating source semantics, thin-evidence fit hiding, and fit scoring with trusted/category/tag evidence.
+- Ran `xcodegen generate`; `Wander.xcodeproj/project.pbxproj` changed to include the new Swift files.
+
+Validation:
+
+- `git diff --check` passed.
+- Elevated focused simulator tests passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-local CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests`
+  Result: `6` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Built app bundle exists at `/private/tmp/DerivedData-place-profile-local/Build/Products/Debug-iphonesimulator/Wander.app`.
+
+Local launch note:
+
+- A later `xcrun simctl list devices booted` attempt was rejected by the Codex escalation approval layer due a temporary usage limit, not by CoreSimulator itself. The app is built and testable from Xcode or once elevated simulator access is available.
+
+## 2026-06-24 23:25 PDT - Codex - Place Profile Full Preview/Profile Build
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: clean worktree, branch 3 commits ahead of `origin/main` at `628a1dc` after `git fetch origin`.
+
+Goal: finish the designed place profile experience so it is locally testable in an Xcode/simulator build before TestFlight. This means replacing the current local-testable sheet slice with the designed map tap preview and full-screen place profile states, while reusing the existing rating/tag/fit presentation work.
+
+Design sources:
+
+- `/private/tmp/recme-design-review/place-profile-design-doc.md`
+- `/private/tmp/recme-design-review/place-profile-redesign-mock.html`
+- `docs/reviews/2026-06-24-place-profile-redesign-after-ratings-plan-eng-review.md`
+
+Decisions locked:
+
+- Use deterministic local fit scoring only; no OpenAI scoring, provider ratings, or backend fit cache in this pass.
+- Actual rating remains explicit human rating: own rating for saved places, trusted aggregate for unsaved/social places.
+- Common tags come from structured attributes only.
+- Preview uses plus + share only, no X; full profile keeps bottom tabs visible.
+- Unsaved state uses plus in the upper-right and no explicit "not saved" copy.
+
+Expected files touched:
+
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- Possible shared SwiftUI view file under `Wander/Features/Map/` or `Wander/Features/PlaceProfile/`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `project.yml` / generated Xcode project only if new file membership is required
+- `docs/agent-log.md`
+
+Notes:
+
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- Main checkout is on `codex/rating-score-reset`; implementation will stay in this isolated worktree to avoid cross-branch edits.
+
+Checkpoint, 2026-06-25 00:05 PDT:
+
+- Joe flagged that the demo profile was repeating `coffee` too much because category fallback was being used as a common tag.
+- Decision: category remains metadata only. Common tags should mean repeated structured tags from visible trusted/current-user saves; no category-as-tag fallback in chip rails or `Best for`.
+- Adding richer demo fixture places saved by the demo account plus Maya/Ryan overlap so the redesigned profile can be tested with real repeated tags, ratings, website/call metadata, and thin-signal fallback states.
+
+Checkpoint, 2026-06-25 00:14 PDT:
+
+- Added richer seed fixture places:
+  - `Circuit Coffee`: Joe/Maya/Ryan saves, repeated tags `quiet`, `wifi solid`, `laptop friendly`, `outlets`, plus website/phone metadata.
+  - `Bar Nido`: Joe/Maya/Ryan saves with repeated dinner/date-night tags and website/phone metadata.
+  - `Elysian Picnic Steps`: Joe wanna-go plus Maya/Ryan trusted ratings/tags for a mixed own/trusted state.
+- Removed category fallback from `PlaceProfileCopy.displayTags`; category now remains metadata only.
+- Updated no-common-tag fit sentence copy so sparse states do not generate `Good for coffee`/`Best for coffee`.
+- Updated the Discover scope test to assert owner scoping without assuming the seed fixture has exactly one Joe/Ryan place.
+- `git diff --check` passed.
+- Full elevated simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Simulator screenshots captured:
+  - `/private/tmp/recme-place-profile-circuit-preview.png`
+  - `/private/tmp/recme-place-profile-circuit-full.png`
+  - `/private/tmp/recme-place-profile-woodcat-fallback.png`
+
+Checkpoint, 2026-06-25 00:31 PDT:
+
+- Joe flagged that early/no-data place-profile states feel too much like a ghost town.
+- Copy direction:
+  - Remove `rec.me does not have enough trusted signal here yet.`
+  - Do not show a `Why it fits` section when there is no real fit/trusted/tag evidence.
+  - Change empty trusted-note copy to `No one you follow has a note here.`
+  - Avoid empty-state copy that implies "none of us do ratings and tags"; make no-data states feel like a normal early product state and invite the user's own save/rating/tags.
+- Later spec/release requests were cancelled before implementation; this branch is staying scoped to the place-profile PR.
+
+Checkpoint, 2026-06-25 00:44 PDT:
+
+- Finished the no-data state cleanup:
+  - `fitSentence` is optional and hidden when there is no evidence, removing the visible `Signal is still thin here.` fallback.
+  - `Why it fits` only renders when there is fit, rating, repeated tag, or multi-person trusted evidence.
+  - Empty trusted notes copy is now `No one you follow has a note here.`
+  - Empty rating card now invites the user to add their own rating/tags without implying the network failed.
+  - Preview rating line no longer shows the review count in parentheses; it now reads like `Demo + Maya · ★ 4.7`.
+- Added a followed Demo account plus richer unsaved demo places:
+  - `Fern Desk Coffee` with repeated coffee/work tags and trusted ratings/notes.
+  - `Juniper Table` with repeated restaurant/date-night tags and trusted ratings/notes.
+- Updated fixture-sensitive tests for the added followed account and visible places.
+- `git diff --check` passed.
+- Full elevated simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-empty-state CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Visual verification:
+  - Full profile screenshot: `/private/tmp/recme-place-profile-fern-demo-full.png`
+  - Updated preview screenshot: `/private/tmp/recme-place-profile-fern-demo-preview.png`
+
+Merge gate checkpoint, 2026-06-25 00:55 PDT:
+
+- Joe asked whether to merge and push to TestFlight. Started the rec.me PR landing workflow for PR #35.
+- GitHub initially reported PR #35 as draft and `CONFLICTING` against newer `main`.
+- Merged `origin/main` into `codex/place-profile-eng-review`; the only conflict was `docs/agent-log.md`, resolved by preserving both the place-profile entries and the newer REC-45/observability entries from `main`.
+- `git diff --check origin/main...HEAD` passed after the merge.
+- Full elevated simulator suite passed on the updated branch:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-merge-gate CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
 ## 2026-06-24 23:44 PDT - Codex - REC-45 save RPC security regression
 
 Agent: Codex

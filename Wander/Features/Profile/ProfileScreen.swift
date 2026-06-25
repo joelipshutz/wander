@@ -489,6 +489,7 @@ private struct SavedPlacesListScreen: View {
                 PlaceSheet(
                     place: PlaceSheetPlace(visiblePlace: selectedPlace),
                     saves: saveSummaries(for: selectedPlace),
+                    tasteSaves: tasteSummaries,
                     currentUserID: store.currentUser.id,
                     action: .edit,
                     isExpanded: $isPlaceDetailExpanded
@@ -719,6 +720,12 @@ private struct SavedPlacesListScreen: View {
             if lhs.visiblePlace.id == selectedPlace.id { return true }
             if rhs.visiblePlace.id == selectedPlace.id { return false }
             return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+        }
+    }
+
+    private var tasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
         }
     }
 
@@ -992,7 +999,7 @@ private struct ProfilePlaceRow: View {
                 Text(visiblePlace.place.canonicalName)
                     .font(.system(size: 15, weight: .bold))
                     .lineLimit(1)
-                Text("\(visiblePlace.place.locality ?? "Los Angeles") · \(visiblePlace.userPlace.status.displayTitle)")
+                Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -1010,6 +1017,14 @@ private struct ProfilePlaceRow: View {
 
     private var icon: String {
         WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+    }
+
+    private var subtitle: String {
+        let locality = visiblePlace.place.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let locality, !locality.isEmpty else {
+            return visiblePlace.userPlace.status.displayTitle
+        }
+        return "\(locality) · \(visiblePlace.userPlace.status.displayTitle)"
     }
 }
 
