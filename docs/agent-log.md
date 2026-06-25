@@ -5630,3 +5630,51 @@ PR / merge gate:
 - GitHub reported PR #34 as `MERGEABLE` / `CLEAN` with no labels and no configured status checks.
 - The gstack `/review` checklist file was missing from both `.agents/skills/gstack/review/checklist.md` and the installed gstack skill path, so the exact checklist workflow could not persist a formal review record. Applied the rec.me merge gate manually against scope, SQL/data reset safety, rating contract, one-time local persistence reset, TestFlight release copy, and test coverage; no blocking findings.
 - This merge does not itself upload TestFlight or post Slack. The prepared TestFlight "What to Test" copy and Slack draft live in `docs/qa/2026-06-24-rating-score-reset-testflight-notes.md` for the next explicit TestFlight release.
+
+## 2026-06-24 17:16 PDT - Codex - Build 44 TestFlight Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-release-gate-skill`
+Starting status: release worktree on `main`, then fast-forwarded from `origin/main` to PR #34 merge commit `1cdc43454f17d630612fe1d5f254c119c4085b59`.
+
+Goal: push the merged numeric rating / saved-place reset release to TestFlight.
+
+Notes:
+
+- Mission Control task creation failed because `localhost:4000` was not reachable, so this entry is the durable release record.
+- Applied hosted Supabase migration `20260624223000_rating_score_reset.sql` from the linked root workspace because the temporary release worktree was not linked to the Supabase project. `npx supabase db push --linked --yes` finished successfully, and `npx supabase migration list --linked` showed remote and local `20260624223000` aligned.
+- Bumped `CURRENT_PROJECT_VERSION` from `43` to `44` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj` with `xcodegen generate`, and pushed commit `fcc7d2f` (`chore: bump testflight build 44`) to `main`.
+
+Validation:
+
+- `git diff --check` passed before the build-number commit.
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build44 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-build44 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `146` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build44.xcarchive`.
+- Archived `CFBundleVersion` verified as `44`.
+- Export options: `/private/tmp/WanderExportUpload44.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package.
+- Ran `node scripts/testflight-release.mjs --build-number 44 --archive-path /private/tmp/Wander-0.1-build44.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build44-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (44)` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Slack:
+
+- Posted tester-facing release note to `#testflight-feedback` (`C0BAA7DG2AC`) after approval.
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782348439270859`.
+
+Known tester-facing behavior:
+
+- Build 44 intentionally clears saved places, drafts, source artifacts, and old dummy/stale place data once on launch.
+- Accounts, profiles, follows, blocks, and default visibility should remain.
+- No reinstall or sign-out should be required.
+- New `Been` saves use the 1-5 slider where `5` is best; `Wanna go` saves do not get rated.
+- Recommended scores average visible `Been` ratings.
