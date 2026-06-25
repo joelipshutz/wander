@@ -754,8 +754,10 @@ final class WanderStoreTests: XCTestCase {
         let friends = await store.discover(query: "", scope: .friendsPlaces)
         let everyone = await store.discover(query: "", scope: .everyone)
 
-        XCTAssertEqual(mine.places.map(\.owner.id), ["user_joe"])
-        XCTAssertEqual(friends.places.map(\.owner.id), ["user_ryan"])
+        XCTAssertFalse(mine.places.isEmpty)
+        XCTAssertTrue(mine.places.allSatisfy { $0.owner.id == "user_joe" })
+        XCTAssertFalse(friends.places.isEmpty)
+        XCTAssertTrue(friends.places.allSatisfy { $0.owner.id == "user_ryan" })
         XCTAssertEqual(Set(everyone.places.map(\.owner.id)), ["user_joe", "user_maya", "user_ryan"])
     }
 

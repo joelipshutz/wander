@@ -142,6 +142,10 @@ struct MapScreen: View {
         return mapSearchCandidates.first { $0.id == selectedSearchCandidateID }
     }
 
+    private var hasSelectedProfile: Bool {
+        selectedPlace != nil || selectedSearchCandidate != nil
+    }
+
     private var mappableSearchCandidates: [PlaceCandidate] {
         mapSearchCandidates.filter { candidate in
             guard candidate.latitude != nil, candidate.longitude != nil else { return false }
@@ -271,47 +275,19 @@ struct MapScreen: View {
 
                 Spacer()
 
-                HStack {
-                    Spacer()
-                    RecenterButton(isLoading: isRecenteringOnUser) {
-                        recenterOnUser()
+                if !isPlaceSheetExpanded {
+                    HStack {
+                        Spacer()
+                        RecenterButton(isLoading: isRecenteringOnUser) {
+                            recenterOnUser()
+                        }
+                        .padding(.trailing, WanderTheme.spacing3)
+                        .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
                     }
-                    .padding(.trailing, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing2)
-                }
-
-                if let selectedSearchCandidate {
-                    PlaceSheet(
-                        place: PlaceSheetPlace(candidate: selectedSearchCandidate),
-                        saves: saveSummaries(for: selectedSearchCandidate),
-                        tasteSaves: tasteSummaries,
-                        currentUserID: store.currentUser.id,
-                        action: .add,
-                        isExpanded: $isPlaceSheetExpanded
-                    ) {
-                        mapSaveFlow = MapPlaceSaveContext.addCandidate(
-                            selectedSearchCandidate,
-                            sourceType: .manual,
-                            defaultVisibility: store.defaultVisibility
-                        )
-                    }
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing2)
-                } else if let selectedPlace {
-                    PlaceSheet(
-                        place: PlaceSheetPlace(visiblePlace: selectedPlace),
-                        saves: saveSummaries(for: selectedPlace),
-                        tasteSaves: tasteSummaries,
-                        currentUserID: store.currentUser.id,
-                        action: action(for: selectedPlace),
-                        isExpanded: $isPlaceSheetExpanded
-                    ) {
-                        performAction(for: selectedPlace)
-                    }
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing2)
                 }
             }
+
+            selectedPlaceProfileSurface
         }
         .background(WanderTheme.canvasWarm.color)
         .onAppear {
@@ -501,6 +477,39 @@ struct MapScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var selectedPlaceProfileSurface: some View {
+        if let selectedSearchCandidate {
+            PlaceProfileMapSurface(
+                place: PlaceSheetPlace(candidate: selectedSearchCandidate),
+                saves: saveSummaries(for: selectedSearchCandidate),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .add,
+                isExpanded: $isPlaceSheetExpanded
+            ) {
+                mapSaveFlow = MapPlaceSaveContext.addCandidate(
+                    selectedSearchCandidate,
+                    sourceType: .manual,
+                    defaultVisibility: store.defaultVisibility
+                )
+            }
+            .zIndex(30)
+        } else if let selectedPlace {
+            PlaceProfileMapSurface(
+                place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                saves: saveSummaries(for: selectedPlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: action(for: selectedPlace),
+                isExpanded: $isPlaceSheetExpanded
+            ) {
+                performAction(for: selectedPlace)
+            }
+            .zIndex(30)
+        }
+    }
+
     private func submitMapSearch() {
         dismissKeyboard()
         suppressedTypeaheadQuery = Self.normalized(mapQuery)
@@ -672,11 +681,11 @@ struct MapScreen: View {
     }
 
     private func action(for visiblePlace: VisiblePlace) -> PlaceSheetAction {
-        if visiblePlace.owner.id == store.currentUser.id {
+        if currentUserSave(matching: visiblePlace) != nil {
             return .edit
         }
 
-        return isSavedByCurrentUser(visiblePlace) ? .none : .add
+        return .add
     }
 
     private func performAction(for visiblePlace: VisiblePlace) {
@@ -688,9 +697,10 @@ struct MapScreen: View {
                 attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
         case .edit:
+            let placeToEdit = currentUserSave(matching: visiblePlace) ?? visiblePlace
             mapSaveFlow = MapPlaceSaveContext.editVisiblePlace(
-                visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id)
+                placeToEdit,
+                attributes: store.attributes(for: placeToEdit.userPlace.id)
             )
         case .none:
             break
@@ -698,7 +708,11 @@ struct MapScreen: View {
     }
 
     private func isSavedByCurrentUser(_ visiblePlace: VisiblePlace) -> Bool {
-        store.currentUserVisiblePlaces.contains { mine in
+        currentUserSave(matching: visiblePlace) != nil
+    }
+
+    private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
+        store.currentUserVisiblePlaces.first { mine in
             mine.place.id == visiblePlace.place.id
                 || mine.place.canonicalName.caseInsensitiveCompare(visiblePlace.place.canonicalName) == .orderedSame
         }

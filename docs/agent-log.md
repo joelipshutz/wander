@@ -5767,3 +5767,64 @@ Validation:
 Local launch note:
 
 - A later `xcrun simctl list devices booted` attempt was rejected by the Codex escalation approval layer due a temporary usage limit, not by CoreSimulator itself. The app is built and testable from Xcode or once elevated simulator access is available.
+
+## 2026-06-24 23:25 PDT - Codex - Place Profile Full Preview/Profile Build
+
+Agent: Codex
+Branch: `codex/place-profile-eng-review`
+Worktree: `/private/tmp/recme-place-profile-eng-review`
+Starting status: clean worktree, branch 3 commits ahead of `origin/main` at `628a1dc` after `git fetch origin`.
+
+Goal: finish the designed place profile experience so it is locally testable in an Xcode/simulator build before TestFlight. This means replacing the current local-testable sheet slice with the designed map tap preview and full-screen place profile states, while reusing the existing rating/tag/fit presentation work.
+
+Design sources:
+
+- `/private/tmp/recme-design-review/place-profile-design-doc.md`
+- `/private/tmp/recme-design-review/place-profile-redesign-mock.html`
+- `docs/reviews/2026-06-24-place-profile-redesign-after-ratings-plan-eng-review.md`
+
+Decisions locked:
+
+- Use deterministic local fit scoring only; no OpenAI scoring, provider ratings, or backend fit cache in this pass.
+- Actual rating remains explicit human rating: own rating for saved places, trusted aggregate for unsaved/social places.
+- Common tags come from structured attributes only.
+- Preview uses plus + share only, no X; full profile keeps bottom tabs visible.
+- Unsaved state uses plus in the upper-right and no explicit "not saved" copy.
+
+Expected files touched:
+
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- Possible shared SwiftUI view file under `Wander/Features/Map/` or `Wander/Features/PlaceProfile/`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `project.yml` / generated Xcode project only if new file membership is required
+- `docs/agent-log.md`
+
+Notes:
+
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- Main checkout is on `codex/rating-score-reset`; implementation will stay in this isolated worktree to avoid cross-branch edits.
+
+Checkpoint, 2026-06-25 00:05 PDT:
+
+- Joe flagged that the demo profile was repeating `coffee` too much because category fallback was being used as a common tag.
+- Decision: category remains metadata only. Common tags should mean repeated structured tags from visible trusted/current-user saves; no category-as-tag fallback in chip rails or `Best for`.
+- Adding richer demo fixture places saved by the demo account plus Maya/Ryan overlap so the redesigned profile can be tested with real repeated tags, ratings, website/call metadata, and thin-signal fallback states.
+
+Checkpoint, 2026-06-25 00:14 PDT:
+
+- Added richer seed fixture places:
+  - `Circuit Coffee`: Joe/Maya/Ryan saves, repeated tags `quiet`, `wifi solid`, `laptop friendly`, `outlets`, plus website/phone metadata.
+  - `Bar Nido`: Joe/Maya/Ryan saves with repeated dinner/date-night tags and website/phone metadata.
+  - `Elysian Picnic Steps`: Joe wanna-go plus Maya/Ryan trusted ratings/tags for a mixed own/trusted state.
+- Removed category fallback from `PlaceProfileCopy.displayTags`; category now remains metadata only.
+- Updated no-common-tag fit sentence copy so sparse states do not generate `Good for coffee`/`Best for coffee`.
+- Updated the Discover scope test to assert owner scoping without assuming the seed fixture has exactly one Joe/Ryan place.
+- `git diff --check` passed.
+- Full elevated simulator test suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `152` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Simulator screenshots captured:
+  - `/private/tmp/recme-place-profile-circuit-preview.png`
+  - `/private/tmp/recme-place-profile-circuit-full.png`
+  - `/private/tmp/recme-place-profile-woodcat-fallback.png`
