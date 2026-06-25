@@ -63,6 +63,7 @@ struct MapScreen: View {
                 || visiblePlace.owner.handle.lowercased().contains(normalizedQuery)
                 || (visiblePlace.userPlace.note?.lowercased().contains(normalizedQuery) ?? false)
                 || (visiblePlace.userPlace.ratingSignal?.lowercased().contains(normalizedQuery) ?? false)
+                || (visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)?.lowercased().contains(normalizedQuery) ?? false)
         }
     }
 
@@ -711,6 +712,7 @@ struct MapScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: sourceType,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
@@ -732,6 +734,7 @@ struct MapScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
@@ -862,7 +865,8 @@ struct MapScreen: View {
             visiblePlace.owner.displayName,
             "@\(visiblePlace.owner.handle)",
             visiblePlace.userPlace.note,
-            visiblePlace.userPlace.ratingSignal
+            visiblePlace.userPlace.ratingSignal,
+            visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)
         ]
         .compactMap { $0 }
         .contains { Self.normalized($0).contains(normalizedQuery) }
@@ -1857,6 +1861,7 @@ struct MapPlaceSaveContext: Identifiable {
     let mode: MapPlaceSaveMode
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
+    let initialRatingScore: Int
     let initialNote: String
     let initialAnswers: [String: Set<String>]
 
@@ -1897,6 +1902,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(sourceType),
             initialStatus: .wannaGo,
             initialVisibility: defaultVisibility,
+            initialRatingScore: PlaceRating.defaultScore,
             initialNote: "",
             initialAnswers: [:]
         )
@@ -1912,6 +1918,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(.socialSave),
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
+            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: "",
             initialAnswers: initialAnswers(from: attributes)
         )
@@ -1926,6 +1933,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .edit(visiblePlace),
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: visiblePlace.userPlace.visibility,
+            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: visiblePlace.userPlace.note ?? "",
             initialAnswers: initialAnswers(from: attributes)
         )
@@ -1973,6 +1981,7 @@ struct MapPlaceSaveSubmission {
     let context: MapPlaceSaveContext
     let status: PlaceStatus
     let visibility: PlaceVisibility
+    let ratingScore: Int?
     let note: String?
     let attributes: [PlaceAttributeDraft]
 }
@@ -1989,6 +1998,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
+    @State private var selectedRatingScore: Int
     @State private var selectedAnswers: [String: Set<String>]
     @State private var note: String
     @State private var isSaving = false
@@ -1999,6 +2009,7 @@ struct MapPlaceSaveFlowSheet: View {
         self.onSave = onSave
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
+        _selectedRatingScore = State(initialValue: context.initialRatingScore)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _note = State(initialValue: context.initialNote)
     }
@@ -2092,6 +2103,10 @@ struct MapPlaceSaveFlowSheet: View {
     private var detailsContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             candidateCard
+
+            if selectedStatus == .been {
+                PlaceRatingSlider(score: $selectedRatingScore)
+            }
 
             ForEach(questionBlocks) { block in
                 MapSaveQuestionBlock(title: block.title, tag: block.tag) {
@@ -2234,6 +2249,7 @@ struct MapPlaceSaveFlowSheet: View {
             context: context,
             status: selectedStatus,
             visibility: selectedVisibility,
+            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts()
         )
@@ -2832,6 +2848,7 @@ struct PlaceSheet: View {
 
     private static func icon(for questionKey: String) -> String {
         switch questionKey {
+        case "interest_signal": "heart.fill"
         case "rating_signal": "heart.fill"
         case "work_setup": "laptopcomputer"
         case "strenuousness": "figure.hiking"
@@ -2977,6 +2994,11 @@ private struct SaveReviewCard: View {
             facts.append(PlaceFact(title: ratingSignal, systemImage: "heart.fill"))
         }
 
+        if let recommendedScore = summary.visiblePlace.recommendedScore,
+           summary.visiblePlace.recommendedCount > 0 {
+            facts.append(PlaceFact(title: "Recommended \(PlaceRating.averageDisplay(recommendedScore))", systemImage: "star.fill"))
+        }
+
         facts.append(contentsOf: summary.attributes.flatMap(attributeFacts(for:)))
         return facts
     }
@@ -2999,6 +3021,7 @@ private struct SaveReviewCard: View {
 
     private func icon(for questionKey: String) -> String {
         switch questionKey {
+        case "interest_signal": "heart.fill"
         case "rating_signal": "heart.fill"
         case "work_setup": "laptopcomputer"
         case "strenuousness": "figure.hiking"

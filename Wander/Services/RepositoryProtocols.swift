@@ -245,9 +245,32 @@ struct UserPlaceDraft: Equatable {
     let visibility: PlaceVisibility
     let note: String?
     let ratingSignal: String?
+    let ratingScore: Int?
     let nearbyConfirmed: Bool
     let sourceType: String
     let attributes: [PlaceAttributeDraft]
+
+    init(
+        place: PlaceDraft,
+        status: PlaceStatus,
+        visibility: PlaceVisibility,
+        note: String?,
+        ratingSignal: String? = nil,
+        ratingScore: Int? = nil,
+        nearbyConfirmed: Bool,
+        sourceType: String,
+        attributes: [PlaceAttributeDraft]
+    ) {
+        self.place = place
+        self.status = status
+        self.visibility = visibility
+        self.note = note
+        self.ratingSignal = ratingSignal
+        self.ratingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
+        self.nearbyConfirmed = nearbyConfirmed
+        self.sourceType = sourceType
+        self.attributes = attributes
+    }
 }
 
 struct PlaceAttributeDraft: Equatable {

@@ -43,19 +43,17 @@ struct WanderFixtures {
         let noodles = LocalPlace(localID: "local_place_noodles", serverID: "place_noodles", canonicalName: "Larchmont Noodles", category: "restaurant", latitude: 34.073, longitude: -118.323, sourceProvider: "mapkit", syncState: .synced)
 
         let userPlaces = [
-            LocalUserPlace(localID: "local_up_joe_woodcat", serverID: "up_joe_woodcat", userID: currentUser.id, placeID: coffee.id, status: .been, visibility: .followers, note: "Good morning table by the window.", nearbyConfirmed: true, sourceType: "manual", syncState: .synced),
-            LocalUserPlace(localID: "local_up_maya_griffith", serverID: "up_maya_griffith", userID: maya.id, placeID: hike.id, status: .been, visibility: .followers, note: "Easy sunset win.", nearbyConfirmed: true, sourceType: "social_seed", syncState: .synced),
+            LocalUserPlace(localID: "local_up_joe_woodcat", serverID: "up_joe_woodcat", userID: currentUser.id, placeID: coffee.id, status: .been, visibility: .followers, note: "Good morning table by the window.", ratingScore: 4, recommendedScore: 4, recommendedCount: 1, nearbyConfirmed: true, sourceType: "manual", syncState: .synced),
+            LocalUserPlace(localID: "local_up_maya_griffith", serverID: "up_maya_griffith", userID: maya.id, placeID: hike.id, status: .been, visibility: .followers, note: "Easy sunset win.", ratingScore: 5, recommendedScore: 5, recommendedCount: 1, nearbyConfirmed: true, sourceType: "social_seed", syncState: .synced),
             LocalUserPlace(localID: "local_up_ryan_noodles", serverID: "up_ryan_noodles", userID: ryan.id, placeID: noodles.id, status: .wannaGo, visibility: .mutuals, note: "Saved for a rainy night.", sourceType: "social_seed", syncState: .synced)
         ]
 
         let placeAttributes = [
-            LocalPlaceAttribute(localID: "local_attr_joe_woodcat_rating", serverID: "attr_joe_woodcat_rating", userPlaceID: "up_joe_woodcat", questionKey: "rating_signal", valueType: "emoji_scale", valueJSON: "\"great\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_joe_woodcat_work", serverID: "attr_joe_woodcat_work", userPlaceID: "up_joe_woodcat", questionKey: "work_setup", valueType: "single_choice", valueJSON: "\"yes\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_joe_woodcat_tags", serverID: "attr_joe_woodcat_tags", userPlaceID: "up_joe_woodcat", questionKey: "coffee_tags", valueType: "multi_tag", valueJSON: "[\"wifi solid\",\"quiet\"]", syncState: .synced),
-            LocalPlaceAttribute(localID: "local_attr_maya_griffith_rating", serverID: "attr_maya_griffith_rating", userPlaceID: "up_maya_griffith", questionKey: "rating_signal", valueType: "emoji_scale", valueJSON: "\"great\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_maya_griffith_strenuousness", serverID: "attr_maya_griffith_strenuousness", userPlaceID: "up_maya_griffith", questionKey: "strenuousness", valueType: "single_choice", valueJSON: "\"easy\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_maya_griffith_tags", serverID: "attr_maya_griffith_tags", userPlaceID: "up_maya_griffith", questionKey: "hike_tags", valueType: "multi_tag", valueJSON: "[\"sunset\",\"views\"]", syncState: .synced),
-            LocalPlaceAttribute(localID: "local_attr_ryan_noodles_rating", serverID: "attr_ryan_noodles_rating", userPlaceID: "up_ryan_noodles", questionKey: "rating_signal", valueType: "emoji_scale", valueJSON: "\"excited\"", syncState: .synced),
+            LocalPlaceAttribute(localID: "local_attr_ryan_noodles_interest", serverID: "attr_ryan_noodles_interest", userPlaceID: "up_ryan_noodles", questionKey: "interest_signal", valueType: "emoji_scale", valueJSON: "\"excited\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_ryan_noodles_price", serverID: "attr_ryan_noodles_price", userPlaceID: "up_ryan_noodles", questionKey: "price", valueType: "price_scale", valueJSON: "\"$$\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_ryan_noodles_occasion", serverID: "attr_ryan_noodles_occasion", userPlaceID: "up_ryan_noodles", questionKey: "occasion", valueType: "single_choice", valueJSON: "\"rainy night\"", syncState: .synced),
             LocalPlaceAttribute(localID: "local_attr_ryan_noodles_tags", serverID: "attr_ryan_noodles_tags", userPlaceID: "up_ryan_noodles", questionKey: "restaurant_tags", valueType: "multi_tag", valueJSON: "[\"cozy\",\"worth it\"]", syncState: .synced)

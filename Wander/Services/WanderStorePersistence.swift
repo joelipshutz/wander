@@ -39,6 +39,8 @@ struct WanderStorePersistence {
 }
 
 struct WanderStoreSnapshot: Codable, Equatable {
+    static let currentSavedPlaceResetVersion = 1
+
     let currentUser: ProfileRecord
     let profiles: [ProfileRecord]
     let places: [PlaceRecord]
@@ -49,6 +51,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let unresolvedDrafts: [UnresolvedDraftRecord]
     let sourceArtifacts: [SourceArtifactRecord]
     let extractionJobs: [ExtractionJobRecord]
+    let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let savedAt: Date
 
@@ -64,11 +67,13 @@ struct WanderStoreSnapshot: Codable, Equatable {
         unresolvedDrafts = store.unresolvedDrafts.map(UnresolvedDraftRecord.init)
         sourceArtifacts = store.sourceArtifacts.map(SourceArtifactRecord.init)
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
+        savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         savedAt = .now
     }
 
     func restoredState(contactProvider: FakeContactProvider) -> RestoredState {
+        let shouldResetSavedPlaces = (savedPlaceResetVersion ?? 0) < Self.currentSavedPlaceResetVersion
         let restoredCurrentUser = currentUser.model()
         var restoredProfiles = profiles.map { $0.model() }
         restoredProfiles.removeAll { $0.id == restoredCurrentUser.id || $0.localID == restoredCurrentUser.localID }
@@ -77,16 +82,17 @@ struct WanderStoreSnapshot: Codable, Equatable {
         return RestoredState(
             currentUser: restoredCurrentUser,
             profiles: restoredProfiles,
-            places: places.map { $0.model() },
-            userPlaces: userPlaces.map { $0.model() },
-            placeAttributes: placeAttributes.map { $0.model() },
+            places: shouldResetSavedPlaces ? [] : places.map { $0.model() },
+            userPlaces: shouldResetSavedPlaces ? [] : userPlaces.map { $0.model() },
+            placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
-            unresolvedDrafts: unresolvedDrafts.map { $0.model() },
-            sourceArtifacts: sourceArtifacts.map { $0.model() },
-            extractionJobs: extractionJobs.map { $0.model() },
+            unresolvedDrafts: shouldResetSavedPlaces ? [] : unresolvedDrafts.map { $0.model() },
+            sourceArtifacts: shouldResetSavedPlaces ? [] : sourceArtifacts.map { $0.model() },
+            extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
             contactProvider: contactProvider,
-            defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility
+            defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
+            didApplySavedPlaceReset: shouldResetSavedPlaces
         )
     }
 
@@ -103,6 +109,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let extractionJobs: [LocalExtractionJob]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
+        let didApplySavedPlaceReset: Bool
     }
 
     struct ProfileRecord: Codable, Equatable {
@@ -249,6 +256,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let statusRaw: String
         let note: String?
         let ratingSignal: String?
+        let ratingScore: Int?
+        let recommendedScore: Double?
+        let recommendedCount: Int?
         let visibilityRaw: String
         let nearbyConfirmed: Bool
         let visitedAt: Date?
@@ -273,6 +283,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             statusRaw = userPlace.statusRaw
             note = userPlace.note
             ratingSignal = userPlace.ratingSignal
+            ratingScore = userPlace.ratingScore
+            recommendedScore = userPlace.recommendedScore
+            recommendedCount = userPlace.recommendedCount
             visibilityRaw = userPlace.visibilityRaw
             nearbyConfirmed = userPlace.nearbyConfirmed
             visitedAt = userPlace.visitedAt
@@ -300,6 +313,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 visibility: PlaceVisibility(rawValue: visibilityRaw) ?? .followers,
                 note: note,
                 ratingSignal: ratingSignal,
+                ratingScore: ratingScore,
+                recommendedScore: recommendedScore,
+                recommendedCount: recommendedCount ?? 0,
                 nearbyConfirmed: nearbyConfirmed,
                 visitedAt: visitedAt,
                 savedAt: savedAt,

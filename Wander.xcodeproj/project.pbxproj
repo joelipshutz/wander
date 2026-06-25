@@ -20,6 +20,7 @@
 		1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */; };
 		1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */; };
 		1F0D588284A12A308B3E26A4 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CF6EFF560365043CF67F3324 /* PostHog */; };
+		20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */; };
 		26573736780BA54719E0F7EC /* LinkPlaceParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */; };
 		2EC61D518D9913AD24235D5B /* AddQuestionTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28E93E5F5EB428888C45B36 /* AddQuestionTemplates.swift */; };
 		2FCACFADB44361B7435C5793 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 9166766790578B44B8D3597A /* Supabase */; };
@@ -41,6 +42,7 @@
 		812F84570207D139A528319C /* DiscoverScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */; };
 		85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A0C8AFCFBDE5C371CED21E /* PhotoPlaceTextExtractor.swift */; };
 		89DD4F9F93B8FFA91B6B350B /* PlaceExternalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */; };
+		8FC6E5AF64993C4B3DB8C4E9 /* PlaceRating.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4753F17DA5C73EB4353038E /* PlaceRating.swift */; };
 		940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */; };
 		9783D57D5D22581B19B01C05 /* MapKitPlaceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */; };
 		9800E02122FDAD2796619FC8 /* WanderLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */; };
@@ -134,6 +136,8 @@
 		D6A18F74DCFE0F295B598171 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackendConfiguration.swift; sourceTree = "<group>"; };
 		DE62D76C9EC89546850909A7 /* AnalyticsEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsEvent.swift; sourceTree = "<group>"; };
+		E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceRatingSlider.swift; sourceTree = "<group>"; };
+		E4753F17DA5C73EB4353038E /* PlaceRating.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceRating.swift; sourceTree = "<group>"; };
 		E635EA909370EB6D597D27AC /* WanderDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderDebugLog.swift; sourceTree = "<group>"; };
 		E850341A28B18117631F62F5 /* WanderBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackend.swift; sourceTree = "<group>"; };
 		ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverModels.swift; sourceTree = "<group>"; };
@@ -277,6 +281,7 @@
 		74079079D5E95AD2E796B1E8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
 				1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */,
 			);
 			path = DesignSystem;
@@ -328,6 +333,7 @@
 			isa = PBXGroup;
 			children = (
 				CED7D1302D938DD4775E8816 /* LocalModels.swift */,
+				E4753F17DA5C73EB4353038E /* PlaceRating.swift */,
 				038D4985674B1D969110954F /* WanderEnums.swift */,
 			);
 			path = Models;
@@ -486,6 +492,8 @@
 				BC07AB3F1E3B95100DB6F3F0 /* MapScreen.swift in Sources */,
 				85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */,
 				89DD4F9F93B8FFA91B6B350B /* PlaceExternalLinks.swift in Sources */,
+				8FC6E5AF64993C4B3DB8C4E9 /* PlaceRating.swift in Sources */,
+				20FEE2E3747CBDB49F6500D1 /* PlaceRatingSlider.swift in Sources */,
 				B84BABB0A3FC62E816F68710 /* PostHogAnalyticsClient.swift in Sources */,
 				C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */,
 				A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */,

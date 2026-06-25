@@ -22,9 +22,10 @@ struct AddQuestionBlock: Identifiable, Equatable {
 enum AddQuestionTemplates {
     static func blocks(category: String, status: PlaceStatus) -> [AddQuestionBlock] {
         let normalizedCategory = category.lowercased()
-        var blocks = [ratingBlock(status: status)]
+        var blocks: [AddQuestionBlock] = []
 
         if status == .wannaGo {
+            blocks.append(interestBlock())
             blocks.append(contentsOf: wannaGoBlocks(category: normalizedCategory))
             return blocks
         }
@@ -152,29 +153,16 @@ enum AddQuestionTemplates {
         }
     }
 
-    private static func ratingBlock(status: PlaceStatus) -> AddQuestionBlock {
-        if status == .wannaGo {
-            return AddQuestionBlock(
-                key: "rating_signal",
-                title: "how excited are you?",
-                tag: "scale",
-                kind: .singleChoice,
-                valueType: "emoji_scale",
-                options: ["curious", "excited", "must go"],
-                defaultValues: ["excited"],
-                minimumOptionWidth: 88
-            )
-        }
-
-        return AddQuestionBlock(
-            key: "rating_signal",
-            title: "how much did you like it?",
+    private static func interestBlock() -> AddQuestionBlock {
+        AddQuestionBlock(
+            key: "interest_signal",
+            title: "how excited are you?",
             tag: "scale",
             kind: .singleChoice,
             valueType: "emoji_scale",
-            options: ["😐", "🙂", "😍", "🤯"],
-            defaultValues: ["😍"],
-            minimumOptionWidth: 64
+            options: ["curious", "excited", "must go"],
+            defaultValues: ["excited"],
+            minimumOptionWidth: 88
         )
     }
 

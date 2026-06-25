@@ -870,6 +870,11 @@ private struct DiscoverPlaceDetailSheet: View {
             facts.append(DiscoverPlaceFact(title: ratingSignal, systemImage: "heart.fill"))
         }
 
+        if let recommendedScore = visiblePlace.recommendedScore,
+           visiblePlace.recommendedCount > 0 {
+            facts.append(DiscoverPlaceFact(title: "Recommended \(PlaceRating.averageDisplay(recommendedScore))", systemImage: "star.fill"))
+        }
+
         facts.append(contentsOf: attributes.flatMap(attributeFacts(for:)))
         return facts
     }
@@ -910,6 +915,7 @@ private struct DiscoverPlaceDetailSheet: View {
 
     private func icon(for questionKey: String) -> String {
         switch questionKey {
+        case "interest_signal": "heart.fill"
         case "rating_signal": "heart.fill"
         case "work_setup": "laptopcomputer"
         case "strenuousness": "figure.hiking"

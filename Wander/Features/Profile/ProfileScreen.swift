@@ -688,7 +688,8 @@ private struct SavedPlacesListScreen: View {
             visiblePlace.place.category,
             visiblePlace.place.locality,
             visiblePlace.userPlace.note,
-            visiblePlace.userPlace.ratingSignal
+            visiblePlace.userPlace.ratingSignal,
+            visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)
         ].compactMap { $0?.lowercased() }
         return searchable.contains { $0.contains(normalized) }
             || metadataTags(for: visiblePlace).contains { $0.lowercased().contains(normalized) }
@@ -743,6 +744,7 @@ private struct SavedPlacesListScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: sourceType,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
@@ -757,6 +759,7 @@ private struct SavedPlacesListScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
@@ -994,6 +997,10 @@ private struct ProfilePlaceRow: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
             Spacer()
+            if let recommendedScore = visiblePlace.recommendedScore,
+               visiblePlace.recommendedCount > 0 {
+                RecommendedScorePill(score: recommendedScore)
+            }
             PlaceVisibilityIconPill(visibility: visiblePlace.userPlace.visibility, size: 30)
         }
         .padding(WanderTheme.spacing3)
@@ -1003,6 +1010,26 @@ private struct ProfilePlaceRow: View {
 
     private var icon: String {
         WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+    }
+}
+
+private struct RecommendedScorePill: View {
+    let score: Double
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 10, weight: .black))
+            Text(PlaceRating.averageDisplay(score))
+                .font(.system(size: 12, weight: .black))
+        }
+        .foregroundStyle(WanderTheme.terracotta.color)
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(height: 30)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityLabel("Recommended score \(PlaceRating.averageDisplay(score)) out of 5")
     }
 }
 

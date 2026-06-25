@@ -5501,3 +5501,132 @@ Merge outcome:
 - Fast-forwarded local `main` to `origin/main`.
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
+
+## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
+
+Agent: Codex
+Branch: `main`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Starting status: clean `main` at `origin/main`; inspected `git status --short --branch`, `git worktree list`, latest `docs/agent-log.md`, `AGENTS.md`, `DESIGN.md`, and product spec. Existing auxiliary worktrees under `/private/tmp` are present, but this pass is read-mostly and not editing overlapping implementation files.
+
+Goal: compare the current rec.me/Wander place/profile detail experience against the provided Beli restaurant profile screenshot from a senior design/PM perspective, pull current app screenshots where possible, and propose a reimagined direction grounded in the app's map-first trusted-place-memory purpose.
+
+Expected files touched:
+
+- `docs/agent-log.md` only, unless Joe explicitly asks to turn the critique into implementation.
+
+Notes:
+
+- Mission Control `localhost:4000` task creation failed with connection error, so this log is the durable tracker for now.
+- GBrain search timed out twice on a transient PGLite lock; direct repo/KB Markdown review is being used as fallback.
+
+Outcome:
+
+- Captured actual local simulator screenshots from iPhone 17 Pro `066417CD-C3D5-4209-BA1F-46152B1A6AAC`:
+  - `/private/tmp/recme-design-review/current-launch.png`
+  - `/private/tmp/recme-design-review/current-profile.png`
+  - `/private/tmp/recme-design-review/current-map-zoom.png`
+- Important caveat: the fresh current simulator build failed because the Mac volume had only a few hundred MB free and Xcode hit `No space left on device` while compiling PostHog into temporary DerivedData. The captured app is the available local simulator build at `DerivedData/Build/Products/Debug-iphonesimulator/Wander.app`, `CFBundleVersion = 24`, so it is useful visual evidence but not a complete build 42 representation.
+- Profile and map shell were reviewed against the Beli place-profile screenshot, `DESIGN.md`, `docs/specs/wander-ios-product-spec.md`, and `docs/plans/2026-06-16-place-detail-pullup-eng-plan.md`.
+- Main design recommendation: borrow Beli's dense, clear place-detail hierarchy, not its restaurant-only/ranking/commerce model. rec.me should make place profiles answer: where is this, why did trusted people care, does it fit my moment, and what can I do next?
+
+Known issues / next steps:
+
+- Free disk space before trying another current simulator build or screenshot pass.
+- If Joe wants implementation, create a short-lived branch/worktree and start with the selected-place/place-detail sheet hierarchy before changing broader Profile chrome.
+
+## 2026-06-24 15:09 PDT - Codex - Rating System Plan Eng Review
+
+Agent: Codex
+Branch: `main`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Starting status: `main` clean except an existing uncommitted `docs/agent-log.md` design-review log entry not made by this pass; fetched/latest state already on `origin/main`.
+
+Goal: run `/plan-eng-review` for replacing the current four-bucket `rating_signal` system with a 1-5 numeric rating slider, Supabase migration/backfill, and Recommended average scores on profile/place surfaces.
+
+Expected files touched:
+
+- `docs/agent-log.md`
+- Possible plan/review artifact under `docs/reviews/` or `docs/plans/` after decisions are locked
+
+Decisions so far:
+
+- Recommended score only counts `been` saves, not `wanna_go` saves.
+- Add `user_places.rating_score smallint` as the active source of truth.
+- Reset dummy saved-place data instead of migrating existing `rating_signal` values.
+- Compute `recommended_score` and `recommended_count` in Supabase visible-place/profile RPCs, with iOS local fallback only for offline/local fixtures.
+
+Checkpoint:
+
+- Joe chose to wipe dummy saved-place data instead of preserving/backfilling old saved ratings.
+- Updated the plan direction: preserve profiles/follows/blocks/auth state, reset saved-place data remotely, and add a one-time local saved-place reset marker so stale on-device saved places do not reappear after TestFlight update.
+- Review artifact added at `docs/reviews/2026-06-24-rating-system-plan-eng-review.md`.
+- QA test-plan artifact updated at `/Users/joelipshutz/.gstack/projects/Wandernametbd/joelipshutz-main-eng-review-test-plan-20260624-152134.md`.
+
+Implementation checkpoint:
+
+- Implementation moved to branch `codex/rating-score-reset`.
+- Added 1...5 numeric rating model and `PlaceRatingSlider`; save flows default to `3` for `been` places and omit ratings for `wanna_go`.
+- Replaced active `wanna_go` interest prompt with `interest_signal`; retained `rating_signal` only as legacy read/display compatibility.
+- Added `rating_score`, `recommended_score`, and `recommended_count` through local models, persistence, Supabase DTOs, save RPC payloads, visible-place/profile surfaces, and search terms.
+- Added one-time local saved-place reset marker `savedPlaceResetVersion = 1`; snapshots missing the marker preserve current profile/follows/blocks/default visibility while clearing local places, user places, attributes, drafts, source artifacts, and extraction jobs, then persist the clean snapshot.
+- Added Supabase migration `supabase/migrations/20260624223000_rating_score_reset.sql` that adds `user_places.rating_score`, resets saved-place tables while preserving profiles/follows/blocks, refreshes `interest_signal`, and updates save/visible/profile RPCs to return numeric rating and recommended aggregates.
+- Updated Swift unit tests and `supabase/tests/save_own_place.sql` for the numeric rating contract and local reset behavior.
+
+Validation:
+
+- `xcodegen generate` passed and regenerated `Wander.xcodeproj/project.pbxproj`.
+- `git diff --check` passed.
+- Elevated generic simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rating-score CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Elevated focused simulator tests passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-rating-score CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests -only-testing:WanderTests/RemoteRepositoryTests`
+  Result: `65` tests, `0` failures, `** TEST SUCCEEDED **`.
+- Elevated full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-rating-score CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `145` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+SQL validation note:
+
+- Local pgTAP was not run in this pass: `supabase` and `psql` are not installed as direct shell commands, and the old temporary hosted pg runner `/private/tmp/wander-pg-runner` is gone.
+- The destructive hosted Supabase reset migration was not applied in this implementation pass. It must be applied as part of the release/merge path before or with the TestFlight build so server refresh cannot rehydrate stale saved places.
+
+Rollout behavior:
+
+- Testers should update to the TestFlight build and open the app normally; no reinstall or sign-out should be required.
+- Profiles, accounts, follows, blocks, and default visibility are preserved.
+- Saved places/drafts/artifacts are intentionally cleared locally once, and the server migration clears saved-place rows remotely, so old dummy/stale places should not show after refresh.
+
+UI polish checkpoint:
+
+- Updated the rating slider to show every number `1` through `5`.
+- Added explicit `5 is best` helper text.
+- Added live rating copy: `oof`, `meh`, `mid`, `yeah`, `wow`.
+- Changed the slider tint to use one fixed red token with opacity only, fading lower at `1` and becoming fully opaque at `5`.
+- Rebuilt and relaunched the app in the iPhone 16 Plus simulator for Joe to test.
+- Reran the full elevated simulator test suite after the final slider polish:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-rating-score CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `145` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+Release-note checkpoint:
+
+- Added `docs/qa/2026-06-24-rating-score-reset-testflight-notes.md` with TestFlight "What to Test" copy and the `#testflight-feedback` Slack draft for the eventual release.
+- The release copy explicitly says saved places/drafts are cleared once, accounts/profiles/follows/blocks/default visibility are preserved, no reinstall or sign-out should be required, and the hosted Supabase reset migration must run before or with the TestFlight build so old server rows cannot rehydrate stale/fake places.
+- The release copy also states that normal TestFlight launches should not seed demo/fake places; after the reset, places should only appear from real tester saves or followed testers' real saves.
+
+Post-rebase validation:
+
+- Rebased `codex/rating-score-reset` onto latest `origin/main` after PR #30/#31/#33/process-policy work landed; conflict was limited to `docs/agent-log.md` and resolved by preserving all entries.
+- `xcodegen generate` passed after the rebase with no additional project diff.
+- `git diff --check origin/main...HEAD` passed.
+- Elevated final simulator suite passed on the rebased commit:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-rating-score-final CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `146` tests, `0` failures, `** TEST SUCCEEDED **`.
+
+PR / merge gate:
+
+- Opened PR #34: https://github.com/joelipshutz/wander/pull/34
+- GitHub reported PR #34 as `MERGEABLE` / `CLEAN` with no labels and no configured status checks.
+- The gstack `/review` checklist file was missing from both `.agents/skills/gstack/review/checklist.md` and the installed gstack skill path, so the exact checklist workflow could not persist a formal review record. Applied the rec.me merge gate manually against scope, SQL/data reset safety, rating contract, one-time local persistence reset, TestFlight release copy, and test coverage; no blocking findings.
+- This merge does not itself upload TestFlight or post Slack. The prepared TestFlight "What to Test" copy and Slack draft live in `docs/qa/2026-06-24-rating-score-reset-testflight-notes.md` for the next explicit TestFlight release.
