@@ -5717,3 +5717,41 @@ Outcome:
 - Mission Control task creation was attempted after implementation, but `localhost:4000` was unreachable (`curl` exit code 7).
 - The hosted backend fix is already applied. No new TestFlight build should be required for build 44 to resume remote saves.
 - Tester next step: Joe/Ryan should force quit and reopen build 44, save a new place, and confirm the follower account can see it. Existing failed local own-place saves that still exist on-device should retry through the normal sync path on reopen/auth refresh.
+
+## 2026-06-25 00:07 PDT - Codex - Supabase policy and observability triage skill
+
+Agent: Codex
+Branch: `codex/observability-policy-skill`
+Worktree: `/private/tmp/recme-observability-policy-skill`
+Starting status: clean branch from `origin/main` at `d798863` after PR #36 merge.
+
+Goal: add repo policy that prevents Supabase RPC/RLS security posture regressions and add a shared, conditional log/data triage skill for Linear issues where PostHog/Supabase evidence is useful.
+
+Coordination:
+
+- Joe confirmed REC-45 appears fixed and asked for a new PR for logging/process follow-up.
+- Joe also said to check logs only when helpful, not for every issue. The skill must be conditional and evidence-driven.
+- Another agent may still be working in the shared codebase; this work is isolated to the temporary worktree above.
+- Mission Control task creation was attempted but `localhost:4000` was unreachable (`curl` exit code 7).
+
+Expected files:
+
+- `AGENTS.md`
+- `agent-skills/recme-linear-log-triage/SKILL.md`
+- `agent-skills/recme-testflight-feedback-bug-catcher/SKILL.md`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Added AGENTS Supabase/RLS/RPC policy requiring agents to preserve function security posture, `search_path`, grants, and hosted verification when migrations recreate functions or alter auth/sync/visibility behavior.
+- Added observability policy that says PostHog/Supabase checks should be used when helpful for auth, save/sync, backend data, visibility, screenshot-with-timestamp, or RLS/RPC issues, but skipped for issues where logs would not change the action.
+- Added new repo skill `recme-linear-log-triage` with conditional triggers, privacy rules, Supabase query templates, PostHog query template, and Linear evidence comment format.
+- Updated `recme-testflight-feedback-bug-catcher` to invoke the new log-triage skill only when evidence can materially change diagnosis.
+- `scripts/install-agent-skills.sh --check` sees the new skill as missing from local indexed roots and reports existing shared rec.me skill conflicts because this machine currently points those installs at the shared `/private/tmp/recme-shared-agent-skills` source. Do not run install from this temporary worktree; install from the canonical repo path after merge if local indexing is needed.
+
+Outcome:
+
+- Commit: `docs: add recme observability triage policy` on branch `codex/observability-policy-skill`.
+- PR: https://github.com/joelipshutz/wander/pull/37
+- Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
+- No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
