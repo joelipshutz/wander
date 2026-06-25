@@ -5679,6 +5679,26 @@ Known tester-facing behavior:
 - New `Been` saves use the 1-5 slider where `5` is best; `Wanna go` saves do not get rated.
 - Recommended scores average visible `Been` ratings.
 
+## 2026-06-25 01:00 PDT - Codex - Build 45 TestFlight Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-release-gate-skill`
+Starting status: clean release worktree on `main`, fast-forwarded from build 44 log commit `628a1dc` to PR #35 merge commit `bf7a3b9`.
+
+Goal: push build 45 to TestFlight for the merged place profile redesign.
+
+Included since build 44:
+
+- `d798863` - restore `save_own_place` security definer posture for hosted save sync. Hosted migration was already applied during the REC-45 fix.
+- `347048f` - observability / triage policy docs and shared skill updates. No app binary behavior.
+- `bf7a3b9` - redesigned place profile preview/full surface with deterministic fit rating, actual rating, common tags, no-data cleanup, richer demo fixtures, and tests.
+
+Notes:
+
+- Mission Control task creation failed because `localhost:4000` was not reachable.
+- Build number before release: `44`; target build number: `45`.
+
 ## 2026-06-24 17:29 PDT - Codex - Place Profile Eng Review After Ratings Merge
 
 Agent: Codex
