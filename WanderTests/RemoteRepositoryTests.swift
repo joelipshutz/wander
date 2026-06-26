@@ -388,6 +388,62 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["get_extraction_job"])
         XCTAssertEqual(rpc.calls[0].body["input_job_id"] as? String, "job_remote")
     }
+
+    func testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:parse-discover-query"] = """
+        {
+          "query": "Joe's favorite coffee spots in LA",
+          "categories": ["coffee"],
+          "area": "LA",
+          "statuses": ["been"],
+          "relationship": null,
+          "ownerQuery": "Joe",
+          "tags": []
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseDiscoverFilterRepository(functions: rpc)
+        let schema = DiscoverFilterSchema(
+            allowedCategories: ["coffee", "hike"],
+            allowedStatuses: [.been, .wannaGo],
+            allowedRelationships: [.owner, .mutual],
+            allowedTags: ["quiet"]
+        )
+
+        let filters = try await repository.parseFilters(query: "Joe's favorite coffee spots in LA", schema: schema)
+
+        XCTAssertEqual(filters.categories, ["coffee"])
+        XCTAssertEqual(filters.statuses, [.been])
+        XCTAssertEqual(filters.ownerQuery, "Joe")
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:parse-discover-query"])
+        XCTAssertEqual(rpc.rawBodies[0]["query"] as? String, "Joe's favorite coffee spots in LA")
+
+        let encodedSchema = rpc.rawBodies[0]["schema"] as? [String: Any]
+        XCTAssertEqual(encodedSchema?["allowedCategories"] as? [String], ["coffee", "hike"])
+        XCTAssertEqual(encodedSchema?["allowedStatuses"] as? [String], ["been", "wanna_go"])
+        XCTAssertEqual(encodedSchema?["allowedRelationships"] as? [String], ["owner", "mutual"])
+        XCTAssertEqual(encodedSchema?["allowedTags"] as? [String], ["quiet"])
+    }
+
+    func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
+        let parser = RemoteDiscoverFilterParser(repository: FailingDiscoverFilterRepository())
+
+        let filters = try await parser.parse(
+            query: "Joe's favorite coffee spots in LA",
+            schema: DiscoverFilterSchema(allowedCategories: ["coffee"])
+        )
+
+        XCTAssertEqual(filters.categories, ["coffee"])
+        XCTAssertEqual(filters.statuses, [.been])
+        XCTAssertEqual(filters.ownerQuery, "joe")
+    }
+}
+
+@MainActor
+private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository {
+    func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        throw WanderRemoteError.invalidResponse("expected failure")
+    }
 }
 
 @MainActor

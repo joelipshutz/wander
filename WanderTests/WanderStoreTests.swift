@@ -716,6 +716,18 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(results.profiles.isEmpty)
     }
 
+    func testDiscoverNaturalLanguageCanFilterByOwnerQuery() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Joe's favorite coffee spots in LA")
+
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.owner.handle == "joe" })
+        XCTAssertTrue(results.places.allSatisfy { $0.place.category == "coffee" })
+        XCTAssertEqual(store.lastDiscoverFilters.ownerQuery, "joe")
+        XCTAssertEqual(store.lastDiscoverFilters.statuses, [.been])
+    }
+
     func testDiscoverParserCachesAndTracksAnalytics() async {
         let analytics = RecordingAnalyticsClient()
         let parser = FakeFilterParser(

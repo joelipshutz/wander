@@ -5999,3 +5999,38 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+## 2026-06-26 14:57 PDT - Codex - REC-39 Discover LLM Search
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch from `origin/main` at `3d6cf5216` after fetching origin. Root checkout is on separate clean branch `codex/link-fixes-instagram-apple`.
+
+Goal: implement Linear `REC-39` (`Add LLM-based search in Discover tab`) and open a PR. Linear was moved to `In Progress` and assigned to `ryan.lieblein` before implementation.
+
+Coordination:
+
+- Discover/search is a high-conflict area, so this work is isolated in a new worktree.
+- Existing prunable temporary worktrees are unrelated; active `/Users/ryanlieblein/Developer/Wander-worktrees/photo-extraction-real` and `place-detail-eng-plan` appear unrelated to this Discover parser task.
+- Durable decisions say the LLM parser must send only the raw query phrase plus allowed filter schema, never friend graph/place/contact/user data.
+
+Expected files:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Services/DiscoverModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/DiscoverParserTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Implemented the REC-39 Discover natural-language parser path with a remote Supabase edge-function repository plus deterministic fallback.
+- Added `ownerQuery` to `DiscoverFilters`, default schema allow-lists for categories/statuses/relationships/tags, owner chips, and local owner-name/handle filtering so queries like `Joe's favorite coffee spots in LA` can filter visible places.
+- Wired the app to use `RemoteDiscoverFilterParser` when Supabase is configured, while preserving the deterministic parser for local/unconfigured runs and as a remote-failure fallback.
+- Added `supabase/functions/parse-discover-query`, which sends only the raw query and fixed schema to OpenAI with `store: false`, validates the response against allow-lists, requires an authenticated request, and avoids sending graph/place/contact/user data.
+- Added focused tests for deterministic possessive-query parsing, store owner filtering, edge-function payload encoding, and remote fallback behavior.
+- `xcodebuild test` on the documented `iPhone 16 Plus, OS=18.6` destination could not run because that simulator is not installed in this environment; reran on available `iPhone 17 Pro, OS=26.5`.
+- Tests passed: focused `xcodebuild test ... -only-testing:WanderTests/DiscoverParserTests ... -only-testing:WanderTests/RemoteRepositoryTests/testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema ... -only-testing:WanderTests/RemoteRepositoryTests/testRemoteDiscoverFilterParserFallsBackToDeterministicParser` on `iPhone 17 Pro, OS=26.5`; full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-discover-full CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`.
+- `git diff --check` passed.
+- Deno and Supabase CLI are not installed in this shell, so the new edge function was not locally type-checked with Deno.

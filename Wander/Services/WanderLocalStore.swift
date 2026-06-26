@@ -78,7 +78,7 @@ final class WanderStore: ObservableObject {
     let contactProvider: FakeContactProvider
 
     private let visibilityPolicy = VisibilityPolicy()
-    private let parser: LLMFilterParser
+    private let parser: any LLMFilterParser
     private let placeResolver: PlaceCandidateResolving
     private let analytics: AnalyticsClient
     private let persistence: WanderStorePersistence?
@@ -100,7 +100,7 @@ final class WanderStore: ObservableObject {
     init(
         fixtures: WanderFixtures,
         placeResolver: PlaceCandidateResolving = MapKitPlaceResolver(),
-        parser: LLMFilterParser = DeterministicFilterParser(),
+        parser: any LLMFilterParser = DeterministicFilterParser(),
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         persistence: WanderStorePersistence? = nil
     ) {
@@ -365,11 +365,7 @@ final class WanderStore: ObservableObject {
             return cached
         }
 
-        let schema = DiscoverFilterSchema(
-            allowedCategories: Array(Set(places.map(\.category))).sorted(),
-            allowedStatuses: PlaceStatus.allCases,
-            allowedRelationships: [.follower, .mutual]
-        )
+        let schema = DiscoverFilterSchema()
 
         do {
             let filters = try await parser.parse(query: query, schema: schema)
@@ -418,6 +414,7 @@ final class WanderStore: ObservableObject {
         let places = visiblePlaces(filters: placeFilters)
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
+                    && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
             }
         var profiles = searchProfiles(handleQuery: query)
@@ -2116,6 +2113,20 @@ final class WanderStore: ObservableObject {
             .lowercased()
 
         return haystack.contains(area.lowercased())
+    }
+
+    private func matchesOwner(_ ownerQuery: String?, visiblePlace: VisiblePlace) -> Bool {
+        guard let ownerQuery = ownerQuery?
+            .lowercased()
+            .replacingOccurrences(of: "@", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !ownerQuery.isEmpty
+        else {
+            return true
+        }
+
+        return visiblePlace.owner.handle.lowercased().contains(ownerQuery)
+            || visiblePlace.owner.displayName.lowercased().contains(ownerQuery)
     }
 
     private func matchesTags(_ tags: Set<String>, visiblePlace: VisiblePlace) -> Bool {
