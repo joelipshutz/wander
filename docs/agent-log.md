@@ -5549,6 +5549,16 @@ Validation:
 - Physical iPhone app build succeeded for `Ry’s iPhone` (`00008130-0008095E3408001C`) with `** BUILD SUCCEEDED **`; this compiled `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`.
 - `xcrun xcdevice list --timeout=5` confirmed `Ry’s iPhone` is visible over USB. `xcrun devicectl device install app` hung twice with no output and was interrupted; Xcode was opened on this branch so Ryan can use the visible Run button if CLI install remains stuck.
 
+Handoff:
+
+- Commit: `22fc12a4b` (`fix: support apple and instagram place links`).
+- Draft PR: https://github.com/joelipshutz/wander/pull/40
+- Branch remains checked out in the root Xcode workspace: `codex/link-fixes-instagram-apple`.
+- Test in Xcode on `Ry’s iPhone` by running the app from this branch, then paste:
+  - `https://maps.apple/p/hDU04tUWpbVsMn` - should resolve to an Urth Café candidate instead of unsupported-link/draft behavior.
+  - `https://www.instagram.com/ronan_la` - should search from the `ronan la` profile hint and show place candidates instead of unsupported-link behavior.
+  - An Instagram post/reel URL - should still avoid creating a bogus place from the media ID.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
