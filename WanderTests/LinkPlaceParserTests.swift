@@ -39,6 +39,35 @@ final class LinkPlaceParserTests: XCTestCase {
         XCTAssertEqual(input, ManualPlaceInput(name: "Urth Café", areaHint: "34.004387,-118.485816", category: nil))
     }
 
+    func testAppleAddressOnlyCoordinateLinkPrefersCoordinateLookup() throws {
+        let rawValue = "https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%2090405,%20United%20States&coordinate=34.001930,-118.482910&map=explore"
+        let input = try XCTUnwrap(parser.manualInput(from: LinkPlaceInput(rawValue: rawValue)))
+
+        XCTAssertEqual(
+            input,
+            ManualPlaceInput(name: "2912 Main St, Santa Monica, CA 90405, United States", areaHint: "34.001930,-118.482910", category: nil)
+        )
+        XCTAssertTrue(
+            LinkPlaceResolutionHeuristics.shouldPreferCoordinateLookup(
+                for: input,
+                rawValue: rawValue
+            )
+        )
+    }
+
+    func testNamedAppleCoordinateLinkKeepsNamedSearch() throws {
+        let rawValue = "https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%2090405,%20United%20States&coordinate=34.001930,-118.482910&name=Heavy%20Handed&map=explore"
+        let input = try XCTUnwrap(parser.manualInput(from: LinkPlaceInput(rawValue: rawValue)))
+
+        XCTAssertEqual(input, ManualPlaceInput(name: "Heavy Handed", areaHint: "34.001930,-118.482910", category: nil))
+        XCTAssertFalse(
+            LinkPlaceResolutionHeuristics.shouldPreferCoordinateLookup(
+                for: input,
+                rawValue: rawValue
+            )
+        )
+    }
+
     func testRecognizesMapsAppleShortLink() {
         XCTAssertTrue(parser.isShortMapLink(LinkPlaceInput(rawValue: "https://maps.apple/p/hDU04tUWpbVsMn")))
     }

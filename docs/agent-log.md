@@ -5559,6 +5559,22 @@ Handoff:
   - `https://www.instagram.com/ronan_la` - should search from the `ronan la` profile hint and show place candidates instead of unsupported-link behavior.
   - An Instagram post/reel URL - should still avoid creating a bogus place from the media ID.
 
+Follow-up checkpoint, 2026-06-26 15:04 PDT:
+
+- Ryan confirmed Instagram links now work, but an Apple Maps link for Heavy Handed produced a save candidate named `2912 Main St` instead of the business name.
+- Starting status: `codex/link-fixes-instagram-apple` was clean and tracking `origin/codex/link-fixes-instagram-apple`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` were checked before editing.
+- Root cause: the first fix covered Apple URLs with an explicit `name=` field. Address-plus-coordinate Apple URLs still parsed `address=` into `ManualPlaceInput.name`, and `MapKitPlaceResolver.resolveLink` immediately searched/saved that address string instead of using the coordinate to resolve nearby POIs.
+- Expected files touched for this follow-up: `Wander/Services/MapKitPlaceResolver.swift`, `WanderTests/LinkPlaceParserTests.swift`, `supabase/functions/extraction-worker/index.ts`, and `docs/agent-log.md`.
+- Implementation direction: when an Apple Maps parsed link has a valid coordinate and the parsed name looks like a street address, use the existing nearby POI lookup instead of the manual address search path. The backend extraction worker should also avoid treating address-only Apple query fields as business names.
+- Implemented `LinkPlaceResolutionHeuristics` and routed parsed Apple address-plus-coordinate links through `nearbyPlaceCandidates(near:)` in `MapKitPlaceResolver`.
+- Added regression coverage for address-only Apple coordinate links and named Apple coordinate links in `LinkPlaceParserTests`.
+- Updated the Supabase extraction worker to only accept Apple Maps names from path/name/title/place/q/query fields when they are not coordinates or street-address-looking strings; it no longer falls back to `address=` for Apple candidates.
+- Validation: `git diff --check` passed.
+- Validation: focused XCTest on installed `iPhone 17 Pro, OS 26.5` compiled the app and `WanderTests` bundle, including `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`, but failed at simulator bootstrap with `Early unexpected exit, operation never finished bootstrapping`; no Swift compile error was reported.
+- Validation: the old documented `iPhone 16 Plus, OS 18.6` simulator destination is not installed on this machine.
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with `** BUILD SUCCEEDED **` using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+- Validation gap: `deno check supabase/functions/extraction-worker/index.ts` could not run because `deno` is not installed.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex

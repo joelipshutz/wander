@@ -285,7 +285,7 @@ function appleMapsCandidate(url: URL, source: SourceArtifact, steps: string[]): 
 
   steps.push("apple_maps_url_adapter");
   const coordinates = coordinatesFromAppleURL(url);
-  const name = placeNameFromAppleURL(url) ?? placeNameFromQuery(url);
+  const name = placeNameFromAppleURL(url);
 
   if (!coordinates || !name) {
     steps.push("apple_maps_missing_name_or_coordinates");
@@ -421,16 +421,22 @@ function placeNameFromAppleURL(url: URL): string | null {
   const parts = url.pathname.split("/").map((part) => decodeURIComponent(part.replaceAll("+", " ")));
   const placeIndex = parts.findIndex((part) => part === "place");
   if (placeIndex >= 0 && parts[placeIndex + 1]) {
-    return cleanTitle(parts[placeIndex + 1]);
+    const pathName = cleanTitle(parts[placeIndex + 1]);
+    return isCoordinateText(pathName) || looksLikeStreetAddress(pathName) ? null : pathName;
   }
 
   const queryName = firstNonEmpty([
     url.searchParams.get("name"),
     url.searchParams.get("title"),
     url.searchParams.get("place"),
+    url.searchParams.get("q"),
+    url.searchParams.get("query"),
   ]);
 
-  return queryName ? cleanTitle(queryName) : null;
+  if (!queryName) return null;
+
+  const title = cleanTitle(queryName);
+  return isCoordinateText(title) || looksLikeStreetAddress(title) ? null : title;
 }
 
 function placeNameFromQuery(url: URL): string | null {
@@ -444,8 +450,16 @@ function placeNameFromQuery(url: URL): string | null {
     url.searchParams.get("daddr"),
     url.searchParams.get("address"),
   ]);
-  if (!query || /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(query)) return null;
+  if (!query || isCoordinateText(query)) return null;
   return cleanTitle(query);
+}
+
+function isCoordinateText(value: string): boolean {
+  return /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(value.trim());
+}
+
+function looksLikeStreetAddress(value: string): boolean {
+  return /\b\d{1,6}\s+[^,]+\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|hwy|highway)\b/i.test(value);
 }
 
 function metaContent(html: string, key: string): string | null {

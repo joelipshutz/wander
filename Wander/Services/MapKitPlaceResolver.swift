@@ -99,19 +99,31 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         let parser = LinkPlaceParser()
 
         if let manualInput = parser.manualInput(from: input) {
-            return try await resolveManualEntry(manualInput)
+            return try await resolveParsedLinkInput(manualInput, rawValue: input.rawValue)
         }
 
         if parser.isShortMapLink(input) {
             if let expandedValue = try? await expandedURLString(from: input),
                let manualInput = parser.manualInput(from: LinkPlaceInput(rawValue: expandedValue)) {
-                return try await resolveManualEntry(manualInput)
+                return try await resolveParsedLinkInput(manualInput, rawValue: expandedValue)
             }
 
             throw PlaceResolutionError.shortLinkNeedsExtraction
         }
 
         throw PlaceResolutionError.unsupportedLink
+    }
+
+    private func resolveParsedLinkInput(_ input: ManualPlaceInput, rawValue: String) async throws -> [PlaceCandidate] {
+        if LinkPlaceResolutionHeuristics.shouldPreferCoordinateLookup(for: input, rawValue: rawValue),
+           let coordinate = LinkPlaceResolutionHeuristics.coordinate(from: input.areaHint) {
+            let candidates = try await nearbyPlaceCandidates(
+                near: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            )
+            return candidates
+        }
+
+        return try await resolveManualEntry(input)
     }
 
     private func expandedURLString(from input: LinkPlaceInput) async throws -> String? {
@@ -336,6 +348,57 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         return String(parts)
             .split(separator: "-")
             .joined(separator: "-")
+    }
+}
+
+enum LinkPlaceResolutionHeuristics {
+    static func shouldPreferCoordinateLookup(for input: ManualPlaceInput, rawValue: String) -> Bool {
+        guard isAppleMapsLink(rawValue),
+              coordinate(from: input.areaHint) != nil,
+              looksLikeStreetAddress(input.name)
+        else {
+            return false
+        }
+
+        return true
+    }
+
+    static func coordinate(from value: String?) -> CLLocationCoordinate2D? {
+        guard let value else { return nil }
+
+        let pattern = #"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$"#
+        guard let match = value.range(of: pattern, options: .regularExpression) else {
+            return nil
+        }
+
+        let matchedValue = String(value[match])
+        let parts = matchedValue.split(separator: ",", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard parts.count == 2,
+              let latitude = CLLocationDegrees(parts[0]),
+              let longitude = CLLocationDegrees(parts[1])
+        else {
+            return nil
+        }
+
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
+    }
+
+    private static func isAppleMapsLink(_ rawValue: String) -> Bool {
+        guard let url = URL(string: rawValue.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let host = url.host?.lowercased()
+        else {
+            return false
+        }
+
+        return host == "maps.apple.com" || host == "maps.apple"
+    }
+
+    private static func looksLikeStreetAddress(_ value: String) -> Bool {
+        let pattern = #"(?i)\b\d{1,6}\s+[^,]+\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|hwy|highway)\b"#
+        return value.range(of: pattern, options: .regularExpression) != nil
     }
 }
 
