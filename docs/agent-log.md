@@ -6081,3 +6081,34 @@ Verification:
 - `git diff --check` passed.
 - Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
 - Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
+
+## 2026-06-26 16:42 PDT - Codex - REC-48 Physical Place Grouping Follow-Up
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean at `39f09e8`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: fix Joe's on-device report that tapping Mutsu can still cycle between multiple saved versions and the current user's want view does not include Ryan's followed note. Re-apply the place-profile state contract from the design review: if the current user has a save, that save owns the page state every time; social saves render as rings and evidence inside that same page.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/DiscoverModels.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- Possibly `Wander/Features/Map/MapScreen.swift` if the native MapKit feature path also needs a guard.
+
+Checkpoint:
+
+- Found the remaining split: `VisiblePlaceGrouping.key(for:)` still treated provider IDs as the first grouping boundary, so the same physical place could stay split when separate saves had different MapKit/provider IDs.
+- Reworked `VisiblePlaceGrouping` around alias-aware physical place matching: same normalized name plus nearby coordinate, same normalized name plus address, or exact provider alias can now resolve to one group. The group key is the current user's primary save key when present.
+- Updated Map selection to store the resolved group key rather than the tapped row's raw key, preventing alternate social aliases from driving the selected profile.
+- Updated Map, Discover, and Profile place-profile save aggregation to use `VisiblePlaceGrouping.matches(...)`, so followed notes/ratings from duplicate physical-place rows appear inside the same profile.
+- Added regression coverage for Joe's Mutsu state: current user `wannaGo` plus Ryan `been` with different provider IDs/categories still renders one group, current-user primary state, and dashed current-user plus solid social outlines.
+- Added a second regression for same-name/same-address rows with different coordinates.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.

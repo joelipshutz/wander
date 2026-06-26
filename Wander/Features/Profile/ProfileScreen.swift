@@ -689,7 +689,7 @@ private struct SavedPlacesListScreen: View {
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
         let summaries = store.visiblePlaces()
-            .filter { $0.place.id == selectedPlace.place.id }
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
                 seen.insert(visiblePlace.userPlace.id)

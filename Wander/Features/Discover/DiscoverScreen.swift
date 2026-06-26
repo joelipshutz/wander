@@ -355,9 +355,8 @@ struct DiscoverScreen: View {
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
-        let key = VisiblePlaceGrouping.key(for: visiblePlace)
         return store.currentUserVisiblePlaces.first { currentUserPlace in
-            VisiblePlaceGrouping.key(for: currentUserPlace) == key
+            VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
         }
     }
 
@@ -375,11 +374,10 @@ struct DiscoverScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        let selectedKey = VisiblePlaceGrouping.key(for: selectedPlace)
         var seen = Set<String>()
 
         return (results.places + store.visiblePlaces())
-            .filter { VisiblePlaceGrouping.key(for: $0) == selectedKey }
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
                 seen.insert(visiblePlace.userPlace.id)
@@ -409,8 +407,7 @@ struct DiscoverScreen: View {
         }
 
         return store.currentUserVisiblePlaces.contains { currentUserPlace in
-            currentUserPlace.place.id == visiblePlace.place.id ||
-                currentUserPlace.place.canonicalName.caseInsensitiveCompare(visiblePlace.place.canonicalName) == .orderedSame
+            VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
         }
     }
 

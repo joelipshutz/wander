@@ -418,14 +418,17 @@ struct MapScreen: View {
 
     private func isSelectedMapRepresentative(_ visiblePlace: VisiblePlace) -> Bool {
         guard let selectedPlaceGroupKey else { return false }
-        return VisiblePlaceGrouping.key(for: visiblePlace) == selectedPlaceGroupKey
+        return VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        )?.key == selectedPlaceGroupKey
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
-        let selectedGroupKey = VisiblePlaceGrouping.key(for: selectedPlace)
         let summaries = store.visiblePlaces()
-            .filter { VisiblePlaceGrouping.key(for: $0) == selectedGroupKey }
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
                 seen.insert(visiblePlace.userPlace.id)
@@ -456,7 +459,11 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlace(_ visiblePlace: VisiblePlace) {
-        selectedPlaceGroupKey = VisiblePlaceGrouping.key(for: visiblePlace)
+        selectedPlaceGroupKey = VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
     }
 
     private func selectSavedResult(_ result: SaveResult) {
@@ -702,9 +709,8 @@ struct MapScreen: View {
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
-        let selectedGroupKey = VisiblePlaceGrouping.key(for: visiblePlace)
         return store.currentUserVisiblePlaces.first { mine in
-            VisiblePlaceGrouping.key(for: mine) == selectedGroupKey
+            VisiblePlaceGrouping.matches(mine, visiblePlace)
         }
     }
 
