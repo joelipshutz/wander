@@ -5575,6 +5575,18 @@ Follow-up checkpoint, 2026-06-26 15:04 PDT:
 - Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with `** BUILD SUCCEEDED **` using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
 - Validation gap: `deno check supabase/functions/extraction-worker/index.ts` could not run because `deno` is not installed.
 
+Follow-up checkpoint, 2026-06-26 15:38 PDT:
+
+- Ryan tested `https://maps.apple/p/7n_0yn8JorskgD` on the PR branch and it still showed `2912 Main St`.
+- Expanded the exact short link with `curl -Ls`; it redirects to `https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=33.999113,-118.481057&name=Heavy%20Handed&place-id=IDED6F7257BB76BBF&map=explore`, so Apple is providing the correct `name=Heavy Handed`.
+- Reproduced the bad MapKit behavior with a temporary `/private/tmp/mapkit_probe`: searching natural language `Heavy Handed 33.999113,-118.481057` returns only `name=2912 Main St`.
+- Reproduced the desired MapKit behavior with the same probe: searching natural language `Heavy Handed` while setting the request region around `33.999113,-118.481057` returns `name=Heavy Handed` first.
+- Root cause: `resolveManualEntry` appended coordinate area hints into `naturalLanguageQuery`; MapKit interpreted that as an address lookup and returned the address candidate.
+- Fix direction: build manual/link MapKit searches with coordinate hints as `request.region`, not query text, while preserving text area hints like `Santa Monica` in the query.
+- Implemented the fix in `MapKitPlaceResolver.resolveManualEntry` by turning coordinate area hints into a tight `MKLocalSearch.Request.region` instead of query text, with focused coverage in `LinkPlaceParserTests`.
+- Validation: focused simulator test command for `WanderTests/LinkPlaceParserTests` compiled and launched, then failed in the environment with XCTest app bootstrap kill before connection (`Early unexpected exit`).
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with exit code 0 using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex

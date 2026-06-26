@@ -76,16 +76,19 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
 
         let area = input.areaHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let category = input.category?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = [name, area]
-            .compactMap { value -> String? in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " ")
+        let searchPlan = ManualPlaceSearchPlan(name: name, areaHint: area)
+        let query = searchPlan.query
 
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.resultTypes = [.pointOfInterest, .address]
+        if let coordinate = searchPlan.coordinateHint {
+            request.region = MKCoordinateRegion(
+                center: coordinate,
+                latitudinalMeters: 1_500,
+                longitudinalMeters: 1_500
+            )
+        }
 
         let response = try await MKLocalSearch(request: request).start()
         let candidates = mapItems(response.mapItems, fallbackCategory: category, limit: 8)
@@ -348,6 +351,26 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         return String(parts)
             .split(separator: "-")
             .joined(separator: "-")
+    }
+}
+
+struct ManualPlaceSearchPlan {
+    let query: String
+    let coordinateHint: CLLocationCoordinate2D?
+
+    init(name: String, areaHint: String?) {
+        coordinateHint = LinkPlaceResolutionHeuristics.coordinate(from: areaHint)
+        if coordinateHint != nil {
+            query = name
+            return
+        }
+
+        query = [name, areaHint]
+            .compactMap { value -> String? in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " ")
     }
 }
 

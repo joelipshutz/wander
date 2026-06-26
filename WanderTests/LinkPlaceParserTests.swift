@@ -68,6 +68,27 @@ final class LinkPlaceParserTests: XCTestCase {
         )
     }
 
+    func testCoordinateAreaHintBiasesRegionWithoutPollutingSearchText() {
+        let plan = ManualPlaceSearchPlan(
+            name: "Heavy Handed",
+            areaHint: "33.999113,-118.481057"
+        )
+
+        XCTAssertEqual(plan.query, "Heavy Handed")
+        XCTAssertEqual(plan.coordinateHint?.latitude, 33.999113)
+        XCTAssertEqual(plan.coordinateHint?.longitude, -118.481057)
+    }
+
+    func testTextAreaHintStaysInSearchText() {
+        let plan = ManualPlaceSearchPlan(
+            name: "Heavy Handed",
+            areaHint: "Santa Monica"
+        )
+
+        XCTAssertEqual(plan.query, "Heavy Handed Santa Monica")
+        XCTAssertNil(plan.coordinateHint)
+    }
+
     func testRecognizesMapsAppleShortLink() {
         XCTAssertTrue(parser.isShortMapLink(LinkPlaceInput(rawValue: "https://maps.apple/p/hDU04tUWpbVsMn")))
     }
