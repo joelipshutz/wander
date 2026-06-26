@@ -1039,6 +1039,19 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(groups[0].saveCount, 2)
         XCTAssertEqual(groups[0].otherSaveCount, 1)
         XCTAssertEqual(groups[0].primary.owner.id, store.currentUser.id)
+
+        let representatives = VisiblePlaceGrouping.representativePlaces(
+            from: matchingPlaces,
+            currentUserID: store.currentUser.id
+        )
+        let matchingGroup = VisiblePlaceGrouping.matchingGroup(
+            for: socialPlace,
+            in: matchingPlaces,
+            currentUserID: store.currentUser.id
+        )
+
+        XCTAssertEqual(representatives.map(\.owner.id), [store.currentUser.id])
+        XCTAssertEqual(matchingGroup?.primary.owner.id, store.currentUser.id)
     }
 
     func testSocialSaveFlowContextPrefillsSourceStatusAndTags() {

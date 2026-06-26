@@ -95,7 +95,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(outlines.last?.dashPattern ?? [], [CGFloat]())
     }
 
-    func testMultipleSocialSavesCollapseToOneSocialOutline() {
+    func testMultipleSocialSavesCollapseToOneSocialOutlineWithBeenPrecedence() {
         let outlines = MapPinOutlineBuilder.outlines(
             for: [
                 MapPinSaveState(ownership: .social, status: .wannaGo),
@@ -104,6 +104,6 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(outlines.map(\.ownership), [.social])
-        XCTAssertEqual(outlines.map(\.status), [.wannaGo])
+        XCTAssertEqual(outlines.map(\.status), [.been])
     }
 }

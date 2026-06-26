@@ -6044,3 +6044,40 @@ Outcome:
 
 - Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
 - PR: https://github.com/joelipshutz/wander/pull/38
+
+## 2026-06-26 15:32 PDT - Codex - REC-48 Place Pin Stability And Ratings
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch at `6fc0060`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: apply the approved `/plan-eng-review` recommendations for REC-48 on top of PR #38: stable grouped map-pin selection, deterministic mixed owner/status marker rendering, and separate fit/overall/own rating semantics in place profiles.
+
+Coordination:
+
+- Linear issue: https://linear.app/recme/issue/REC-48/place-pins-should-not-cycle-views-and-place-profiles-should
+- Root checkout remains on stale `codex/rating-score-reset`; this work stays in the isolated PR #38 worktree.
+- Fetched `origin` before edits; no new `main` update appeared in fetch output.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+
+Checkpoint:
+
+- Reworked map selection around stable `VisiblePlaceGroup` keys so tapping a grouped place always resolves to the current user's save when present instead of cycling through other people's saves.
+- Made mixed-owner map pin rendering deterministic: current user outline first, social outline second, and `.been` takes precedence over `.wannaGo` within each ownership class. Selection still gets a halo/scale affordance, but the pin's line style and base icon shape no longer mutate on tap.
+- Split place profile ratings into `fitRating`, `overallRating`, and `ownRating`. Unsaved and want states can now show fit plus trusted overall rating while hiding the current user's own rating unless the current user has actually been.
+- Kept per-person save cards from showing a rating for `wannaGo` saves, even if stale/mock data includes a rating score.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
