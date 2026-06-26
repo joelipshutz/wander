@@ -5502,6 +5502,53 @@ Merge outcome:
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
 
+## 2026-06-26 14:37 PDT - Codex - Instagram and Apple Maps link fixes
+
+Agent: Codex
+Branch/worktree: `codex/link-fixes-instagram-apple` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: root checkout was clean on `main` but behind `origin/main`; fetched `origin`, fast-forwarded to `3d6cf5216`, inspected existing worktrees, read recent `docs/agent-log.md`, and created a short-lived feature branch in the root checkout so Xcode/phone testing points at this branch.
+
+Goal: investigate why Instagram location links and Apple Maps links are not reliably becoming add-place candidates, implement the fixes in a PR, and create a physical-device build Ryan can test on his phone.
+
+Expected files:
+
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `WanderTests/LinkPlaceParserTests.swift`
+- possibly `supabase/functions/extraction-worker/index.ts` if the backend extraction path needs matching Apple/Instagram support
+- `docs/agent-log.md`
+
+Plan:
+
+- Reproduce supported and failing link shapes with focused parser tests before changing behavior.
+- Fix root causes in the parser/resolver path instead of broadening unsupported links blindly.
+- Run focused tests and a simulator/device build, then open a draft PR for testing.
+
+Root cause:
+
+- The current failing Apple Maps example in Slack is `https://maps.apple/p/hDU04tUWpbVsMn`. It redirects to `https://maps.apple.com/place?address=2327%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=34.004387,-118.485816&name=Urth%20Caff%C3%A9&place-id=I1BEA961C41ECB5A7&map=explore`, but the app only expanded Google short-map hosts, so it treated `maps.apple` as unsupported.
+- Expanded Apple Maps links can include both `address` and `name`; the parser preferred `address` before `name`, which could search the street address as the place name.
+- Apple Maps `ll`/`sll` coordinate hints were not used as `areaHint`, making ambiguous place-name searches less reliable.
+- The reported Instagram example is `https://www.instagram.com/ronan_la`, a business profile URL, not an `/explore/locations/...` URL. The existing parser intentionally handled only Instagram location slugs and ignored profile slugs.
+
+Implementation:
+
+- Recognize `maps.apple` as a short map link and expand it through the same local resolver redirect path as Google short links.
+- Prefer Apple/Map link `name`/`title`/`place` query values before `address`, and preserve `ll`/`sll`/`center`/`coordinate` values as area hints for MapKit search.
+- Parse safe top-level Instagram profile slugs such as `ronan_la` into manual place-name hints while continuing to reject reserved Instagram paths like posts/reels/stories.
+- Added parser regression coverage for the exact expanded Urth Café Apple Maps target, `maps.apple` short-link recognition, Instagram profile slugs, and Instagram post rejection.
+- Hardened the Supabase extraction worker for backend parity: `maps.apple` redirect support, Apple `coordinate` support, Apple path/query name extraction, and `name`/`title`/`place` preference before address.
+
+Validation:
+
+- `curl -Ls` confirmed `https://maps.apple/p/hDU04tUWpbVsMn` redirects to the coordinate-backed Urth Café Apple Maps URL above.
+- `git diff --check` passed.
+- Focused simulator XCTest could not run because local CoreSimulator is out of date: installed `1051.54.0`, Xcode expects `1051.55.0`.
+- Focused physical-device XCTest reached build preparation but failed before running tests because `WanderTests` cannot code sign on device without an Info.plist/generated Info.plist.
+- Generic `build-for-testing` also failed in local tooling/asset-catalog thinning after the CoreSimulator mismatch.
+- Physical iPhone app build succeeded for `Ry’s iPhone` (`00008130-0008095E3408001C`) with `** BUILD SUCCEEDED **`; this compiled `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`.
+- `xcrun xcdevice list --timeout=5` confirmed `Ry’s iPhone` is visible over USB. `xcrun devicectl device install app` hung twice with no output and was interrupted; Xcode was opened on this branch so Ryan can use the visible Run button if CLI install remains stuck.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex

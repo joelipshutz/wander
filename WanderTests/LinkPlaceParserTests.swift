@@ -28,7 +28,19 @@ final class LinkPlaceParserTests: XCTestCase {
             from: LinkPlaceInput(rawValue: "https://maps.apple.com/?q=Maru%20Coffee&ll=34.0407,-118.2354")
         )
 
-        XCTAssertEqual(input, ManualPlaceInput(name: "Maru Coffee", areaHint: nil, category: nil))
+        XCTAssertEqual(input, ManualPlaceInput(name: "Maru Coffee", areaHint: "34.0407,-118.2354", category: nil))
+    }
+
+    func testParsesExpandedMapsAppleShortLinkDestination() {
+        let input = parser.manualInput(
+            from: LinkPlaceInput(rawValue: "https://maps.apple.com/place?address=2327%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=34.004387,-118.485816&name=Urth%20Caff%C3%A9&place-id=I1BEA961C41ECB5A7&map=explore")
+        )
+
+        XCTAssertEqual(input, ManualPlaceInput(name: "Urth Café", areaHint: "34.004387,-118.485816", category: nil))
+    }
+
+    func testRecognizesMapsAppleShortLink() {
+        XCTAssertTrue(parser.isShortMapLink(LinkPlaceInput(rawValue: "https://maps.apple/p/hDU04tUWpbVsMn")))
     }
 
     func testParsesAppleMapsAddressParameter() {
@@ -53,6 +65,22 @@ final class LinkPlaceParserTests: XCTestCase {
         )
 
         XCTAssertEqual(input, ManualPlaceInput(name: "larchmont noodles", areaHint: nil, category: nil))
+    }
+
+    func testParsesInstagramBusinessProfileSlug() {
+        let input = parser.manualInput(
+            from: LinkPlaceInput(rawValue: "https://www.instagram.com/ronan_la")
+        )
+
+        XCTAssertEqual(input, ManualPlaceInput(name: "ronan la", areaHint: nil, category: nil))
+    }
+
+    func testDoesNotTreatInstagramPostAsPlaceName() {
+        let input = parser.manualInput(
+            from: LinkPlaceInput(rawValue: "https://www.instagram.com/p/C1234567890/")
+        )
+
+        XCTAssertNil(input)
     }
 
     func testRejectsOpaqueShortLinkWithoutPlaceHint() {

@@ -120,7 +120,7 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
             return nil
         }
 
-        guard ["maps.app.goo.gl", "goo.gl", "g.co"].contains(host) else {
+        guard ["maps.app.goo.gl", "goo.gl", "g.co", "maps.apple"].contains(host) else {
             return nil
         }
 

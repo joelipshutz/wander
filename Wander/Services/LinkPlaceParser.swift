@@ -24,6 +24,10 @@ struct LinkPlaceParser {
             return instagramLocationInput(from: components)
         }
 
+        if isInstagramHost(host) {
+            return instagramProfileInput(from: components)
+        }
+
         return nil
     }
 
@@ -38,18 +42,19 @@ struct LinkPlaceParser {
         return host == "maps.app.goo.gl"
             || host == "goo.gl"
             || host == "g.co"
+            || host == "maps.apple"
             || host == "maps.google.com" && url.path.lowercased().contains("/maps")
     }
 
     private func queryPlaceName(from components: URLComponents) -> String? {
-        let preferredKeys = ["q", "query", "destination", "daddr", "address", "place", "name", "title"]
+        let preferredKeys = ["q", "query", "name", "title", "place", "destination", "daddr", "address"]
         return firstQueryValue(in: components, keys: preferredKeys)
             ?? appleMapsAddressValue(in: components.queryItems ?? []).flatMap(cleanedPlaceText)
             ?? appleMapsPathName(from: components)
     }
 
     private func areaHint(from components: URLComponents) -> String? {
-        firstAreaHint(in: components, keys: ["near", "center", "coordinate"])
+        firstAreaHint(in: components, keys: ["near", "ll", "sll", "center", "coordinate"])
     }
 
     private func firstQueryValue(in components: URLComponents, keys: [String]) -> String? {
@@ -140,6 +145,19 @@ struct LinkPlaceParser {
         return ManualPlaceInput(name: name, areaHint: nil, category: nil)
     }
 
+    private func instagramProfileInput(from components: URLComponents) -> ManualPlaceInput? {
+        let pieces = normalizedPathPieces(from: components)
+        guard pieces.count == 1,
+              let username = pieces.first,
+              isReservedInstagramPath(username) == false,
+              let name = cleanedPlaceText(username)
+        else {
+            return nil
+        }
+
+        return ManualPlaceInput(name: name, areaHint: nil, category: nil)
+    }
+
     private func normalizedPathPieces(from components: URLComponents) -> [String] {
         components.path
             .split(separator: "/")
@@ -159,9 +177,34 @@ struct LinkPlaceParser {
     }
 
     private func isInstagramLocationURL(host: String, components: URLComponents) -> Bool {
-        host == "instagram.com" || host.hasSuffix(".instagram.com")
+        isInstagramHost(host)
             ? components.path.lowercased().contains("/explore/locations/")
             : false
+    }
+
+    private func isInstagramHost(_ host: String) -> Bool {
+        host == "instagram.com" || host.hasSuffix(".instagram.com")
+    }
+
+    private func isReservedInstagramPath(_ value: String) -> Bool {
+        let reservedPaths: Set<String> = [
+            "about",
+            "accounts",
+            "api",
+            "developer",
+            "direct",
+            "explore",
+            "legal",
+            "oauth",
+            "p",
+            "privacy",
+            "reel",
+            "reels",
+            "stories",
+            "terms",
+            "tv"
+        ]
+        return reservedPaths.contains(value.lowercased())
     }
 
     private func cleanedPlaceText(_ value: String) -> String? {

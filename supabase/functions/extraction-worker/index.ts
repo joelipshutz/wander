@@ -285,7 +285,7 @@ function appleMapsCandidate(url: URL, source: SourceArtifact, steps: string[]): 
 
   steps.push("apple_maps_url_adapter");
   const coordinates = coordinatesFromAppleURL(url);
-  const name = placeNameFromQuery(url);
+  const name = placeNameFromAppleURL(url) ?? placeNameFromQuery(url);
 
   if (!coordinates || !name) {
     steps.push("apple_maps_missing_name_or_coordinates");
@@ -373,6 +373,7 @@ function coordinatesFromAppleURL(url: URL): { latitude: number; longitude: numbe
     url.searchParams.get("ll"),
     url.searchParams.get("sll"),
     url.searchParams.get("center"),
+    url.searchParams.get("coordinate"),
   ]);
   const coordinateMatch = coordinateValue?.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
   if (coordinateMatch) return coordinatesFromParts(coordinateMatch[1], coordinateMatch[2]);
@@ -416,10 +417,29 @@ function placeNameFromGoogleURL(url: URL): string | null {
   return null;
 }
 
+function placeNameFromAppleURL(url: URL): string | null {
+  const parts = url.pathname.split("/").map((part) => decodeURIComponent(part.replaceAll("+", " ")));
+  const placeIndex = parts.findIndex((part) => part === "place");
+  if (placeIndex >= 0 && parts[placeIndex + 1]) {
+    return cleanTitle(parts[placeIndex + 1]);
+  }
+
+  const queryName = firstNonEmpty([
+    url.searchParams.get("name"),
+    url.searchParams.get("title"),
+    url.searchParams.get("place"),
+  ]);
+
+  return queryName ? cleanTitle(queryName) : null;
+}
+
 function placeNameFromQuery(url: URL): string | null {
   const query = firstNonEmpty([
     url.searchParams.get("q"),
     url.searchParams.get("query"),
+    url.searchParams.get("name"),
+    url.searchParams.get("title"),
+    url.searchParams.get("place"),
     url.searchParams.get("destination"),
     url.searchParams.get("daddr"),
     url.searchParams.get("address"),
@@ -735,7 +755,7 @@ function isAppleMapsHost(hostname: string): boolean {
 
 function isShortMapHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
-  return host === "maps.app.goo.gl" || host === "goo.gl" || host === "g.co";
+  return host === "maps.app.goo.gl" || host === "goo.gl" || host === "g.co" || host === "maps.apple";
 }
 
 function firstNonEmpty(values: Array<string | null | undefined>): string | null {
