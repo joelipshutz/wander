@@ -6428,3 +6428,300 @@ Expected files:
 - `docs/agent-log.md`
 - `project.yml`
 - `Wander.xcodeproj/project.pbxproj`
+
+Checkpoint, 2026-06-27 15:07 PDT:
+
+- Confirmed REC-39 is already merged as PR #41 (`Implement REC-39 Discover LLM search`) and included on `origin/main` before REC-40 landing.
+- Merged latest `origin/main` into `codex/rec-40-lists-mockups` to clear PR #42's GitHub `DIRTY` merge state.
+- Resolved the functional overlap by preserving REC-39's `LLMFilterParser` injection in `WanderRootView` while layering REC-40's native five-item tab order: Map, Discover, Add, Lists, Profile.
+- Resolved generated project conflicts by regenerating `Wander.xcodeproj` from the merged `project.yml`; project version remains build 48 until the post-merge TestFlight bump.
+- Resolved the append-only `docs/agent-log.md` conflict with a union merge so REC-39/TestFlight history and REC-40 implementation history are both preserved.
+- Verified the visible REC-40 controls are present in source after merge: list detail `add places`, edit-sheet `Save changes`, edit-sheet `Delete List`, and friend-only collaborator candidates from mutual follows.
+- Verification:
+  - `git diff --cached --check` passed.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-merge-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-merge-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and traditional headermap warnings.
+
+## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch from `origin/main` at `3d6cf52` after build 45 release log.
+
+Goal: make the place profile open as a true full-screen detail page across entrypoints instead of a sheet that shows map/background at top or bottom. Decide and implement detail-page chrome without bottom tabs for this full-screen context unless the existing code makes that unsafe.
+
+Coordination:
+
+- Root checkout is on stale `codex/rating-score-reset`; this work is isolated in the temporary worktree above.
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- GBrain search timed out on a transient PGLite lock; the lock directory was gone on inspection, so this pass is using repo docs and implementation context.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Potential place-profile entrypoints in `Wander/Features/Profile/` and `Wander/Features/Discover/`
+- Focused tests if presentation behavior is covered or can be covered cleanly.
+
+Checkpoint:
+
+- Decided full place profile should not show bottom tabs. It is a task-level detail surface, not one of the four root app tabs, and keeping tabs visible was the source of the sheet/background bleed.
+- Changed the map selected-place flow so the map keeps the compact preview card, then opens the full place profile in a `fullScreenCover`.
+- Changed Discover and Profile saved-place entrypoints from bottom-sheet presentation to the same full-screen place profile surface.
+- Routed full-screen save/edit actions through the existing save/edit flows after dismissing the full-screen detail, avoiding stacked sheet state.
+- Updated the shared back button accessibility label from map-specific copy to `Close place profile`.
+
+Verification:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 152 tests, 0 failures.
+
+Known issues:
+
+- Visual simulator screenshot pass was not run in this session. The implementation is compile/test verified, but final visual QA should still tap through Map, Discover, and Profile on a simulator before TestFlight.
+
+Outcome:
+
+- Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
+- PR: https://github.com/joelipshutz/wander/pull/38
+
+## 2026-06-26 15:32 PDT - Codex - REC-48 Place Pin Stability And Ratings
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch at `6fc0060`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: apply the approved `/plan-eng-review` recommendations for REC-48 on top of PR #38: stable grouped map-pin selection, deterministic mixed owner/status marker rendering, and separate fit/overall/own rating semantics in place profiles.
+
+Coordination:
+
+- Linear issue: https://linear.app/recme/issue/REC-48/place-pins-should-not-cycle-views-and-place-profiles-should
+- Root checkout remains on stale `codex/rating-score-reset`; this work stays in the isolated PR #38 worktree.
+- Fetched `origin` before edits; no new `main` update appeared in fetch output.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+
+Checkpoint:
+
+- Reworked map selection around stable `VisiblePlaceGroup` keys so tapping a grouped place always resolves to the current user's save when present instead of cycling through other people's saves.
+- Made mixed-owner map pin rendering deterministic: current user outline first, social outline second, and `.been` takes precedence over `.wannaGo` within each ownership class. Selection still gets a halo/scale affordance, but the pin's line style and base icon shape no longer mutate on tap.
+- Split place profile ratings into `fitRating`, `overallRating`, and `ownRating`. Unsaved and want states can now show fit plus trusted overall rating while hiding the current user's own rating unless the current user has actually been.
+- Kept per-person save cards from showing a rating for `wannaGo` saves, even if stale/mock data includes a rating score.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
+
+## 2026-06-26 16:42 PDT - Codex - REC-48 Physical Place Grouping Follow-Up
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean at `39f09e8`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: fix Joe's on-device report that tapping Mutsu can still cycle between multiple saved versions and the current user's want view does not include Ryan's followed note. Re-apply the place-profile state contract from the design review: if the current user has a save, that save owns the page state every time; social saves render as rings and evidence inside that same page.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/DiscoverModels.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- Possibly `Wander/Features/Map/MapScreen.swift` if the native MapKit feature path also needs a guard.
+
+Checkpoint:
+
+- Found the remaining split: `VisiblePlaceGrouping.key(for:)` still treated provider IDs as the first grouping boundary, so the same physical place could stay split when separate saves had different MapKit/provider IDs.
+- Reworked `VisiblePlaceGrouping` around alias-aware physical place matching: same normalized name plus nearby coordinate, same normalized name plus address, or exact provider alias can now resolve to one group. The group key is the current user's primary save key when present.
+- Updated Map selection to store the resolved group key rather than the tapped row's raw key, preventing alternate social aliases from driving the selected profile.
+- Updated Map, Discover, and Profile place-profile save aggregation to use `VisiblePlaceGrouping.matches(...)`, so followed notes/ratings from duplicate physical-place rows appear inside the same profile.
+- Added regression coverage for Joe's Mutsu state: current user `wannaGo` plus Ryan `been` with different provider IDs/categories still renders one group, current-user primary state, and dashed current-user plus solid social outlines.
+- Added a second regression for same-name/same-address rows with different coordinates.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.
+
+## 2026-06-26 23:14 PDT - Codex - PR #38 Merge and Build 47 TestFlight Release
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: fresh worktree checked out at PR #38 head `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for release edits. Fetched `origin`; latest `origin/main` is build 46 release commit `6705fb5`.
+
+Goal: fulfill Joe's explicit request to push a new build for the place-profile/full-screen/REC-48 work: update PR #38 onto latest `main`, complete the merge gate, squash-merge to `main`, bump the next TestFlight build number, archive/upload, run the TestFlight helper, update linked status, and post the required tester-facing Slack note.
+
+Expected files before merge/release:
+
+- `docs/agent-log.md`
+- Possible merge-only updates from current `origin/main`
+- Later release bump on `main`: `project.yml` and `Wander.xcodeproj/project.pbxproj`
+
+Release scope since build 46:
+
+- PR #38: full-screen place profiles from Map, Discover, and Profile.
+- PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
+
+## 2026-06-26 23:16 PDT - Codex - PR #38 Merge-Only Review
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: PR #38 is open, ready, and mergeable at `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is not being used for landing work.
+
+Goal: review, visually QA, and squash-merge PR #38 to `main` after Joe confirmed "let's do it." This run is merge-only: no build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note unless Joe explicitly asks for a TestFlight release after merge.
+
+Coordination notes:
+
+- Existing log entry above mentions a Build 47 TestFlight release goal, but no build 47 bump exists on `origin/main`; `project.yml` still reports `CURRENT_PROJECT_VERSION: "46"`.
+- Latest completed release on `origin/main` is build 46, logged by `6705fb5`.
+- Mission Control task: `8ba743d7-2123-47ef-a587-d922038db3a8`.
+
+Expected files for this review/landing pass:
+
+- `docs/agent-log.md`
+- Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
+
+Checkpoint, 2026-06-26 23:29 PDT:
+
+- Current Joe request was handled as PR #38 landing work. PR #38 is now merged to `main` at `b31c9aa`, and `main` also contains build-number bump commit `a9a8ce9` for build 47.
+- No archive/upload, TestFlight helper, build attachment, or Slack release note was run in this pass.
+- Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
+- Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
+- Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
+- `git diff --check` passed.
+- Focused elevated simulator regression run passed: 13 tests, 0 failures.
+- Full elevated simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-pr38-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.
+- Visual QA screenshots passed on iPhone 16 Plus and iPhone 16e with demo fixtures:
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded.png`
+  - `/private/tmp/recme-pr38-visual/discover-demo.png`
+  - `/private/tmp/recme-pr38-visual/profile-demo.png`
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded-iphone16e.png`
+
+## 2026-06-26 14:57 PDT - Codex - REC-39 Discover LLM Search
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch from `origin/main` at `3d6cf5216` after fetching origin. Root checkout is on separate clean branch `codex/link-fixes-instagram-apple`.
+
+Goal: implement Linear `REC-39` (`Add LLM-based search in Discover tab`) and open a PR. Linear was moved to `In Progress` and assigned to `ryan.lieblein` before implementation.
+
+Coordination:
+
+- Discover/search is a high-conflict area, so this work is isolated in a new worktree.
+- Existing prunable temporary worktrees are unrelated; active `/Users/ryanlieblein/Developer/Wander-worktrees/photo-extraction-real` and `place-detail-eng-plan` appear unrelated to this Discover parser task.
+- Durable decisions say the LLM parser must send only the raw query phrase plus allowed filter schema, never friend graph/place/contact/user data.
+
+Expected files:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Services/DiscoverModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/DiscoverParserTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Implemented the REC-39 Discover natural-language parser path with a remote Supabase edge-function repository plus deterministic fallback.
+- Added `ownerQuery` to `DiscoverFilters`, default schema allow-lists for categories/statuses/relationships/tags, owner chips, and local owner-name/handle filtering so queries like `Joe's favorite coffee spots in LA` can filter visible places.
+- Wired the app to use `RemoteDiscoverFilterParser` when Supabase is configured, while preserving the deterministic parser for local/unconfigured runs and as a remote-failure fallback.
+- Added `supabase/functions/parse-discover-query`, which sends only the raw query and fixed schema to OpenAI with `store: false`, validates the response against allow-lists, requires an authenticated request, and avoids sending graph/place/contact/user data.
+- Added focused tests for deterministic possessive-query parsing, store owner filtering, edge-function payload encoding, and remote fallback behavior.
+- `xcodebuild test` on the documented `iPhone 16 Plus, OS=18.6` destination could not run because that simulator is not installed in this environment; reran on available `iPhone 17 Pro, OS=26.5`.
+- Tests passed: focused `xcodebuild test ... -only-testing:WanderTests/DiscoverParserTests ... -only-testing:WanderTests/RemoteRepositoryTests/testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema ... -only-testing:WanderTests/RemoteRepositoryTests/testRemoteDiscoverFilterParserFallsBackToDeterministicParser` on `iPhone 17 Pro, OS=26.5`; full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-discover-full CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`.
+- `git diff --check` passed.
+- Deno and Supabase CLI are not installed in this shell, so the new edge function was not locally type-checked with Deno.
+
+Outcome:
+
+- Implementation commit: `054aa8b8d78977a6377a916d513444c83b3b1add` (`feat: add discover llm search parsing`).
+- PR: https://github.com/joelipshutz/wander/pull/41
+- Linear: `REC-39` remains `In Progress` per request, assigned to `ryan.lieblein`, with a PR/validation comment added.
+- GitHub connector PR creation returned `403 Resource not accessible by integration`; branch push succeeded with git, and the PR was created with `gh pr create` using the existing redacted git HTTPS credential because the stored `gh` token itself is invalid.
+- Known issue: deploy-time Deno type-check should be run from an environment with Deno or Supabase CLI installed before deploying `parse-discover-query`.
+
+## 2026-06-26 23:50 PDT - Codex - REC-39 Discover Places/Members Redesign
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch tracking `origin/codex/rec-39-discover-llm-search` after fetching origin. `origin/main` advanced to `3b3135633`; root checkout is on `codex/rec-40-lists-mockups`.
+
+Goal: redesign the Discover tab in PR #41 around top-level `Places` and `Members` modes, with Places using the natural-language search from REC-39, empty Places showing a vertical latest-activity feed, unresolved person searches showing a compact disambiguation prompt, and Members using the same search chrome only for member lookup.
+
+Coordination:
+
+- User explicitly warned that PR #40 has concurrent tray/List-tab work. Do not touch app shell, root tab navigation, or bottom tray files in this task.
+- Expected files: `Wander/Features/Discover/DiscoverScreen.swift`, focused Discover/store tests if needed, `docs/agent-log.md`.
+- Requested review gates: run `design-review` and `plan-eng-review` on this implementation and fold the findings into PR #41.
+
+Checkpoint:
+
+- Plan-eng review gate applied to keep scope in the existing Discover/store architecture: reuse `WanderStore.discover(query:scope:backend:)`, add a separate member-only search path instead of mixing members into the LLM place parser, and avoid app shell/root tab/tray files because PR #40 is active.
+- Design review gate applied against `DESIGN.md` and the Beli header reference: Discover now uses top `Places`/`Members` mode tabs, search as the first real control, no big Discover title, compact results/list rows, 44pt+ tap targets, and no visible instructional copy beyond short trust/context lines.
+- Implemented the Places mode with a rotating natural-language placeholder, vertical latest network activity when empty, interpreted place results when a query resolves, and a compact ambiguous-person selector that resolves in place.
+- Implemented the Members mode with the same search chrome backed by member lookup only, horizontal member-result tiles during search, and a compact friends list with saved-rec counts below.
+- Added `WanderStore.discoverMembers(query:backend:)` so member search can merge remote profiles without invoking the place parser or consuming LLM calls.
+- Added focused store tests for member search avoiding the parser and merging remote profile results.
+- Build/test validation used available `iPhone 17 Pro, OS=26.5` because the documented `iPhone 16 Plus, OS=18.6` simulator is not installed here.
+- First focused `xcodebuild test` stalled at simulator worker materialization before producing useful diagnostics; package resolution passed, and a concrete-destination build then exposed a Swift 6 closure return issue in `WanderLocalStore.searchProfiles(handleQuery:)`, which was fixed.
+- Validation passed after the fix: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator/DerivedData.
+- `git diff --check` passed.
+- Visual review note: installed and launched the built app on the booted iPhone 17 Pro simulator and captured `/private/tmp/rec39-launch.png`; desktop automation permission blocked switching to the Discover tab for a direct Discover screenshot, so the design review evidence is source-level plus build/test validation rather than a tab-specific screenshot.
+- `gstack-review-log` could not persist dashboard metadata because the script validates JSON with `bun`, and `bun` is not installed in this shell; review findings are recorded here instead.
+
+Outcome:
+
+- PR #41 is updated with the Discover Places/Members redesign and member-only search path.
+- Tests/checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator and DerivedData.
+- Known issue: a direct Discover-tab simulator screenshot was not captured because desktop automation permissions blocked switching tabs; app launch screenshot exists at `/private/tmp/rec39-launch.png`.
+- No app shell, root tab navigation, bottom tray, `Wander/App/`, `MapScreen`, project file, Supabase migration, TestFlight build, Slack post, or Linear status changes were made in this pass.
+
+## 2026-06-27 00:45 PDT - Codex - REC-39 V1 Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-39-v1-release-20260627` tracking `origin/codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean at PR #41 head `811ca973c`; latest `origin/main` is `3b3135633`. Root checkout was moved from clean `codex/rec-40-lists-mockups` to this temporary PR41 update branch for merge/release work.
+
+Goal: Ryan approved REC-39 v1 and requested squash-merge to `main`, push a TestFlight build, and post the tester-facing Slack note.
+
+Coordination:
+
+- PR #41 is currently conflicting with `main`; resolve latest-main conflicts before merge.
+- PR #40 remains separate and must not be included in this release.
+- Explicit TestFlight release requested, so this run must bump `CURRENT_PROJECT_VERSION`, archive/upload, run the TestFlight helper, and post to `#testflight-feedback` if upload/helper succeeds or is confirmed processing/available.
+
+Expected files before merge: conflict-resolution edits in REC-39 touched files plus `docs/agent-log.md`.
+
+Checkpoint:
+
+- Merged latest `origin/main` into temporary release branch `codex/rec-39-v1-release-20260627`; only conflict was `docs/agent-log.md`, resolved by keeping main's PR38/TestFlight build 47 history and re-appending the REC-39 entries.
+- Reviewed the Discover merge with the PR38 full-screen place-profile changes. Kept Discover place results on `PlaceProfileFullScreen` and removed the obsolete private `DiscoverPlaceDetailSheet` path so v1 does not ship two competing place-detail presentations.
+- Fixed merge fallout in `DiscoverScreen.saveSummaries(for:)` by reading from `placeResults.places` instead of the stale `results.places` identifier.
+- Checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-release-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
+
+Checkpoint:
+
+- PR #41 was squash-merged into `main` as `1a9818169b82000542e8dfcaa85621d4c18e7755` (`Implement REC-39 Discover LLM search`).
+- Fast-forwarded local `main` to `origin/main` and started the explicit TestFlight release requested by Ryan.
+- Incremented `CURRENT_PROJECT_VERSION` from build 47 to build 48 in `project.yml`; next step is `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` matches.
+- Ran `xcodegen generate`; it produced unrelated project-setting normalization in this shell, so the project diff was narrowed back to the same build-number-only pattern used for build 47 while preserving the generated build number.
+- Build 48 validation passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-build48 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.

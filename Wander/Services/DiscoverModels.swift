@@ -1,11 +1,12 @@
 import Foundation
 
-struct DiscoverFilters: Equatable {
+struct DiscoverFilters: Codable, Equatable {
     var query: String
     var categories: Set<String> = []
     var area: String?
     var statuses: Set<PlaceStatus> = []
     var relationship: ViewerRelationship?
+    var ownerQuery: String?
     var tags: Set<String> = []
 }
 
@@ -30,8 +31,12 @@ extension DiscoverFilters {
             chips.append(DiscoverFilterChip(id: "relationship_\(relationship.rawValue)", title: relationship.discoverChipTitle))
         }
 
-        if let area {
+        if let area = trimmed(area) {
             chips.append(DiscoverFilterChip(id: "area_\(area)", title: area))
+        }
+
+        if let ownerQuery = trimmed(ownerQuery) {
+            chips.append(DiscoverFilterChip(id: "owner_\(ownerQuery)", title: ownerQuery))
         }
 
         chips.append(contentsOf: tags.sorted().map { tag in
@@ -40,12 +45,60 @@ extension DiscoverFilters {
 
         return chips
     }
+
+    private func trimmed(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
 }
 
-struct DiscoverFilterSchema: Equatable {
+struct DiscoverFilterSchema: Codable, Equatable {
     let allowedCategories: [String]
     let allowedStatuses: [PlaceStatus]
     let allowedRelationships: [ViewerRelationship]
+    let allowedTags: [String]
+
+    init(
+        allowedCategories: [String] = Self.defaultAllowedCategories,
+        allowedStatuses: [PlaceStatus] = PlaceStatus.allCases,
+        allowedRelationships: [ViewerRelationship] = [.owner, .follower, .mutual],
+        allowedTags: [String] = Self.defaultAllowedTags
+    ) {
+        self.allowedCategories = allowedCategories
+        self.allowedStatuses = allowedStatuses
+        self.allowedRelationships = allowedRelationships
+        self.allowedTags = allowedTags
+    }
+
+    static let defaultAllowedCategories = [
+        "bar",
+        "coffee",
+        "fitness studio",
+        "gym",
+        "hike",
+        "hospital",
+        "park",
+        "pharmacy",
+        "pilates studio",
+        "restaurant",
+        "spiritual",
+        "veterinarian"
+    ]
+
+    static let defaultAllowedTags = [
+        "cozy",
+        "date",
+        "dog friendly",
+        "group",
+        "outlets",
+        "patio",
+        "quiet",
+        "sunset",
+        "views",
+        "wifi",
+        "wifi solid",
+        "work"
+    ]
 }
 
 struct VisiblePlace: Identifiable {
@@ -80,6 +133,7 @@ struct DiscoverResults {
 
 struct VisiblePlaceGroup: Identifiable {
     let key: String
+    let aliases: Set<String>
     let places: [VisiblePlace]
     let currentUserID: String
 
@@ -128,25 +182,67 @@ enum VisiblePlaceGrouping {
     ) -> [VisiblePlaceGroup] {
         var orderedKeys: [String] = []
         var grouped: [String: [VisiblePlace]] = [:]
+        var aliasesByKey: [String: Set<String>] = [:]
+        var keyByAlias: [String: String] = [:]
+
+        func mergeGroup(_ sourceKey: String, into destinationKey: String) {
+            guard sourceKey != destinationKey else { return }
+
+            grouped[destinationKey, default: []].append(contentsOf: grouped[sourceKey] ?? [])
+            grouped[sourceKey] = nil
+
+            aliasesByKey[destinationKey, default: []].formUnion(aliasesByKey[sourceKey] ?? [])
+            aliasesByKey[sourceKey] = nil
+
+            orderedKeys.removeAll { $0 == sourceKey }
+            for alias in aliasesByKey[destinationKey, default: []] {
+                keyByAlias[alias] = destinationKey
+            }
+        }
 
         for visiblePlace in places {
-            let key = key(for: visiblePlace)
+            let aliases = keys(for: visiblePlace)
+            var existingKeys: [String] = []
+            for alias in aliases {
+                guard let existingKey = keyByAlias[alias],
+                      !existingKeys.contains(existingKey)
+                else { continue }
+                existingKeys.append(existingKey)
+            }
+
+            let key = existingKeys.first ?? key(for: visiblePlace)
             if grouped[key] == nil {
                 orderedKeys.append(key)
                 grouped[key] = []
+                aliasesByKey[key] = []
             }
+
+            for existingKey in existingKeys.dropFirst() {
+                mergeGroup(existingKey, into: key)
+            }
+
             grouped[key]?.append(visiblePlace)
+            aliasesByKey[key, default: []].formUnion(aliases)
+            for alias in aliasesByKey[key, default: []] {
+                keyByAlias[alias] = key
+            }
         }
 
         return orderedKeys.compactMap { key in
             guard let places = grouped[key], !places.isEmpty else { return nil }
+            let sortedPlaces = places.sorted { lhs, rhs in
+                if lhs.owner.id == currentUserID { return true }
+                if rhs.owner.id == currentUserID { return false }
+                return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
+            }
+            let primary = sortedPlaces.first { $0.owner.id == currentUserID } ?? sortedPlaces[0]
+            let primaryKey = Self.key(for: primary)
+            let aliases = aliasesByKey[key, default: []].union([primaryKey])
+
             return VisiblePlaceGroup(
-                key: key,
-                places: places.sorted { lhs, rhs in
-                    if lhs.owner.id == currentUserID { return true }
-                    if rhs.owner.id == currentUserID { return false }
-                    return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
-                },
+                key: primaryKey,
+                aliases: aliases,
+                places: sortedPlaces,
                 currentUserID: currentUserID
             )
         }
@@ -164,39 +260,68 @@ enum VisiblePlaceGrouping {
         in places: [VisiblePlace],
         currentUserID: String
     ) -> VisiblePlaceGroup? {
-        let selectedKey = key(for: selectedPlace)
+        let selectedAliases = Set(keys(for: selectedPlace))
         return groups(from: places, currentUserID: currentUserID)
-            .first { $0.key == selectedKey }
+            .first { !$0.aliases.isDisjoint(with: selectedAliases) }
     }
 
     static func key(for visiblePlace: VisiblePlace) -> String {
-        let place = visiblePlace.place
-
-        let providerID = normalized(place.sourceProviderPlaceID)
-        if !providerID.isEmpty {
-            return "provider:\(normalized(place.sourceProvider)):\(providerID)"
-        }
-
-        let name = normalized(place.canonicalName)
-        let category = normalized(place.category)
-        let address = normalized(place.address)
-        let locality = normalized(place.locality)
-        let region = normalized(place.region)
-
-        if !address.isEmpty || !locality.isEmpty || !region.isEmpty {
-            return "text:\([name, category, address, locality, region].joined(separator: "|"))"
-        }
-
-        let roundedLatitude = (place.latitude * 10_000).rounded() / 10_000
-        let roundedLongitude = (place.longitude * 10_000).rounded() / 10_000
-        return "coordinate:\([name, category, "\(roundedLatitude)", "\(roundedLongitude)"].joined(separator: "|"))"
+        keys(for: visiblePlace)[0]
     }
 
-    private static func normalized(_ value: String?) -> String {
+    static func matches(_ lhs: VisiblePlace, _ rhs: VisiblePlace) -> Bool {
+        !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
+    }
+
+    private static func keys(for visiblePlace: VisiblePlace) -> [String] {
+        let place = visiblePlace.place
+        var keys: [String] = []
+
+        func append(_ key: String) {
+            guard !keys.contains(key) else { return }
+            keys.append(key)
+        }
+
+        let name = normalizedText(place.canonicalName)
+        if !name.isEmpty {
+            let address = normalizedText(place.address)
+            if !address.isEmpty {
+                append("address:\([name, address, normalizedText(place.locality), normalizedText(place.region), normalizedText(place.country)].joined(separator: "|"))")
+            }
+            append("place:\([name, coordinateBucket(for: place)].joined(separator: "|"))")
+        }
+
+        let providerID = normalizedIdentifier(place.sourceProviderPlaceID)
+        if !providerID.isEmpty {
+            append("provider:\(normalizedIdentifier(place.sourceProvider)):\(providerID)")
+        }
+
+        if keys.isEmpty {
+            append("coordinate:\(coordinateBucket(for: place))")
+        }
+        return keys
+    }
+
+    private static func normalizedText(_ value: String?) -> String {
+        (value ?? "")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedIdentifier(_ value: String?) -> String {
         (value ?? "")
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func coordinateBucket(for place: LocalPlace) -> String {
+        let roundedLatitude = (place.latitude * 1_000).rounded() / 1_000
+        let roundedLongitude = (place.longitude * 1_000).rounded() / 1_000
+        return "\(roundedLatitude)|\(roundedLongitude)"
     }
 }
 
@@ -244,7 +369,7 @@ struct DeterministicFilterParser: LLMFilterParser {
             }
         }
 
-        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") {
+        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") || normalized.contains("favorite") || normalized.contains("best") || normalized.contains("recommended") {
             filters.statuses.insert(.been)
         }
 
@@ -252,21 +377,25 @@ struct DeterministicFilterParser: LLMFilterParser {
             filters.statuses.insert(.wannaGo)
         }
 
-        if normalized.contains("friend") || normalized.contains("mutual") {
+        if normalized.contains("my ") || normalized.hasPrefix("my") {
+            filters.relationship = .owner
+        } else if normalized.contains("friend") || normalized.contains("mutual") {
             filters.relationship = .mutual
         } else if normalized.contains("following") || normalized.contains("people") {
             filters.relationship = .follower
         }
 
+        filters.ownerQuery = Self.ownerQuery(from: normalized)
+
         if normalized.contains("la") || normalized.contains("los angeles") {
             filters.area = "LA"
         }
 
-        for area in ["eastside", "silver lake", "larchmont", "echo park", "los feliz"] where normalized.contains(area) {
+        for area in ["eastside", "silver lake", "larchmont", "echo park", "los feliz", "santa monica"] where normalized.contains(area) {
             filters.area = area
         }
 
-        for tag in Self.knownTags where normalized.contains(tag) {
+        for tag in schema.allowedTags where normalized.contains(tag) {
             filters.tags.insert(tag)
         }
 
@@ -281,17 +410,38 @@ struct DeterministicFilterParser: LLMFilterParser {
         "park": ["park", "parks"]
     ]
 
-    private static let knownTags = [
-        "wifi",
-        "work",
-        "patio",
-        "quiet",
-        "cozy",
-        "views",
-        "sunset",
-        "group",
-        "date",
-        "dog friendly"
+    private static func ownerQuery(from normalized: String) -> String? {
+        if let handle = firstCapture(in: normalized, pattern: #"@([a-z0-9_][a-z0-9_.-]{1,30})"#) {
+            return handle
+        }
+
+        if let possessive = firstCapture(in: normalized, pattern: #"\b([a-z][a-z0-9_.-]{1,30})['’]s\b"#),
+           !ignoredOwnerWords.contains(possessive) {
+            return possessive
+        }
+
+        return nil
+    }
+
+    private static func firstCapture(in value: String, pattern: String) -> String? {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        guard let match = expression.firstMatch(in: value, range: range),
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: value)
+        else {
+            return nil
+        }
+        return String(value[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static let ignoredOwnerWords: Set<String> = [
+        "friend",
+        "friends",
+        "people",
+        "rec",
+        "recme",
+        "wander"
     ]
 }
 

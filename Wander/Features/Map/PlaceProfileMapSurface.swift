@@ -21,45 +21,79 @@ struct PlaceProfileMapSurface: View {
     }
 
     var body: some View {
-        Group {
-            if isExpanded {
-                PlaceProfileFullView(
-                    place: place,
-                    presentation: presentation,
-                    saves: saves,
-                    currentUserID: currentUserID,
-                    action: action,
-                    onBack: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            isExpanded = false
-                        }
-                    },
-                    onAction: onAction
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                VStack {
-                    Spacer(minLength: 0)
-                    PlaceProfilePreviewCard(
-                        place: place,
-                        presentation: presentation,
-                        saves: saves,
-                        currentUserID: currentUserID,
-                        action: action,
-                        onOpen: {
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                isExpanded = true
-                            }
-                        },
-                        onAction: onAction
-                    )
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing3)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+        VStack {
+            Spacer(minLength: 0)
+            PlaceProfilePreviewCard(
+                place: place,
+                presentation: presentation,
+                saves: saves,
+                currentUserID: currentUserID,
+                action: action,
+                onOpen: {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                        isExpanded = true
+                    }
+                },
+                onAction: onAction
+            )
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing3)
         }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.spring(response: 0.30, dampingFraction: 0.86), value: isExpanded)
+        .fullScreenCover(isPresented: $isExpanded) {
+            PlaceProfileFullScreen(
+                place: place,
+                saves: saves,
+                tasteSaves: tasteSaves,
+                currentUserID: currentUserID,
+                action: action,
+                onBack: {
+                    isExpanded = false
+                },
+                onAction: {
+                    isExpanded = false
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        onAction()
+                    }
+                }
+            )
+        }
+    }
+}
+
+struct PlaceProfileFullScreen: View {
+    let place: PlaceSheetPlace
+    let saves: [PlaceSaveSummary]
+    let tasteSaves: [PlaceSaveSummary]
+    let currentUserID: String
+    let action: PlaceSheetAction
+    let onBack: () -> Void
+    let onAction: () -> Void
+
+    private var presentation: PlaceProfilePresentation {
+        PlaceProfilePresenter.presentation(
+            placeID: place.id,
+            category: place.category,
+            saves: saves,
+            tasteSaves: tasteSaves,
+            currentUserID: currentUserID
+        )
+    }
+
+    var body: some View {
+        PlaceProfileFullView(
+            place: place,
+            presentation: presentation,
+            saves: saves,
+            currentUserID: currentUserID,
+            action: action,
+            onBack: onBack,
+            onAction: onAction
+        )
+        .preferredColorScheme(.light)
+        .interactiveDismissDisabled(false)
     }
 }
 
@@ -151,10 +185,14 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var previewSignal: String? {
-        if let rating = presentation.actualRating {
+        if let rating = presentation.overallRating {
             let names = participantNames(limit: 2)
             let prefix = names.isEmpty ? rating.title : names.joined(separator: " + ")
             return "\(prefix) · ★ \(rating.displayScore)"
+        }
+
+        if let rating = presentation.ownRating {
+            return "You · ★ \(rating.displayScore)"
         }
 
         let names = participantNames(limit: 2)
@@ -187,7 +225,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private func participantNames(limit: Int) -> [String] {
         saves
-            .filter { $0.visiblePlace.owner.id != currentUserID || presentation.actualRating?.source == .own }
+            .filter { $0.visiblePlace.owner.id != currentUserID }
             .map { $0.visiblePlace.owner.id == currentUserID ? "You" : $0.visiblePlace.owner.displayName.components(separatedBy: " ").first ?? $0.visiblePlace.owner.displayName }
             .uniquePreservingOrder()
             .prefix(limit)
@@ -279,7 +317,7 @@ private struct PlaceProfileFullView: View {
 
     @ViewBuilder
     private var ratingSection: some View {
-        if presentation.fitRating != nil || presentation.actualRating != nil {
+        if presentation.fitRating != nil || displayRating != nil {
             HStack(spacing: WanderTheme.spacing2) {
                 if let fitRating = presentation.fitRating {
                     PlaceProfileRatingTile(
@@ -292,12 +330,12 @@ private struct PlaceProfileFullView: View {
                     )
                 }
 
-                if let actualRating = presentation.actualRating {
+                if let displayRating {
                     PlaceProfileRatingTile(
-                        value: actualRating.displayScore,
+                        value: displayRating.displayScore,
                         suffix: "/5",
-                        title: "Actual rating",
-                        subtitle: actualRating.source == .own ? "your saved rating" : actualRating.subtitle,
+                        title: displayRating.title,
+                        subtitle: displayRating.subtitle,
                         systemImage: "star.fill",
                         tint: WanderTheme.stateWarning.color
                     )
@@ -440,7 +478,8 @@ private struct PlaceProfileFullView: View {
 
     private var hasWhyItFitsEvidence: Bool {
         !presentation.whyItFits.isEmpty
-            || presentation.actualRating != nil
+            || presentation.overallRating != nil
+            || presentation.ownRating != nil
             || !displayTags.isEmpty
             || trustedSaves.count >= 2
     }
@@ -465,18 +504,22 @@ private struct PlaceProfileFullView: View {
         saves.filter { $0.visiblePlace.owner.id != currentUserID }
     }
 
+    private var displayRating: PlaceActualRating? {
+        presentation.overallRating ?? presentation.ownRating
+    }
+
     private var whyItFitsPrimary: String {
         if let firstReason = presentation.whyItFits.first {
             return firstReason
         }
-        if let actualRating = presentation.actualRating {
-            if actualRating.source == .own {
-                return "You rated this \(actualRating.displayScore)/5."
-            }
+        if let overallRating = presentation.overallRating {
             if let trustedName = trustedSaves.first?.visiblePlace.owner.displayName.components(separatedBy: " ").first {
-                return "\(trustedName) rated this \(actualRating.displayScore)/5."
+                return "\(trustedName) rated this \(overallRating.displayScore)/5."
             }
-            return "\(actualRating.subtitle.capitalized) average \(actualRating.displayScore)/5."
+            return "\(overallRating.subtitle.capitalized) average \(overallRating.displayScore)/5."
+        }
+        if let ownRating = presentation.ownRating {
+            return "You rated this \(ownRating.displayScore)/5."
         }
         if trustedSaves.count >= 2 {
             return "\(trustedSaves.count) people you follow saved this place."
@@ -488,7 +531,7 @@ private struct PlaceProfileFullView: View {
         if presentation.fitRating != nil {
             return "Based on places you saved and people you follow."
         }
-        if presentation.actualRating != nil {
+        if presentation.overallRating != nil || presentation.ownRating != nil {
             return "Your map gets more personal as you save places."
         }
         if displayTags.count >= 2 {
@@ -577,7 +620,7 @@ private struct PlaceProfileMapHeader: View {
                             .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Back to map preview")
+                    .accessibilityLabel("Close place profile")
 
                     Spacer()
 
@@ -921,7 +964,7 @@ private struct PlaceProfileSaveCard: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 Spacer()
-                if let ratingScore = userPlace.ratingScore {
+                if let ratingScore = displayedRatingScore {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(ratingScore) / 5")
                             .font(.system(size: 13, weight: .black))
@@ -964,6 +1007,11 @@ private struct PlaceProfileSaveCard: View {
 
     private var userPlace: LocalUserPlace {
         summary.visiblePlace.userPlace
+    }
+
+    private var displayedRatingScore: Int? {
+        guard userPlace.status == .been else { return nil }
+        return userPlace.ratingScore
     }
 
     private var note: String? {
@@ -1087,13 +1135,12 @@ private enum PlaceProfileCopy {
             return "Strong fit based on your saved places."
         }
 
-        if let actualRating = presentation.actualRating {
-            switch actualRating.source {
-            case .own:
-                return "You rated this \(actualRating.displayScore)/5."
-            case .trusted:
-                return "Trusted rating: \(actualRating.displayScore)/5."
-            }
+        if let overallRating = presentation.overallRating {
+            return "Trusted rating: \(overallRating.displayScore)/5."
+        }
+
+        if let ownRating = presentation.ownRating {
+            return "You rated this \(ownRating.displayScore)/5."
         }
 
         return nil

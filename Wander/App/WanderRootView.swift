@@ -14,7 +14,8 @@ struct WanderRootView: View {
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
-        analytics: AnalyticsClient = NoopAnalyticsClient()
+        analytics: AnalyticsClient = NoopAnalyticsClient(),
+        parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
@@ -25,6 +26,7 @@ struct WanderRootView: View {
         _store = StateObject(
             wrappedValue: WanderStore(
                 fixtures: Self.resolvedFixtures(mode: fixtureMode),
+                parser: parser,
                 analytics: analytics,
                 persistence: persistence
             )
