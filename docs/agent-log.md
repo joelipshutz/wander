@@ -6407,3 +6407,24 @@ Checkpoint, 2026-06-27 13:59 PDT:
 Outcome, 2026-06-27 13:59 PDT:
 
 - Phone visibility follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.
+
+## 2026-06-27 14:58 PDT - Codex - REC-40/REC-39 landing and TestFlight release
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: resolve Ryan's report that the REC-40 delete/save/add-place changes are not visible on device by verifying the branch stack, squash-merging REC-40 and any real REC-39 dependency to `main` without conflicts, creating a new TestFlight build from latest `main`, posting Slack tracking, and updating Linear.
+
+Coordination:
+
+- Primary checkout is clean at `0b61c62b5`.
+- `git worktree list` still shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also attached to `codex/rec-40-lists-mockups`; do not edit or reset that worktree during landing.
+- Because this is an explicit TestFlight request, release work is in scope after the intended PRs land.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
