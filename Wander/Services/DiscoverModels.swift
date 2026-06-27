@@ -80,6 +80,7 @@ struct DiscoverResults {
 
 struct VisiblePlaceGroup: Identifiable {
     let key: String
+    let aliases: Set<String>
     let places: [VisiblePlace]
     let currentUserID: String
 
@@ -128,25 +129,67 @@ enum VisiblePlaceGrouping {
     ) -> [VisiblePlaceGroup] {
         var orderedKeys: [String] = []
         var grouped: [String: [VisiblePlace]] = [:]
+        var aliasesByKey: [String: Set<String>] = [:]
+        var keyByAlias: [String: String] = [:]
+
+        func mergeGroup(_ sourceKey: String, into destinationKey: String) {
+            guard sourceKey != destinationKey else { return }
+
+            grouped[destinationKey, default: []].append(contentsOf: grouped[sourceKey] ?? [])
+            grouped[sourceKey] = nil
+
+            aliasesByKey[destinationKey, default: []].formUnion(aliasesByKey[sourceKey] ?? [])
+            aliasesByKey[sourceKey] = nil
+
+            orderedKeys.removeAll { $0 == sourceKey }
+            for alias in aliasesByKey[destinationKey, default: []] {
+                keyByAlias[alias] = destinationKey
+            }
+        }
 
         for visiblePlace in places {
-            let key = key(for: visiblePlace)
+            let aliases = keys(for: visiblePlace)
+            var existingKeys: [String] = []
+            for alias in aliases {
+                guard let existingKey = keyByAlias[alias],
+                      !existingKeys.contains(existingKey)
+                else { continue }
+                existingKeys.append(existingKey)
+            }
+
+            let key = existingKeys.first ?? key(for: visiblePlace)
             if grouped[key] == nil {
                 orderedKeys.append(key)
                 grouped[key] = []
+                aliasesByKey[key] = []
             }
+
+            for existingKey in existingKeys.dropFirst() {
+                mergeGroup(existingKey, into: key)
+            }
+
             grouped[key]?.append(visiblePlace)
+            aliasesByKey[key, default: []].formUnion(aliases)
+            for alias in aliasesByKey[key, default: []] {
+                keyByAlias[alias] = key
+            }
         }
 
         return orderedKeys.compactMap { key in
             guard let places = grouped[key], !places.isEmpty else { return nil }
+            let sortedPlaces = places.sorted { lhs, rhs in
+                if lhs.owner.id == currentUserID { return true }
+                if rhs.owner.id == currentUserID { return false }
+                return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
+            }
+            let primary = sortedPlaces.first { $0.owner.id == currentUserID } ?? sortedPlaces[0]
+            let primaryKey = Self.key(for: primary)
+            let aliases = aliasesByKey[key, default: []].union([primaryKey])
+
             return VisiblePlaceGroup(
-                key: key,
-                places: places.sorted { lhs, rhs in
-                    if lhs.owner.id == currentUserID { return true }
-                    if rhs.owner.id == currentUserID { return false }
-                    return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
-                },
+                key: primaryKey,
+                aliases: aliases,
+                places: sortedPlaces,
                 currentUserID: currentUserID
             )
         }
@@ -164,39 +207,68 @@ enum VisiblePlaceGrouping {
         in places: [VisiblePlace],
         currentUserID: String
     ) -> VisiblePlaceGroup? {
-        let selectedKey = key(for: selectedPlace)
+        let selectedAliases = Set(keys(for: selectedPlace))
         return groups(from: places, currentUserID: currentUserID)
-            .first { $0.key == selectedKey }
+            .first { !$0.aliases.isDisjoint(with: selectedAliases) }
     }
 
     static func key(for visiblePlace: VisiblePlace) -> String {
-        let place = visiblePlace.place
-
-        let providerID = normalized(place.sourceProviderPlaceID)
-        if !providerID.isEmpty {
-            return "provider:\(normalized(place.sourceProvider)):\(providerID)"
-        }
-
-        let name = normalized(place.canonicalName)
-        let category = normalized(place.category)
-        let address = normalized(place.address)
-        let locality = normalized(place.locality)
-        let region = normalized(place.region)
-
-        if !address.isEmpty || !locality.isEmpty || !region.isEmpty {
-            return "text:\([name, category, address, locality, region].joined(separator: "|"))"
-        }
-
-        let roundedLatitude = (place.latitude * 10_000).rounded() / 10_000
-        let roundedLongitude = (place.longitude * 10_000).rounded() / 10_000
-        return "coordinate:\([name, category, "\(roundedLatitude)", "\(roundedLongitude)"].joined(separator: "|"))"
+        keys(for: visiblePlace)[0]
     }
 
-    private static func normalized(_ value: String?) -> String {
+    static func matches(_ lhs: VisiblePlace, _ rhs: VisiblePlace) -> Bool {
+        !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
+    }
+
+    private static func keys(for visiblePlace: VisiblePlace) -> [String] {
+        let place = visiblePlace.place
+        var keys: [String] = []
+
+        func append(_ key: String) {
+            guard !keys.contains(key) else { return }
+            keys.append(key)
+        }
+
+        let name = normalizedText(place.canonicalName)
+        if !name.isEmpty {
+            let address = normalizedText(place.address)
+            if !address.isEmpty {
+                append("address:\([name, address, normalizedText(place.locality), normalizedText(place.region), normalizedText(place.country)].joined(separator: "|"))")
+            }
+            append("place:\([name, coordinateBucket(for: place)].joined(separator: "|"))")
+        }
+
+        let providerID = normalizedIdentifier(place.sourceProviderPlaceID)
+        if !providerID.isEmpty {
+            append("provider:\(normalizedIdentifier(place.sourceProvider)):\(providerID)")
+        }
+
+        if keys.isEmpty {
+            append("coordinate:\(coordinateBucket(for: place))")
+        }
+        return keys
+    }
+
+    private static func normalizedText(_ value: String?) -> String {
+        (value ?? "")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedIdentifier(_ value: String?) -> String {
         (value ?? "")
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func coordinateBucket(for place: LocalPlace) -> String {
+        let roundedLatitude = (place.latitude * 1_000).rounded() / 1_000
+        let roundedLongitude = (place.longitude * 1_000).rounded() / 1_000
+        return "\(roundedLatitude)|\(roundedLongitude)"
     }
 }
 

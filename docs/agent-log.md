@@ -6142,3 +6142,166 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+
+## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch from `origin/main` at `3d6cf52` after build 45 release log.
+
+Goal: make the place profile open as a true full-screen detail page across entrypoints instead of a sheet that shows map/background at top or bottom. Decide and implement detail-page chrome without bottom tabs for this full-screen context unless the existing code makes that unsafe.
+
+Coordination:
+
+- Root checkout is on stale `codex/rating-score-reset`; this work is isolated in the temporary worktree above.
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- GBrain search timed out on a transient PGLite lock; the lock directory was gone on inspection, so this pass is using repo docs and implementation context.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Potential place-profile entrypoints in `Wander/Features/Profile/` and `Wander/Features/Discover/`
+- Focused tests if presentation behavior is covered or can be covered cleanly.
+
+Checkpoint:
+
+- Decided full place profile should not show bottom tabs. It is a task-level detail surface, not one of the four root app tabs, and keeping tabs visible was the source of the sheet/background bleed.
+- Changed the map selected-place flow so the map keeps the compact preview card, then opens the full place profile in a `fullScreenCover`.
+- Changed Discover and Profile saved-place entrypoints from bottom-sheet presentation to the same full-screen place profile surface.
+- Routed full-screen save/edit actions through the existing save/edit flows after dismissing the full-screen detail, avoiding stacked sheet state.
+- Updated the shared back button accessibility label from map-specific copy to `Close place profile`.
+
+Verification:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 152 tests, 0 failures.
+
+Known issues:
+
+- Visual simulator screenshot pass was not run in this session. The implementation is compile/test verified, but final visual QA should still tap through Map, Discover, and Profile on a simulator before TestFlight.
+
+Outcome:
+
+- Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
+- PR: https://github.com/joelipshutz/wander/pull/38
+
+## 2026-06-26 15:32 PDT - Codex - REC-48 Place Pin Stability And Ratings
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch at `6fc0060`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: apply the approved `/plan-eng-review` recommendations for REC-48 on top of PR #38: stable grouped map-pin selection, deterministic mixed owner/status marker rendering, and separate fit/overall/own rating semantics in place profiles.
+
+Coordination:
+
+- Linear issue: https://linear.app/recme/issue/REC-48/place-pins-should-not-cycle-views-and-place-profiles-should
+- Root checkout remains on stale `codex/rating-score-reset`; this work stays in the isolated PR #38 worktree.
+- Fetched `origin` before edits; no new `main` update appeared in fetch output.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+
+Checkpoint:
+
+- Reworked map selection around stable `VisiblePlaceGroup` keys so tapping a grouped place always resolves to the current user's save when present instead of cycling through other people's saves.
+- Made mixed-owner map pin rendering deterministic: current user outline first, social outline second, and `.been` takes precedence over `.wannaGo` within each ownership class. Selection still gets a halo/scale affordance, but the pin's line style and base icon shape no longer mutate on tap.
+- Split place profile ratings into `fitRating`, `overallRating`, and `ownRating`. Unsaved and want states can now show fit plus trusted overall rating while hiding the current user's own rating unless the current user has actually been.
+- Kept per-person save cards from showing a rating for `wannaGo` saves, even if stale/mock data includes a rating score.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
+
+## 2026-06-26 16:42 PDT - Codex - REC-48 Physical Place Grouping Follow-Up
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean at `39f09e8`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: fix Joe's on-device report that tapping Mutsu can still cycle between multiple saved versions and the current user's want view does not include Ryan's followed note. Re-apply the place-profile state contract from the design review: if the current user has a save, that save owns the page state every time; social saves render as rings and evidence inside that same page.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/DiscoverModels.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- Possibly `Wander/Features/Map/MapScreen.swift` if the native MapKit feature path also needs a guard.
+
+Checkpoint:
+
+- Found the remaining split: `VisiblePlaceGrouping.key(for:)` still treated provider IDs as the first grouping boundary, so the same physical place could stay split when separate saves had different MapKit/provider IDs.
+- Reworked `VisiblePlaceGrouping` around alias-aware physical place matching: same normalized name plus nearby coordinate, same normalized name plus address, or exact provider alias can now resolve to one group. The group key is the current user's primary save key when present.
+- Updated Map selection to store the resolved group key rather than the tapped row's raw key, preventing alternate social aliases from driving the selected profile.
+- Updated Map, Discover, and Profile place-profile save aggregation to use `VisiblePlaceGrouping.matches(...)`, so followed notes/ratings from duplicate physical-place rows appear inside the same profile.
+- Added regression coverage for Joe's Mutsu state: current user `wannaGo` plus Ryan `been` with different provider IDs/categories still renders one group, current-user primary state, and dashed current-user plus solid social outlines.
+- Added a second regression for same-name/same-address rows with different coordinates.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.
+
+## 2026-06-26 23:14 PDT - Codex - PR #38 Merge and Build 47 TestFlight Release
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: fresh worktree checked out at PR #38 head `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for release edits. Fetched `origin`; latest `origin/main` is build 46 release commit `6705fb5`.
+
+Goal: fulfill Joe's explicit request to push a new build for the place-profile/full-screen/REC-48 work: update PR #38 onto latest `main`, complete the merge gate, squash-merge to `main`, bump the next TestFlight build number, archive/upload, run the TestFlight helper, update linked status, and post the required tester-facing Slack note.
+
+Expected files before merge/release:
+
+- `docs/agent-log.md`
+- Possible merge-only updates from current `origin/main`
+- Later release bump on `main`: `project.yml` and `Wander.xcodeproj/project.pbxproj`
+
+Release scope since build 46:
+
+- PR #38: full-screen place profiles from Map, Discover, and Profile.
+- PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
+
+## 2026-06-26 23:16 PDT - Codex - PR #38 Merge-Only Review
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: PR #38 is open, ready, and mergeable at `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is not being used for landing work.
+
+Goal: review, visually QA, and squash-merge PR #38 to `main` after Joe confirmed "let's do it." This run is merge-only: no build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note unless Joe explicitly asks for a TestFlight release after merge.
+
+Coordination notes:
+
+- Existing log entry above mentions a Build 47 TestFlight release goal, but no build 47 bump exists on `origin/main`; `project.yml` still reports `CURRENT_PROJECT_VERSION: "46"`.
+- Latest completed release on `origin/main` is build 46, logged by `6705fb5`.
+- Mission Control task: `8ba743d7-2123-47ef-a587-d922038db3a8`.
+
+Expected files for this review/landing pass:
+
+- `docs/agent-log.md`
+- Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
+
+Checkpoint, 2026-06-26 23:24 PDT:
+
+- Current Joe request is explicit TestFlight release: "push new build for this"; the merge-only note above is superseded for this run.
+- Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
+- Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
+- Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
+- `git diff --check origin/main...HEAD` passed before this follow-up; full elevated simulator suite passed after the guard fix:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-release-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.

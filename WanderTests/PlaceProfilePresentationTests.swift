@@ -37,7 +37,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertFalse(tags.contains { $0.title == "must go" })
     }
 
-    func testActualRatingPrefersCurrentUsersRating() throws {
+    func testRatingsSeparateCurrentUserRatingFromOverallRating() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
         let place = place(id: "place_bar", category: "bar")
@@ -46,14 +46,18 @@ final class PlaceProfilePresentationTests: XCTestCase {
             summary(owner: maya, place: place, ratingScore: 5, tags: [])
         ]
 
-        let rating = try XCTUnwrap(PlaceProfilePresenter.actualRating(from: summaries, currentUserID: currentUser.id))
+        let overallRating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
+        let ownRating = try XCTUnwrap(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
 
-        XCTAssertEqual(rating.source, .own)
-        XCTAssertEqual(rating.score, 3)
-        XCTAssertEqual(rating.count, 1)
+        XCTAssertEqual(overallRating.source, .trusted)
+        XCTAssertEqual(overallRating.score, 5)
+        XCTAssertEqual(overallRating.count, 1)
+        XCTAssertEqual(ownRating.source, .own)
+        XCTAssertEqual(ownRating.score, 3)
+        XCTAssertEqual(ownRating.count, 1)
     }
 
-    func testActualRatingAveragesTrustedRatingsWhenUnsaved() throws {
+    func testOverallRatingAveragesTrustedRatingsWhenUnsaved() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
         let ryan = profile(id: "user_ryan", handle: "ryan")
@@ -63,11 +67,40 @@ final class PlaceProfilePresentationTests: XCTestCase {
             summary(owner: ryan, place: place, ratingScore: 5, tags: [])
         ]
 
-        let rating = try XCTUnwrap(PlaceProfilePresenter.actualRating(from: summaries, currentUserID: currentUser.id))
+        let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
         XCTAssertEqual(rating.source, .trusted)
         XCTAssertEqual(rating.score, 4.5)
         XCTAssertEqual(rating.count, 2)
+    }
+
+    func testCurrentUserWannaSaveCanShowTrustedOverallButNoOwnRating() throws {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let maya = profile(id: "user_maya", handle: "maya")
+        let place = place(id: "place_want", category: "restaurant")
+        let summaries = [
+            summary(owner: currentUser, place: place, status: .wannaGo, ratingScore: 4, tags: []),
+            summary(owner: maya, place: place, ratingScore: 5, tags: [])
+        ]
+
+        let overallRating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
+
+        XCTAssertNil(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
+        XCTAssertEqual(overallRating.source, .trusted)
+        XCTAssertEqual(overallRating.score, 5)
+    }
+
+    func testOverallRatingDoesNotFallbackToCurrentUsersOwnAggregate() throws {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let place = place(id: "place_solo", category: "coffee")
+        let summaries = [
+            summary(owner: currentUser, place: place, ratingScore: 5, tags: [])
+        ]
+
+        let ownRating = try XCTUnwrap(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
+
+        XCTAssertNil(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
+        XCTAssertEqual(ownRating.score, 5)
     }
 
     func testFitRatingIsNilWhenEvidenceIsThin() {
@@ -82,7 +115,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
 
         XCTAssertNil(presentation.fitRating)
-        XCTAssertNil(presentation.actualRating)
+        XCTAssertNil(presentation.overallRating)
+        XCTAssertNil(presentation.ownRating)
         XCTAssertTrue(presentation.commonTags.isEmpty)
     }
 
@@ -110,6 +144,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
 
         let fit = try XCTUnwrap(presentation.fitRating)
+        XCTAssertEqual(presentation.overallRating?.score, 4.5)
+        XCTAssertNil(presentation.ownRating)
         XCTAssertGreaterThanOrEqual(fit.score, 8)
         XCTAssertEqual(presentation.commonTags.map(\.title), ["quiet"])
         XCTAssertTrue(fit.reasons.contains { $0.contains("coffee") })
@@ -143,16 +179,18 @@ final class PlaceProfilePresentationTests: XCTestCase {
     private func summary(
         owner: LocalProfile,
         place: LocalPlace,
+        status: PlaceStatus? = nil,
         ratingScore: Int?,
         interestSignal: String? = nil,
         tags: [String]
     ) -> PlaceSaveSummary {
+        let resolvedStatus = status ?? (ratingScore == nil ? .wannaGo : .been)
         let userPlace = LocalUserPlace(
             localID: "local_up_\(owner.id)_\(place.id)",
             serverID: "up_\(owner.id)_\(place.id)",
             userID: owner.id,
             placeID: place.id,
-            status: ratingScore == nil ? .wannaGo : .been,
+            status: resolvedStatus,
             visibility: .followers,
             note: nil,
             ratingScore: ratingScore,
