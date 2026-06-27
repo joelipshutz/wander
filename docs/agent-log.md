@@ -5502,6 +5502,149 @@ Merge outcome:
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
 
+## 2026-06-26 14:37 PDT - Codex - Instagram and Apple Maps link fixes
+
+Agent: Codex
+Branch/worktree: `codex/link-fixes-instagram-apple` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: root checkout was clean on `main` but behind `origin/main`; fetched `origin`, fast-forwarded to `3d6cf5216`, inspected existing worktrees, read recent `docs/agent-log.md`, and created a short-lived feature branch in the root checkout so Xcode/phone testing points at this branch.
+
+Goal: investigate why Instagram location links and Apple Maps links are not reliably becoming add-place candidates, implement the fixes in a PR, and create a physical-device build Ryan can test on his phone.
+
+Expected files:
+
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `WanderTests/LinkPlaceParserTests.swift`
+- possibly `supabase/functions/extraction-worker/index.ts` if the backend extraction path needs matching Apple/Instagram support
+- `docs/agent-log.md`
+
+Plan:
+
+- Reproduce supported and failing link shapes with focused parser tests before changing behavior.
+- Fix root causes in the parser/resolver path instead of broadening unsupported links blindly.
+- Run focused tests and a simulator/device build, then open a draft PR for testing.
+
+Root cause:
+
+- The current failing Apple Maps example in Slack is `https://maps.apple/p/hDU04tUWpbVsMn`. It redirects to `https://maps.apple.com/place?address=2327%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=34.004387,-118.485816&name=Urth%20Caff%C3%A9&place-id=I1BEA961C41ECB5A7&map=explore`, but the app only expanded Google short-map hosts, so it treated `maps.apple` as unsupported.
+- Expanded Apple Maps links can include both `address` and `name`; the parser preferred `address` before `name`, which could search the street address as the place name.
+- Apple Maps `ll`/`sll` coordinate hints were not used as `areaHint`, making ambiguous place-name searches less reliable.
+- The reported Instagram example is `https://www.instagram.com/ronan_la`, a business profile URL, not an `/explore/locations/...` URL. The existing parser intentionally handled only Instagram location slugs and ignored profile slugs.
+
+Implementation:
+
+- Recognize `maps.apple` as a short map link and expand it through the same local resolver redirect path as Google short links.
+- Prefer Apple/Map link `name`/`title`/`place` query values before `address`, and preserve `ll`/`sll`/`center`/`coordinate` values as area hints for MapKit search.
+- Parse safe top-level Instagram profile slugs such as `ronan_la` into manual place-name hints while continuing to reject reserved Instagram paths like posts/reels/stories.
+- Added parser regression coverage for the exact expanded Urth Café Apple Maps target, `maps.apple` short-link recognition, Instagram profile slugs, and Instagram post rejection.
+- Hardened the Supabase extraction worker for backend parity: `maps.apple` redirect support, Apple `coordinate` support, Apple path/query name extraction, and `name`/`title`/`place` preference before address.
+
+Validation:
+
+- `curl -Ls` confirmed `https://maps.apple/p/hDU04tUWpbVsMn` redirects to the coordinate-backed Urth Café Apple Maps URL above.
+- `git diff --check` passed.
+- Focused simulator XCTest could not run because local CoreSimulator is out of date: installed `1051.54.0`, Xcode expects `1051.55.0`.
+- Focused physical-device XCTest reached build preparation but failed before running tests because `WanderTests` cannot code sign on device without an Info.plist/generated Info.plist.
+- Generic `build-for-testing` also failed in local tooling/asset-catalog thinning after the CoreSimulator mismatch.
+- Physical iPhone app build succeeded for `Ry’s iPhone` (`00008130-0008095E3408001C`) with `** BUILD SUCCEEDED **`; this compiled `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`.
+- `xcrun xcdevice list --timeout=5` confirmed `Ry’s iPhone` is visible over USB. `xcrun devicectl device install app` hung twice with no output and was interrupted; Xcode was opened on this branch so Ryan can use the visible Run button if CLI install remains stuck.
+
+Handoff:
+
+- Commit: `22fc12a4b` (`fix: support apple and instagram place links`).
+- Draft PR: https://github.com/joelipshutz/wander/pull/40
+- Branch remains checked out in the root Xcode workspace: `codex/link-fixes-instagram-apple`.
+- Test in Xcode on `Ry’s iPhone` by running the app from this branch, then paste:
+  - `https://maps.apple/p/hDU04tUWpbVsMn` - should resolve to an Urth Café candidate instead of unsupported-link/draft behavior.
+  - `https://www.instagram.com/ronan_la` - should search from the `ronan la` profile hint and show place candidates instead of unsupported-link behavior.
+  - An Instagram post/reel URL - should still avoid creating a bogus place from the media ID.
+
+Follow-up checkpoint, 2026-06-26 15:04 PDT:
+
+- Ryan confirmed Instagram links now work, but an Apple Maps link for Heavy Handed produced a save candidate named `2912 Main St` instead of the business name.
+- Starting status: `codex/link-fixes-instagram-apple` was clean and tracking `origin/codex/link-fixes-instagram-apple`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` were checked before editing.
+- Root cause: the first fix covered Apple URLs with an explicit `name=` field. Address-plus-coordinate Apple URLs still parsed `address=` into `ManualPlaceInput.name`, and `MapKitPlaceResolver.resolveLink` immediately searched/saved that address string instead of using the coordinate to resolve nearby POIs.
+- Expected files touched for this follow-up: `Wander/Services/MapKitPlaceResolver.swift`, `WanderTests/LinkPlaceParserTests.swift`, `supabase/functions/extraction-worker/index.ts`, and `docs/agent-log.md`.
+- Implementation direction: when an Apple Maps parsed link has a valid coordinate and the parsed name looks like a street address, use the existing nearby POI lookup instead of the manual address search path. The backend extraction worker should also avoid treating address-only Apple query fields as business names.
+- Implemented `LinkPlaceResolutionHeuristics` and routed parsed Apple address-plus-coordinate links through `nearbyPlaceCandidates(near:)` in `MapKitPlaceResolver`.
+- Added regression coverage for address-only Apple coordinate links and named Apple coordinate links in `LinkPlaceParserTests`.
+- Updated the Supabase extraction worker to only accept Apple Maps names from path/name/title/place/q/query fields when they are not coordinates or street-address-looking strings; it no longer falls back to `address=` for Apple candidates.
+- Validation: `git diff --check` passed.
+- Validation: focused XCTest on installed `iPhone 17 Pro, OS 26.5` compiled the app and `WanderTests` bundle, including `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`, but failed at simulator bootstrap with `Early unexpected exit, operation never finished bootstrapping`; no Swift compile error was reported.
+- Validation: the old documented `iPhone 16 Plus, OS 18.6` simulator destination is not installed on this machine.
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with `** BUILD SUCCEEDED **` using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+- Validation gap: `deno check supabase/functions/extraction-worker/index.ts` could not run because `deno` is not installed.
+
+Follow-up checkpoint, 2026-06-26 15:38 PDT:
+
+- Ryan tested `https://maps.apple/p/7n_0yn8JorskgD` on the PR branch and it still showed `2912 Main St`.
+- Expanded the exact short link with `curl -Ls`; it redirects to `https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=33.999113,-118.481057&name=Heavy%20Handed&place-id=IDED6F7257BB76BBF&map=explore`, so Apple is providing the correct `name=Heavy Handed`.
+- Reproduced the bad MapKit behavior with a temporary `/private/tmp/mapkit_probe`: searching natural language `Heavy Handed 33.999113,-118.481057` returns only `name=2912 Main St`.
+- Reproduced the desired MapKit behavior with the same probe: searching natural language `Heavy Handed` while setting the request region around `33.999113,-118.481057` returns `name=Heavy Handed` first.
+- Root cause: `resolveManualEntry` appended coordinate area hints into `naturalLanguageQuery`; MapKit interpreted that as an address lookup and returned the address candidate.
+- Fix direction: build manual/link MapKit searches with coordinate hints as `request.region`, not query text, while preserving text area hints like `Santa Monica` in the query.
+- Implemented the fix in `MapKitPlaceResolver.resolveManualEntry` by turning coordinate area hints into a tight `MKLocalSearch.Request.region` instead of query text, with focused coverage in `LinkPlaceParserTests`.
+- Validation: focused simulator test command for `WanderTests/LinkPlaceParserTests` compiled and launched, then failed in the environment with XCTest app bootstrap kill before connection (`Early unexpected exit`).
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with exit code 0 using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+
+Merge/release checkpoint, 2026-06-26 16:00 PDT:
+
+- Ryan confirmed the PR #40 Apple Maps fix works on device and explicitly requested squash-merge to `main`, a TestFlight build, Slack update, and REC-46/REC-47 completion in Linear.
+- Starting status: root checkout clean on `codex/link-fixes-instagram-apple` at `57154a702`; `git fetch origin`, `git status --short --branch`, and `git worktree list` checked before merge/release work.
+- PR #40 metadata: open draft, base `main`, head `codex/link-fixes-instagram-apple`, head SHA `57154a702`, merge state `CLEAN`, no GitHub checks reported.
+- Expected files for release follow-up after merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`, `docs/agent-log.md`, and temporary TestFlight release notes outside the repo.
+
+## 2026-06-26 16:11 PDT - Codex - PR #40 Merge and Build 46 TestFlight Release
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`
+
+Goal: finish Ryan's requested PR #40 squash merge, package the Apple Maps/Instagram link fixes into TestFlight build 46, post the tester Slack update, and move REC-46/REC-47 to Done after TestFlight availability.
+
+Merge:
+
+- Marked PR #40 ready for review after Ryan confirmed device testing passed.
+- Squash-merged PR #40 into `main` with merge commit `aad975d11` (`Fix Apple Maps and Instagram link add`) and deleted the remote PR branch.
+- Included release scope since build 45: PR #40 only; app-side Apple Maps short-link/name/coordinate resolution, Instagram business profile link parsing, parser tests, and extraction-worker parity.
+
+Build bump:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `45` to `46` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; reverted broad generated project-setting churn and kept the narrow build-number change pattern used by build 45.
+- Pushed build-number commit `311ae1d92` (`chore: bump testflight build 46`) to `main`.
+
+Validation:
+
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Documented `iPhone 16 Plus, OS=18.6` test destination is not installed on this machine; reran on available `iPhone 17 Pro, OS=26.5`.
+- First full suite run found one test expectation mismatch: the exact Apple Maps URL decodes to `Urth Caffé`, while the regression test expected `Urth Café`.
+- Fixed the test expectation to match Apple's decoded place name and reran validation.
+- Focused `LinkPlaceParserTests/testParsesExpandedMapsAppleShortLinkDestination` passed on `iPhone 17 Pro, OS=26.5`.
+- Full simulator suite passed on `iPhone 17 Pro, OS=26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build46.xcarchive`.
+- Archived `CFBundleVersion` verified as `46`.
+- Export options: `/private/tmp/WanderExportUpload46.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 46 --archive-path /private/tmp/Wander-0.1-build46.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build46-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (46)` id `065b612e-5a1b-4cdd-aca9-709aa9fb0ed8` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Linear:
+
+- Added completion comments to `REC-46` and `REC-47` with PR #40, merge commit, build 46, validation, and TestFlight status.
+- Moved `REC-46` and `REC-47` to `Done`.
+
+Slack:
+
+- Posted tester-facing build 46 release note to `#testflight-feedback` (`C0BAA7DG2AC`) after TestFlight approval.
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782537106044699`.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
