@@ -6291,3 +6291,39 @@ Expected files:
 - `Wander/Features/Lists/ListsScreen.swift`
 - `WanderTests/NavigationContractTests.swift`
 - `docs/agent-log.md`
+
+## 2026-06-27 09:46 PDT - Codex - REC-40 native bottom tray correction
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: fix Ryan's testing feedback that the custom bottom tray is visually wrong. Restore the original native tab bar styling and make the only tray change be inserting Add between Discover and Lists, yielding exactly one bottom tray in the order Map, Discover, Add, Lists, Profile.
+
+Coordination:
+
+- The Xcode-facing checkout is already on the REC-40 PR branch and clean.
+- Other worktrees are detached or on unrelated branches; no overlapping local edits found.
+
+Expected files:
+
+- `Wander/App/WanderRootView.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 10:00 PDT:
+
+- Removed the custom `WanderBottomTray` entirely and restored the native SwiftUI `TabView` tab bar.
+- Inserted Add as the center native tab item in the requested order: Map, Discover, Add, Lists, Profile.
+- Kept Add as an action rather than a destination by intercepting the Add tab selection and presenting the existing `AddScreen` sheet while preserving the current selected tab.
+- Removed the temporary map place-card bottom padding that was only needed for the custom tray.
+- Updated navigation contract tests to lock the five-item tray order and ensure launch args cannot select Add as a blank initial tab.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-native-tab-fix-build2 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-native-tab-fix-tests2 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - Screenshot reviewed: `/private/tmp/rec40-native-tab-fix-screenshots/native-five-tab-tray-final.png`.
+
+Outcome, 2026-06-27 10:00 PDT:
+
+- Native bottom tray correction is ready to push to PR #42 on `codex/rec-40-lists-mockups` for Xcode testing.

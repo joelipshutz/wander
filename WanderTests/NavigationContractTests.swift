@@ -2,8 +2,8 @@ import XCTest
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
-    func testBottomNavigationHasFourProductTabsOnly() {
-        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .lists, .profile])
+    func testBottomNavigationUsesRequestedFiveItemOrder() {
+        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
 
     @MainActor
@@ -16,6 +16,7 @@ final class NavigationContractTests: XCTestCase {
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "lists"]),
             .lists
         )
+        XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "add"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "nope"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab"]), .map)
     }

@@ -18,7 +18,8 @@ struct WanderRootView: View {
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
-        _selectedTab = State(initialValue: initialTab ?? Self.resolvedInitialTab())
+        let requestedTab = initialTab ?? Self.resolvedInitialTab()
+        _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
@@ -31,28 +32,26 @@ struct WanderRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             MapScreen()
+                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
             DiscoverScreen()
+                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
 
+            Color.clear
+                .tabItem { Label(WanderTab.add.title, systemImage: WanderTab.add.systemImage) }
+                .tag(WanderTab.add)
+
             ListsScreen()
+                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
                 .tag(WanderTab.lists)
 
             ProfileScreen()
+                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
                 .tag(WanderTab.profile)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            WanderBottomTray(selectedTab: $selectedTab) {
-                addTabResetToken = UUID()
-                isPresentingAdd = true
-            }
-            .padding(.horizontal, WanderTheme.spacing3)
-            .padding(.top, WanderTheme.spacing2)
-            .padding(.bottom, WanderTheme.spacing2)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
@@ -100,6 +99,19 @@ struct WanderRootView: View {
         }
     }
 
+    private var tabSelection: Binding<WanderTab> {
+        Binding {
+            selectedTab
+        } set: { newTab in
+            if newTab == .add {
+                addTabResetToken = UUID()
+                isPresentingAdd = true
+            } else {
+                selectedTab = newTab
+            }
+        }
+    }
+
     private func applyAuthStateIfNeeded(_ state: AuthState) {
         guard fixtureMode == .empty else {
             #if DEBUG
@@ -140,7 +152,8 @@ struct WanderRootView: View {
             return .map
         }
 
-        return WanderTab(rawValue: arguments[valueIndex]) ?? .map
+        let tab = WanderTab(rawValue: arguments[valueIndex]) ?? .map
+        return tab == .add ? .map : tab
     }
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
@@ -165,70 +178,6 @@ struct WanderRootView: View {
     }
 }
 
-private struct WanderBottomTray: View {
-    @Binding var selectedTab: WanderTab
-    let onAdd: () -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            trayButton(.map)
-            trayButton(.discover)
-            addButton
-            trayButton(.lists)
-            trayButton(.profile)
-        }
-        .padding(5)
-        .frame(minHeight: 72)
-        .background(WanderTheme.surfaceRaised.color.opacity(0.96))
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(WanderTheme.borderHairline.color.opacity(0.7), lineWidth: 1)
-        )
-        .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 22, x: 0, y: 10)
-    }
-
-    private func trayButton(_ tab: WanderTab) -> some View {
-        Button {
-            selectedTab = tab
-        } label: {
-            VStack(spacing: 5) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: 23, weight: .black))
-                Text(tab.title)
-                    .font(.system(size: 12, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .foregroundStyle(selectedTab == tab ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
-            .background(selectedTab == tab ? WanderTheme.surfaceSand.color : Color.clear)
-            .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
-    }
-
-    private var addButton: some View {
-        Button(action: onAdd) {
-            VStack(spacing: 5) {
-                Image(systemName: "plus")
-                    .font(.system(size: 23, weight: .black))
-                    .frame(width: 42, height: 42)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-                Text("Add")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a place")
-    }
-}
-
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
@@ -243,6 +192,7 @@ enum WanderInitialPresentation: String, Identifiable {
 enum WanderTab: String, CaseIterable, Hashable {
     case map
     case discover
+    case add
     case lists
     case profile
 
@@ -250,6 +200,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         switch self {
         case .map: "Map"
         case .discover: "Discover"
+        case .add: "Add"
         case .lists: "Lists"
         case .profile: "Profile"
         }
@@ -259,6 +210,7 @@ enum WanderTab: String, CaseIterable, Hashable {
         switch self {
         case .map: "map"
         case .discover: "sparkle.magnifyingglass"
+        case .add: "plus"
         case .lists: "bookmark.square"
         case .profile: "person.crop.circle"
         }
