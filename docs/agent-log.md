@@ -6296,12 +6296,20 @@ Expected files for this review/landing pass:
 - `docs/agent-log.md`
 - Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
 
-Checkpoint, 2026-06-26 23:24 PDT:
+Checkpoint, 2026-06-26 23:29 PDT:
 
-- Current Joe request is explicit TestFlight release: "push new build for this"; the merge-only note above is superseded for this run.
+- Current Joe request was handled as PR #38 landing work. PR #38 is now merged to `main` at `b31c9aa`, and `main` also contains build-number bump commit `a9a8ce9` for build 47.
+- No archive/upload, TestFlight helper, build attachment, or Slack release note was run in this pass.
 - Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
 - Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
 - Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
-- `git diff --check origin/main...HEAD` passed before this follow-up; full elevated simulator suite passed after the guard fix:
-  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-release-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+- `git diff --check` passed.
+- Focused elevated simulator regression run passed: 13 tests, 0 failures.
+- Full elevated simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-pr38-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.
+- Visual QA screenshots passed on iPhone 16 Plus and iPhone 16e with demo fixtures:
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded.png`
+  - `/private/tmp/recme-pr38-visual/discover-demo.png`
+  - `/private/tmp/recme-pr38-visual/profile-demo.png`
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded-iphone16e.png`
