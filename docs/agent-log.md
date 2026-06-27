@@ -6442,6 +6442,18 @@ Checkpoint, 2026-06-27 15:07 PDT:
   - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-merge-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-merge-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and traditional headermap warnings.
 
+Checkpoint, 2026-06-27 15:18 PDT:
+
+- PR #42 was marked ready and squash-merged to `main` on GitHub as `80912a283b1d440bf1afa6c3ded1f7ead4656151` (`Add REC-40 list tab flows`).
+- Local `main` had an unpushed build-48 release-log commit; it was rebased on top of the REC-40 squash merge rather than discarded.
+- Started the explicit TestFlight release requested by Ryan from latest `main`.
+- Incremented `CURRENT_PROJECT_VERSION` from build 48 to build 49 in `project.yml` and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+- Verification:
+  - `git diff --check` passed.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build49-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - First full `xcodebuild test` attempt using `/private/tmp/DerivedData-build49-tests` failed before tests connected: `Early unexpected exit, operation never finished bootstrapping`.
+  - Rerun passed: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build49-tests2 CODE_SIGNING_ALLOWED=NO -jobs 1` with existing signed-binary stripping warnings and traditional headermap warnings.
+
 ## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
 
 Agent: Codex
