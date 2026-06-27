@@ -5587,6 +5587,13 @@ Follow-up checkpoint, 2026-06-26 15:38 PDT:
 - Validation: focused simulator test command for `WanderTests/LinkPlaceParserTests` compiled and launched, then failed in the environment with XCTest app bootstrap kill before connection (`Early unexpected exit`).
 - Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with exit code 0 using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
 
+Merge/release checkpoint, 2026-06-26 16:00 PDT:
+
+- Ryan confirmed the PR #40 Apple Maps fix works on device and explicitly requested squash-merge to `main`, a TestFlight build, Slack update, and REC-46/REC-47 completion in Linear.
+- Starting status: root checkout clean on `codex/link-fixes-instagram-apple` at `57154a702`; `git fetch origin`, `git status --short --branch`, and `git worktree list` checked before merge/release work.
+- PR #40 metadata: open draft, base `main`, head `codex/link-fixes-instagram-apple`, head SHA `57154a702`, merge state `CLEAN`, no GitHub checks reported.
+- Expected files for release follow-up after merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`, `docs/agent-log.md`, and temporary TestFlight release notes outside the repo.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
