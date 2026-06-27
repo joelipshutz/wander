@@ -337,11 +337,34 @@ final class WanderStore: ObservableObject {
 
         return profiles
             .filter { profile in
-                profile.id != currentUser.id
+                let normalizedName = profile.displayName.lowercased()
+                return profile.id != currentUser.id
                     && !isBlockedBetweenCurrentUser(and: profile.id)
-                    && (profile.searchHandle == normalized || profile.searchHandle.hasPrefix(normalized))
+                    && (
+                        profile.searchHandle == normalized
+                            || profile.searchHandle.hasPrefix(normalized)
+                            || normalizedName.hasPrefix(normalized)
+                    )
             }
             .map(shell(for:))
+    }
+
+    func discoverMembers(query: String, backend: WanderBackend? = nil) async -> [ProfileShell] {
+        var profiles = searchProfiles(handleQuery: query)
+        let normalizedProfileQuery = normalizedHandleQuery(query)
+
+        if normalizedProfileQuery.count >= 2, let backend {
+            do {
+                let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
+                upsertRemoteProfileShells(remoteProfiles)
+                profiles = mergeProfileShells(profiles + remoteProfiles)
+                lastRemoteError = nil
+            } catch {
+                lastRemoteError = remoteErrorMessage(error)
+            }
+        }
+
+        return profiles
     }
 
     func contactMatches() async -> [ContactMatch] {

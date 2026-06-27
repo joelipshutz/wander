@@ -6042,3 +6042,40 @@ Outcome:
 - Linear: `REC-39` remains `In Progress` per request, assigned to `ryan.lieblein`, with a PR/validation comment added.
 - GitHub connector PR creation returned `403 Resource not accessible by integration`; branch push succeeded with git, and the PR was created with `gh pr create` using the existing redacted git HTTPS credential because the stored `gh` token itself is invalid.
 - Known issue: deploy-time Deno type-check should be run from an environment with Deno or Supabase CLI installed before deploying `parse-discover-query`.
+
+## 2026-06-26 23:50 PDT - Codex - REC-39 Discover Places/Members Redesign
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch tracking `origin/codex/rec-39-discover-llm-search` after fetching origin. `origin/main` advanced to `3b3135633`; root checkout is on `codex/rec-40-lists-mockups`.
+
+Goal: redesign the Discover tab in PR #41 around top-level `Places` and `Members` modes, with Places using the natural-language search from REC-39, empty Places showing a vertical latest-activity feed, unresolved person searches showing a compact disambiguation prompt, and Members using the same search chrome only for member lookup.
+
+Coordination:
+
+- User explicitly warned that PR #40 has concurrent tray/List-tab work. Do not touch app shell, root tab navigation, or bottom tray files in this task.
+- Expected files: `Wander/Features/Discover/DiscoverScreen.swift`, focused Discover/store tests if needed, `docs/agent-log.md`.
+- Requested review gates: run `design-review` and `plan-eng-review` on this implementation and fold the findings into PR #41.
+
+Checkpoint:
+
+- Plan-eng review gate applied to keep scope in the existing Discover/store architecture: reuse `WanderStore.discover(query:scope:backend:)`, add a separate member-only search path instead of mixing members into the LLM place parser, and avoid app shell/root tab/tray files because PR #40 is active.
+- Design review gate applied against `DESIGN.md` and the Beli header reference: Discover now uses top `Places`/`Members` mode tabs, search as the first real control, no big Discover title, compact results/list rows, 44pt+ tap targets, and no visible instructional copy beyond short trust/context lines.
+- Implemented the Places mode with a rotating natural-language placeholder, vertical latest network activity when empty, interpreted place results when a query resolves, and a compact ambiguous-person selector that resolves in place.
+- Implemented the Members mode with the same search chrome backed by member lookup only, horizontal member-result tiles during search, and a compact friends list with saved-rec counts below.
+- Added `WanderStore.discoverMembers(query:backend:)` so member search can merge remote profiles without invoking the place parser or consuming LLM calls.
+- Added focused store tests for member search avoiding the parser and merging remote profile results.
+- Build/test validation used available `iPhone 17 Pro, OS=26.5` because the documented `iPhone 16 Plus, OS=18.6` simulator is not installed here.
+- First focused `xcodebuild test` stalled at simulator worker materialization before producing useful diagnostics; package resolution passed, and a concrete-destination build then exposed a Swift 6 closure return issue in `WanderLocalStore.searchProfiles(handleQuery:)`, which was fixed.
+- Validation passed after the fix: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator/DerivedData.
+- `git diff --check` passed.
+- Visual review note: installed and launched the built app on the booted iPhone 17 Pro simulator and captured `/private/tmp/rec39-launch.png`; desktop automation permission blocked switching to the Discover tab for a direct Discover screenshot, so the design review evidence is source-level plus build/test validation rather than a tab-specific screenshot.
+- `gstack-review-log` could not persist dashboard metadata because the script validates JSON with `bun`, and `bun` is not installed in this shell; review findings are recorded here instead.
+
+Outcome:
+
+- PR #41 is updated with the Discover Places/Members redesign and member-only search path.
+- Tests/checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator and DerivedData.
+- Known issue: a direct Discover-tab simulator screenshot was not captured because desktop automation permissions blocked switching tabs; app launch screenshot exists at `/private/tmp/rec39-launch.png`.
+- No app shell, root tab navigation, bottom tray, `Wander/App/`, `MapScreen`, project file, Supabase migration, TestFlight build, Slack post, or Linear status changes were made in this pass.

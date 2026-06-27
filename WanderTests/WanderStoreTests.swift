@@ -798,6 +798,39 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
 
+    func testDiscoverMembersSearchDoesNotInvokePlaceParser() async {
+        let parser = FakeFilterParser()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), parser: parser)
+
+        let profiles = await store.discoverMembers(query: "Maya")
+
+        XCTAssertEqual(profiles.map(\.handle), ["maya"])
+        XCTAssertTrue(parser.queries.isEmpty)
+    }
+
+    func testDiscoverMembersMergesRemoteProfileSearch() async {
+        let store = makeStore()
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_sofia",
+                    handle: "sofia",
+                    displayName: "Sofia Rivera",
+                    avatarURL: nil,
+                    bio: nil,
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        let profiles = await store.discoverMembers(query: "@so", backend: backend)
+
+        XCTAssertEqual(profiles.map(\.handle), ["sofia"])
+        XCTAssertEqual(profileRepository.queries, ["so"])
+        XCTAssertNotNil(store.profileState(for: "user_sofia"))
+    }
+
     func testRemoteVisiblePlacesHydrateProfilesAndAttributesWithoutLocalFollow() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
