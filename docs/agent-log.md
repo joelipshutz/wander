@@ -6725,3 +6725,16 @@ Checkpoint:
 - Incremented `CURRENT_PROJECT_VERSION` from build 47 to build 48 in `project.yml`; next step is `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` matches.
 - Ran `xcodegen generate`; it produced unrelated project-setting normalization in this shell, so the project diff was narrowed back to the same build-number-only pattern used for build 47 while preserving the generated build number.
 - Build 48 validation passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-build48 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
+
+Outcome:
+
+- Pushed build-number commit `948d7bcbb` (`chore: bump testflight build 48`) to `main`.
+- Archive path: `/private/tmp/Wander-0.1-build48.xcarchive`; archived `CFBundleVersion` verified as `48`.
+- Export options: `/private/tmp/WanderExportUpload48.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 48 --archive-path /private/tmp/Wander-0.1-build48.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build48-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (48)` id `879997f5-eb6e-4e80-bea4-5fc1ab45104d` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Linear: `REC-39` was already `Done`; added final release comment with PR #41, build 48, validation, archive/upload, and TestFlight status.
+- Slack: posted tester-facing build 48 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782547872716159`.
