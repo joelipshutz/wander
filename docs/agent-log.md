@@ -5611,6 +5611,19 @@ Build bump:
 
 - Bumped `CURRENT_PROJECT_VERSION` from `45` to `46` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
 - Ran `xcodegen generate`; reverted broad generated project-setting churn and kept the narrow build-number change pattern used by build 45.
+- Pushed build-number commit `311ae1d92` (`chore: bump testflight build 46`) to `main`.
+
+Validation:
+
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Documented `iPhone 16 Plus, OS=18.6` test destination is not installed on this machine; reran on available `iPhone 17 Pro, OS=26.5`.
+- First full suite run found one test expectation mismatch: the exact Apple Maps URL decodes to `Urth Caffé`, while the regression test expected `Urth Café`.
+- Fixed the test expectation to match Apple's decoded place name and reran validation.
+- Focused `LinkPlaceParserTests/testParsesExpandedMapsAppleShortLinkDestination` passed on `iPhone 17 Pro, OS=26.5`.
+- Full simulator suite passed on `iPhone 17 Pro, OS=26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
 
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
