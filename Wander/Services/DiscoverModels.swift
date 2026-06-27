@@ -243,7 +243,9 @@ enum VisiblePlaceGrouping {
             append("provider:\(normalizedIdentifier(place.sourceProvider)):\(providerID)")
         }
 
-        append("coordinate:\(coordinateBucket(for: place))")
+        if keys.isEmpty {
+            append("coordinate:\(coordinateBucket(for: place))")
+        }
         return keys
     }
 

@@ -190,6 +190,39 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         XCTAssertEqual(groups.map(\.saveCount), [1, 1])
     }
 
+    func testDoesNotGroupDifferentPlacesAtSameCoordinate() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let restaurant = visiblePlace(
+            owner: currentUser,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.050,
+            longitude: -118.250,
+            providerID: "mapkit_mutsu",
+            status: .wannaGo
+        )
+        let coffee = visiblePlace(
+            owner: ryan,
+            name: "Maru Coffee",
+            category: "coffee",
+            latitude: 34.050,
+            longitude: -118.250,
+            providerID: "mapkit_maru",
+            status: .been,
+            ratingScore: 5
+        )
+
+        let groups = VisiblePlaceGrouping.groups(
+            from: [restaurant, coffee],
+            currentUserID: currentUser.id
+        )
+
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertFalse(VisiblePlaceGrouping.matches(restaurant, coffee))
+        XCTAssertEqual(groups.map(\.primary.place.canonicalName), ["Mutsu", "Maru Coffee"])
+    }
+
     func testGroupsSameNamedAddressAcrossDifferentCoordinates() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

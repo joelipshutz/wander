@@ -6275,3 +6275,33 @@ Release scope since build 46:
 
 - PR #38: full-screen place profiles from Map, Discover, and Profile.
 - PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
+
+## 2026-06-26 23:16 PDT - Codex - PR #38 Merge-Only Review
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: PR #38 is open, ready, and mergeable at `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is not being used for landing work.
+
+Goal: review, visually QA, and squash-merge PR #38 to `main` after Joe confirmed "let's do it." This run is merge-only: no build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note unless Joe explicitly asks for a TestFlight release after merge.
+
+Coordination notes:
+
+- Existing log entry above mentions a Build 47 TestFlight release goal, but no build 47 bump exists on `origin/main`; `project.yml` still reports `CURRENT_PROJECT_VERSION: "46"`.
+- Latest completed release on `origin/main` is build 46, logged by `6705fb5`.
+- Mission Control task: `8ba743d7-2123-47ef-a587-d922038db3a8`.
+
+Expected files for this review/landing pass:
+
+- `docs/agent-log.md`
+- Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
+
+Checkpoint, 2026-06-26 23:24 PDT:
+
+- Current Joe request is explicit TestFlight release: "push new build for this"; the merge-only note above is superseded for this run.
+- Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
+- Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
+- Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
+- `git diff --check origin/main...HEAD` passed before this follow-up; full elevated simulator suite passed after the guard fix:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-release-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.
