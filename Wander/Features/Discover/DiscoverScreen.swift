@@ -167,19 +167,25 @@ struct DiscoverScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .sheet(item: $selectedPlace) { selection in
-                DiscoverPlaceDetailSheet(
-                    visiblePlace: selection.visiblePlace,
-                    attributes: attributes(for: selection.visiblePlace),
-                    isSavedByCurrentUser: isSavedByCurrentUser(selection.visiblePlace),
-                    currentUserID: store.currentUser.id
-                ) {
-                    beginSaveDiscoverPlace(selection.visiblePlace)
-                } edit: {
-                    beginEditDiscoverPlace(selection.visiblePlace)
-                } openProfile: {
-                    openProfileFromPlace(selection.visiblePlace.owner.id)
-                }
+            .fullScreenCover(item: $selectedPlace) { selection in
+                let visiblePlace = selection.visiblePlace
+                PlaceProfileFullScreen(
+                    place: PlaceSheetPlace(visiblePlace: visiblePlace),
+                    saves: saveSummaries(for: visiblePlace),
+                    tasteSaves: tasteSummaries,
+                    currentUserID: store.currentUser.id,
+                    action: isSavedByCurrentUser(visiblePlace) ? .edit : .add,
+                    onBack: {
+                        selectedPlace = nil
+                    },
+                    onAction: {
+                        if isSavedByCurrentUser(visiblePlace) {
+                            beginEditDiscoverPlace(visiblePlace)
+                        } else {
+                            beginSaveDiscoverPlace(visiblePlace)
+                        }
+                    }
+                )
             }
             .sheet(item: $placeSaveFlow) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
@@ -448,9 +454,8 @@ struct DiscoverScreen: View {
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
-        let key = VisiblePlaceGrouping.key(for: visiblePlace)
         return store.currentUserVisiblePlaces.first { currentUserPlace in
-            VisiblePlaceGrouping.key(for: currentUserPlace) == key
+            VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
         }
     }
 
@@ -467,14 +472,41 @@ struct DiscoverScreen: View {
         return storeAttributes.isEmpty ? visiblePlace.attributes : storeAttributes
     }
 
+    private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
+        var seen = Set<String>()
+
+        return (results.places + store.visiblePlaces())
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
+            .filter { visiblePlace in
+                guard !seen.contains(visiblePlace.userPlace.id) else { return false }
+                seen.insert(visiblePlace.userPlace.id)
+                return true
+            }
+            .map { visiblePlace in
+                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes(for: visiblePlace))
+            }
+            .sorted { lhs, rhs in
+                if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
+                if rhs.visiblePlace.owner.id == store.currentUser.id { return false }
+                if lhs.visiblePlace.id == selectedPlace.id { return true }
+                if rhs.visiblePlace.id == selectedPlace.id { return false }
+                return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+            }
+    }
+
+    private var tasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+        }
+    }
+
     private func isSavedByCurrentUser(_ visiblePlace: VisiblePlace) -> Bool {
         if visiblePlace.owner.id == store.currentUser.id {
             return true
         }
 
         return store.currentUserVisiblePlaces.contains { currentUserPlace in
-            currentUserPlace.place.id == visiblePlace.place.id ||
-                currentUserPlace.place.canonicalName.caseInsensitiveCompare(visiblePlace.place.canonicalName) == .orderedSame
+            VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
         }
     }
 

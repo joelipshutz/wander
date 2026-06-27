@@ -5502,6 +5502,149 @@ Merge outcome:
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
 
+## 2026-06-26 14:37 PDT - Codex - Instagram and Apple Maps link fixes
+
+Agent: Codex
+Branch/worktree: `codex/link-fixes-instagram-apple` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: root checkout was clean on `main` but behind `origin/main`; fetched `origin`, fast-forwarded to `3d6cf5216`, inspected existing worktrees, read recent `docs/agent-log.md`, and created a short-lived feature branch in the root checkout so Xcode/phone testing points at this branch.
+
+Goal: investigate why Instagram location links and Apple Maps links are not reliably becoming add-place candidates, implement the fixes in a PR, and create a physical-device build Ryan can test on his phone.
+
+Expected files:
+
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `WanderTests/LinkPlaceParserTests.swift`
+- possibly `supabase/functions/extraction-worker/index.ts` if the backend extraction path needs matching Apple/Instagram support
+- `docs/agent-log.md`
+
+Plan:
+
+- Reproduce supported and failing link shapes with focused parser tests before changing behavior.
+- Fix root causes in the parser/resolver path instead of broadening unsupported links blindly.
+- Run focused tests and a simulator/device build, then open a draft PR for testing.
+
+Root cause:
+
+- The current failing Apple Maps example in Slack is `https://maps.apple/p/hDU04tUWpbVsMn`. It redirects to `https://maps.apple.com/place?address=2327%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=34.004387,-118.485816&name=Urth%20Caff%C3%A9&place-id=I1BEA961C41ECB5A7&map=explore`, but the app only expanded Google short-map hosts, so it treated `maps.apple` as unsupported.
+- Expanded Apple Maps links can include both `address` and `name`; the parser preferred `address` before `name`, which could search the street address as the place name.
+- Apple Maps `ll`/`sll` coordinate hints were not used as `areaHint`, making ambiguous place-name searches less reliable.
+- The reported Instagram example is `https://www.instagram.com/ronan_la`, a business profile URL, not an `/explore/locations/...` URL. The existing parser intentionally handled only Instagram location slugs and ignored profile slugs.
+
+Implementation:
+
+- Recognize `maps.apple` as a short map link and expand it through the same local resolver redirect path as Google short links.
+- Prefer Apple/Map link `name`/`title`/`place` query values before `address`, and preserve `ll`/`sll`/`center`/`coordinate` values as area hints for MapKit search.
+- Parse safe top-level Instagram profile slugs such as `ronan_la` into manual place-name hints while continuing to reject reserved Instagram paths like posts/reels/stories.
+- Added parser regression coverage for the exact expanded Urth Café Apple Maps target, `maps.apple` short-link recognition, Instagram profile slugs, and Instagram post rejection.
+- Hardened the Supabase extraction worker for backend parity: `maps.apple` redirect support, Apple `coordinate` support, Apple path/query name extraction, and `name`/`title`/`place` preference before address.
+
+Validation:
+
+- `curl -Ls` confirmed `https://maps.apple/p/hDU04tUWpbVsMn` redirects to the coordinate-backed Urth Café Apple Maps URL above.
+- `git diff --check` passed.
+- Focused simulator XCTest could not run because local CoreSimulator is out of date: installed `1051.54.0`, Xcode expects `1051.55.0`.
+- Focused physical-device XCTest reached build preparation but failed before running tests because `WanderTests` cannot code sign on device without an Info.plist/generated Info.plist.
+- Generic `build-for-testing` also failed in local tooling/asset-catalog thinning after the CoreSimulator mismatch.
+- Physical iPhone app build succeeded for `Ry’s iPhone` (`00008130-0008095E3408001C`) with `** BUILD SUCCEEDED **`; this compiled `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`.
+- `xcrun xcdevice list --timeout=5` confirmed `Ry’s iPhone` is visible over USB. `xcrun devicectl device install app` hung twice with no output and was interrupted; Xcode was opened on this branch so Ryan can use the visible Run button if CLI install remains stuck.
+
+Handoff:
+
+- Commit: `22fc12a4b` (`fix: support apple and instagram place links`).
+- Draft PR: https://github.com/joelipshutz/wander/pull/40
+- Branch remains checked out in the root Xcode workspace: `codex/link-fixes-instagram-apple`.
+- Test in Xcode on `Ry’s iPhone` by running the app from this branch, then paste:
+  - `https://maps.apple/p/hDU04tUWpbVsMn` - should resolve to an Urth Café candidate instead of unsupported-link/draft behavior.
+  - `https://www.instagram.com/ronan_la` - should search from the `ronan la` profile hint and show place candidates instead of unsupported-link behavior.
+  - An Instagram post/reel URL - should still avoid creating a bogus place from the media ID.
+
+Follow-up checkpoint, 2026-06-26 15:04 PDT:
+
+- Ryan confirmed Instagram links now work, but an Apple Maps link for Heavy Handed produced a save candidate named `2912 Main St` instead of the business name.
+- Starting status: `codex/link-fixes-instagram-apple` was clean and tracking `origin/codex/link-fixes-instagram-apple`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` were checked before editing.
+- Root cause: the first fix covered Apple URLs with an explicit `name=` field. Address-plus-coordinate Apple URLs still parsed `address=` into `ManualPlaceInput.name`, and `MapKitPlaceResolver.resolveLink` immediately searched/saved that address string instead of using the coordinate to resolve nearby POIs.
+- Expected files touched for this follow-up: `Wander/Services/MapKitPlaceResolver.swift`, `WanderTests/LinkPlaceParserTests.swift`, `supabase/functions/extraction-worker/index.ts`, and `docs/agent-log.md`.
+- Implementation direction: when an Apple Maps parsed link has a valid coordinate and the parsed name looks like a street address, use the existing nearby POI lookup instead of the manual address search path. The backend extraction worker should also avoid treating address-only Apple query fields as business names.
+- Implemented `LinkPlaceResolutionHeuristics` and routed parsed Apple address-plus-coordinate links through `nearbyPlaceCandidates(near:)` in `MapKitPlaceResolver`.
+- Added regression coverage for address-only Apple coordinate links and named Apple coordinate links in `LinkPlaceParserTests`.
+- Updated the Supabase extraction worker to only accept Apple Maps names from path/name/title/place/q/query fields when they are not coordinates or street-address-looking strings; it no longer falls back to `address=` for Apple candidates.
+- Validation: `git diff --check` passed.
+- Validation: focused XCTest on installed `iPhone 17 Pro, OS 26.5` compiled the app and `WanderTests` bundle, including `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`, but failed at simulator bootstrap with `Early unexpected exit, operation never finished bootstrapping`; no Swift compile error was reported.
+- Validation: the old documented `iPhone 16 Plus, OS 18.6` simulator destination is not installed on this machine.
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with `** BUILD SUCCEEDED **` using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+- Validation gap: `deno check supabase/functions/extraction-worker/index.ts` could not run because `deno` is not installed.
+
+Follow-up checkpoint, 2026-06-26 15:38 PDT:
+
+- Ryan tested `https://maps.apple/p/7n_0yn8JorskgD` on the PR branch and it still showed `2912 Main St`.
+- Expanded the exact short link with `curl -Ls`; it redirects to `https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=33.999113,-118.481057&name=Heavy%20Handed&place-id=IDED6F7257BB76BBF&map=explore`, so Apple is providing the correct `name=Heavy Handed`.
+- Reproduced the bad MapKit behavior with a temporary `/private/tmp/mapkit_probe`: searching natural language `Heavy Handed 33.999113,-118.481057` returns only `name=2912 Main St`.
+- Reproduced the desired MapKit behavior with the same probe: searching natural language `Heavy Handed` while setting the request region around `33.999113,-118.481057` returns `name=Heavy Handed` first.
+- Root cause: `resolveManualEntry` appended coordinate area hints into `naturalLanguageQuery`; MapKit interpreted that as an address lookup and returned the address candidate.
+- Fix direction: build manual/link MapKit searches with coordinate hints as `request.region`, not query text, while preserving text area hints like `Santa Monica` in the query.
+- Implemented the fix in `MapKitPlaceResolver.resolveManualEntry` by turning coordinate area hints into a tight `MKLocalSearch.Request.region` instead of query text, with focused coverage in `LinkPlaceParserTests`.
+- Validation: focused simulator test command for `WanderTests/LinkPlaceParserTests` compiled and launched, then failed in the environment with XCTest app bootstrap kill before connection (`Early unexpected exit`).
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with exit code 0 using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+
+Merge/release checkpoint, 2026-06-26 16:00 PDT:
+
+- Ryan confirmed the PR #40 Apple Maps fix works on device and explicitly requested squash-merge to `main`, a TestFlight build, Slack update, and REC-46/REC-47 completion in Linear.
+- Starting status: root checkout clean on `codex/link-fixes-instagram-apple` at `57154a702`; `git fetch origin`, `git status --short --branch`, and `git worktree list` checked before merge/release work.
+- PR #40 metadata: open draft, base `main`, head `codex/link-fixes-instagram-apple`, head SHA `57154a702`, merge state `CLEAN`, no GitHub checks reported.
+- Expected files for release follow-up after merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`, `docs/agent-log.md`, and temporary TestFlight release notes outside the repo.
+
+## 2026-06-26 16:11 PDT - Codex - PR #40 Merge and Build 46 TestFlight Release
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`
+
+Goal: finish Ryan's requested PR #40 squash merge, package the Apple Maps/Instagram link fixes into TestFlight build 46, post the tester Slack update, and move REC-46/REC-47 to Done after TestFlight availability.
+
+Merge:
+
+- Marked PR #40 ready for review after Ryan confirmed device testing passed.
+- Squash-merged PR #40 into `main` with merge commit `aad975d11` (`Fix Apple Maps and Instagram link add`) and deleted the remote PR branch.
+- Included release scope since build 45: PR #40 only; app-side Apple Maps short-link/name/coordinate resolution, Instagram business profile link parsing, parser tests, and extraction-worker parity.
+
+Build bump:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `45` to `46` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; reverted broad generated project-setting churn and kept the narrow build-number change pattern used by build 45.
+- Pushed build-number commit `311ae1d92` (`chore: bump testflight build 46`) to `main`.
+
+Validation:
+
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Documented `iPhone 16 Plus, OS=18.6` test destination is not installed on this machine; reran on available `iPhone 17 Pro, OS=26.5`.
+- First full suite run found one test expectation mismatch: the exact Apple Maps URL decodes to `Urth Caffé`, while the regression test expected `Urth Café`.
+- Fixed the test expectation to match Apple's decoded place name and reran validation.
+- Focused `LinkPlaceParserTests/testParsesExpandedMapsAppleShortLinkDestination` passed on `iPhone 17 Pro, OS=26.5`.
+- Full simulator suite passed on `iPhone 17 Pro, OS=26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build46.xcarchive`.
+- Archived `CFBundleVersion` verified as `46`.
+- Export options: `/private/tmp/WanderExportUpload46.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 46 --archive-path /private/tmp/Wander-0.1-build46.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build46-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (46)` id `065b612e-5a1b-4cdd-aca9-709aa9fb0ed8` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Linear:
+
+- Added completion comments to `REC-46` and `REC-47` with PR #40, merge commit, build 46, validation, and TestFlight status.
+- Moved `REC-46` and `REC-47` to `Done`.
+
+Slack:
+
+- Posted tester-facing build 46 release note to `#testflight-feedback` (`C0BAA7DG2AC`) after TestFlight approval.
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782537106044699`.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
@@ -5999,6 +6142,178 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+
+## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch from `origin/main` at `3d6cf52` after build 45 release log.
+
+Goal: make the place profile open as a true full-screen detail page across entrypoints instead of a sheet that shows map/background at top or bottom. Decide and implement detail-page chrome without bottom tabs for this full-screen context unless the existing code makes that unsafe.
+
+Coordination:
+
+- Root checkout is on stale `codex/rating-score-reset`; this work is isolated in the temporary worktree above.
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- GBrain search timed out on a transient PGLite lock; the lock directory was gone on inspection, so this pass is using repo docs and implementation context.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Potential place-profile entrypoints in `Wander/Features/Profile/` and `Wander/Features/Discover/`
+- Focused tests if presentation behavior is covered or can be covered cleanly.
+
+Checkpoint:
+
+- Decided full place profile should not show bottom tabs. It is a task-level detail surface, not one of the four root app tabs, and keeping tabs visible was the source of the sheet/background bleed.
+- Changed the map selected-place flow so the map keeps the compact preview card, then opens the full place profile in a `fullScreenCover`.
+- Changed Discover and Profile saved-place entrypoints from bottom-sheet presentation to the same full-screen place profile surface.
+- Routed full-screen save/edit actions through the existing save/edit flows after dismissing the full-screen detail, avoiding stacked sheet state.
+- Updated the shared back button accessibility label from map-specific copy to `Close place profile`.
+
+Verification:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 152 tests, 0 failures.
+
+Known issues:
+
+- Visual simulator screenshot pass was not run in this session. The implementation is compile/test verified, but final visual QA should still tap through Map, Discover, and Profile on a simulator before TestFlight.
+
+Outcome:
+
+- Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
+- PR: https://github.com/joelipshutz/wander/pull/38
+
+## 2026-06-26 15:32 PDT - Codex - REC-48 Place Pin Stability And Ratings
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch at `6fc0060`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: apply the approved `/plan-eng-review` recommendations for REC-48 on top of PR #38: stable grouped map-pin selection, deterministic mixed owner/status marker rendering, and separate fit/overall/own rating semantics in place profiles.
+
+Coordination:
+
+- Linear issue: https://linear.app/recme/issue/REC-48/place-pins-should-not-cycle-views-and-place-profiles-should
+- Root checkout remains on stale `codex/rating-score-reset`; this work stays in the isolated PR #38 worktree.
+- Fetched `origin` before edits; no new `main` update appeared in fetch output.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+
+Checkpoint:
+
+- Reworked map selection around stable `VisiblePlaceGroup` keys so tapping a grouped place always resolves to the current user's save when present instead of cycling through other people's saves.
+- Made mixed-owner map pin rendering deterministic: current user outline first, social outline second, and `.been` takes precedence over `.wannaGo` within each ownership class. Selection still gets a halo/scale affordance, but the pin's line style and base icon shape no longer mutate on tap.
+- Split place profile ratings into `fitRating`, `overallRating`, and `ownRating`. Unsaved and want states can now show fit plus trusted overall rating while hiding the current user's own rating unless the current user has actually been.
+- Kept per-person save cards from showing a rating for `wannaGo` saves, even if stale/mock data includes a rating score.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
+
+## 2026-06-26 16:42 PDT - Codex - REC-48 Physical Place Grouping Follow-Up
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean at `39f09e8`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: fix Joe's on-device report that tapping Mutsu can still cycle between multiple saved versions and the current user's want view does not include Ryan's followed note. Re-apply the place-profile state contract from the design review: if the current user has a save, that save owns the page state every time; social saves render as rings and evidence inside that same page.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/DiscoverModels.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- Possibly `Wander/Features/Map/MapScreen.swift` if the native MapKit feature path also needs a guard.
+
+Checkpoint:
+
+- Found the remaining split: `VisiblePlaceGrouping.key(for:)` still treated provider IDs as the first grouping boundary, so the same physical place could stay split when separate saves had different MapKit/provider IDs.
+- Reworked `VisiblePlaceGrouping` around alias-aware physical place matching: same normalized name plus nearby coordinate, same normalized name plus address, or exact provider alias can now resolve to one group. The group key is the current user's primary save key when present.
+- Updated Map selection to store the resolved group key rather than the tapped row's raw key, preventing alternate social aliases from driving the selected profile.
+- Updated Map, Discover, and Profile place-profile save aggregation to use `VisiblePlaceGrouping.matches(...)`, so followed notes/ratings from duplicate physical-place rows appear inside the same profile.
+- Added regression coverage for Joe's Mutsu state: current user `wannaGo` plus Ryan `been` with different provider IDs/categories still renders one group, current-user primary state, and dashed current-user plus solid social outlines.
+- Added a second regression for same-name/same-address rows with different coordinates.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.
+
+## 2026-06-26 23:14 PDT - Codex - PR #38 Merge and Build 47 TestFlight Release
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: fresh worktree checked out at PR #38 head `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for release edits. Fetched `origin`; latest `origin/main` is build 46 release commit `6705fb5`.
+
+Goal: fulfill Joe's explicit request to push a new build for the place-profile/full-screen/REC-48 work: update PR #38 onto latest `main`, complete the merge gate, squash-merge to `main`, bump the next TestFlight build number, archive/upload, run the TestFlight helper, update linked status, and post the required tester-facing Slack note.
+
+Expected files before merge/release:
+
+- `docs/agent-log.md`
+- Possible merge-only updates from current `origin/main`
+- Later release bump on `main`: `project.yml` and `Wander.xcodeproj/project.pbxproj`
+
+Release scope since build 46:
+
+- PR #38: full-screen place profiles from Map, Discover, and Profile.
+- PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
+
+## 2026-06-26 23:16 PDT - Codex - PR #38 Merge-Only Review
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: PR #38 is open, ready, and mergeable at `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is not being used for landing work.
+
+Goal: review, visually QA, and squash-merge PR #38 to `main` after Joe confirmed "let's do it." This run is merge-only: no build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note unless Joe explicitly asks for a TestFlight release after merge.
+
+Coordination notes:
+
+- Existing log entry above mentions a Build 47 TestFlight release goal, but no build 47 bump exists on `origin/main`; `project.yml` still reports `CURRENT_PROJECT_VERSION: "46"`.
+- Latest completed release on `origin/main` is build 46, logged by `6705fb5`.
+- Mission Control task: `8ba743d7-2123-47ef-a587-d922038db3a8`.
+
+Expected files for this review/landing pass:
+
+- `docs/agent-log.md`
+- Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
+
+Checkpoint, 2026-06-26 23:29 PDT:
+
+- Current Joe request was handled as PR #38 landing work. PR #38 is now merged to `main` at `b31c9aa`, and `main` also contains build-number bump commit `a9a8ce9` for build 47.
+- No archive/upload, TestFlight helper, build attachment, or Slack release note was run in this pass.
+- Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
+- Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
+- Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
+- `git diff --check` passed.
+- Focused elevated simulator regression run passed: 13 tests, 0 failures.
+- Full elevated simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-pr38-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.
+- Visual QA screenshots passed on iPhone 16 Plus and iPhone 16e with demo fixtures:
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded.png`
+  - `/private/tmp/recme-pr38-visual/discover-demo.png`
+  - `/private/tmp/recme-pr38-visual/profile-demo.png`
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded-iphone16e.png`
+
 ## 2026-06-26 14:57 PDT - Codex - REC-39 Discover LLM Search
 
 Agent: Codex
