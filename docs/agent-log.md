@@ -6327,3 +6327,48 @@ Checkpoint, 2026-06-27 10:00 PDT:
 Outcome, 2026-06-27 10:00 PDT:
 
 - Native bottom tray correction is ready to push to PR #42 on `codex/rec-40-lists-mockups` for Xcode testing.
+
+## 2026-06-27 10:08 PDT - Codex - REC-40 add places and list management follow-up
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: apply Ryan's latest Lists feedback by adding a way to add places from inside a list, restricting collaborator invite candidates to the user's current friends, and adding a destructive Delete List action with confirmation copy that changes for collaborative lists.
+
+Coordination:
+
+- The Xcode-facing checkout is clean and on the REC-40 PR branch.
+- `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also appears at the same commit/branch name in `git worktree list`; do not edit there.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `Wander/Services/WanderLocalStore.swift` or related store/model files if friend graph access needs a small helper
+- `WanderTests/NavigationContractTests.swift` if new visual QA launch states are added
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 10:47 PDT:
+
+- Added a saved-place search surface directly under the list title/metadata on the list detail page. It pulls from `WanderStore.currentUserVisiblePlaces`, excludes places already in the list by normalized name/category, and locally appends selected places to the current list view.
+- Replaced hardcoded collaborator invite candidates with dynamic mutual-follow friends from `WanderStore.following(of: currentUser).filter { relationship == .mutual }`. The demo fixture currently has one mutual friend, so the screenshot shows only that one; live tester accounts should mirror their actual friends list.
+- Added a destructive `Delete List` button under `Save changes` on edit-list sheets. Confirming delete removes the list from the current local Lists UI state.
+- Added delete confirmation copy:
+  - Solo list: `Are you sure you want to delete this list?`
+  - Collaborative list: `Are you sure you want to delete this list? You will be deleting it for everybody.`
+- Added visual QA launch states for solo/collaborative delete confirmations and locked them in `NavigationContractTests`.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-list-management-build4 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-list-management-tests3 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - `git diff --check` passed.
+- Screenshots reviewed:
+  - `/private/tmp/rec40-list-management-screenshots/list-add-place-search.png`
+  - `/private/tmp/rec40-list-management-screenshots/friend-only-collaborators.png`
+  - `/private/tmp/rec40-list-management-screenshots/delete-list-confirmation.png`
+  - `/private/tmp/rec40-list-management-screenshots/collab-delete-list-confirmation.png`
+
+Outcome, 2026-06-27 10:47 PDT:
+
+- REC-40 Lists management follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.
+- Remaining product/backend gap: list additions, collaborator mutations, and deletions are local/mock-functional in this PR; durable persistence/schema remains future work.
