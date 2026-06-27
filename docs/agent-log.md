@@ -6112,3 +6112,23 @@ Verification:
 - `git diff --check` passed.
 - Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
 - Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.
+
+## 2026-06-26 23:14 PDT - Codex - PR #38 Merge and Build 47 TestFlight Release
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: fresh worktree checked out at PR #38 head `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for release edits. Fetched `origin`; latest `origin/main` is build 46 release commit `6705fb5`.
+
+Goal: fulfill Joe's explicit request to push a new build for the place-profile/full-screen/REC-48 work: update PR #38 onto latest `main`, complete the merge gate, squash-merge to `main`, bump the next TestFlight build number, archive/upload, run the TestFlight helper, update linked status, and post the required tester-facing Slack note.
+
+Expected files before merge/release:
+
+- `docs/agent-log.md`
+- Possible merge-only updates from current `origin/main`
+- Later release bump on `main`: `project.yml` and `Wander.xcodeproj/project.pbxproj`
+
+Release scope since build 46:
+
+- PR #38: full-screen place profiles from Map, Discover, and Profile.
+- PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
