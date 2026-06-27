@@ -6418,3 +6418,11 @@ Checkpoint:
 - Reviewed the Discover merge with the PR38 full-screen place-profile changes. Kept Discover place results on `PlaceProfileFullScreen` and removed the obsolete private `DiscoverPlaceDetailSheet` path so v1 does not ship two competing place-detail presentations.
 - Fixed merge fallout in `DiscoverScreen.saveSummaries(for:)` by reading from `placeResults.places` instead of the stale `results.places` identifier.
 - Checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-release-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
+
+Checkpoint:
+
+- PR #41 was squash-merged into `main` as `1a9818169b82000542e8dfcaa85621d4c18e7755` (`Implement REC-39 Discover LLM search`).
+- Fast-forwarded local `main` to `origin/main` and started the explicit TestFlight release requested by Ryan.
+- Incremented `CURRENT_PROJECT_VERSION` from build 47 to build 48 in `project.yml`; next step is `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` matches.
+- Ran `xcodegen generate`; it produced unrelated project-setting normalization in this shell, so the project diff was narrowed back to the same build-number-only pattern used for build 47 while preserving the generated build number.
+- Build 48 validation passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-build48 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
