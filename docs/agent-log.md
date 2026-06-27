@@ -5625,6 +5625,26 @@ Validation:
 - Full simulator suite passed on `iPhone 17 Pro, OS=26.5`:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
 
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build46.xcarchive`.
+- Archived `CFBundleVersion` verified as `46`.
+- Export options: `/private/tmp/WanderExportUpload46.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 46 --archive-path /private/tmp/Wander-0.1-build46.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build46-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (46)` id `065b612e-5a1b-4cdd-aca9-709aa9fb0ed8` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Linear:
+
+- Added completion comments to `REC-46` and `REC-47` with PR #40, merge commit, build 46, validation, and TestFlight status.
+- Moved `REC-46` and `REC-47` to `Done`.
+
+Slack:
+
+- Posted tester-facing build 46 release note to `#testflight-feedback` (`C0BAA7DG2AC`) after TestFlight approval.
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782537106044699`.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
