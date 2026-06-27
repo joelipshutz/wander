@@ -5594,6 +5594,24 @@ Merge/release checkpoint, 2026-06-26 16:00 PDT:
 - PR #40 metadata: open draft, base `main`, head `codex/link-fixes-instagram-apple`, head SHA `57154a702`, merge state `CLEAN`, no GitHub checks reported.
 - Expected files for release follow-up after merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`, `docs/agent-log.md`, and temporary TestFlight release notes outside the repo.
 
+## 2026-06-26 16:11 PDT - Codex - PR #40 Merge and Build 46 TestFlight Release
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`
+
+Goal: finish Ryan's requested PR #40 squash merge, package the Apple Maps/Instagram link fixes into TestFlight build 46, post the tester Slack update, and move REC-46/REC-47 to Done after TestFlight availability.
+
+Merge:
+
+- Marked PR #40 ready for review after Ryan confirmed device testing passed.
+- Squash-merged PR #40 into `main` with merge commit `aad975d11` (`Fix Apple Maps and Instagram link add`) and deleted the remote PR branch.
+- Included release scope since build 45: PR #40 only; app-side Apple Maps short-link/name/coordinate resolution, Instagram business profile link parsing, parser tests, and extraction-worker parity.
+
+Build bump:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `45` to `46` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; reverted broad generated project-setting churn and kept the narrow build-number change pattern used by build 45.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
