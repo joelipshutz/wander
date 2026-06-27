@@ -6411,3 +6411,10 @@ Coordination:
 - Explicit TestFlight release requested, so this run must bump `CURRENT_PROJECT_VERSION`, archive/upload, run the TestFlight helper, and post to `#testflight-feedback` if upload/helper succeeds or is confirmed processing/available.
 
 Expected files before merge: conflict-resolution edits in REC-39 touched files plus `docs/agent-log.md`.
+
+Checkpoint:
+
+- Merged latest `origin/main` into temporary release branch `codex/rec-39-v1-release-20260627`; only conflict was `docs/agent-log.md`, resolved by keeping main's PR38/TestFlight build 47 history and re-appending the REC-39 entries.
+- Reviewed the Discover merge with the PR38 full-screen place-profile changes. Kept Discover place results on `PlaceProfileFullScreen` and removed the obsolete private `DiscoverPlaceDetailSheet` path so v1 does not ship two competing place-detail presentations.
+- Fixed merge fallout in `DiscoverScreen.saveSummaries(for:)` by reading from `placeResults.places` instead of the stale `results.places` identifier.
+- Checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-release-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
