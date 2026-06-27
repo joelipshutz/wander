@@ -6155,3 +6155,13 @@ Checkpoint, 2026-06-26 22:06 PDT:
 - Captured simulator screenshots in `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/`, including no-lists, create, detail, edit, My/Friends/Collabs, and smaller-phone layout checks.
 - Applied Ryan's follow-up request to make the center bottom plus more floaty: increased the button to 66pt, lifted it above the tray, widened the white rim, and added layered shadow.
 - Verification so far: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-build CODE_SIGNING_ALLOWED=NO` passed with the existing traditional headermap warning.
+
+Checkpoint, 2026-06-26 22:31 PDT:
+
+- Merged latest `origin/main` into `codex/rec-40-lists-mockups`; resolved the generated `Wander.xcodeproj/project.pbxproj` conflict by keeping build 46 from `main` plus the new Lists source membership.
+- Added explicit XcodeGen `schemes.Wander` wiring so the documented `xcodebuild test -scheme Wander` test action includes `WanderTests`.
+- Restored generated project settings required for tests after `xcodegen generate`: `PRODUCT_NAME`, Debug `ENABLE_TESTABILITY`, Debug `ONLY_ACTIVE_ARCH`, Debug optimization/conditions, app runpaths, and hosted unit-test `TEST_HOST`/`BUNDLE_LOADER`/runpaths.
+- The exact documented test destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed on this machine, so it failed before running app code with "requested device could not be found."
+- Full simulator suite passed on installed destination `platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tests-iphone17pro-v4 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: command exited 0; remaining output was non-fatal signed-binary stripping warnings and the existing traditional headermap warning.
