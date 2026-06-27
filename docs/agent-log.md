@@ -6079,3 +6079,20 @@ Outcome:
 - Tests/checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator and DerivedData.
 - Known issue: a direct Discover-tab simulator screenshot was not captured because desktop automation permissions blocked switching tabs; app launch screenshot exists at `/private/tmp/rec39-launch.png`.
 - No app shell, root tab navigation, bottom tray, `Wander/App/`, `MapScreen`, project file, Supabase migration, TestFlight build, Slack post, or Linear status changes were made in this pass.
+
+## 2026-06-27 00:45 PDT - Codex - REC-39 V1 Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-39-v1-release-20260627` tracking `origin/codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean at PR #41 head `811ca973c`; latest `origin/main` is `3b3135633`. Root checkout was moved from clean `codex/rec-40-lists-mockups` to this temporary PR41 update branch for merge/release work.
+
+Goal: Ryan approved REC-39 v1 and requested squash-merge to `main`, push a TestFlight build, and post the tester-facing Slack note.
+
+Coordination:
+
+- PR #41 is currently conflicting with `main`; resolve latest-main conflicts before merge.
+- PR #40 remains separate and must not be included in this release.
+- Explicit TestFlight release requested, so this run must bump `CURRENT_PROJECT_VERSION`, archive/upload, run the TestFlight helper, and post to `#testflight-feedback` if upload/helper succeeds or is confirmed processing/available.
+
+Expected files before merge: conflict-resolution edits in REC-39 touched files plus `docs/agent-log.md`.
