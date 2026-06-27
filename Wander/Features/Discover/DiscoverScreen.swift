@@ -86,31 +86,14 @@ struct DiscoverScreen: View {
             .onChange(of: visiblePlaceSignature) { _, _ in
                 Task { await refresh() }
             }
+            .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+                selectedPlaceDestination
+            }
             .sheet(item: $selectedProfile) { profile in
                 ProfileDetailView(profileID: profile.id)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
-            }
-            .fullScreenCover(item: $selectedPlace) { selection in
-                let visiblePlace = selection.visiblePlace
-                PlaceProfileFullScreen(
-                    place: PlaceSheetPlace(visiblePlace: visiblePlace),
-                    saves: saveSummaries(for: visiblePlace),
-                    tasteSaves: tasteSummaries,
-                    currentUserID: store.currentUser.id,
-                    action: isSavedByCurrentUser(visiblePlace) ? .edit : .add,
-                    onBack: {
-                        selectedPlace = nil
-                    },
-                    onAction: {
-                        if isSavedByCurrentUser(visiblePlace) {
-                            beginEditDiscoverPlace(visiblePlace)
-                        } else {
-                            beginSaveDiscoverPlace(visiblePlace)
-                        }
-                    }
-                )
             }
             .sheet(item: $placeSaveFlow) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
@@ -122,6 +105,43 @@ struct DiscoverScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+        }
+    }
+
+    private var selectedPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                selectedPlace != nil
+            },
+            set: { isPresented in
+                if !isPresented {
+                    selectedPlace = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedPlaceDestination: some View {
+        if let selection = selectedPlace {
+            let visiblePlace = selection.visiblePlace
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: visiblePlace),
+                saves: saveSummaries(for: visiblePlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: isSavedByCurrentUser(visiblePlace) ? .edit : .add,
+                onBack: {
+                    selectedPlace = nil
+                },
+                onAction: {
+                    if isSavedByCurrentUser(visiblePlace) {
+                        beginEditDiscoverPlace(visiblePlace)
+                    } else {
+                        beginSaveDiscoverPlace(visiblePlace)
+                    }
+                }
+            )
         }
     }
 

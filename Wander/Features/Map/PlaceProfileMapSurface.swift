@@ -7,7 +7,7 @@ struct PlaceProfileMapSurface: View {
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
-    @Binding var isExpanded: Bool
+    let onOpen: () -> Void
     let onAction: () -> Void
 
     private var presentation: PlaceProfilePresentation {
@@ -29,37 +29,13 @@ struct PlaceProfileMapSurface: View {
                 saves: saves,
                 currentUserID: currentUserID,
                 action: action,
-                onOpen: {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                        isExpanded = true
-                    }
-                },
+                onOpen: onOpen,
                 onAction: onAction
             )
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
-        .animation(.spring(response: 0.30, dampingFraction: 0.86), value: isExpanded)
-        .fullScreenCover(isPresented: $isExpanded) {
-            PlaceProfileFullScreen(
-                place: place,
-                saves: saves,
-                tasteSaves: tasteSaves,
-                currentUserID: currentUserID,
-                action: action,
-                onBack: {
-                    isExpanded = false
-                },
-                onAction: {
-                    isExpanded = false
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 250_000_000)
-                        onAction()
-                    }
-                }
-            )
-        }
     }
 }
 
@@ -93,7 +69,9 @@ struct PlaceProfileFullScreen: View {
             onAction: onAction
         )
         .preferredColorScheme(.light)
-        .interactiveDismissDisabled(false)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
