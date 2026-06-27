@@ -6217,6 +6217,31 @@ Expected files:
 - `WanderTests/NavigationContractTests.swift`
 - `docs/agent-log.md`
 
+Checkpoint, 2026-06-27 00:30 PDT:
+
+- Replaced the partially floating Add control with a custom five-item bottom tray in `WanderRootView`: Map, Discover, Add, Lists, Profile. The Add action still presents the existing add-place sheet, but now sits directly between Discover and Lists.
+- Added bottom clearance to `PlaceProfileMapSurface` and wired Map's selected-place surfaces to use it so the new tray does not cover the standard map place card.
+- Replaced the list map sheet with `ListMapFullScreen`, a full-screen MapKit view scoped to the selected list's places only. Map pins and the horizontal place rail select a list place and open the shared `PlaceProfileMapSurface` presentation.
+- Replaced collaborator mock invite buttons with searchable friend/add sheets for both entry points: the existing list collaborator button and the new-list collaborator plus.
+- Added deterministic REC-40 visual QA launch scenario `mapSelectedPlace` for the selected list-map place card and `createCollaboratorsSearch` for the new-list collaborator search flow.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tray-map-build3 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tray-map-tests3 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - `git diff --check` passed.
+- Screenshots reviewed from the final build:
+  - `/private/tmp/rec40-lists-followup3-screenshots/bottom-tray-five.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/list-map-fullscreen.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/list-map-place-card.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/existing-collaborator-friend-search.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/create-list-collaborator-search.png`
+- Deferred/product decisions unchanged: real list persistence, real friend graph source, invite links/SMS/deep-link routing, and map saved-place add-to-list writes stay out of this REC-40 mock/interactions PR.
+
+Outcome, 2026-06-27 00:33 PDT:
+
+- Follow-up implementation is ready to push to PR #42 on `codex/rec-40-lists-mockups` for Ryan's Xcode testing.
+- No TestFlight build or build-number bump requested.
+- Known test gap: visual verification used the available iPhone 17 Pro / iOS 26.5 simulator because the documented iPhone 16 Plus / iOS 18.6 destination is not installed on this machine.
+
 Checkpoint, 2026-06-26 23:38 PDT:
 
 - `/plan-eng-review` result: scope accepted as a focused PR follow-up. Existing code already had a center Add sheet action, Lists tabs, mocked list models, editor sheet, and list detail shell; this pass reuses those instead of adding persistence or new services.
@@ -6244,3 +6269,25 @@ Outcome, 2026-06-26 23:42 PDT:
 - PR remains https://github.com/joelipshutz/wander/pull/42 and should receive this follow-up commit when pushed.
 - Tests/build passed on the installed simulator target listed above; the documented iPhone 16 Plus / iOS 18.6 simulator remains unavailable on this machine from the earlier REC-40 pass.
 - Known deferred areas are unchanged from the eng review: real persistence, invite deep links/SMS, map add-to-list writes, and place-profile integrations.
+
+## 2026-06-26 23:58 PDT - Codex - REC-40 bottom tray and list map follow-up
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: apply Ryan's latest testing feedback by making the center plus sit as the fifth bottom-tray item between Discover and Lists, replacing the list map sheet with a full-screen list-scoped map that opens standard-style place profile cards, and changing collaborator add flows to friend search/add surfaces.
+
+Coordination:
+
+- The Xcode-facing checkout is already on the REC-40 PR branch and is clean.
+- Existing `/private/tmp/recme-rec-40-lists-mockups` remains detached and stale; continue in the primary checkout per Ryan's Xcode testing request.
+- Other active worktrees are on unrelated category/photo/place/discover branches.
+
+Expected files:
+
+- `Wander/App/WanderRootView.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`

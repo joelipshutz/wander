@@ -7,6 +7,7 @@ struct PlaceProfileMapSurface: View {
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
+    var bottomPadding: CGFloat = WanderTheme.spacing3
     @Binding var isExpanded: Bool
     let onAction: () -> Void
 
@@ -54,7 +55,7 @@ struct PlaceProfileMapSurface: View {
                         onAction: onAction
                     )
                     .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing3)
+                    .padding(.bottom, bottomPadding)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }

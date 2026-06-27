@@ -1,7 +1,9 @@
+@preconcurrency import MapKit
 import SwiftUI
 
 struct ListsScreen: View {
     private let scenario: ListsScreenScenario
+    private let editorStartsWithFriendSearch: Bool
     @State private var selectedScopeID: String
     @State private var editorPresentation: ListEditorPresentation?
     @State private var selectedList: PlaceListMock?
@@ -10,9 +12,10 @@ struct ListsScreen: View {
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
+        self.editorStartsWithFriendSearch = scenario == .createCollaboratorsSearch
         let featuredList = PlaceListMock.featuredDetail
         let initialEditorPresentation: ListEditorPresentation? = switch scenario {
-        case .create:
+        case .create, .createCollaboratorsSearch:
             .create
         case .edit:
             .edit(featuredList)
@@ -20,7 +23,7 @@ struct ListsScreen: View {
             nil
         }
         let initialCollaboratorList: PlaceListMock? = scenario == .collaboratorsSheet ? featuredList : nil
-        let initialMapList: PlaceListMock? = scenario == .mapPreview ? featuredList : nil
+        let initialMapList: PlaceListMock? = scenario == .mapPreview || scenario == .mapSelectedPlace ? featuredList : nil
 
         _selectedScopeID = State(initialValue: scenario.initialScope.rawValue)
         _editorPresentation = State(initialValue: initialEditorPresentation)
@@ -41,7 +44,10 @@ struct ListsScreen: View {
                 detailScreen(for: list)
             }
             .sheet(item: $editorPresentation) { presentation in
-                ListEditorSheet(presentation: presentation)
+                ListEditorSheet(
+                    presentation: presentation,
+                    startsWithFriendSearch: editorStartsWithFriendSearch
+                )
                     .presentationDetents([.large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
@@ -50,10 +56,11 @@ struct ListsScreen: View {
                     .presentationDetents([.medium, .large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
-            .sheet(item: $mapList) { list in
-                ListMapSheet(list: list)
-                    .presentationDetents([.large])
-                    .presentationBackground(WanderTheme.canvasWarm.color)
+            .fullScreenCover(item: $mapList) { list in
+                ListMapFullScreen(
+                    list: list,
+                    initialSelectedPlaceID: scenario == .mapSelectedPlace ? list.places.first?.id : nil
+                )
             }
         }
     }
@@ -264,9 +271,11 @@ enum ListsScreenScenario: String {
     case collabs
     case detail
     case create
+    case createCollaboratorsSearch
     case edit
     case collaboratorsSheet
     case mapPreview
+    case mapSelectedPlace
     case placeDetail
 
     var initialScope: ListsScope {
@@ -282,7 +291,7 @@ enum ListsScreenScenario: String {
 
     var showsDetailRoot: Bool {
         switch self {
-        case .detail, .edit, .collaboratorsSheet, .mapPreview, .placeDetail:
+        case .detail, .edit, .collaboratorsSheet, .mapPreview, .mapSelectedPlace, .placeDetail:
             true
         default:
             false
@@ -438,8 +447,8 @@ private struct ListDetailScreen: View {
             }
         }
         .sheet(item: $selectedPlace) { place in
-            ListPlaceDetailSheet(place: place)
-                .presentationDetents([.medium])
+            ListPlaceProfileSheet(place: place)
+                .presentationDetents([.large])
                 .presentationBackground(WanderTheme.canvasWarm.color)
         }
     }
@@ -651,7 +660,12 @@ private struct ListPlaceRow: View {
 private struct CollaboratorInviteSheet: View {
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
-    @State private var inviteSent = false
+    @State private var selectedCollaborators: [ListCollaboratorMock]
+
+    init(list: PlaceListMock) {
+        self.list = list
+        _selectedCollaborators = State(initialValue: list.collaborators)
+    }
 
     var body: some View {
         NavigationStack {
@@ -665,44 +679,7 @@ private struct CollaboratorInviteSheet: View {
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
 
-                    Button {
-                        inviteSent = true
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Image(systemName: inviteSent ? "checkmark" : "person.badge.plus")
-                                .font(.system(size: 16, weight: .black))
-                            Text(inviteSent ? "Invite ready" : "Invite collaborator")
-                                .font(.system(size: 15, weight: .black))
-                            Spacer()
-                        }
-                        .padding(WanderTheme.spacing3)
-                        .frame(minHeight: 54)
-                        .background(inviteSent ? WanderTheme.categorySage.color.opacity(0.26) : WanderTheme.textInk.color)
-                        .foregroundStyle(inviteSent ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    }
-                    .buttonStyle(.plain)
-
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                        Text("people")
-                            .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-
-                        if list.collaborators.isEmpty {
-                            collaboratorRow(collaborator: PlaceListMock.joe, detail: inviteSent ? "pending invite" : "suggested")
-                        } else {
-                            ForEach(list.collaborators) { collaborator in
-                                collaboratorRow(collaborator: collaborator, detail: "can add places")
-                            }
-
-                            if inviteSent, !list.collaborators.contains(where: { $0.id == PlaceListMock.joe.id }) {
-                                collaboratorRow(collaborator: PlaceListMock.joe, detail: "pending invite")
-                            }
-                        }
-                    }
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
@@ -719,61 +696,26 @@ private struct CollaboratorInviteSheet: View {
             }
         }
     }
-
-    private func collaboratorRow(collaborator: ListCollaboratorMock, detail: String) -> some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            WanderAvatar(initials: collaborator.initials, size: 36, color: collaborator.color)
-            Text("@\(collaborator.name.lowercased())")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-            Text(detail)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-            Spacer()
-        }
-    }
 }
 
-private struct ListMapSheet: View {
+private struct FriendCollaboratorSearchSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let list: PlaceListMock
+    @Binding var selectedCollaborators: [ListCollaboratorMock]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text(list.name)
+                        Text("invite collaborator")
                             .font(.system(size: 30, weight: .black, design: .rounded))
-                            .lineLimit(2)
-                        Text("\(list.places.count) places")
+                        Text("Search friends and add the people who can contribute to this list.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    ListMapPreview(list: list, height: 320, label: "list map")
-
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        ForEach(list.places) { place in
-                            HStack(spacing: WanderTheme.spacing2) {
-                                Image(systemName: "mappin.circle.fill")
-                                    .font(.system(size: 18, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracotta.color)
-                                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                                    Text(place.name)
-                                        .font(.system(size: 14, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
-                                    Text(place.metadata)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(WanderTheme.textMuted.color)
-                                }
-                                Spacer()
-                            }
-                            .padding(WanderTheme.spacing3)
-                            .background(WanderTheme.surfaceBone.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                        }
-                    }
+                    FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
@@ -792,46 +734,304 @@ private struct ListMapSheet: View {
     }
 }
 
-private struct ListPlaceDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let place: ListPlaceMock
+private struct FriendCollaboratorSearchContent: View {
+    @Binding var selectedCollaborators: [ListCollaboratorMock]
+    @State private var query = ""
+
+    private var filteredFriends: [ListCollaboratorMock] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return PlaceListMock.friendCandidates }
+
+        return PlaceListMock.friendCandidates.filter { friend in
+            friend.name.lowercased().contains(normalized)
+                || friend.handle.lowercased().contains(normalized)
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            ZStack {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
-                    .fill(place.tint)
-
-                Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                    .font(.system(size: 40, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                TextField("Search friends", text: $query)
+                    .font(.system(size: 16, weight: .bold))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
-            .frame(height: 150)
+            .padding(WanderTheme.spacing3)
+            .frame(minHeight: 54)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+
+            if !selectedCollaborators.isEmpty {
+                HStack(spacing: WanderTheme.spacing2) {
+                    FacePileView(collaborators: selectedCollaborators, size: 28)
+                    Text("\(selectedCollaborators.count) selected")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Spacer()
+                }
+                .padding(.horizontal, WanderTheme.spacing1)
+            }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text(place.name)
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .lineLimit(2)
-                Text(place.metadata)
-                    .font(.system(size: 15, weight: .semibold))
+                Text("friends")
+                    .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
-            }
 
-            Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Text("Done")
-                    .font(.system(size: 15, weight: .black))
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(WanderTheme.textInk.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                if filteredFriends.isEmpty {
+                    Text("No friends match that search.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                } else {
+                    ForEach(filteredFriends) { friend in
+                        friendRow(friend)
+                    }
+                }
             }
-            .buttonStyle(.plain)
         }
-        .padding(WanderTheme.spacing4)
+    }
+
+    private func friendRow(_ friend: ListCollaboratorMock) -> some View {
+        let isSelected = selectedCollaborators.contains { $0.id == friend.id }
+
+        return Button {
+            if isSelected {
+                selectedCollaborators.removeAll { $0.id == friend.id }
+            } else {
+                selectedCollaborators.append(friend)
+            }
+        } label: {
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderAvatar(initials: friend.initials, size: 40, color: friend.color)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(friend.name)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("@\(friend.handle)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle.fill")
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(isSelected ? WanderTheme.categorySage.color : WanderTheme.terracotta.color)
+            }
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isSelected ? "Remove \(friend.name)" : "Add \(friend.name)")
+    }
+}
+
+private struct ListMapFullScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    let list: PlaceListMock
+    @State private var position: MapCameraPosition
+    @State private var selectedPlace: ListPlaceMock?
+    @State private var isPlaceProfileExpanded = false
+
+    init(list: PlaceListMock, initialSelectedPlaceID: String? = nil) {
+        self.list = list
+        _position = State(initialValue: .region(list.mapRegion))
+        _selectedPlace = State(initialValue: list.places.first { $0.id == initialSelectedPlaceID })
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Map(position: $position) {
+                ForEach(list.places) { place in
+                    Annotation(place.name, coordinate: place.coordinate) {
+                        Button {
+                            selectedPlace = place
+                            isPlaceProfileExpanded = false
+                        } label: {
+                            ListMapMarker(place: place, isSelected: selectedPlace?.id == place.id)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .black))
+                            .frame(width: 44, height: 44)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close list map")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(list.name)
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                            .lineLimit(1)
+                        Text("\(list.places.count) places")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer()
+                }
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.92))
+                .clipShape(Capsule())
+                .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, x: 0, y: 8)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.top, WanderTheme.spacing2)
+
+                Spacer()
+            }
+
+            if let selectedPlace {
+                PlaceProfileMapSurface(
+                    place: PlaceSheetPlace(listPlace: selectedPlace),
+                    saves: [],
+                    tasteSaves: [],
+                    currentUserID: "you",
+                    action: .none,
+                    isExpanded: $isPlaceProfileExpanded
+                ) {}
+                .zIndex(20)
+            } else {
+                ListMapPlaceRail(list: list) { place in
+                    selectedPlace = place
+                    isPlaceProfileExpanded = false
+                }
+                .zIndex(10)
+            }
+        }
+        .background(WanderTheme.canvasWarm.color)
+    }
+}
+
+private struct ListMapMarker: View {
+    let place: ListPlaceMock
+    let isSelected: Bool
+
+    var body: some View {
+        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+            .font(.system(size: isSelected ? 17 : 16, weight: .black))
+            .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
+            .background(WanderTheme.surfaceRaised.color)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(place.status == .wannaGo ? WanderTheme.pinSocial.color : WanderTheme.pinYou.color, style: StrokeStyle(lineWidth: isSelected ? 4 : 3, dash: place.status == .wannaGo ? [5, 4] : []))
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: isSelected ? 9 : 6, x: 0, y: 2)
+            .scaleEffect(isSelected ? 1.08 : 1)
+            .accessibilityLabel("\(place.name) on list map")
+    }
+}
+
+private struct ListMapPlaceRail: View {
+    let list: PlaceListMock
+    let onSelect: (ListPlaceMock) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack {
+                Text("places in this list")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ForEach(list.places) { place in
+                        ListMapPlaceTile(place: place) {
+                            onSelect(place)
+                        }
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+            }
+        }
+        .padding(.vertical, WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 24, x: 0, y: 12)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.bottom, WanderTheme.spacing3)
+    }
+}
+
+private struct ListMapPlaceTile: View {
+    let place: ListPlaceMock
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .fill(place.tint)
+                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                }
+                .frame(width: 62, height: 62)
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(place.name)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(2)
+                    Text(place.metadata)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+                .frame(width: 178, alignment: .leading)
+            }
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(place.name)")
+    }
+}
+
+private struct ListPlaceProfileSheet: View {
+    let place: ListPlaceMock
+    @State private var isExpanded = true
+
+    var body: some View {
+        PlaceProfileMapSurface(
+            place: PlaceSheetPlace(listPlace: place),
+            saves: [],
+            tasteSaves: [],
+            currentUserID: "you",
+            action: .none,
+            isExpanded: $isExpanded
+        ) {}
         .wanderScreen()
     }
 }
@@ -857,8 +1057,9 @@ private struct ListEditorSheet: View {
     @State private var description: String
     @State private var isStealth: Bool
     @State private var stagedCollaborators: [ListCollaboratorMock]
+    @State private var isShowingFriendSearch = false
 
-    init(presentation: ListEditorPresentation) {
+    init(presentation: ListEditorPresentation, startsWithFriendSearch: Bool = false) {
         self.presentation = presentation
 
         switch presentation {
@@ -866,13 +1067,14 @@ private struct ListEditorSheet: View {
             _title = State(initialValue: "")
             _description = State(initialValue: "")
             _isStealth = State(initialValue: false)
-            _stagedCollaborators = State(initialValue: [PlaceListMock.maya])
+            _stagedCollaborators = State(initialValue: [])
         case .edit(let list):
             _title = State(initialValue: list.name)
             _description = State(initialValue: list.description)
             _isStealth = State(initialValue: list.isStealth)
             _stagedCollaborators = State(initialValue: list.collaborators)
         }
+        _isShowingFriendSearch = State(initialValue: startsWithFriendSearch)
     }
 
     var body: some View {
@@ -919,6 +1121,11 @@ private struct ListEditorSheet: View {
                     .font(.system(size: 14, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
                 }
+            }
+            .sheet(isPresented: $isShowingFriendSearch) {
+                FriendCollaboratorSearchSheet(selectedCollaborators: $stagedCollaborators)
+                    .presentationDetents([.large])
+                    .presentationBackground(WanderTheme.canvasWarm.color)
             }
         }
     }
@@ -979,11 +1186,7 @@ private struct ListEditorSheet: View {
                 Spacer()
 
                 Button {
-                    if stagedCollaborators.contains(where: { $0.id == PlaceListMock.joe.id }) {
-                        stagedCollaborators.removeAll { $0.id == PlaceListMock.joe.id }
-                    } else {
-                        stagedCollaborators.append(PlaceListMock.joe)
-                    }
+                    isShowingFriendSearch = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .black))
@@ -1052,6 +1255,13 @@ private struct PlaceListMock: Identifiable, Hashable {
 
     var previewPlaces: [ListPlaceMock] { places }
 
+    var mapRegion: MKCoordinateRegion {
+        MapRegionFitter.region(fitting: places.map(\.coordinate)) ?? MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
+            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+        )
+    }
+
     var subtitle: String {
         if ownerName == "You" {
             return "\(places.count) places"
@@ -1086,13 +1296,54 @@ private struct ListPlaceMock: Identifiable {
     let metadata: String
     let tint: Color
     let pinPosition: CGPoint
+    let latitude: Double
+    let longitude: Double
+    let status: PlaceStatus
+    let note: String?
+
+    init(
+        id: String,
+        name: String,
+        category: String,
+        metadata: String,
+        tint: Color,
+        pinPosition: CGPoint,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        status: PlaceStatus = .wannaGo,
+        note: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.metadata = metadata
+        self.tint = tint
+        self.pinPosition = pinPosition
+        self.latitude = latitude ?? 34.075 + (84 - pinPosition.y) * 0.00042
+        self.longitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
+        self.status = status
+        self.note = note
+    }
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 }
 
 private struct ListCollaboratorMock: Identifiable {
     let id: String
     let name: String
     let initials: String
+    let handle: String
     let color: Color
+
+    init(id: String, name: String, initials: String, handle: String? = nil, color: Color) {
+        self.id = id
+        self.name = name
+        self.initials = initials
+        self.handle = handle ?? name.lowercased()
+        self.color = color
+    }
 }
 
 private extension PlaceListMock {
@@ -1100,6 +1351,10 @@ private extension PlaceListMock {
     static let maya = ListCollaboratorMock(id: "maya", name: "Maya", initials: "M", color: WanderTheme.avatarSofia.color)
     static let ryan = ListCollaboratorMock(id: "ryan", name: "Ryan", initials: "R", color: WanderTheme.avatarRyan.color)
     static let sofia = ListCollaboratorMock(id: "sofia", name: "Sofia", initials: "S", color: WanderTheme.avatarAndrew.color)
+    static let andrew = ListCollaboratorMock(id: "andrew", name: "Andrew", initials: "A", color: WanderTheme.pinSocial.color)
+    static let nina = ListCollaboratorMock(id: "nina", name: "Nina", initials: "N", color: WanderTheme.categorySage.color)
+
+    static let friendCandidates = [maya, ryan, sofia, joe, andrew, nina]
 
     static let laptopPlaces = [
         ListPlaceMock(id: "circuit", name: "Circuit Coffee", category: "coffee", metadata: "coffee - outlets - quiet", tint: WanderTheme.skyTint.color, pinPosition: CGPoint(x: 78, y: 70)),
@@ -1143,4 +1398,26 @@ private extension PlaceListMock {
     ]
 
     static let featuredDetail = mine[0]
+}
+
+private extension PlaceSheetPlace {
+    init(listPlace: ListPlaceMock) {
+        self.id = listPlace.id
+        self.name = listPlace.name
+        self.category = listPlace.category
+        self.address = nil
+        self.locality = "Los Angeles"
+        self.region = "CA"
+        self.latitude = listPlace.latitude
+        self.longitude = listPlace.longitude
+        self.websiteURLString = nil
+        self.phoneNumber = nil
+        self.actionLinksJSON = nil
+        self.compactSubtitleOverride = listPlace.metadata
+        self.status = listPlace.status
+        self.visibility = .followers
+        self.note = listPlace.note
+        self.noteOwnerID = "you"
+        self.noteOwnerName = "You"
+    }
 }

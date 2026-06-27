@@ -39,6 +39,14 @@ final class NavigationContractTests: XCTestCase {
             .mapPreview
         )
         XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "mapSelectedPlace"]),
+            .mapSelectedPlace
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "createCollaboratorsSearch"]),
+            .createCollaboratorsSearch
+        )
+        XCTAssertEqual(
             ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "placeDetail"]),
             .placeDetail
         )

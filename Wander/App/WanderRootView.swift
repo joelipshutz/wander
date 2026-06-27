@@ -31,41 +31,28 @@ struct WanderRootView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            TabView(selection: $selectedTab) {
-                MapScreen()
-                    .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
-                    .tag(WanderTab.map)
+        TabView(selection: $selectedTab) {
+            MapScreen()
+                .tag(WanderTab.map)
 
-                DiscoverScreen()
-                    .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
-                    .tag(WanderTab.discover)
+            DiscoverScreen()
+                .tag(WanderTab.discover)
 
-                ListsScreen()
-                    .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
-                    .tag(WanderTab.lists)
+            ListsScreen()
+                .tag(WanderTab.lists)
 
-                ProfileScreen()
-                    .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
-                    .tag(WanderTab.profile)
-            }
-
-            Button {
+            ProfileScreen()
+                .tag(WanderTab.profile)
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            WanderBottomTray(selectedTab: $selectedTab) {
                 addTabResetToken = UUID()
                 isPresentingAdd = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .black))
-                    .frame(width: 58, height: 58)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-                    .shadow(color: WanderTheme.terracotta.color.opacity(0.20), radius: 14, x: 0, y: 7)
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 7, x: 0, y: 3)
-                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 4))
             }
-            .accessibilityLabel("Add a place")
-            .padding(.bottom, WanderTheme.spacing3)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.top, WanderTheme.spacing2)
+            .padding(.bottom, WanderTheme.spacing2)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
@@ -175,6 +162,70 @@ struct WanderRootView: View {
         case .demo:
             WanderFixtures.seed()
         }
+    }
+}
+
+private struct WanderBottomTray: View {
+    @Binding var selectedTab: WanderTab
+    let onAdd: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            trayButton(.map)
+            trayButton(.discover)
+            addButton
+            trayButton(.lists)
+            trayButton(.profile)
+        }
+        .padding(5)
+        .frame(minHeight: 72)
+        .background(WanderTheme.surfaceRaised.color.opacity(0.96))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(WanderTheme.borderHairline.color.opacity(0.7), lineWidth: 1)
+        )
+        .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 22, x: 0, y: 10)
+    }
+
+    private func trayButton(_ tab: WanderTab) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 23, weight: .black))
+                Text(tab.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .foregroundStyle(selectedTab == tab ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+            .background(selectedTab == tab ? WanderTheme.surfaceSand.color : Color.clear)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+    }
+
+    private var addButton: some View {
+        Button(action: onAdd) {
+            VStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 23, weight: .black))
+                    .frame(width: 42, height: 42)
+                    .background(WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .clipShape(Circle())
+                Text("Add")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a place")
     }
 }
 

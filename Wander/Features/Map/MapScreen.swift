@@ -486,6 +486,7 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .add,
+                bottomPadding: WanderTheme.spacing16 + WanderTheme.spacing8,
                 isExpanded: $isPlaceSheetExpanded
             ) {
                 mapSaveFlow = MapPlaceSaveContext.addCandidate(
@@ -502,6 +503,7 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
+                bottomPadding: WanderTheme.spacing16 + WanderTheme.spacing8,
                 isExpanded: $isPlaceSheetExpanded
             ) {
                 performAction(for: selectedPlace)
