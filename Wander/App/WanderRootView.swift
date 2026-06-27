@@ -55,17 +55,17 @@ struct WanderRootView: View {
                 isPresentingAdd = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 25, weight: .black))
-                    .frame(width: 66, height: 66)
+                    .font(.system(size: 22, weight: .black))
+                    .frame(width: 58, height: 58)
                     .background(WanderTheme.terracotta.color)
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Circle())
-                    .shadow(color: WanderTheme.terracotta.color.opacity(0.22), radius: 22, x: 0, y: 12)
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 10, x: 0, y: 5)
-                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 5))
+                    .shadow(color: WanderTheme.terracotta.color.opacity(0.20), radius: 14, x: 0, y: 7)
+                    .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 7, x: 0, y: 3)
+                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 4))
             }
             .accessibilityLabel("Add a place")
-            .padding(.bottom, WanderTheme.spacing6)
+            .padding(.bottom, WanderTheme.spacing3)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)

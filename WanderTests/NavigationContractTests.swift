@@ -29,6 +29,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertNil(WanderRootView.resolvedInitialPresentation(from: ["Wander"]))
     }
 
+    func testListsScreenCanResolveInteractiveVisualQAScenarios() {
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collaboratorsSheet"]),
+            .collaboratorsSheet
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "mapPreview"]),
+            .mapPreview
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "placeDetail"]),
+            .placeDetail
+        )
+        XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)

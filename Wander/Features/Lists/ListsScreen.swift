@@ -5,44 +5,73 @@ struct ListsScreen: View {
     @State private var selectedScopeID: String
     @State private var editorPresentation: ListEditorPresentation?
     @State private var selectedList: PlaceListMock?
+    @State private var collaboratorList: PlaceListMock?
+    @State private var mapList: PlaceListMock?
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
+        let featuredList = PlaceListMock.featuredDetail
         let initialEditorPresentation: ListEditorPresentation? = switch scenario {
         case .create:
             .create
         case .edit:
-            .edit(PlaceListMock.featuredDetail)
+            .edit(featuredList)
         default:
             nil
         }
+        let initialCollaboratorList: PlaceListMock? = scenario == .collaboratorsSheet ? featuredList : nil
+        let initialMapList: PlaceListMock? = scenario == .mapPreview ? featuredList : nil
 
         _selectedScopeID = State(initialValue: scenario.initialScope.rawValue)
         _editorPresentation = State(initialValue: initialEditorPresentation)
+        _collaboratorList = State(initialValue: initialCollaboratorList)
+        _mapList = State(initialValue: initialMapList)
     }
 
     var body: some View {
         NavigationStack {
             Group {
                 if scenario.showsDetailRoot {
-                    ListDetailScreen(list: PlaceListMock.featuredDetail) {
-                        editorPresentation = .edit(PlaceListMock.featuredDetail)
-                    }
+                    detailScreen(for: PlaceListMock.featuredDetail, initialSelectedPlace: scenario == .placeDetail ? PlaceListMock.featuredDetail.places.first : nil)
                 } else {
                     homeScreen
                 }
             }
             .navigationDestination(item: $selectedList) { list in
-                ListDetailScreen(list: list) {
-                    editorPresentation = .edit(list)
-                }
+                detailScreen(for: list)
             }
             .sheet(item: $editorPresentation) { presentation in
                 ListEditorSheet(presentation: presentation)
                     .presentationDetents([.large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
+            .sheet(item: $collaboratorList) { list in
+                CollaboratorInviteSheet(list: list)
+                    .presentationDetents([.medium, .large])
+                    .presentationBackground(WanderTheme.canvasWarm.color)
+            }
+            .sheet(item: $mapList) { list in
+                ListMapSheet(list: list)
+                    .presentationDetents([.large])
+                    .presentationBackground(WanderTheme.canvasWarm.color)
+            }
         }
+    }
+
+    private func detailScreen(for list: PlaceListMock, initialSelectedPlace: ListPlaceMock? = nil) -> some View {
+        ListDetailScreen(
+            list: list,
+            onEdit: {
+                editorPresentation = .edit(list)
+            },
+            onCollaborators: {
+                collaboratorList = list
+            },
+            onOpenMap: {
+                mapList = list
+            },
+            initialSelectedPlace: initialSelectedPlace
+        )
     }
 
     private var homeScreen: some View {
@@ -187,7 +216,7 @@ struct ListsScreen: View {
                 Button {
                     selectedList = list
                 } label: {
-                    ListTile(list: list)
+                    ListTile(list: list, showsCollaborators: selectedScope != .mine)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
@@ -236,6 +265,9 @@ enum ListsScreenScenario: String {
     case detail
     case create
     case edit
+    case collaboratorsSheet
+    case mapPreview
+    case placeDetail
 
     var initialScope: ListsScope {
         switch self {
@@ -249,7 +281,12 @@ enum ListsScreenScenario: String {
     }
 
     var showsDetailRoot: Bool {
-        self == .detail || self == .edit
+        switch self {
+        case .detail, .edit, .collaboratorsSheet, .mapPreview, .placeDetail:
+            true
+        default:
+            false
+        }
     }
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> ListsScreenScenario {
@@ -268,6 +305,7 @@ enum ListsScreenScenario: String {
 
 private struct ListTile: View {
     let list: PlaceListMock
+    let showsCollaborators: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -295,7 +333,7 @@ private struct ListTile: View {
                     .lineLimit(1)
             }
 
-            if !list.collaborators.isEmpty {
+            if showsCollaborators, !list.collaborators.isEmpty {
                 HStack(spacing: WanderTheme.spacing2) {
                     FacePileView(collaborators: list.collaborators, size: 24)
                     Text(list.collaboratorSummary)
@@ -343,7 +381,25 @@ private struct ListPreviewMosaic: View {
 
 private struct ListDetailScreen: View {
     let list: PlaceListMock
-    var onEdit: () -> Void = {}
+    var onEdit: () -> Void
+    var onCollaborators: () -> Void
+    var onOpenMap: () -> Void
+    @State private var removedPlaceIDs = Set<String>()
+    @State private var selectedPlace: ListPlaceMock?
+
+    init(
+        list: PlaceListMock,
+        onEdit: @escaping () -> Void = {},
+        onCollaborators: @escaping () -> Void = {},
+        onOpenMap: @escaping () -> Void = {},
+        initialSelectedPlace: ListPlaceMock? = nil
+    ) {
+        self.list = list
+        self.onEdit = onEdit
+        self.onCollaborators = onCollaborators
+        self.onOpenMap = onOpenMap
+        _selectedPlace = State(initialValue: initialSelectedPlace)
+    }
 
     var body: some View {
         ScrollView {
@@ -370,7 +426,7 @@ private struct ListDetailScreen: View {
                 }
                 .accessibilityLabel("Edit list")
 
-                Button {} label: {
+                Button(action: onCollaborators) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 16, weight: .black))
                         .frame(width: 40, height: 40)
@@ -380,6 +436,11 @@ private struct ListDetailScreen: View {
                 }
                 .accessibilityLabel("Manage collaborators")
             }
+        }
+        .sheet(item: $selectedPlace) { place in
+            ListPlaceDetailSheet(place: place)
+                .presentationDetents([.medium])
+                .presentationBackground(WanderTheme.canvasWarm.color)
         }
     }
 
@@ -414,7 +475,7 @@ private struct ListDetailScreen: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                 Spacer()
-                Text("\(list.places.count) places")
+                Text("\(visiblePlaces.count) places")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracottaDark.color)
             }
@@ -423,6 +484,53 @@ private struct ListDetailScreen: View {
     }
 
     private var mapPreview: some View {
+        Button(action: onOpenMap) {
+            ListMapPreview(list: list, height: 168, label: "open list map")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open map preview for \(list.name)")
+    }
+
+    private var placeRows: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Text("places")
+                .font(.system(size: 18, weight: .black))
+
+            if visiblePlaces.isEmpty {
+                Text("No places in this list yet.")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing4)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            } else {
+                ForEach(visiblePlaces) { place in
+                    ListPlaceRow(
+                        place: place,
+                        onOpen: {
+                            selectedPlace = place
+                        },
+                        onRemove: {
+                            removedPlaceIDs.insert(place.id)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var visiblePlaces: [ListPlaceMock] {
+        list.places.filter { !removedPlaceIDs.contains($0.id) }
+    }
+}
+
+private struct ListMapPreview: View {
+    let list: PlaceListMock
+    let height: CGFloat
+    let label: String
+
+    var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
                 .fill(
@@ -437,17 +545,19 @@ private struct ListDetailScreen: View {
                     )
                 )
 
-            ForEach(Array(list.places.prefix(5).enumerated()), id: \.offset) { index, place in
-                Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: index == 0 ? 34 : 26, weight: .black))
-                    .foregroundStyle(index == 0 ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color)
-                    .position(place.pinPosition)
+            GeometryReader { proxy in
+                ForEach(Array(list.places.prefix(5).enumerated()), id: \.offset) { index, place in
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: index == 0 ? 34 : 26, weight: .black))
+                        .foregroundStyle(index == 0 ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color)
+                        .position(scaledPosition(for: place, in: proxy.size))
+                }
             }
 
             VStack {
                 Spacer()
                 HStack {
-                    Label("list map preview", systemImage: "map.fill")
+                    Label(label, systemImage: "map.fill")
                         .font(.system(size: 12, weight: .black))
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(minHeight: 34)
@@ -459,7 +569,7 @@ private struct ListDetailScreen: View {
                 .padding(WanderTheme.spacing3)
             }
         }
-        .frame(height: 168)
+        .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
@@ -467,48 +577,58 @@ private struct ListDetailScreen: View {
         )
     }
 
-    private var placeRows: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("places")
-                .font(.system(size: 18, weight: .black))
+    private func scaledPosition(for place: ListPlaceMock, in size: CGSize) -> CGPoint {
+        let baseWidth: CGFloat = 340
+        let baseHeight: CGFloat = 168
+        let x = place.pinPosition.x / baseWidth * size.width
+        let y = place.pinPosition.y / baseHeight * size.height
 
-            ForEach(list.places) { place in
-                ListPlaceRow(place: place)
-            }
-        }
+        return CGPoint(
+            x: min(max(x, 24), max(size.width - 24, 24)),
+            y: min(max(y, 24), max(size.height - 24, 24))
+        )
     }
 }
 
 private struct ListPlaceRow: View {
     let place: ListPlaceMock
+    let onOpen: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            ZStack {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .fill(place.tint)
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                            .fill(place.tint)
 
-                Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                    }
+                    .frame(width: 56, height: 56)
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text(place.name)
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(1)
+
+                        Text(place.metadata)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing2)
+                }
+                .contentShape(Rectangle())
             }
-            .frame(width: 56, height: 56)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(place.name)")
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(place.name)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
-
-                Text(place.metadata)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Button {} label: {
+            Button(action: onRemove) {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .black))
                     .frame(width: 40, height: 40)
@@ -525,6 +645,194 @@ private struct ListPlaceRow: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
         )
+    }
+}
+
+private struct CollaboratorInviteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let list: PlaceListMock
+    @State private var inviteSent = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("collaborators")
+                            .font(.system(size: 30, weight: .black, design: .rounded))
+                        Text(list.name)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Button {
+                        inviteSent = true
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Image(systemName: inviteSent ? "checkmark" : "person.badge.plus")
+                                .font(.system(size: 16, weight: .black))
+                            Text(inviteSent ? "Invite ready" : "Invite collaborator")
+                                .font(.system(size: 15, weight: .black))
+                            Spacer()
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .frame(minHeight: 54)
+                        .background(inviteSent ? WanderTheme.categorySage.color.opacity(0.26) : WanderTheme.textInk.color)
+                        .foregroundStyle(inviteSent ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    }
+                    .buttonStyle(.plain)
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                        Text("people")
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+
+                        if list.collaborators.isEmpty {
+                            collaboratorRow(collaborator: PlaceListMock.joe, detail: inviteSent ? "pending invite" : "suggested")
+                        } else {
+                            ForEach(list.collaborators) { collaborator in
+                                collaboratorRow(collaborator: collaborator, detail: "can add places")
+                            }
+
+                            if inviteSent, !list.collaborators.contains(where: { $0.id == PlaceListMock.joe.id }) {
+                                collaboratorRow(collaborator: PlaceListMock.joe, detail: "pending invite")
+                            }
+                        }
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+            .wanderScreen()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+        }
+    }
+
+    private func collaboratorRow(collaborator: ListCollaboratorMock, detail: String) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            WanderAvatar(initials: collaborator.initials, size: 36, color: collaborator.color)
+            Text("@\(collaborator.name.lowercased())")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+            Text(detail)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+        }
+    }
+}
+
+private struct ListMapSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let list: PlaceListMock
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text(list.name)
+                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .lineLimit(2)
+                        Text("\(list.places.count) places")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    ListMapPreview(list: list, height: 320, label: "list map")
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        ForEach(list.places) { place in
+                            HStack(spacing: WanderTheme.spacing2) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.system(size: 18, weight: .black))
+                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                    Text(place.name)
+                                        .font(.system(size: 14, weight: .black))
+                                        .foregroundStyle(WanderTheme.textInk.color)
+                                    Text(place.metadata)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                }
+                                Spacer()
+                            }
+                            .padding(WanderTheme.spacing3)
+                            .background(WanderTheme.surfaceBone.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        }
+                    }
+                }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+            .wanderScreen()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+        }
+    }
+}
+
+private struct ListPlaceDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let place: ListPlaceMock
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
+                    .fill(place.tint)
+
+                Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                    .font(.system(size: 40, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+            }
+            .frame(height: 150)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text(place.name)
+                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .lineLimit(2)
+                Text(place.metadata)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Spacer()
+
+            Button {
+                dismiss()
+            } label: {
+                Text("Done")
+                    .font(.system(size: 15, weight: .black))
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(WanderTheme.textInk.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(WanderTheme.spacing4)
+        .wanderScreen()
     }
 }
 
@@ -548,6 +856,7 @@ private struct ListEditorSheet: View {
     @State private var title: String
     @State private var description: String
     @State private var isStealth: Bool
+    @State private var stagedCollaborators: [ListCollaboratorMock]
 
     init(presentation: ListEditorPresentation) {
         self.presentation = presentation
@@ -557,10 +866,12 @@ private struct ListEditorSheet: View {
             _title = State(initialValue: "")
             _description = State(initialValue: "")
             _isStealth = State(initialValue: false)
+            _stagedCollaborators = State(initialValue: [PlaceListMock.maya])
         case .edit(let list):
             _title = State(initialValue: list.name)
             _description = State(initialValue: list.description)
             _isStealth = State(initialValue: list.isStealth)
+            _stagedCollaborators = State(initialValue: list.collaborators)
         }
     }
 
@@ -617,15 +928,6 @@ private struct ListEditorSheet: View {
         return false
     }
 
-    private var visibleCollaborators: [ListCollaboratorMock] {
-        switch presentation {
-        case .create:
-            [PlaceListMock.maya]
-        case .edit(let list):
-            list.collaborators
-        }
-    }
-
     private func fieldBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
@@ -676,7 +978,13 @@ private struct ListEditorSheet: View {
 
                 Spacer()
 
-                Button {} label: {
+                Button {
+                    if stagedCollaborators.contains(where: { $0.id == PlaceListMock.joe.id }) {
+                        stagedCollaborators.removeAll { $0.id == PlaceListMock.joe.id }
+                    } else {
+                        stagedCollaborators.append(PlaceListMock.joe)
+                    }
+                } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 18, weight: .black))
                         .frame(width: 44, height: 44)
@@ -687,7 +995,7 @@ private struct ListEditorSheet: View {
                 .accessibilityLabel("Invite collaborator")
             }
 
-            if visibleCollaborators.isEmpty {
+            if stagedCollaborators.isEmpty {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 18, weight: .black))
@@ -699,7 +1007,7 @@ private struct ListEditorSheet: View {
                     Spacer()
                 }
             } else {
-                ForEach(visibleCollaborators) { collaborator in
+                ForEach(stagedCollaborators) { collaborator in
                     HStack(spacing: WanderTheme.spacing2) {
                         WanderAvatar(initials: collaborator.initials, size: 32, color: collaborator.color)
                         Text("@\(collaborator.name.lowercased())")
