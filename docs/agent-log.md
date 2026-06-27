@@ -5999,3 +5999,36 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+## 2026-06-26 15:30 PDT - Codex - REC-40 Lists tab mockups and issue split
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/private/tmp/recme-rec-40-lists-mockups`
+Starting status: clean branch from `origin/main` at `3d6cf5216`.
+
+Goal: triage Linear `REC-40`, split the broad Lists/collabs/map/share/deep-link work into clearer Linear follow-up issues, and build an initial SwiftUI mockup with simulator screenshots across the Lists tab states requested by Ryan.
+
+Coordination:
+
+- Root checkout is on `codex/link-fixes-instagram-apple` and is clean; it is intentionally untouched.
+- Other Codex worktrees exist for photo extraction, place detail planning, and REC-39 Discover LLM search. This work is isolated because REC-40 touches app navigation and likely high-conflict UI files.
+- REC-40 is currently Backlog. Direction from Ryan on 2026-06-26 narrows this first pass to the Lists tab, creation flow, list tiles, list detail rows, and deferred follow-up issues for map/place-profile/share-link work.
+
+Expected files:
+
+- `Wander/App/*`
+- `Wander/Features/Lists/*`
+- `Wander/Models/*`
+- `Wander/Services/*`
+- `WanderTests/*`
+- `project.yml`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-26 22:06 PDT:
+
+- Implemented the REC-40 Lists tab SwiftUI mock on `codex/rec-40-lists-mockups`, replacing the Add bottom tab with a Lists tab and a raised center Add-place button.
+- Added `Wander/Features/Lists/ListsScreen.swift` with My lists, Friends, and Collabs tabs; empty first-run state; new/edit list sheets; list detail rows with remove affordances; stealth/collaborator visual states; and launch-argument scenarios for screenshot capture.
+- Split REC-40 into focused Linear follow-up issues for core list UI, creation/editing, friends lists, collaborative invites/share links, map saved-place list actions, list map behavior, place profile follow-up, and App Store fallback for invite links.
+- Captured simulator screenshots in `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/`, including no-lists, create, detail, edit, My/Friends/Collabs, and smaller-phone layout checks.
+- Applied Ryan's follow-up request to make the center bottom plus more floaty: increased the button to 66pt, lifted it above the tray, widened the white rim, and added layered shadow.
+- Verification so far: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-build CODE_SIGNING_ALLOWED=NO` passed with the existing traditional headermap warning.

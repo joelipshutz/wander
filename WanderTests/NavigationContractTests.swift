@@ -3,7 +3,7 @@ import XCTest
 
 final class NavigationContractTests: XCTestCase {
     func testBottomNavigationHasFourProductTabsOnly() {
-        XCTAssertEqual(WanderTab.allCases, [.map, .add, .discover, .profile])
+        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .lists, .profile])
     }
 
     @MainActor
@@ -11,6 +11,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "discover"]),
             .discover
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "lists"]),
+            .lists
         )
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "nope"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab"]), .map)

@@ -46,6 +46,7 @@ targets:
           - UIInterfaceOrientationPortrait
     settings:
       base:
+        PRODUCT_NAME: Wander
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "45"
@@ -71,4 +72,5 @@ targets:
       - target: Wander
     settings:
       base:
+        PRODUCT_NAME: WanderTests
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.tests
