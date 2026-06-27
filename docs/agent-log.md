@@ -6185,3 +6185,11 @@ Checkpoint, 2026-06-26 22:31 PDT:
 - Full simulator suite passed on installed destination `platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5`:
   `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tests-iphone17pro-v4 CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: command exited 0; remaining output was non-fatal signed-binary stripping warnings and the existing traditional headermap warning.
+
+Outcome, 2026-06-26 22:40 PDT:
+
+- Draft PR opened: https://github.com/joelipshutz/wander/pull/42
+- Linear `REC-40` moved to `In Review` with the PR attached and a testing/screenshot note.
+- Branch `codex/rec-40-lists-mockups` pushed to origin and then moved into the primary checkout `/Users/ryanlieblein/Developer/wander` so Xcode opens this branch for local testing.
+- Temporary implementation worktree `/private/tmp/recme-rec-40-lists-mockups` is clean and detached at the same commit.
+- Known follow-ups remain in Linear child issues: map saved-place list actions, real invite/share link handling, place profile controls, list map behavior, and App Store invite fallback.
