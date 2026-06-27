@@ -2,8 +2,8 @@ import XCTest
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
-    func testBottomNavigationHasFourProductTabsOnly() {
-        XCTAssertEqual(WanderTab.allCases, [.map, .add, .discover, .profile])
+    func testBottomNavigationUsesRequestedFiveItemOrder() {
+        XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
 
     @MainActor
@@ -12,6 +12,11 @@ final class NavigationContractTests: XCTestCase {
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "discover"]),
             .discover
         )
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "lists"]),
+            .lists
+        )
+        XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "add"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "nope"]), .map)
         XCTAssertEqual(WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab"]), .map)
     }
@@ -23,6 +28,38 @@ final class NavigationContractTests: XCTestCase {
             .settings
         )
         XCTAssertNil(WanderRootView.resolvedInitialPresentation(from: ["Wander"]))
+    }
+
+    func testListsScreenCanResolveInteractiveVisualQAScenarios() {
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collaboratorsSheet"]),
+            .collaboratorsSheet
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "mapPreview"]),
+            .mapPreview
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "mapSelectedPlace"]),
+            .mapSelectedPlace
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "createCollaboratorsSearch"]),
+            .createCollaboratorsSearch
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "editDeleteConfirm"]),
+            .editDeleteConfirm
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collabEditDeleteConfirm"]),
+            .collabEditDeleteConfirm
+        )
+        XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "placeDetail"]),
+            .placeDetail
+        )
+        XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
     }
 
     @MainActor
