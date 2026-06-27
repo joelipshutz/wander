@@ -6372,3 +6372,38 @@ Outcome, 2026-06-27 10:47 PDT:
 
 - REC-40 Lists management follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.
 - Remaining product/backend gap: list additions, collaborator mutations, and deletions are local/mock-functional in this PR; durable persistence/schema remains future work.
+
+## 2026-06-27 11:04 PDT - Codex - REC-40 phone test visibility fix
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: respond to Ryan's phone-test report that the delete button and other list-management changes are not visible. Verify branch/source state, make the add-place and delete affordances harder to miss, rebuild, and push a fresh branch head for device testing.
+
+Coordination:
+
+- Source checkout contains the previous list-management code at `9be076c74`.
+- `git worktree list` still shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also on `codex/rec-40-lists-mockups`, so keep working only in `/Users/ryanlieblein/Developer/wander`.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 13:59 PDT:
+
+- Verified `/Users/ryanlieblein/Developer/wander` is on `codex/rec-40-lists-mockups` at `9be076c74`, and the source already contained the previous add-place/search/delete changes.
+- Made the list detail add-place control more obvious by adding an `add places` heading above the saved-place search field.
+- Moved edit-sheet actions into a pinned bottom safe-area action stack so `Save changes` and `Delete List` are visible without scrolling.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-phone-visible-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-phone-visible-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+- Screenshots reviewed:
+  - `/private/tmp/rec40-phone-visible-screenshots/add-places-visible.png`
+  - `/private/tmp/rec40-phone-visible-screenshots/pinned-delete-visible.png`
+
+Outcome, 2026-06-27 13:59 PDT:
+
+- Phone visibility follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.

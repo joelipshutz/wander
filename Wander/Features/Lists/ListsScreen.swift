@@ -602,6 +602,13 @@ private struct ListAddPlacesSearchSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack {
+                Text("add places")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Spacer()
+            }
+
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 17, weight: .black))
@@ -1270,23 +1277,14 @@ private struct ListEditorSheet: View {
 
                     stealthToggle
                     collaboratorsBlock
-
-                    VStack(spacing: WanderTheme.spacing3) {
-                        WanderPrimaryButton(title: isEditing ? "Save changes" : "Save list", systemImage: "checkmark", isDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-                            dismiss()
-                        }
-
-                        if isEditing {
-                            ListDestructiveButton(title: "Delete List", systemImage: "trash") {
-                                isShowingDeleteConfirmation = true
-                            }
-                        }
-                    }
                 }
                 .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
+                .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing8)
             }
             .wanderScreen()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                editorActionButtons
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
@@ -1318,6 +1316,28 @@ private struct ListEditorSheet: View {
     private var isEditing: Bool {
         if case .edit = presentation { return true }
         return false
+    }
+
+    private var editorActionButtons: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            WanderPrimaryButton(
+                title: isEditing ? "Save changes" : "Save list",
+                systemImage: "checkmark",
+                isDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ) {
+                dismiss()
+            }
+
+            if isEditing {
+                ListDestructiveButton(title: "Delete List", systemImage: "trash") {
+                    isShowingDeleteConfirmation = true
+                }
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing3)
+        .padding(.bottom, WanderTheme.spacing3)
+        .background(WanderTheme.canvasWarm.color.opacity(0.96))
     }
 
     private var deleteConfirmationMessage: String {
