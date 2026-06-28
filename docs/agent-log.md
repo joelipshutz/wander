@@ -10353,3 +10353,9 @@ Validation checkpoint, 2026-06-28 11:56 PDT:
 - Added `docs/specs/2026-06-28-recme-app-rename-spec.md` with prioritized P0/P1/P2/P3 rename guidance, architecture/test/performance review notes, failure modes, and explicit non-goals.
 - `git diff --check` passed.
 - No `xcodebuild` run because this change is docs-only and does not modify app code or generated project files.
+
+Outcome, 2026-06-28 11:58 PDT:
+
+- Committed the spec as `1c4edbe` (`docs: spec recme app rename`), pushed branch `codex/recme-app-rename-spec`, and opened PR #46: `https://github.com/joelipshutz/wander/pull/46`.
+- This PR is spec-only. It does not change app behavior, build number, TestFlight state, bundle id, Xcode target names, service config, or repo name.
+- Next implementation slice should be the P0 path from the spec: `CFBundleDisplayName = rec.me`, targeted user-facing copy updates, and focused config/copy tests.
