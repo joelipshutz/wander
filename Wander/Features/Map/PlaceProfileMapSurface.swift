@@ -40,6 +40,10 @@ struct PlaceProfileMapSurface: View {
 }
 
 struct PlaceProfileFullScreen: View {
+    private static let edgeSwipeActivationWidth: CGFloat = 28
+    private static let edgeSwipeMinimumTranslation: CGFloat = 80
+    private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
     let tasteSaves: [PlaceSaveSummary]
@@ -72,6 +76,25 @@ struct PlaceProfileFullScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .simultaneousGesture(edgeSwipeBackGesture)
+    }
+
+    static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
+        startX <= edgeSwipeActivationWidth
+            && translation.width >= edgeSwipeMinimumTranslation
+            && abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+    }
+
+    private var edgeSwipeBackGesture: some Gesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onEnded { value in
+                if Self.shouldTriggerEdgeSwipeBack(
+                    startX: value.startLocation.x,
+                    translation: value.translation
+                ) {
+                    onBack()
+                }
+            }
     }
 }
 
@@ -222,51 +245,56 @@ private struct PlaceProfileFullView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(spacing: 0) {
-            PlaceProfileMapHeader(
-                place: place,
-                action: action,
-                shareURL: shareURL,
-                shareText: shareText,
-                onBack: onBack,
-                onAction: onAction
-            )
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                PlaceProfileMapHeader(
+                    place: place,
+                    action: action,
+                    shareURL: shareURL,
+                    shareText: shareText,
+                    topInset: proxy.safeAreaInsets.top,
+                    onBack: onBack,
+                    onAction: onAction
+                )
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    heading
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        heading
 
-                    if let fitSentence {
-                        Text(fitSentence)
-                            .font(.system(size: 19, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if let fitSentence {
+                            Text(fitSentence)
+                                .font(.system(size: 19, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        PlaceProfileTagRail(tags: displayTags, compact: false)
+
+                        ratingSection
+
+                        if !actionItems.isEmpty {
+                            actionRow
+                        }
+
+                        whyItFitsSection
+                        bestForSection
+                        ownNoteSection
+                        trustedNotesSection
+                        detailsSection
                     }
-
-                    PlaceProfileTagRail(tags: displayTags, compact: false)
-
-                    ratingSection
-
-                    if !actionItems.isEmpty {
-                        actionRow
-                    }
-
-                    whyItFitsSection
-                    bestForSection
-                    ownNoteSection
-                    trustedNotesSection
-                    detailsSection
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing8 + proxy.safeAreaInsets.bottom)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
+                .background(WanderTheme.surfaceBone.color)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(WanderTheme.surfaceBone.color)
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: 0))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 24, x: 0, y: -8)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
     private var heading: some View {
@@ -558,6 +586,7 @@ private struct PlaceProfileMapHeader: View {
     let action: PlaceSheetAction
     let shareURL: URL?
     let shareText: String
+    let topInset: CGFloat
     let onBack: () -> Void
     let onAction: () -> Void
 
@@ -634,9 +663,9 @@ private struct PlaceProfileMapHeader: View {
                 Spacer()
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing4 + topInset)
         }
-        .frame(height: 214)
+        .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
     }
 
