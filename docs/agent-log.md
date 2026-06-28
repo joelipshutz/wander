@@ -10326,3 +10326,30 @@ Completion, 2026-07-12 15:48 PDT:
 - Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; signed archive passed.
 - Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
 - Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
+
+## 2026-06-28 11:53 PDT - Codex - rec.me App Rename Spec
+
+Agent: Codex
+Branch: `codex/recme-app-rename-spec`
+Worktree: `/private/tmp/recme-app-rename-spec`
+Starting status: clean branch from current `origin/main`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: attempted, but `http://localhost:4000/api/tasks` was unavailable from this environment (`curl` exit 7).
+
+Goal: run the requested plan-eng-review pass for renaming user-facing Wander surfaces to `rec.me`, prioritize the implementation work, and commit a repo spec that separates immediate user-facing rename work from deferred internal/repo cleanup.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/specs/2026-06-28-recme-app-rename-spec.md`
+
+Checkpoint, 2026-06-28 11:56 PDT:
+
+- Read the requested `plan-eng-review` skill and inspected the current app, TestFlight helper, build configuration tests, setup docs, and user-facing string hits.
+- GBrain project search was attempted first but blocked on a PGLite lock timeout; fell back to repo and Markdown inspection.
+- User corrected canonical casing to `rec.me`, not `REC.me`.
+
+Validation checkpoint, 2026-06-28 11:56 PDT:
+
+- Added `docs/specs/2026-06-28-recme-app-rename-spec.md` with prioritized P0/P1/P2/P3 rename guidance, architecture/test/performance review notes, failure modes, and explicit non-goals.
+- `git diff --check` passed.
+- No `xcodebuild` run because this change is docs-only and does not modify app code or generated project files.
