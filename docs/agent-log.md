@@ -6843,3 +6843,31 @@ Outcome, 2026-06-28 08:30 PDT:
 - Slack: posted tester-facing build 50 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
 - Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782660612379839`.
 - Known deferred area: list creation/editing remains local/mock-functional from REC-40; backend list persistence and invite links remain follow-up scope.
+
+## 2026-06-28 10:29 PDT - Codex - Place Profile Edge Swipe Back
+
+Agent: Codex
+Branch: `codex/place-profile-edge-swipe`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean branch from current `main` after build 50 release; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: `3bb9ca04-3798-4d78-8e95-d3f4c0008070`
+
+Goal: add left-edge swipe-to-go-back behavior to the pushed Place Profile screen from every entrypoint. The custom back button already works; the missing piece is preserving/recreating iOS's interactive pop gesture after hiding the system navigation bar for the full-screen place profile design.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused navigation/UI tests if the gesture can be covered without brittle UI automation.
+
+Completion checkpoint, 2026-06-28 10:38 PDT:
+
+- Added a shared left-edge drag gesture to `PlaceProfileFullScreen` that calls the same `onBack` path as the custom back button when the gesture starts at the left edge and moves right far enough.
+- Updated `PlaceProfileFullView` to paint edge-to-edge under the status/home areas while keeping header controls and scroll content padded by safe-area insets.
+- Added focused threshold coverage in `NavigationContractTests` so non-edge drags, short drags, and mostly vertical drags do not trigger the back action.
+- `git diff --check` passed.
+- Focused simulator tests passed:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+- Simulator build passed and was installed/launched on the booted iPhone 16 Plus simulator:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual sanity screenshot: `/private/tmp/recme-edge-swipe-place-profile.png`.

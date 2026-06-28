@@ -78,4 +78,35 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander", "-WanderMapSheetExpanded"]))
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
     }
+
+    @MainActor
+    func testPlaceProfileEdgeSwipeBackGestureOnlyTriggersFromLeftEdge() {
+        XCTAssertTrue(
+            PlaceProfileFullScreen.shouldTriggerEdgeSwipeBack(
+                startX: 12,
+                translation: CGSize(width: 96, height: 8)
+            )
+        )
+
+        XCTAssertFalse(
+            PlaceProfileFullScreen.shouldTriggerEdgeSwipeBack(
+                startX: 52,
+                translation: CGSize(width: 120, height: 4)
+            )
+        )
+
+        XCTAssertFalse(
+            PlaceProfileFullScreen.shouldTriggerEdgeSwipeBack(
+                startX: 12,
+                translation: CGSize(width: 40, height: 2)
+            )
+        )
+
+        XCTAssertFalse(
+            PlaceProfileFullScreen.shouldTriggerEdgeSwipeBack(
+                startX: 12,
+                translation: CGSize(width: 110, height: 110)
+            )
+        )
+    }
 }
