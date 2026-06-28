@@ -190,6 +190,26 @@ final class WanderStore: ObservableObject {
             + unresolvedDrafts.count
     }
 
+    func updateCurrentUserAvatarURL(_ avatarURL: String?) {
+        objectWillChange.send()
+
+        let now = Date()
+        let currentLocalID = currentUser.localID
+        let currentProfileID = currentUser.id
+
+        currentUser.avatarURL = avatarURL
+        currentUser.updatedAt = now
+        currentUser.localUpdatedAt = now
+
+        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+            profile.avatarURL = avatarURL
+            profile.updatedAt = now
+            profile.localUpdatedAt = now
+        }
+
+        persist()
+    }
+
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
     }
@@ -1213,6 +1233,7 @@ final class WanderStore: ObservableObject {
             serverID: session.userID,
             handle: handle,
             displayName: displayName,
+            avatarURL: previousCurrentUser.avatarURL,
             syncState: .synced
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
@@ -1246,12 +1267,14 @@ final class WanderStore: ObservableObject {
     }
 
     private func applySignedOutProfile() {
+        let previousCurrentUser = currentUser
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let profile = LocalProfile(
             localID: localID,
             handle: "you",
             displayName: "You",
+            avatarURL: previousCurrentUser.avatarURL,
             syncState: .localOnly
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue

@@ -1,11 +1,18 @@
 import Foundation
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var showsSettings = false
+    @State private var showsProfilePhotoDialog = false
+    @State private var showsProfilePhotoLibrary = false
+    @State private var showsProfileCamera = false
+    @State private var selectedProfilePhotoItem: PhotosPickerItem?
+    @State private var profilePhotoError: String?
     @State private var listMode: GraphListMode?
     @State private var savedListMode: SavedPlacesListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
@@ -32,11 +39,48 @@ struct ProfileScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+            .sheet(isPresented: $showsProfileCamera) {
+                ProfileCameraPicker { image in
+                    saveProfilePhoto(image: image)
+                }
+            }
             .sheet(item: $listMode) { mode in
                 GraphListScreen(mode: mode)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+            }
+            .photosPicker(
+                isPresented: $showsProfilePhotoLibrary,
+                selection: $selectedProfilePhotoItem,
+                matching: .images
+            )
+            .onChange(of: selectedProfilePhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    await importProfilePhoto(from: item)
+                }
+            }
+            .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoDialog, titleVisibility: .visible) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button("Take Photo") {
+                        showsProfileCamera = true
+                    }
+                }
+
+                Button("Choose from Library") {
+                    showsProfilePhotoLibrary = true
+                }
+
+                if hasProfilePhoto {
+                    Button("Delete Photo", role: .destructive) {
+                        deleteProfilePhoto()
+                    }
+                }
+
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Choose a profile picture for this device.")
             }
             .navigationDestination(item: $savedListMode) { mode in
                 SavedPlacesListScreen(mode: mode)
@@ -60,7 +104,18 @@ struct ProfileScreen: View {
     private var ownerHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top) {
-                WanderAvatar(initials: store.currentUser.initials, size: 56, color: WanderTheme.terracotta.color)
+                Button {
+                    showsProfilePhotoDialog = true
+                } label: {
+                    EditableProfileAvatar(
+                        initials: store.currentUser.initials,
+                        avatarURL: store.currentUser.avatarURL,
+                        size: 56
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(hasProfilePhoto ? "Change profile photo" : "Add profile photo")
+                .accessibilityHint("Opens photo options")
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(store.currentUser.displayName)
@@ -82,6 +137,12 @@ struct ProfileScreen: View {
                         .clipShape(Circle())
                 }
                 .accessibilityLabel("Settings")
+            }
+
+            if let profilePhotoError {
+                Text(profilePhotoError)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
             }
         }
         .padding(WanderTheme.spacing3)
@@ -222,6 +283,145 @@ struct ProfileScreen: View {
             return store.following(of: store.currentUser.id).filter { store.relationship(to: $0.id) == .mutual }
         }
     }
+
+    private var hasProfilePhoto: Bool {
+        guard let avatarURL = store.currentUser.avatarURL else { return false }
+        return !avatarURL.isEmpty
+    }
+
+    @MainActor
+    private func importProfilePhoto(from item: PhotosPickerItem) async {
+        defer {
+            selectedProfilePhotoItem = nil
+        }
+
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                throw WanderImageProcessingError.invalidImageData
+            }
+            try await saveProfilePhoto(data: data)
+        } catch {
+            profilePhotoError = "Could not use that photo. Try another one."
+        }
+    }
+
+    @MainActor
+    private func saveProfilePhoto(image: UIImage) {
+        do {
+            let jpegData = try WanderImageProcessor.squareJPEGData(from: image)
+            try saveProfilePhoto(jpegData: jpegData)
+        } catch {
+            profilePhotoError = "Could not use that photo. Try another one."
+        }
+    }
+
+    @MainActor
+    private func saveProfilePhoto(data: Data) async throws {
+        let jpegData = try await Task.detached(priority: .userInitiated) {
+            try WanderImageProcessor.squareJPEGData(from: data)
+        }.value
+        try saveProfilePhoto(jpegData: jpegData)
+    }
+
+    @MainActor
+    private func saveProfilePhoto(jpegData: Data) throws {
+        let url = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
+        store.updateCurrentUserAvatarURL(url.absoluteString)
+        profilePhotoError = nil
+    }
+
+    private func deleteProfilePhoto() {
+        do {
+            try ProfileAvatarStorage.live.deleteAvatar()
+            store.updateCurrentUserAvatarURL(nil)
+            profilePhotoError = nil
+        } catch {
+            profilePhotoError = "Could not delete this photo. Try again."
+        }
+    }
+}
+
+private struct EditableProfileAvatar: View {
+    let initials: String
+    let avatarURL: String?
+    let size: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            WanderAvatar(
+                initials: initials,
+                avatarURL: avatarURL,
+                size: size,
+                color: WanderTheme.terracotta.color
+            )
+
+            Image(systemName: hasAvatar ? "pencil" : "camera.fill")
+                .font(.system(size: 10, weight: .black))
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .frame(width: 22, height: 22)
+                .background(WanderTheme.textInk.color)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                .accessibilityHidden(true)
+        }
+        .frame(width: size + 4, height: size + 4)
+        .contentShape(Rectangle())
+    }
+
+    private var hasAvatar: Bool {
+        guard let avatarURL else { return false }
+        return !avatarURL.isEmpty
+    }
+}
+
+private struct ProfileCameraPicker: UIViewControllerRepresentable {
+    let onImage: @MainActor (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.allowsEditing = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onImage: onImage,
+            dismiss: {
+                dismiss()
+            }
+        )
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let onImage: @MainActor (UIImage) -> Void
+        private let dismiss: () -> Void
+
+        init(onImage: @escaping @MainActor (UIImage) -> Void, dismiss: @escaping () -> Void) {
+            self.onImage = onImage
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage
+            if let image {
+                onImage(image)
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
+    }
 }
 
 struct ProfileDetailView: View {
@@ -279,7 +479,12 @@ struct ProfileDetailView: View {
     private func profileHeader(state: ProfileViewState) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack(alignment: .top) {
-                WanderAvatar(initials: initials(for: state.shell.displayName), size: 56, color: WanderTheme.pinSocial.color)
+                WanderAvatar(
+                    initials: initials(for: state.shell.displayName),
+                    avatarURL: state.shell.avatarURL,
+                    size: 56,
+                    color: WanderTheme.pinSocial.color
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(state.shell.displayName)
@@ -837,7 +1042,12 @@ private struct GraphListScreen: View {
             List {
                 ForEach(profiles, id: \.id) { profile in
                     HStack {
-                        WanderAvatar(initials: profile.initials, size: 40, color: WanderTheme.pinSocial.color)
+                        WanderAvatar(
+                            initials: profile.initials,
+                            avatarURL: profile.avatarURL,
+                            size: 40,
+                            color: WanderTheme.pinSocial.color
+                        )
                         VStack(alignment: .leading) {
                             Text(profile.displayName)
                                 .font(.system(size: 15, weight: .bold))
@@ -921,7 +1131,12 @@ private struct ProfilePersonRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: WanderTheme.spacing3) {
-                WanderAvatar(initials: profile.initials, size: 40, color: WanderTheme.pinSocial.color)
+                WanderAvatar(
+                    initials: profile.initials,
+                    avatarURL: profile.avatarURL,
+                    size: 40,
+                    color: WanderTheme.pinSocial.color
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)

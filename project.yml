@@ -57,6 +57,7 @@ targets:
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSCameraUsageDescription: Wander uses the camera only when you choose to take a photo in the app.
         NSLocationWhenInUseUsageDescription: Wander uses your location once to suggest nearby places. It never broadcasts live location.
         UILaunchScreen: {}
         UIRequiresFullScreen: true

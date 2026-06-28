@@ -6871,3 +6871,63 @@ Completion checkpoint, 2026-06-28 10:38 PDT:
 - Simulator build passed and was installed/launched on the booted iPhone 16 Plus simulator:
   `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Visual sanity screenshot: `/private/tmp/recme-edge-swipe-place-profile.png`.
+
+## 2026-06-28 11:05 PDT - Codex - Profile Pictures Planning
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch from current `origin/main`.
+
+Goal: plan and implement first profile-picture upload/edit flow. Tapping the profile avatar on the Profile page should present native iOS photo options such as take photo, choose from library, and delete existing photo where applicable.
+
+Requested review gates before implementation:
+
+- Run `plan-design-review` for the user-facing avatar edit interaction.
+- Run `plan-eng-review` because this is the first photo upload/media-selection surface.
+
+Expected files:
+
+- `docs/agent-log.md`
+- A feature plan under `docs/plans/`
+- `Wander/Features/Profile/` profile UI files
+- `Wander/Models/` or `Wander/Services/` only if the plan confirms local avatar state needs model/store support
+- `WanderTests/` focused tests for avatar state/picker behavior where feasible
+
+Coordination note: existing worktrees are active/prunable, but none appear to target Profile avatar editing. Avoid unrelated app shell, map, project, and Supabase changes unless the review explicitly identifies a dependency.
+
+Checkpoint, 2026-06-28 11:21 PDT:
+
+- Created planning branch `codex/profile-pictures` from latest `origin/main`.
+- Added initial plan at `docs/plans/2026-06-28-profile-pictures-plan.md`.
+- Read requested `plan-design-review` and `plan-eng-review` skill files from disk.
+- Inspected current Profile, Add-photo, avatar, auth session, local model, persistence, remote profile DTO/repository, `project.yml`, `DESIGN.md`, and `TODOS.md`.
+- Design setup result: `DESIGN_NOT_AVAILABLE`; review will proceed text-only unless designer tooling is installed later.
+- Initial design review rating: 8/10. Plan already covers avatar tap, native dialog actions, state table, and accessibility; remaining design risks are exact edit-badge treatment, delete placement, and how honestly the local-only avatar state is communicated.
+- Blocker: native `request_user_input` is unavailable in Default mode, so the `plan-design-review` Step 0 focus gate is waiting for Ryan's reply in chat.
+- Restart: answer the D1 design-focus question in chat, then continue with all seven design passes, update the plan, run `plan-eng-review`, implement, test, and finish this log.
+
+Checkpoint, 2026-06-28 11:37 PDT:
+
+- Ryan chose design focus A: run the full design review because this picker pattern will be reused for place photos later.
+- Completed text-only `plan-design-review` and `plan-eng-review`; both cleared after folding decisions into `docs/plans/2026-06-28-profile-pictures-plan.md`.
+- gstack task JSONL artifacts were written under `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/`.
+- `gstack-review-log` / `gstack-decision-log` could not run because `bun` is not installed in this shell; the plan file contains the durable `GSTACK REVIEW REPORT`.
+- Implemented owner profile avatar editing on the Profile page:
+  - Avatar tap opens a native confirmation dialog with library, camera when available, delete when a photo exists, and cancel.
+  - Library uses `PhotosPicker`; camera uses `UIImagePickerController` with editing enabled.
+  - Selected images are processed into bounded square JPEGs and written to Application Support via `ProfileAvatarStorage`.
+  - `WanderAvatar` now renders local `file://` and remote `http(s)` avatar URLs with initials fallback.
+  - Store avatar updates are local profile state only and intentionally do not affect `pendingSyncCount`.
+  - Camera privacy copy added through `project.yml`; ran `xcodegen generate`.
+- Tests:
+  - Documented iPhone 16 Plus / iOS 18.6 simulator is not installed in this Xcode environment, so tests ran on available `iPhone 17, iOS 26.5`.
+  - Focused tests passed:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCurrentUserAvatarURLUpdatesProfileShellWithoutPendingSync -only-testing:WanderTests/WanderStoreTests/testSignedInSessionPreservesExistingLocalAvatarURL -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresCurrentUserAvatarURLAfterRelaunch -only-testing:WanderTests/ProfileAvatarStorageTests`
+  - Full suite passed: 181 tests, 0 failures:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual sanity:
+  - Installed and launched the built app with `-WanderInitialTab profile -WanderUseDemoFixtures`.
+  - Screenshots reviewed: `/private/tmp/recme-profile-avatar-17pro.png` and `/private/tmp/recme-profile-avatar-17e.png`.
+  - Avatar edit badge, profile copy, settings button, stats, and bottom tab layout looked clean on both sizes.
+- Known gap: physical camera capture was not exercised because simulator camera availability is gated off; the action is hidden on simulator and should appear on device.

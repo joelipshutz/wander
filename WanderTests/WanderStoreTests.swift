@@ -48,6 +48,49 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.profiles.map(\.id), ["user_live"])
     }
 
+    func testCurrentUserAvatarURLUpdatesProfileShellWithoutPendingSync() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let initialPendingCount = store.pendingSyncCount
+        let initialSyncState = store.currentUser.syncState
+        let avatarURL = "file:///tmp/wander-avatar.jpg"
+
+        store.updateCurrentUserAvatarURL(avatarURL)
+
+        XCTAssertEqual(store.currentUser.avatarURL, avatarURL)
+        XCTAssertEqual(store.profileState(for: store.currentUser.id)?.shell.avatarURL, avatarURL)
+        XCTAssertEqual(store.profiles.first?.avatarURL, avatarURL)
+        XCTAssertEqual(store.currentUser.syncState, initialSyncState)
+        XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
+
+        store.updateCurrentUserAvatarURL(nil)
+
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.profileState(for: store.currentUser.id)?.shell.avatarURL)
+        XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
+    }
+
+    func testSignedInSessionPreservesExistingLocalAvatarURL() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let avatarURL = "file:///tmp/wander-avatar.jpg"
+        store.updateCurrentUserAvatarURL(avatarURL)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Joe",
+                    handle: "joe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+
+        XCTAssertEqual(store.currentUser.id, "user_live")
+        XCTAssertEqual(store.currentUser.avatarURL, avatarURL)
+        XCTAssertEqual(store.profileState(for: "user_live")?.shell.avatarURL, avatarURL)
+        XCTAssertEqual(store.currentUser.syncState, .synced)
+    }
+
     func testSignedInSessionClaimsGuestSavedPlaces() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let result = store.saveCandidate(
@@ -426,6 +469,20 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.unresolvedDrafts.map(\.sourceType), [.link])
         XCTAssertEqual(relaunchedStore.sourceArtifacts.map(\.type), ["url"])
         XCTAssertEqual(relaunchedStore.extractionJobs.map(\.sourceType), ["link"])
+    }
+
+    func testFilePersistenceRestoresCurrentUserAvatarURLAfterRelaunch() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let avatarURL = "file:///tmp/wander-avatar.jpg"
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
+        firstStore.updateCurrentUserAvatarURL(avatarURL)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertEqual(relaunchedStore.currentUser.avatarURL, avatarURL)
+        XCTAssertEqual(relaunchedStore.profileState(for: relaunchedStore.currentUser.id)?.shell.avatarURL, avatarURL)
     }
 
     func testUpdatingCandidateReplacesQuestionAttributesWhenProvided() {
