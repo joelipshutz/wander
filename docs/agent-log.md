@@ -6871,3 +6871,22 @@ Completion checkpoint, 2026-06-28 10:38 PDT:
 - Simulator build passed and was installed/launched on the booted iPhone 16 Plus simulator:
   `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Visual sanity screenshot: `/private/tmp/recme-edge-swipe-place-profile.png`.
+
+Release outcome, 2026-06-28 11:04 PDT:
+
+- PR #44 was squash-merged into `main` as `9b668de` (`fix: add place profile edge swipe back (#44)`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 50 to build 51 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `74bb5b1` (`chore: bump testflight build 51`).
+- Release Mission Control task: `b039ca6e-dc2c-4244-b68c-278ed6c0a7bf`.
+- Simulator build passed:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build51-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed on the documented target with 175 tests:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build51-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build51.xcarchive`; archived `CFBundleVersion` verified as `51`.
+- Export options: `/private/tmp/WanderExportUpload51.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 51 --archive-path /private/tmp/Wander-0.1-build51.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build51-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (51)` id `b5f1ae25-4ed3-4caa-94d7-f4768305b85c` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack: posted tester-facing build 51 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782669825924449`.
+- Known deferred area: save/edit forms still intentionally open as sheets; list creation/editing remains local/mock-functional from REC-40, with backend list persistence and invite links remaining follow-up scope.
