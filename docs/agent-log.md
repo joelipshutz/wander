@@ -6638,6 +6638,50 @@ Checkpoint, 2026-06-26 23:29 PDT:
   - `/private/tmp/recme-pr38-visual/discover-demo.png`
   - `/private/tmp/recme-pr38-visual/profile-demo.png`
   - `/private/tmp/recme-pr38-visual/map-woodcat-expanded-iphone16e.png`
+## 2026-06-26 23:52 PDT - Codex - Place Profile Navigation Push Fix
+
+Agent: Codex
+Branch: `codex/place-profile-navigation-push`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean worktree on new branch from `main` after fetching `origin`; root checkout remains on `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: `abfa221a-a17a-4fc3-929b-836e18a3feb2`
+
+Goal: fix Joe's simulator feedback that place profiles still behave like pop-up sheets. Convert Map, Discover, and Profile place profile detail from `fullScreenCover`/overlay modal presentation to native `NavigationStack` push/pop behavior while keeping save/edit forms as sheets.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Possible focused tests if route state needs new regression coverage.
+
+Plan checkpoint:
+
+- Existing full place profile UI is reusable; this is a presentation architecture fix, not a redesign.
+- `PlaceProfileMapSurface` currently owns a `fullScreenCover`; Map also tracks `isPlaceSheetExpanded`, which makes the profile feel like a sheet even with a custom back button.
+- Discover and Profile saved-list entry points also use `fullScreenCover`, so the fix should be applied consistently across all place-profile entry points.
+
+Completion checkpoint, 2026-06-27 00:08 PDT:
+
+- Converted Map, Discover, and Profile saved-list place profile entry points from `fullScreenCover` to native `NavigationStack` destinations.
+- Map now keeps the bottom preview card as a map overlay, but tapping it pushes `PlaceProfileFullScreen` as a navigation destination. The destination hides the default nav/tab bars so the profile remains full-screen while using native push/pop behavior.
+- Preserved the existing `-WanderMapPlace` and legacy `-WanderMapSheetExpanded` launch flags for visual QA, now mapping the expanded flag to initial place-profile navigation presentation.
+- Added `NavigationContractTests.testMapScreenCanResolvePlaceProfileLaunchArgumentsForVisualQA`.
+- `git diff --check` passed.
+- Simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-nav-push-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Focused simulator test passed: `NavigationContractTests`, 5 tests, 0 failures.
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-nav-push-test CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 167 tests, 0 failures.
+- Simulator smoke on iPhone 16 Plus passed using:
+  `-WanderUseDemoFixtures -WanderMapPlace 'Woodcat Coffee' -WanderMapSheetExpanded`
+- Screenshots:
+  - `/private/tmp/recme-nav-push-woodcat-profile.png`
+  - `/private/tmp/recme-nav-push-woodcat-back-map.png`
+- Computer Use verified the profile screen exposes `Close place profile` as an accessible button and clicking it returns to the map with the preview card and tab bar visible.
 
 ## 2026-06-26 14:57 PDT - Codex - REC-39 Discover LLM Search
 
@@ -6764,3 +6808,18 @@ Outcome:
 - Linear: `REC-39` was already `Done`; added final release comment with PR #41, build 48, validation, archive/upload, and TestFlight status.
 - Slack: posted tester-facing build 48 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
 - Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782547872716159`.
+
+## 2026-06-28 08:10 PDT - Codex - Place Profile Navigation Build 50 Release
+
+Agent: Codex
+Branch: `codex/place-profile-navigation-push`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: resumed from Joe's explicit TestFlight request after `origin/main` advanced through builds 48 and 49. PR #43 conflicted with the newer REC-39/REC-40 Discover/List work, so this pass is resolving the branch onto latest `origin/main` before merge.
+Mission Control task: `7947eac0-fa14-4767-b7db-6585a121f999`
+
+Goal: finish Joe's explicit TestFlight request by merging PR #43, bumping the next build from 49 to 50, archiving/uploading, running the TestFlight helper, and posting the required `#testflight-feedback` note.
+
+Checkpoint:
+
+- Resolved `Wander/Features/Discover/DiscoverScreen.swift` by keeping the current Places/Members redesign from `main` and adding the native `NavigationStack` place-profile destination from PR #43.
+- Resolved `docs/agent-log.md` as an append-only log, preserving both the PR #43 navigation entry and the build 48/49 mainline release history.

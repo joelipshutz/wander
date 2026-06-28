@@ -11,7 +11,7 @@ struct MapScreen: View {
     @State private var selectedMapFeature: MapFeature?
     @State private var ignoreNextMapFeatureClear = false
     @State private var mapSaveFlow: MapPlaceSaveContext?
-    @State private var isPlaceSheetExpanded: Bool
+    @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery = ""
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
@@ -44,10 +44,10 @@ struct MapScreen: View {
 
     init(
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
-        startsExpanded: Bool = ProcessInfo.processInfo.arguments.contains("-WanderMapSheetExpanded")
+        startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation()
     ) {
         self.initialPlaceQuery = initialPlaceQuery
-        _isPlaceSheetExpanded = State(initialValue: startsExpanded)
+        _isPlaceProfilePresented = State(initialValue: startsExpanded)
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -157,171 +157,176 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Map(position: $position, selection: $selectedMapFeature) {
-                UserAnnotation()
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Map(position: $position, selection: $selectedMapFeature) {
+                    UserAnnotation()
 
-                ForEach(mapAnnotationPlaces) { visiblePlace in
-                    Annotation(
-                        visiblePlace.place.canonicalName,
-                        coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
-                    ) {
-                        Button {
-                            clearNativeMapFeatureSelection()
-                            selectVisiblePlace(visiblePlace)
-                            selectedSearchCandidateID = nil
-                            isPlaceSheetExpanded = false
-                        } label: {
-                            MapPlaceMarker(
-                                visiblePlace: visiblePlace,
-                                saves: saveSummaries(for: visiblePlace),
-                                currentUserID: store.currentUser.id,
-                                isSelected: isSelectedMapRepresentative(visiblePlace)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                ForEach(mappableSearchCandidates) { candidate in
-                    if let latitude = candidate.latitude,
-                       let longitude = candidate.longitude {
+                    ForEach(mapAnnotationPlaces) { visiblePlace in
                         Annotation(
-                            candidate.name,
-                            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                            visiblePlace.place.canonicalName,
+                            coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
                         ) {
                             Button {
                                 clearNativeMapFeatureSelection()
-                                selectedSearchCandidateID = candidate.id
-                                selectedPlaceGroupKey = nil
-                                isPlaceSheetExpanded = false
+                                selectVisiblePlace(visiblePlace)
+                                selectedSearchCandidateID = nil
+                                isPlaceProfilePresented = false
                             } label: {
-                                SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
+                                MapPlaceMarker(
+                                    visiblePlace: visiblePlace,
+                                    saves: saveSummaries(for: visiblePlace),
+                                    currentUserID: store.currentUser.id,
+                                    isSelected: isSelectedMapRepresentative(visiblePlace)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .mapFeatureSelectionDisabled { feature in
-                feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
-            }
-            .mapFeatureSelectionContent { _ in }
-            .modifier(HideNativeMapFeatureAccessory())
-            .tint(Self.currentLocationTint)
-            .ignoresSafeArea()
-            .onChange(of: selectedMapFeature) { _, feature in
-                handleMapFeatureSelection(feature)
-            }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                currentSearchRegion = context.region
-            }
 
-            VStack(spacing: 0) {
-                VStack(spacing: WanderTheme.spacing2) {
-                    SearchBar(
-                        query: $mapQuery,
-                        userInitials: store.currentUser.initials,
-                        onSubmit: submitMapSearch
-                    )
-                    if shouldShowTypeahead {
-                        MapTypeaheadList(
-                            suggestions: typeaheadSuggestions,
-                            isLoading: isLoadingTypeahead,
-                            onSelect: selectTypeaheadSuggestion
-                        )
-                        .padding(.horizontal, WanderTheme.spacing3)
-                    } else if let mapSearchMessage {
-                        MapSearchMessage(text: mapSearchMessage)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                    }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            ForEach(MapFilter.allCases) { filter in
-                                if filter == .social {
-                                    MapSocialFilterMenu(
-                                        isSelected: selectedFilters.contains(.social),
-                                        selectedOwner: selectedSocialOwner,
-                                        ownerOptions: socialOwnerOptions,
-                                        showAll: showAllSocialPlaces,
-                                        hideSocial: hideSocialPlaces,
-                                        selectOwner: showSocialPlaces
-                                    )
-                                } else {
-                                    Button {
-                                        toggle(filter)
-                                    } label: {
-                                        MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
-                                    }
-                                    .buttonStyle(.plain)
+                    ForEach(mappableSearchCandidates) { candidate in
+                        if let latitude = candidate.latitude,
+                           let longitude = candidate.longitude {
+                            Annotation(
+                                candidate.name,
+                                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                            ) {
+                                Button {
+                                    clearNativeMapFeatureSelection()
+                                    selectedSearchCandidateID = candidate.id
+                                    selectedPlaceGroupKey = nil
+                                    isPlaceProfilePresented = false
+                                } label: {
+                                    SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing1)
                     }
-                    .frame(height: 48)
                 }
-                .padding(.top, WanderTheme.spacing2)
+                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .mapFeatureSelectionDisabled { feature in
+                    feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
+                }
+                .mapFeatureSelectionContent { _ in }
+                .modifier(HideNativeMapFeatureAccessory())
+                .tint(Self.currentLocationTint)
+                .ignoresSafeArea()
+                .onChange(of: selectedMapFeature) { _, feature in
+                    handleMapFeatureSelection(feature)
+                }
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    currentSearchRegion = context.region
+                }
 
-                Spacer()
-
-                if !isPlaceSheetExpanded {
-                    HStack {
-                        Spacer()
-                        RecenterButton(isLoading: isRecenteringOnUser) {
-                            recenterOnUser()
+                VStack(spacing: 0) {
+                    VStack(spacing: WanderTheme.spacing2) {
+                        SearchBar(
+                            query: $mapQuery,
+                            userInitials: store.currentUser.initials,
+                            onSubmit: submitMapSearch
+                        )
+                        if shouldShowTypeahead {
+                            MapTypeaheadList(
+                                suggestions: typeaheadSuggestions,
+                                isLoading: isLoadingTypeahead,
+                                onSelect: selectTypeaheadSuggestion
+                            )
+                            .padding(.horizontal, WanderTheme.spacing3)
+                        } else if let mapSearchMessage {
+                            MapSearchMessage(text: mapSearchMessage)
+                                .padding(.horizontal, WanderTheme.spacing3)
                         }
-                        .padding(.trailing, WanderTheme.spacing3)
-                        .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapFilter.allCases) { filter in
+                                    if filter == .social {
+                                        MapSocialFilterMenu(
+                                            isSelected: selectedFilters.contains(.social),
+                                            selectedOwner: selectedSocialOwner,
+                                            ownerOptions: socialOwnerOptions,
+                                            showAll: showAllSocialPlaces,
+                                            hideSocial: hideSocialPlaces,
+                                            selectOwner: showSocialPlaces
+                                        )
+                                    } else {
+                                        Button {
+                                            toggle(filter)
+                                        } label: {
+                                            MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, WanderTheme.spacing1)
+                        }
+                        .frame(height: 48)
+                    }
+                    .padding(.top, WanderTheme.spacing2)
+
+                    Spacer()
+
+                    if !isPlaceProfilePresented {
+                        HStack {
+                            Spacer()
+                            RecenterButton(isLoading: isRecenteringOnUser) {
+                                recenterOnUser()
+                            }
+                            .padding(.trailing, WanderTheme.spacing3)
+                            .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
+                        }
                     }
                 }
-            }
 
-            selectedPlaceProfileSurface
-        }
-        .background(WanderTheme.canvasWarm.color)
-        .onAppear {
-            resolveInitialSelection()
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .task {
-            await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .onChange(of: auth.isSignedIn) { _, isSignedIn in
-            guard isSignedIn else { return }
-            Task {
+                selectedPlaceProfileSurface
+            }
+            .background(WanderTheme.canvasWarm.color)
+            .onAppear {
+                resolveInitialSelection()
+                centerMapOnInitialPlacesIfNeeded()
+            }
+            .task {
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                 centerMapOnInitialPlacesIfNeeded()
             }
-        }
-        .onChange(of: visiblePlaceGroupKeys) { _, keys in
-            if let current = selectedPlaceGroupKey, !keys.contains(current) {
-                selectedPlaceGroupKey = nil
-                isPlaceSheetExpanded = false
+            .onChange(of: auth.isSignedIn) { _, isSignedIn in
+                guard isSignedIn else { return }
+                Task {
+                    await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                    centerMapOnInitialPlacesIfNeeded()
+                }
             }
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .onChange(of: mapQuery) { _, _ in
-            handleMapQueryChange()
-            if let firstGroupKey = visiblePlaceGroupKeys.first,
-               !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
-                selectedPlaceGroupKey = firstGroupKey
-                isPlaceSheetExpanded = false
+            .onChange(of: visiblePlaceGroupKeys) { _, keys in
+                if let current = selectedPlaceGroupKey, !keys.contains(current) {
+                    selectedPlaceGroupKey = nil
+                    isPlaceProfilePresented = false
+                }
+                centerMapOnInitialPlacesIfNeeded()
             }
-        }
-        .onDisappear {
-            typeaheadTask?.cancel()
-            mapFeatureResolutionTask?.cancel()
-        }
-        .sheet(item: $mapSaveFlow) { context in
-            MapPlaceSaveFlowSheet(context: context) { submission in
-                await saveMapFlowSubmission(submission)
+            .onChange(of: mapQuery) { _, _ in
+                handleMapQueryChange()
+                if let firstGroupKey = visiblePlaceGroupKeys.first,
+                   !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
+                    selectedPlaceGroupKey = firstGroupKey
+                    isPlaceProfilePresented = false
+                }
             }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+            .onDisappear {
+                typeaheadTask?.cancel()
+                mapFeatureResolutionTask?.cancel()
+            }
+            .sheet(item: $mapSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveMapFlowSubmission(submission)
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .navigationDestination(isPresented: placeProfileDestinationBinding) {
+                selectedPlaceProfileDestination
+            }
         }
     }
 
@@ -357,7 +362,7 @@ struct MapScreen: View {
         selectedMapFeature = nil
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
     }
 
     private func clearNativeMapFeatureSelection() {
@@ -376,7 +381,7 @@ struct MapScreen: View {
         selectedSearchCandidateID = nil
         mapSearchCandidates = []
         mapSearchMessage = nil
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
     }
 
     private func resolveInitialSelection() {
@@ -474,6 +479,19 @@ struct MapScreen: View {
         selectVisiblePlace(visiblePlace)
     }
 
+    private var placeProfileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                isPlaceProfilePresented && hasSelectedProfile
+            },
+            set: { isPresented in
+                if !isPresented {
+                    isPlaceProfilePresented = false
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private var selectedPlaceProfileSurface: some View {
         if let selectedSearchCandidate {
@@ -483,7 +501,7 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .add,
-                isExpanded: $isPlaceSheetExpanded
+                onOpen: openSelectedPlaceProfile
             ) {
                 mapSaveFlow = MapPlaceSaveContext.addCandidate(
                     selectedSearchCandidate,
@@ -499,11 +517,65 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
-                isExpanded: $isPlaceSheetExpanded
+                onOpen: openSelectedPlaceProfile
             ) {
                 performAction(for: selectedPlace)
             }
             .zIndex(30)
+        }
+    }
+
+    @ViewBuilder
+    private var selectedPlaceProfileDestination: some View {
+        if let selectedSearchCandidate {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(candidate: selectedSearchCandidate),
+                saves: saveSummaries(for: selectedSearchCandidate),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .add,
+                onBack: {
+                    isPlaceProfilePresented = false
+                },
+                onAction: {
+                    dismissPlaceProfileThen {
+                        mapSaveFlow = MapPlaceSaveContext.addCandidate(
+                            selectedSearchCandidate,
+                            sourceType: .manual,
+                            defaultVisibility: store.defaultVisibility
+                        )
+                    }
+                }
+            )
+        } else if let selectedPlace {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                saves: saveSummaries(for: selectedPlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: action(for: selectedPlace),
+                onBack: {
+                    isPlaceProfilePresented = false
+                },
+                onAction: {
+                    dismissPlaceProfileThen {
+                        performAction(for: selectedPlace)
+                    }
+                }
+            )
+        }
+    }
+
+    private func openSelectedPlaceProfile() {
+        guard hasSelectedProfile else { return }
+        isPlaceProfilePresented = true
+    }
+
+    private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
+        isPlaceProfilePresented = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            action()
         }
     }
 
@@ -605,7 +677,7 @@ struct MapScreen: View {
             selectVisiblePlace(visiblePlace)
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
-            isPlaceSheetExpanded = false
+            isPlaceProfilePresented = false
             mapSearchMessage = nil
             return
         }
@@ -613,7 +685,7 @@ struct MapScreen: View {
         mapSearchCandidates = [candidate]
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = candidate.id
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
         mapSearchMessage = "Map place. Tap + to add it."
     }
 
@@ -1129,7 +1201,7 @@ struct MapScreen: View {
         return street
     }
 
-    private static func resolvedInitialMapPlaceQuery(from arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {
+    static func resolvedInitialMapPlaceQuery(from arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderMapPlace") else {
             return nil
         }
@@ -1140,6 +1212,10 @@ struct MapScreen: View {
         }
 
         return arguments[valueIndex]
+    }
+
+    static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        arguments.contains("-WanderMapSheetExpanded")
     }
 
     private static func normalized(_ value: String) -> String {

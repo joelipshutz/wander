@@ -473,7 +473,35 @@ private struct SavedPlacesListScreen: View {
             .padding(WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing8)
         }
-        .fullScreenCover(item: $selectedPlace) { selectedPlace in
+        .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+            selectedPlaceDestination
+        }
+        .sheet(item: $placeSaveFlow) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await saveProfileFlowSubmission(submission)
+            }
+        }
+        .wanderScreen()
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var selectedPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                selectedPlace != nil
+            },
+            set: { isPresented in
+                if !isPresented {
+                    selectedPlace = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedPlaceDestination: some View {
+        if let selectedPlace {
             PlaceProfileFullScreen(
                 place: PlaceSheetPlace(visiblePlace: selectedPlace),
                 saves: saveSummaries(for: selectedPlace),
@@ -488,14 +516,6 @@ private struct SavedPlacesListScreen: View {
                 }
             )
         }
-        .sheet(item: $placeSaveFlow) { context in
-            MapPlaceSaveFlowSheet(context: context) { submission in
-                await saveProfileFlowSubmission(submission)
-            }
-        }
-        .wanderScreen()
-        .navigationTitle(mode.title)
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var searchField: some View {
