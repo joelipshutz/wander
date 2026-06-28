@@ -158,6 +158,12 @@ Runtime knobs:
 
 The worker sends only the approved place classification payload to OpenAI: place name, address/locality/region/country, source provider, source type, and current inferred category. Requests set `store: false`; if the secret is missing or the call fails, extraction falls back to deterministic category inference.
 
+The `parse-discover-query` Edge Function powers Discover natural-language search parsing when Supabase is configured. It requires the same server-side OpenAI secret and sends only the raw query plus the fixed allowed filter schema to OpenAI with `store: false`; the iOS app falls back to deterministic local parsing if the function is missing, the secret is missing, or the call fails.
+
+```bash
+npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
 Current hosted SQL test status:
 
 ```text

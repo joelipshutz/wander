@@ -6890,3 +6890,33 @@ Release outcome, 2026-06-28 11:04 PDT:
 - Slack: posted tester-facing build 51 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
 - Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782669825924449`.
 - Known deferred area: save/edit forms still intentionally open as sheets; list creation/editing remains local/mock-functional from REC-40, with backend list persistence and invite links remaining follow-up scope.
+
+## 2026-06-28 11:28 PDT - Codex - Deploy Discover OpenAI Parser
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean `main` at `origin/main` after `git fetch origin`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
+Mission Control task: `65a58cda-8527-46f5-a616-4ef4dba0e468`
+
+Goal: deploy the existing `supabase/functions/parse-discover-query` Edge Function, set/verify server-side OpenAI secret availability, smoke test Discover natural-language parsing against hosted Supabase, and record any extraction-worker classifier setup status.
+
+Expected files:
+
+- `docs/agent-log.md`
+
+Outcome, 2026-06-28 11:35 PDT:
+
+- Set hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw` from the local operational env file; no key value was written to git or logs.
+- Added the missing `parse-discover-query` function block to `supabase/config.toml` with `verify_jwt = false`, matching the existing app-invoked Edge Function pattern where the function code requires an Authorization header and the iOS client sends authenticated headers.
+- Documented the Discover parser deploy path in `docs/setup.md`.
+- Deployed `parse-discover-query` with:
+  `npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
+- Deployed current `extraction-worker` with:
+  `npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
+- Hosted smoke test for `parse-discover-query` passed:
+  - no Authorization header returned `401 {"error":"missing_authorization"}`
+  - authorized smoke query `Joe favorite coffee spots in LA` returned `categories=["coffee"]`, `area="LA"`, `statuses=["been"]`, `ownerQuery="Joe"`
+- Hosted smoke test for `extraction-worker` reached the deployed function and returned `401 {"error":"missing_authorization"}` without Authorization.
+- `git diff --check` passed.
+- No iOS build/TestFlight bump needed because the shipped app already calls `parse-discover-query` when Supabase is configured and falls back locally on failure. Existing running app sessions may keep per-query in-memory deterministic parse cache until restart or a new query string is used.
