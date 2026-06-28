@@ -7260,3 +7260,44 @@ Expected files:
 - `project.yml`
 - `Wander.xcodeproj/project.pbxproj`
 - `docs/agent-log.md`
+
+Outcome, 2026-06-28 13:08 PDT:
+
+- Squash-merged the local Private Profile branch into the release worktree as `84ea0b5b0` (`Implement private profile controls`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 51 to build 52 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `5e01d887b` (`chore: bump testflight build 52`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build52-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build52-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build52.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=52` verified.
+- Export options: `/private/tmp/WanderExportUpload52.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 52 --archive-path /private/tmp/Wander-0.1-build52.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build52-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (52)` id `7240093e-4c5e-4395-956c-50bb629cbc62` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: this Codex runtime did not expose a callable Slack send/draft tool, and no `SLACK_*` credential variable was available in the local env file. Post this required tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`):
+
+```text
+rec.me build 52 is live/approved in TestFlight.
+
+What changed:
+- Private Profile is now wired across settings, saves, and local list collaboration.
+- Turning Private Profile on puts your saved Been/Wanna Go places into stealth mode and keeps future saves stealth while it is on.
+- Turning Private Profile off does not bulk-restore visibility; existing places stay stealth, and future saves follow the stealth mode for new saves setting.
+- New collaborative lists are blocked while Private Profile is on, but owned existing collaborative lists can still add/remove friend-network collaborators.
+
+Please test:
+- Settings > Private profile on/off warnings and locked stealth-mode behavior.
+- Save a new place while Private Profile is on and confirm stealth stays locked on.
+- Turn Private Profile off and confirm existing places remain stealth while the default new-save setting is configurable again.
+- Try new list creation while Private Profile is on and confirm collaboration is blocked.
+- Edit an existing collaborative list you own and confirm collaborators remain and friend-network add/remove still works.
+
+Known/deferred:
+- List creation/editing is still local/mock-functional; backend list persistence and invite links remain follow-up scope.
+- Private Profile does not bulk-restore place visibility when turned off.
+
+Public TestFlight: https://testflight.apple.com/join/knEhRa6t
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+```
