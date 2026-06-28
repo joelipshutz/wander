@@ -304,7 +304,7 @@ function sanitizeShortText(
   maxLength = 48,
 ): string | null {
   const sanitized = value
-    ?.replace(/[^\p{L}\p{N}@'’&/., -]/gu, "")
+    ?.replace(/[^\p{L}\p{N}_@'’&/., -]/gu, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLength);

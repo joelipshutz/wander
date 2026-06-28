@@ -6974,3 +6974,18 @@ Handoff:
 - Commit: `535515b` (`feat: add modular ai provider layer`)
 - PR: `https://github.com/joelipshutz/wander/pull/48`
 - Restart instructions: review/merge PR #48, then deploy both `parse-discover-query` and `extraction-worker` Supabase functions when ready. Existing OpenAI secrets continue to work by default; set `WANDER_AI_PROVIDER`, provider key/model envs, and optional `WANDER_AI_BASE_URL` only when switching providers.
+
+Merge/deploy outcome, 2026-06-28 12:28 PDT:
+
+- PR #48 was squash-merged into `main` as `eb6746d` (`Add modular AI provider layer (#48)`).
+- Re-ran pre-merge validation on the PR head:
+  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
+  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
+  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
+  `git diff --check origin/main...HEAD`
+- Deployed merged `parse-discover-query` and `extraction-worker` to Supabase project `rugmtlgufrhlxwfkumhw` with `npx supabase functions deploy ... --use-api`.
+- Hosted smoke checks after deploy:
+  - `parse-discover-query` without Authorization returned `401 {"error":"missing_authorization"}`.
+  - `extraction-worker` with a dummy `job_id` and no Authorization returned `401 {"error":"missing_authorization"}`.
+  - Authorized Discover smoke initially exposed an existing sanitizer bug where `wanna_go` could become `wannago`; fixed the parser sanitizer to preserve underscores, re-ran `deno check`, redeployed `parse-discover-query`, and confirmed `places I want to try in LA` returns `statuses=["wanna_go"]`.
+- No TestFlight build was created because this was a backend Edge Function deploy only; build 51 remains the current TestFlight binary.
