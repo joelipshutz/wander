@@ -6941,3 +6941,37 @@ Completion checkpoint, 2026-06-28 11:39 PDT:
   - Real-device camera capture still needs QA.
   - Supabase Storage upload/cross-device avatar sync remains intentionally out of scope for this local-first slice.
   - `gstack-review-log` / `gstack-decision-log` still need `bun` available if Ryan wants dashboard ingestion beyond the plan file's terminal review report.
+
+## 2026-06-28 11:53 PDT - Codex - Profile Avatar Propagation
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` updated `origin/main` from `74bb5b157` to `cf5f3ef58`.
+
+Goal: make the selected profile photo render everywhere that same profile avatar appears in the app, including place cards, Discover, Lists, Map, settings, and profile surfaces. If the current user changes the local profile photo, all local surfaces that derive from `currentUser` / `LocalProfile` / `ProfileShell` / `VisiblePlace.owner` should update.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused tests if any propagation path needs model support beyond passing existing `avatarURL` values.
+
+Constraint: cross-device visibility in another person's installed app still requires a backend upload/storage contract. This follow-up completes propagation for avatar URLs already present in local profile state or remote profile shells.
+
+Completion checkpoint, 2026-06-28 11:59 PDT:
+
+- Propagated `avatarURL` through every `WanderAvatar` call site outside the shared component:
+  - Discover latest activity, owner disambiguation, member result tiles, and friend list rows now render `ProfileShell` / `VisiblePlace.owner` avatar URLs.
+  - Map search bar, save review cards, and facepiles now render current-user / owner avatar URLs.
+  - Place profile facepiles and save cards now render owner avatar URLs.
+  - Lists collaborator rows, staged collaborator rows, and facepiles now carry or resolve collaborator avatar URLs from `LocalProfile` / store profiles.
+- Broader profile-icon source scan found only generic navigation/auth/person-action symbols beyond `WanderAvatar`; those are not user photo surfaces.
+- `git diff --check` passed.
+- Full simulator suite passed on available iPhone 17 / iOS 26.5 runtime:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 181 tests, 0 failures.
+- Remaining product limitation: profiles on other people's devices still require the future Supabase Storage/profile avatar upload path; this pass ensures any available `avatarURL` renders everywhere locally and through remote profile shells.
