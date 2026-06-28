@@ -318,6 +318,21 @@ struct RemoteDiscoverFilterParser: LLMFilterParser {
     }
 }
 
+struct SupabaseListSuggestionRepository: ListSuggestionRepository {
+    private let functions: RemoteFunctionCalling
+
+    init(functions: RemoteFunctionCalling) {
+        self.functions = functions
+    }
+
+    func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {
+        try await functions.invoke(
+            "suggest-list-places",
+            body: payload
+        )
+    }
+}
+
 private struct SearchProfilesParams: Encodable {
     let query: String
 }

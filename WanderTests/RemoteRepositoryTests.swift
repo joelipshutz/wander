@@ -533,6 +533,53 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(encodedSchema?["allowedTags"] as? [String], ["quiet"])
     }
 
+    func testListSuggestionRepositoryInvokesEdgeFunctionWithPayload() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:suggest-list-places"] = """
+        {
+          "suggestions": [
+            {
+              "visible_place_id": "visible_fern",
+              "reason": "Fits the coffee and laptop theme",
+              "score": 0.91
+            }
+          ]
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseListSuggestionRepository(functions: rpc)
+        let payload = ListSuggestionPayload(
+            listID: "list_laptop",
+            title: "LA laptop mornings",
+            description: "quiet tables and outlets",
+            existingPlaces: [],
+            candidatePlaces: [
+                ListSuggestionPlacePayload(
+                    visiblePlaceID: "visible_fern",
+                    placeID: "place_fern",
+                    name: "Fern Desk Coffee",
+                    category: "coffee",
+                    locality: "Los Angeles",
+                    region: "CA",
+                    status: .been,
+                    ratingScore: 5,
+                    recommendedScore: 4.7,
+                    recommendedCount: 3,
+                    attributesText: "[quiet outlets]"
+                )
+            ],
+            limit: 4
+        )
+
+        let response = try await repository.suggestions(payload: payload)
+
+        XCTAssertEqual(response.suggestions.map(\.visiblePlaceID), ["visible_fern"])
+        XCTAssertEqual(response.suggestions[0].reason, "Fits the coffee and laptop theme")
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:suggest-list-places"])
+        XCTAssertEqual(rpc.rawBodies[0]["list_id"] as? String, "list_laptop")
+        XCTAssertEqual(rpc.rawBodies[0]["title"] as? String, "LA laptop mornings")
+        XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
+    }
+
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
         let parser = RemoteDiscoverFilterParser(repository: FailingDiscoverFilterRepository())
 

@@ -48,12 +48,16 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let placeAttributes: [PlaceAttributeRecord]
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
+    let placeLists: [PlaceListRecord]?
+    let placeListMembers: [PlaceListMemberRecord]?
+    let placeListItems: [PlaceListItemRecord]?
     let unresolvedDrafts: [UnresolvedDraftRecord]
     let sourceArtifacts: [SourceArtifactRecord]
     let extractionJobs: [ExtractionJobRecord]
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
+    let autoSaveListAddsToWant: Bool?
     let savedAt: Date
 
     @MainActor
@@ -65,12 +69,16 @@ struct WanderStoreSnapshot: Codable, Equatable {
         placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
+        placeLists = store.placeLists.map(PlaceListRecord.init)
+        placeListMembers = store.placeListMembers.map(PlaceListMemberRecord.init)
+        placeListItems = store.placeListItems.map(PlaceListItemRecord.init)
         unresolvedDrafts = store.unresolvedDrafts.map(UnresolvedDraftRecord.init)
         sourceArtifacts = store.sourceArtifacts.map(SourceArtifactRecord.init)
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
+        autoSaveListAddsToWant = store.autoSaveListAddsToWant
         savedAt = .now
     }
 
@@ -89,12 +97,16 @@ struct WanderStoreSnapshot: Codable, Equatable {
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
+            placeLists: placeLists?.map { $0.model() } ?? [],
+            placeListMembers: placeListMembers?.map { $0.model() } ?? [],
+            placeListItems: shouldResetSavedPlaces ? [] : placeListItems?.map { $0.model() } ?? [],
             unresolvedDrafts: shouldResetSavedPlaces ? [] : unresolvedDrafts.map { $0.model() },
             sourceArtifacts: shouldResetSavedPlaces ? [] : sourceArtifacts.map { $0.model() },
             extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
+            autoSaveListAddsToWant: autoSaveListAddsToWant ?? true,
             didApplySavedPlaceReset: shouldResetSavedPlaces
         )
     }
@@ -107,12 +119,16 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let placeAttributes: [LocalPlaceAttribute]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]
+        let placeLists: [LocalPlaceList]
+        let placeListMembers: [LocalPlaceListMember]
+        let placeListItems: [LocalPlaceListItem]
         let unresolvedDrafts: [UnresolvedDraft]
         let sourceArtifacts: [LocalSourceArtifact]
         let extractionJobs: [LocalExtractionJob]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool
+        let autoSaveListAddsToWant: Bool
         let didApplySavedPlaceReset: Bool
     }
 
@@ -493,6 +509,123 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 serverUpdatedAt: serverUpdatedAt,
                 lastSyncError: lastSyncError,
                 createdAt: createdAt
+            )
+        }
+    }
+
+    struct PlaceListRecord: Codable, Equatable {
+        let localID: String
+        let serverID: String?
+        let ownerUserID: String
+        let name: String
+        let description: String
+        let visibilityRaw: String
+        let syncStateRaw: String
+        let createdAt: Date
+        let updatedAt: Date
+        let deletedAt: Date?
+
+        init(_ list: LocalPlaceList) {
+            localID = list.localID
+            serverID = list.serverID
+            ownerUserID = list.ownerUserID
+            name = list.name
+            description = list.description
+            visibilityRaw = list.visibilityRaw
+            syncStateRaw = list.syncStateRaw
+            createdAt = list.createdAt
+            updatedAt = list.updatedAt
+            deletedAt = list.deletedAt
+        }
+
+        func model() -> LocalPlaceList {
+            LocalPlaceList(
+                localID: localID,
+                serverID: serverID,
+                ownerUserID: ownerUserID,
+                name: name,
+                description: description,
+                visibility: PlaceListVisibility(rawValue: visibilityRaw) ?? .followers,
+                syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt
+            )
+        }
+    }
+
+    struct PlaceListMemberRecord: Codable, Equatable {
+        let localID: String
+        let serverID: String?
+        let listID: String
+        let userID: String
+        let roleRaw: String
+        let createdAt: Date
+        let deletedAt: Date?
+
+        init(_ member: LocalPlaceListMember) {
+            localID = member.localID
+            serverID = member.serverID
+            listID = member.listID
+            userID = member.userID
+            roleRaw = member.roleRaw
+            createdAt = member.createdAt
+            deletedAt = member.deletedAt
+        }
+
+        func model() -> LocalPlaceListMember {
+            LocalPlaceListMember(
+                localID: localID,
+                serverID: serverID,
+                listID: listID,
+                userID: userID,
+                role: PlaceListRole(rawValue: roleRaw) ?? .collaborator,
+                createdAt: createdAt,
+                deletedAt: deletedAt
+            )
+        }
+    }
+
+    struct PlaceListItemRecord: Codable, Equatable {
+        let localID: String
+        let serverID: String?
+        let listID: String
+        let placeID: String
+        let ownerUserPlaceID: String?
+        let sourceUserPlaceID: String?
+        let addedByUserID: String
+        let syncStateRaw: String
+        let createdAt: Date
+        let updatedAt: Date
+        let deletedAt: Date?
+
+        init(_ item: LocalPlaceListItem) {
+            localID = item.localID
+            serverID = item.serverID
+            listID = item.listID
+            placeID = item.placeID
+            ownerUserPlaceID = item.ownerUserPlaceID
+            sourceUserPlaceID = item.sourceUserPlaceID
+            addedByUserID = item.addedByUserID
+            syncStateRaw = item.syncStateRaw
+            createdAt = item.createdAt
+            updatedAt = item.updatedAt
+            deletedAt = item.deletedAt
+        }
+
+        func model() -> LocalPlaceListItem {
+            LocalPlaceListItem(
+                localID: localID,
+                serverID: serverID,
+                listID: listID,
+                placeID: placeID,
+                ownerUserPlaceID: ownerUserPlaceID,
+                sourceUserPlaceID: sourceUserPlaceID,
+                addedByUserID: addedByUserID,
+                syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt
             )
         }
     }

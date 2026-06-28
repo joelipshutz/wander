@@ -642,3 +642,8 @@ protocol DiscoverRepository {
 protocol DiscoverFilterParsingRepository {
     func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters
 }
+
+@MainActor
+protocol ListSuggestionRepository {
+    func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse
+}

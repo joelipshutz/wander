@@ -11,6 +11,7 @@ final class WanderBackend: ObservableObject {
     let userPlaceRepository: (any UserPlaceRepository)?
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
     let extractionRepository: (any ExtractionRepository)?
+    let listSuggestionRepository: (any ListSuggestionRepository)?
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
@@ -26,6 +27,7 @@ final class WanderBackend: ObservableObject {
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
+            self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
         } else {
             self.profileRepository = nil
             self.profileAvatarRepository = nil
@@ -35,6 +37,7 @@ final class WanderBackend: ObservableObject {
             self.userPlaceRepository = nil
             self.socialPlaceSaveRepository = nil
             self.extractionRepository = nil
+            self.listSuggestionRepository = nil
         }
     }
 
@@ -52,7 +55,8 @@ final class WanderBackend: ObservableObject {
         placeRepository: (any PlaceRepository)? = nil,
         userPlaceRepository: (any UserPlaceRepository)? = nil,
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
-        extractionRepository: (any ExtractionRepository)? = nil
+        extractionRepository: (any ExtractionRepository)? = nil,
+        listSuggestionRepository: (any ListSuggestionRepository)? = nil
     ) {
         self.configuration = configuration
         self.profileRepository = profileRepository
@@ -63,6 +67,7 @@ final class WanderBackend: ObservableObject {
         self.userPlaceRepository = userPlaceRepository
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
         self.extractionRepository = extractionRepository
+        self.listSuggestionRepository = listSuggestionRepository
     }
 
     var canUseRemoteData: Bool {
@@ -74,6 +79,7 @@ final class WanderBackend: ObservableObject {
             || userPlaceRepository != nil
             || socialPlaceSaveRepository != nil
             || extractionRepository != nil
+            || listSuggestionRepository != nil
     }
 
     var canSyncProfileAvatars: Bool {
@@ -225,5 +231,13 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await extractionRepository.result(jobID: jobID)
+    }
+
+    func listSuggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {
+        guard let listSuggestionRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await listSuggestionRepository.suggestions(payload: payload)
     }
 }
