@@ -52,6 +52,10 @@ final class NavigationContractTests: XCTestCase {
             .editDeleteConfirm
         )
         XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collabEdit"]),
+            .collabEdit
+        )
+        XCTAssertEqual(
             ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collabEditDeleteConfirm"]),
             .collabEditDeleteConfirm
         )

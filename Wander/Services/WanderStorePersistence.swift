@@ -53,6 +53,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let extractionJobs: [ExtractionJobRecord]
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
+    let isPrivateProfile: Bool?
     let savedAt: Date
 
     @MainActor
@@ -69,6 +70,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
+        isPrivateProfile = store.isPrivateProfile
         savedAt = .now
     }
 
@@ -92,6 +94,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
+            isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
             didApplySavedPlaceReset: shouldResetSavedPlaces
         )
     }
@@ -109,6 +112,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let extractionJobs: [LocalExtractionJob]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
+        let isPrivateProfile: Bool
         let didApplySavedPlaceReset: Bool
     }
 
@@ -120,6 +124,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let avatarURL: String?
         let bio: String?
         let homeArea: String?
+        let isPrivateProfile: Bool?
         let defaultVisibilityRaw: String
         let syncStateRaw: String
         let localUpdatedAt: Date
@@ -137,6 +142,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             avatarURL = profile.avatarURL
             bio = profile.bio
             homeArea = profile.homeArea
+            isPrivateProfile = profile.isPrivateProfile
             defaultVisibilityRaw = profile.defaultVisibilityRaw
             syncStateRaw = profile.syncStateRaw
             localUpdatedAt = profile.localUpdatedAt
@@ -156,6 +162,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 avatarURL: avatarURL,
                 bio: bio,
                 homeArea: homeArea,
+                isPrivateProfile: isPrivateProfile ?? false,
                 defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? .followers,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,

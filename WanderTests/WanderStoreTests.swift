@@ -359,6 +359,22 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags"])
     }
 
+    func testFilePersistenceRestoresPrivateProfileModeAfterRelaunch() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.defaultVisibility = .followers
+        firstStore.setPrivateProfile(true)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertTrue(relaunchedStore.isPrivateProfile)
+        XCTAssertTrue(relaunchedStore.currentUser.isPrivateProfile)
+        XCTAssertEqual(relaunchedStore.defaultVisibility, .followers)
+        XCTAssertEqual(relaunchedStore.effectiveDefaultVisibility, .selfOnly)
+    }
+
     func testOldPersistenceSnapshotClearsSavedPlaceDataButKeepsAccountGraph() throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -695,6 +711,70 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertTrue(store.searchProfiles(handleQuery: "ry").isEmpty)
         XCTAssertTrue(store.searchProfiles(handleQuery: "r").isEmpty)
+    }
+
+    func testUsernameSearchHidesPrivateProfiles() {
+        let store = makeStore()
+        let maya = store.profiles.first { $0.id == "user_maya" }!
+
+        XCTAssertEqual(store.searchProfiles(handleQuery: "ma").map(\.handle), ["maya"])
+
+        maya.isPrivateProfile = true
+
+        XCTAssertTrue(store.searchProfiles(handleQuery: "ma").isEmpty)
+    }
+
+    func testPrivateProfileForcesCurrentAndFutureSavesStealthWithoutRestoringOnDisable() {
+        let store = makeStore()
+        store.defaultVisibility = .followers
+        let originalUserPlaceIDs = store.currentUserVisiblePlaces.map(\.userPlace.id)
+        let otherUserPlace = store.userPlaces.first {
+            $0.userID != store.currentUser.id && $0.visibility == .followers
+        }!
+
+        store.setPrivateProfile(true)
+
+        XCTAssertTrue(store.isPrivateProfile)
+        XCTAssertTrue(store.currentUser.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertEqual(store.effectiveDefaultVisibility, .selfOnly)
+        XCTAssertTrue(
+            store.currentUserVisiblePlaces
+                .filter { originalUserPlaceIDs.contains($0.userPlace.id) }
+                .allSatisfy { $0.userPlace.visibility == .selfOnly }
+        )
+        XCTAssertEqual(
+            store.userPlaces.first { $0.id == otherUserPlace.id }?.visibility,
+            .followers
+        )
+
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_private_profile_maru",
+                name: "Private Profile Maru",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.visibility, .selfOnly)
+
+        store.setPrivateProfile(false)
+
+        XCTAssertFalse(store.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertEqual(store.effectiveDefaultVisibility, .followers)
+        XCTAssertTrue(
+            store.currentUserVisiblePlaces
+                .filter { originalUserPlaceIDs.contains($0.userPlace.id) || $0.userPlace.id == result.userPlaceID }
+                .allSatisfy { $0.userPlace.visibility == .selfOnly }
+        )
     }
 
     func testContactMatchesOnlyIncludePeopleOnWander() async {

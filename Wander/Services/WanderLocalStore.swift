@@ -74,6 +74,15 @@ final class WanderStore: ObservableObject {
             persist()
         }
     }
+    @Published var isPrivateProfile: Bool {
+        didSet {
+            currentUser.isPrivateProfile = isPrivateProfile
+            currentUser.updatedAt = .now
+            currentUser.localUpdatedAt = .now
+
+            persist()
+        }
+    }
 
     let contactProvider: FakeContactProvider
 
@@ -123,6 +132,7 @@ final class WanderStore: ObservableObject {
             self.extractionJobs = restored.extractionJobs
             self.contactProvider = restored.contactProvider
             self.defaultVisibility = restored.defaultVisibility
+            self.isPrivateProfile = restored.isPrivateProfile
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
         } else {
             self.currentUser = fixtures.currentUser
@@ -134,7 +144,11 @@ final class WanderStore: ObservableObject {
             self.blocks = fixtures.blocks
             self.contactProvider = fixtures.contactProvider
             self.defaultVisibility = fixtures.currentUser.defaultVisibility
+            self.isPrivateProfile = fixtures.currentUser.isPrivateProfile
         }
+
+        self.currentUser.isPrivateProfile = self.isPrivateProfile
+        self.currentUser.defaultVisibilityRaw = self.defaultVisibility.rawValue
 
         if shouldPersistAfterRestore {
             persist()
@@ -192,6 +206,20 @@ final class WanderStore: ObservableObject {
 
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
+    }
+
+    var effectiveDefaultVisibility: PlaceVisibility {
+        isPrivateProfile ? .selfOnly : defaultVisibility.normalizedForStealthMode
+    }
+
+    func setPrivateProfile(_ enabled: Bool) {
+        guard isPrivateProfile != enabled else { return }
+
+        isPrivateProfile = enabled
+
+        if enabled {
+            makeCurrentUserContentPrivate()
+        }
     }
 
     func visiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
@@ -339,6 +367,7 @@ final class WanderStore: ObservableObject {
             .filter { profile in
                 let normalizedName = profile.displayName.lowercased()
                 return profile.id != currentUser.id
+                    && !profile.isPrivateProfile
                     && !isBlockedBetweenCurrentUser(and: profile.id)
                     && (
                         profile.searchHandle == normalized
@@ -372,6 +401,7 @@ final class WanderStore: ObservableObject {
         return matches.filter { match in
             guard let userID = match.userID else { return false }
             return !isBlockedBetweenCurrentUser(and: userID)
+                && !isProfilePrivate(userID)
         }
     }
 
@@ -499,12 +529,13 @@ final class WanderStore: ObservableObject {
         ratingScore: Int? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
+        let resolvedVisibility = visibilityForSave(visibility)
         let place = upsertPlace(from: candidate, sourceType: sourceType)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
             existing.statusRaw = status.rawValue
-            existing.visibilityRaw = visibility.rawValue
+            existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
             existing.ratingScore = savedRatingScore
             existing.recommendedScore = savedRatingScore.map(Double.init)
@@ -526,7 +557,7 @@ final class WanderStore: ObservableObject {
             userID: currentUser.id,
             placeID: place.id,
             status: status,
-            visibility: visibility,
+            visibility: resolvedVisibility,
             note: note,
             ratingSignal: attributes.flatMap { ratingSignal(from: $0) },
             ratingScore: savedRatingScore,
@@ -543,7 +574,7 @@ final class WanderStore: ObservableObject {
         analytics.track(
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.placeSaved,
-                properties: ["source_type": sourceType.rawValue, "visibility": visibility.rawValue, "status": status.rawValue]
+                properties: ["source_type": sourceType.rawValue, "visibility": resolvedVisibility.rawValue, "status": status.rawValue]
             )
         )
         persist()
@@ -894,7 +925,7 @@ final class WanderStore: ObservableObject {
                 confidence: visiblePlace.place.confidence ?? 1
             ),
             status: status,
-            visibility: defaultVisibility,
+            visibility: effectiveDefaultVisibility,
             note: visiblePlace.userPlace.note,
             sourceType: .socialSave,
             attributes: copiedAttributes
@@ -1202,17 +1233,44 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func isProfilePrivate(_ userID: String) -> Bool {
+        profiles.first { $0.id == userID }?.isPrivateProfile == true
+    }
+
+    private func visibilityForSave(_ visibility: PlaceVisibility) -> PlaceVisibility {
+        isPrivateProfile ? .selfOnly : visibility
+    }
+
+    private func makeCurrentUserContentPrivate() {
+        var didUpdate = false
+
+        for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil && userPlace.visibility != .selfOnly {
+            userPlace.visibilityRaw = PlaceVisibility.selfOnly.rawValue
+            userPlace.updatedAt = .now
+            userPlace.localUpdatedAt = .now
+            userPlace.syncStateRaw = userPlace.syncState == .synced ? SyncState.pendingUpdate.rawValue : userPlace.syncStateRaw
+            didUpdate = true
+        }
+
+        if didUpdate {
+            objectWillChange.send()
+            persist()
+        }
+    }
+
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
         let handle = normalizedSessionHandle(from: session)
         let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: handle)
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
+        let preferredPrivateProfile = isPrivateProfile
         let profile = LocalProfile(
             localID: localID,
             serverID: session.userID,
             handle: handle,
             displayName: displayName,
+            isPrivateProfile: preferredPrivateProfile,
             syncState: .synced
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
@@ -1222,6 +1280,7 @@ final class WanderStore: ObservableObject {
         profiles.insert(profile, at: 0)
         claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
         defaultVisibility = preferredVisibility
+        isPrivateProfile = preferredPrivateProfile
     }
 
     private func claimGuestRowsIfNeeded(from previousProfile: LocalProfile, to signedInProfile: LocalProfile) {
@@ -1248,10 +1307,12 @@ final class WanderStore: ObservableObject {
     private func applySignedOutProfile() {
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
+        let preferredPrivateProfile = isPrivateProfile
         let profile = LocalProfile(
             localID: localID,
             handle: "you",
             displayName: "You",
+            isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
@@ -1260,6 +1321,7 @@ final class WanderStore: ObservableObject {
         profiles.removeAll { $0.localID == localID }
         profiles.insert(profile, at: 0)
         defaultVisibility = preferredVisibility
+        isPrivateProfile = preferredPrivateProfile
     }
 
     private func normalizedSessionHandle(from session: AuthSession) -> String {
@@ -1587,7 +1649,7 @@ final class WanderStore: ObservableObject {
         var seen = Set<String>()
         var merged: [ProfileShell] = []
 
-        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) && !seen.contains(shell.id) {
+        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) && !isProfilePrivate(shell.id) && !seen.contains(shell.id) {
             seen.insert(shell.id)
             merged.append(shell)
         }

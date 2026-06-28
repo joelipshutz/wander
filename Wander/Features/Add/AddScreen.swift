@@ -39,6 +39,19 @@ struct AddScreen: View {
         candidates.first { $0.id == selectedCandidateID } ?? candidates.first
     }
 
+    private var saveVisibility: PlaceVisibility {
+        store.isPrivateProfile ? .selfOnly : selectedVisibility
+    }
+
+    private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
+        Binding(
+            get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
+            set: { newVisibility in
+                selectedVisibility = store.isPrivateProfile ? .selfOnly : newVisibility
+            }
+        )
+    }
+
     private var currentQuestionBlocks: [AddQuestionBlock] {
         AddQuestionTemplates.blocks(
             category: selectedCandidate?.category ?? manualCategory,
@@ -95,6 +108,11 @@ struct AddScreen: View {
             .animation(.spring(response: 0.36, dampingFraction: 0.86), value: saveToast)
             .onChange(of: resetToken) { _, _ in
                 reset()
+            }
+            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
+                if isPrivateProfile {
+                    selectedVisibility = .selfOnly
+                }
             }
         }
     }
@@ -411,7 +429,17 @@ struct AddScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             }
 
-            PlaceVisibilityStealthToggle(visibility: $selectedVisibility)
+            PlaceVisibilityStealthToggle(
+                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
+                visibility: selectedVisibilityForStealthToggle,
+                helperCopy: { visibility in
+                    store.isPrivateProfile
+                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
+                        : visibility.stealthModeHelperCopy
+                }
+            )
+            .disabled(store.isPrivateProfile)
+            .opacity(store.isPrivateProfile ? 0.56 : 1)
 
             WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
                 Task {
@@ -493,7 +521,7 @@ struct AddScreen: View {
         candidates = []
         selectedCandidateID = nil
         selectedStatus = .been
-        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+        selectedVisibility = store.effectiveDefaultVisibility
         selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
         note = ""
@@ -518,7 +546,7 @@ struct AddScreen: View {
         candidates = []
         selectedCandidateID = nil
         selectedStatus = .been
-        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+        selectedVisibility = store.effectiveDefaultVisibility
         selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
         note = ""
@@ -632,7 +660,7 @@ struct AddScreen: View {
         savedResult = await store.saveCandidate(
             selectedCandidate,
             status: selectedStatus,
-            visibility: selectedVisibility,
+            visibility: saveVisibility,
             note: note.isEmpty ? nil : note,
             sourceType: selectedSource,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
@@ -658,7 +686,7 @@ struct AddScreen: View {
         do {
             candidates = try await store.currentLocationCandidates()
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -687,7 +715,7 @@ struct AddScreen: View {
                 category: manualCategory
             )
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -712,7 +740,7 @@ struct AddScreen: View {
         do {
             candidates = try await store.linkCandidates(linkInput)
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -856,7 +884,7 @@ struct AddScreen: View {
             manualArea = ""
             candidates = resolution.candidates
             selectedCandidateID = resolution.candidates.first?.id
-            selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+            selectedVisibility = store.effectiveDefaultVisibility
             resolutionMessage = resolution.message
             step = .confirm
             return true
@@ -910,7 +938,7 @@ struct AddScreen: View {
         selectedSource = source
         candidates = resolvedCandidates
         selectedCandidateID = resolvedCandidates.first?.id
-        selectedVisibility = store.defaultVisibility.normalizedForStealthMode
+        selectedVisibility = store.effectiveDefaultVisibility
         resolutionMessage = nil
         step = .confirm
         return true

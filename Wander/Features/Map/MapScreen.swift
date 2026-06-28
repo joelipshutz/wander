@@ -506,7 +506,7 @@ struct MapScreen: View {
                 mapSaveFlow = MapPlaceSaveContext.addCandidate(
                     selectedSearchCandidate,
                     sourceType: .manual,
-                    defaultVisibility: store.defaultVisibility
+                    defaultVisibility: store.effectiveDefaultVisibility
                 )
             }
             .zIndex(30)
@@ -762,7 +762,7 @@ struct MapScreen: View {
         case .add:
             mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
-                defaultVisibility: store.defaultVisibility,
+                defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
         case .edit:
@@ -2093,6 +2093,7 @@ struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
@@ -2116,6 +2117,19 @@ struct MapPlaceSaveFlowSheet: View {
         AddQuestionTemplates.blocks(category: context.candidate.category, status: selectedStatus)
     }
 
+    private var saveVisibility: PlaceVisibility {
+        store.isPrivateProfile ? .selfOnly : selectedVisibility
+    }
+
+    private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
+        Binding(
+            get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
+            set: { newVisibility in
+                selectedVisibility = store.isPrivateProfile ? .selfOnly : newVisibility
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -2134,6 +2148,16 @@ struct MapPlaceSaveFlowSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(WanderTheme.canvasWarm.color)
+            .onAppear {
+                if store.isPrivateProfile {
+                    selectedVisibility = .selfOnly
+                }
+            }
+            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
+                if isPrivateProfile {
+                    selectedVisibility = .selfOnly
+                }
+            }
         }
     }
 
@@ -2241,7 +2265,17 @@ struct MapPlaceSaveFlowSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
-            PlaceVisibilityStealthToggle(visibility: $selectedVisibility)
+            PlaceVisibilityStealthToggle(
+                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
+                visibility: selectedVisibilityForStealthToggle,
+                helperCopy: { visibility in
+                    store.isPrivateProfile
+                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
+                        : visibility.stealthModeHelperCopy
+                }
+            )
+            .disabled(store.isPrivateProfile)
+            .opacity(store.isPrivateProfile ? 0.56 : 1)
 
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
@@ -2346,7 +2380,7 @@ struct MapPlaceSaveFlowSheet: View {
         let submission = MapPlaceSaveSubmission(
             context: context,
             status: selectedStatus,
-            visibility: selectedVisibility,
+            visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts()

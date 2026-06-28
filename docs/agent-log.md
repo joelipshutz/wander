@@ -6989,3 +6989,274 @@ Merge/deploy outcome, 2026-06-28 12:28 PDT:
   - `extraction-worker` with a dummy `job_id` and no Authorization returned `401 {"error":"missing_authorization"}`.
   - Authorized Discover smoke initially exposed an existing sanitizer bug where `wanna_go` could become `wannago`; fixed the parser sanitizer to preserve underscores, re-ran `deno check`, redeployed `parse-discover-query`, and confirmed `places I want to try in LA` returns `statuses=["wanna_go"]`.
 - No TestFlight build was created because this was a backend Edge Function deploy only; build 51 remains the current TestFlight binary.
+## 2026-06-27 14:55 PDT - Codex - REC-42/REC-43 Settings Copy And Toggle Layout
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch created from `origin/main` at `948d7bcbb`.
+
+Goal: implement REC-42 and REC-43 by clarifying the private profile and stealth mode settings copy, and fixing the clipped stealth-mode toggle in the Settings page.
+
+Coordination:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is clean but currently on `codex/rec-40-lists-mockups`, so this work is isolated in a new worktree.
+- `git worktree list` also shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` pointing at the REC-40 branch; no overlapping files are expected there.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- Focused settings/navigation tests if existing coverage needs updating
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 15:16 PDT:
+
+- Rebased the branch onto latest `origin/main` at `80912a283` after REC-40 landed.
+- Implemented settings privacy copy updates:
+  - Renamed the settings section from `default stealth mode` to `privacy`.
+  - Changed the default-place privacy toggle label to `stealth mode for new saves`.
+  - Added state-specific helper copy so the setting explains what on/off means for newly saved places.
+  - Added a `Private profile` explanatory row that clarifies username search/suggestions and that per-place privacy still controls saved-place visibility.
+- Fixed the clipped settings toggle by updating `PlaceVisibilityStealthToggle` so embedded/no-container use no longer applies a zero-radius clipping mask, while retaining the existing contained style for Add/Map save flows.
+- Expanded expected touched files to include `Wander/DesignSystem/WanderTheme.swift` and `WanderTests/AuthSessionTests.swift`.
+- Verification:
+  - `git diff --check` passed.
+  - Initial documented simulator destination `iPhone 16 Plus, OS=18.6` is not installed here; available validation used `iPhone 17 Pro, OS=26.5`.
+  - Focused `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch` passed after fixing a local SwiftUI property-name collision.
+  - Rebased full suite passed: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-rebased-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Full-suite warnings were existing signed-binary stripping warnings plus the existing traditional headermap warning.
+- Final rebased Settings screenshots reviewed:
+  - `/private/tmp/rec42-43-settings-rebased-iphone17pro.png`
+  - `/private/tmp/rec42-43-settings-rebased-iphone17e.png`
+- Visual result: no clipped switch on either phone size; privacy copy wraps within the card and remains readable above the fold on the smaller phone.
+
+Blocked handoff, 2026-06-27 15:18 PDT:
+
+- Local implementation commit created: `208200cc9` (`Clarify settings privacy copy`).
+- Attempted `git push -u origin codex/rec-42-43-settings-copy`, but the Codex approval reviewer rejected the push because external transfer to the GitHub remote needs explicit user approval.
+- Branch has not been pushed and no PR has been opened yet.
+- Restart after approval: from `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`, run `git push -u origin codex/rec-42-43-settings-copy`, then open a PR against `main` with the validation notes above.
+
+## 2026-06-27 22:00 PDT - Codex - Private Profile Mode Behavior
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin` and rebase onto `origin/main` at `34dcd6f79`; branch has two local commits ahead of `origin/main` from the prior settings pass.
+
+Goal: implement Ryan's private profile behavior: show Private Profile above default stealth mode, lock stealth on when private profile is enabled, lock save/edit privacy to stealth when private, keep private profiles out of search and list collaboration, and show transition warnings for changing private profile state.
+
+Assumption:
+
+- Ryan's warning directions appear reversed relative to the behavior description. Implementation will follow the product model that Private Profile on means everything private/hidden, and Private Profile off means searchable/collaboration-capable with default stealth configurable.
+
+Expected files:
+
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/DesignSystem/WanderTheme.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- Focused model/store/UI-copy tests
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-28 00:29 PDT:
+
+- Implemented Private Profile as persisted local profile/store state.
+- Settings now shows `Private profile` above `stealth mode for new saves`.
+- Private Profile changes are confirmation-gated:
+  - Turning on warns that saved places/lists become private, username search is hidden, collaboration is unavailable, and stealth stays locked on.
+  - Turning off warns that username search and list collaboration return, and new saves can be visible by default unless stealth remains on.
+- Private Profile on now:
+  - Forces default visibility to `self`.
+  - Marks existing current-user saved places private.
+  - Forces future saves and edits through Add/Map/Discover/Profile save paths to `self`.
+  - Keeps local private profiles out of username search and contact matches.
+  - Locks the Add/Map save sheet stealth controls on and disabled.
+  - Locks list editor stealth on, disables collaborator entry points, and filters private profiles from collaborator candidates.
+- Added focused tests for Settings copy, persisted private profile mode, search exclusion, and forced save visibility.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testUsernameSearchHidesPrivateProfiles -only-testing:WanderTests/WanderStoreTests/testPrivateProfileLocksDefaultVisibilityAndFutureSaves -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch`.
+  - Final full XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-final-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - Default Settings off state:
+    `/private/tmp/private-profile-settings-iphone17pro.png`
+    `/private/tmp/private-profile-settings-iphone17e.png`
+  - Private Profile locked-on Settings state, using simulator-only persisted local store setup:
+    `/private/tmp/private-profile-settings-locked-iphone17pro.png`
+    `/private/tmp/private-profile-settings-locked-iphone17e.png`
+- Visual result: Private Profile appears above stealth mode, the stealth switch is visibly grayed/locked on when Private Profile is enabled, and copy wraps cleanly on iPhone 17 Pro and iPhone 17e.
+- Local implementation commit: `0792ba5cc` (`Implement private profile privacy lock`).
+- Known handoff issue: branch is still local because the earlier `git push` was rejected by the approval reviewer for external transfer without explicit user approval. Push and PR creation remain blocked until Ryan approves that transfer.
+
+## 2026-06-28 00:44 PDT - Codex - Private Profile Copy And Stealth Icon Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch had four local commits ahead of `origin/main`.
+
+Goal: remove the redundant "Stealth mode below controls whether new saves start hidden" sentence from the Private Profile off-state copy, change the Private Profile warning to say stealth mode stays activated, and add an icon next to the shared stealth mode option.
+
+Expected files:
+
+- `Wander/DesignSystem/WanderTheme.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Private Profile off-state Settings body to only say the username can appear in search and list collaboration is available.
+- Updated the Private Profile on-warning copy from "Stealth mode will stay locked on" to "Stealth mode will stay activated."
+- Added an `eye.slash.fill` SF Symbol next to the shared `PlaceVisibilityStealthToggle` title so Settings, Add, and Map save/edit flows all show a stealth/privacy icon.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-copy-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-stealth-icon-iphone17pro.png`
+  - `/private/tmp/private-profile-stealth-icon-iphone17e.png`
+- Visual result: shorter Private Profile copy fits cleanly; the stealth icon appears beside the stealth mode title without clipping or crowding on iPhone 17 Pro and iPhone 17e.
+- Local follow-up commit: `cc225b568` (`Tighten private profile settings copy`).
+- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. After the required fetch, branch is four commits behind latest `origin/main`; rebase before opening a PR.
+
+## 2026-06-28 09:10 PDT - Codex - Stealth Row Alignment Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 6, behind 4 versus `origin/main`.
+
+Goal: align the `stealth mode for new saves` row with the Private Profile row above it by giving the shared stealth toggle the same leading icon column treatment.
+
+Expected files:
+
+- `Wander/DesignSystem/WanderTheme.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated `PlaceVisibilityStealthToggle` so the stealth icon sits in the same 38pt leading icon column used by the Private Profile row, aligning the stealth title/helper text with the row above.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-alignment-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-stealth-aligned-iphone17pro.png`
+  - `/private/tmp/private-profile-stealth-aligned-iphone17e.png`
+- Visual result: the `stealth mode for new saves` title and helper copy now align with the Private Profile title/helper copy above on iPhone 17 Pro and iPhone 17e.
+
+## 2026-06-28 09:33 PDT - Codex - Existing Collaborative Lists Private Profile Rule
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 7, behind 6 versus `origin/main`.
+
+Goal: update Private Profile behavior and disclaimer copy so existing collaborative lists remain unchanged, while Private Profile prevents creating new collaborative lists or adding new collaborators. Remove the warning sentence that says stealth mode will stay activated.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Private Profile settings copy so the enabled state says new collaborative lists are unavailable, and the enabling warning says saved places and solo lists become private while existing collaborative lists stay unchanged.
+- Removed the warning sentence that said "Stealth mode will stay activated."
+- Updated list collaboration UI behavior:
+  - Brand-new lists clear/disable staged collaborators while Private Profile is on.
+  - Existing collaborative lists keep their existing collaborators while Private Profile is on.
+  - Existing collaborative list invite surfaces show the current collaborators and explain that new invites are unavailable.
+  - Solo lists keep the collaborator controls disabled while Private Profile is on.
+- Added a `collabEdit` visual QA scenario for opening an existing collaborative list editor without the delete-confirmation alert.
+- Validation:
+  - `git diff --check` passed.
+  - Sandboxed `xcodebuild test` failed before app code ran because CoreSimulator/user cache access was blocked; reran the same focused tests with elevated permissions.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
+  - Existing warnings only: traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-new-collab-blocked-list-editor-final.png`
+  - `/private/tmp/private-profile-existing-collab-list-editor-final.png`
+- Visual result: Private Profile blocks new collaborative lists without overlap, and existing collaborative lists show locked stealth plus a compact "existing collaborators" summary that stays clear of the save/delete action bar.
+- Local implementation commit: `bb2b1ed83` (`Preserve existing list collaborators in private profile`).
+- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. Rebase or merge latest `origin/main` before opening a PR because the branch is behind.
+
+## 2026-06-28 12:08 PDT - Codex - Clarified Private Profile Visibility Rules
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 9, behind 8 versus `origin/main`.
+
+Goal: update Private Profile behavior to match Ryan's clarified product rules: only places saved by the current user are forced stealth, future saves stay stealth while enabled, turning Private Profile off does not restore visibility, and existing collaborative lists remain editable for existing friend-network collaboration.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated `WanderLocalStore` so Private Profile no longer overwrites the stored `defaultVisibility`; it forces `.selfOnly` through `effectiveDefaultVisibility` and save-time visibility while enabled.
+- Strengthened store tests to verify:
+  - all current-user saved places switch to stealth when Private Profile turns on;
+  - other users' saved-place rows are not mutated;
+  - future saves are forced stealth while Private Profile is on;
+  - turning Private Profile off does not restore existing place visibility;
+  - the user's underlying default visibility preference survives the Private Profile round trip.
+- Updated Settings copy so enabling Private Profile says Been/Wanna Go places switch to stealth, future saves stay stealth, username is hidden, followers and existing collaborative lists stay unchanged, and new collaborative lists are unavailable.
+- Updated the turn-off warning to be informational only: existing places stay stealth, username can appear in search again, and future saves follow the `stealth mode for new saves` setting.
+- Updated list collaboration behavior:
+  - new/solo lists cannot become collaborative while Private Profile is on;
+  - owned existing collaborative lists can still add/remove friend-network collaborators while Private Profile is on;
+  - private profiles are hidden from global username search but remain available inside mutual-friend collaborator search;
+  - collaborator rows match by handle as well as id to avoid duplicate mock/profile entries.
+- Validation:
+  - `git diff --check` passed.
+  - Sandboxed focused `xcodebuild test` failed before app code ran because CoreSimulator/user cache access and package fetches were blocked; reran with elevated permissions and existing DerivedData.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testPrivateProfileForcesCurrentAndFutureSavesStealthWithoutRestoringOnDisable -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
+  - Full XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Existing warnings only: traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-new-list-collab-blocked-clarified.png`
+  - `/private/tmp/private-profile-existing-collab-manage-clarified-final.png`
+- Visual result: new lists show collaboration blocked while Private Profile is on; existing collaborative lists show locked stealth, compact collaborator summary, and a visible add/manage control without bottom action-bar overlap.
+- Local implementation commit: `9a1ae13bc` (`Clarify private profile visibility rules`).
+
+## 2026-06-28 12:46 PDT - Codex - Private Profile TestFlight Release
+
+Agent: Codex
+Branch: `codex/private-profile-testflight-release`
+Worktree: `/private/tmp/recme-private-profile-release`
+Starting status: clean branch from latest `origin/main` (`65b196319`) after `git fetch origin`; source feature branch `codex/rec-42-43-settings-copy` is local-only at `8b93092e0` and is ahead 11, behind 10 versus `origin/main`.
+
+Goal: squash-merge the local Private Profile/settings/list-collaboration branch to `main`, increment the TestFlight build from 51 to 52, run build/tests, archive/upload to TestFlight, run the TestFlight helper, and post tester-facing Slack notes to `#testflight-feedback`.
+
+Expected files:
+
+- `Wander/**`
+- `WanderTests/**`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
