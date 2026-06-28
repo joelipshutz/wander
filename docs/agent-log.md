@@ -6968,3 +6968,9 @@ Completion checkpoint, 2026-06-28 12:19 PDT:
   `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
   `git diff --check`
 - No iOS build, archive, TestFlight upload, or hosted Supabase function deploy was run for this implementation pass.
+
+Handoff:
+
+- Commit: `535515b` (`feat: add modular ai provider layer`)
+- PR: `https://github.com/joelipshutz/wander/pull/48`
+- Restart instructions: review/merge PR #48, then deploy both `parse-discover-query` and `extraction-worker` Supabase functions when ready. Existing OpenAI secrets continue to work by default; set `WANDER_AI_PROVIDER`, provider key/model envs, and optional `WANDER_AI_BASE_URL` only when switching providers.
