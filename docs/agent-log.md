@@ -6920,3 +6920,57 @@ Outcome, 2026-06-28 11:35 PDT:
 - Hosted smoke test for `extraction-worker` reached the deployed function and returned `401 {"error":"missing_authorization"}` without Authorization.
 - `git diff --check` passed.
 - No iOS build/TestFlight bump needed because the shipped app already calls `parse-discover-query` when Supabase is configured and falls back locally on failure. Existing running app sessions may keep per-query in-memory deterministic parse cache until restart or a new query string is used.
+
+## 2026-06-28 11:52 PDT - Codex - Scope Modular AI Provider Layer
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean `main` at `origin/main`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
+Mission Control task: `ecb7852e-bb71-46cf-8bdd-1c29272594ee`
+
+Goal: scope whether the Discover natural-language parser and extraction-worker category classifier can be modularized so Rec.me can swap OpenAI for Anthropic or an OpenAI-compatible/open-source endpoint without changing app contracts.
+
+Planning outcome:
+
+- App-side contract is already mostly insulated: iOS calls Supabase Edge Functions and falls back to the deterministic parser when the remote parser fails.
+- Server-side provider logic is not yet modular: `parse-discover-query` and `extraction-worker` each own OpenAI-specific transport, key lookup, timeout, model selection, response parsing, and provider step names.
+- Recommended scope is a server-side shared structured-JSON provider layer under `supabase/functions/_shared/ai/`, with OpenAI as the first production adapter and Anthropic/OpenAI-compatible adapters behind the same interface.
+- Preserve current function APIs, current deterministic fallbacks, and current hosted behavior. No TestFlight bump is required unless the follow-up also adds app-side debouncing/request throttling.
+
+## 2026-06-28 12:02 PDT - Codex - Implement Modular AI Provider Layer
+
+Agent: Codex
+Branch: `codex/modular-ai-provider`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: branch created from current `main`; existing uncommitted planning log entry is Codex-owned and carried onto this branch. Mission Control local API is not reachable, so this log is the coordination source for this task.
+
+Goal: implement the scoped provider-neutral structured JSON layer for Supabase Edge Functions so Discover parsing and extraction category classification can switch away from OpenAI without changing iOS contracts.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/setup.md`
+- `supabase/functions/_shared/ai/*`
+- `supabase/functions/parse-discover-query/index.ts`
+- `supabase/functions/extraction-worker/index.ts`
+- Focused Deno tests for provider adapter behavior and current fallback semantics.
+
+Completion checkpoint, 2026-06-28 12:19 PDT:
+
+- Added `supabase/functions/_shared/ai/` with a provider-neutral `structuredJSON` entrypoint and OpenAI, Anthropic, and OpenAI-compatible adapters.
+- Refactored `parse-discover-query` to call the shared provider layer while preserving the existing authenticated function API, `model_unavailable` response for missing provider config, OpenAI default model, and deterministic iOS fallback behavior.
+- Refactored `extraction-worker` category enrichment to call the shared provider layer, record neutral `ai_*` provider steps, preserve deterministic fallback on provider failure, and use provider-neutral `category_source: "ai"` for newly applied model classifications.
+- Documented the new provider/env knobs in `docs/setup.md`, while keeping existing OpenAI secret/model/timeout env names as backwards-compatible fallbacks.
+- Validation passed:
+  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
+  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
+  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
+  `git diff --check`
+- No iOS build, archive, TestFlight upload, or hosted Supabase function deploy was run for this implementation pass.
+
+Handoff:
+
+- Commit: `535515b` (`feat: add modular ai provider layer`)
+- PR: `https://github.com/joelipshutz/wander/pull/48`
+- Restart instructions: review/merge PR #48, then deploy both `parse-discover-query` and `extraction-worker` Supabase functions when ready. Existing OpenAI secrets continue to work by default; set `WANDER_AI_PROVIDER`, provider key/model envs, and optional `WANDER_AI_BASE_URL` only when switching providers.
