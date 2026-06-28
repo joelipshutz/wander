@@ -6931,3 +6931,13 @@ Checkpoint, 2026-06-28 11:37 PDT:
   - Screenshots reviewed: `/private/tmp/recme-profile-avatar-17pro.png` and `/private/tmp/recme-profile-avatar-17e.png`.
   - Avatar edit badge, profile copy, settings button, stats, and bottom tab layout looked clean on both sizes.
 - Known gap: physical camera capture was not exercised because simulator camera availability is gated off; the action is hidden on simulator and should appear on device.
+
+Completion checkpoint, 2026-06-28 11:39 PDT:
+
+- Implementation commit: `9e3818a90` (`Add profile picture picker`).
+- PR opened: https://github.com/joelipshutz/wander/pull/45.
+- Final branch: `codex/profile-pictures`.
+- Known issues / follow-ups:
+  - Real-device camera capture still needs QA.
+  - Supabase Storage upload/cross-device avatar sync remains intentionally out of scope for this local-first slice.
+  - `gstack-review-log` / `gstack-decision-log` still need `bun` available if Ryan wants dashboard ingestion beyond the plan file's terminal review report.
