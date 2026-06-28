@@ -2,20 +2,20 @@
 
 Date: 2026-06-28
 Branch: `codex/profile-pictures`
-Status: planning before implementation
+Status: implemented with local Swift tests passing; hosted/Supabase CLI migration test still needs an environment with `supabase` installed
 
 ## Goal
 
 Let the profile owner tap the avatar circle on the Profile tab and use native iOS photo UI to set or remove a profile picture.
 
-The first slice should feel real on-device without pretending the backend avatar pipeline is done. The selected image persists locally, renders anywhere Wander shows a profile avatar, and can be deleted. Remote Supabase Storage upload and cross-device avatar sync stay explicit follow-up scope.
+The selected image persists locally immediately, uploads to Supabase Storage when the user is signed in, stores a durable profile avatar URL on `profiles.avatar_url`, renders anywhere Wander shows a profile avatar, and can be deleted. Other installs see the new photo after their normal remote profile/place/social graph refreshes.
 
 ## Current System Facts
 
 - `ProfileScreen.ownerHeader` renders `WanderAvatar(initials:size:color:)` at [Wander/Features/Profile/ProfileScreen.swift](/Users/ryanlieblein/Developer/wander/Wander/Features/Profile/ProfileScreen.swift:60).
 - `WanderAvatar` only renders initials today at [Wander/DesignSystem/WanderTheme.swift](/Users/ryanlieblein/Developer/wander/Wander/DesignSystem/WanderTheme.swift:261).
 - `LocalProfile.avatarURL` already exists and persists through `WanderStoreSnapshot.ProfileRecord` at [Wander/Models/LocalModels.swift](/Users/ryanlieblein/Developer/wander/Wander/Models/LocalModels.swift:11) and [Wander/Services/WanderStorePersistence.swift](/Users/ryanlieblein/Developer/wander/Wander/Services/WanderStorePersistence.swift:115).
-- Remote profile shells already carry `avatar_url`, but `SupabaseProfileRepository.currentProfile()` and profile mutation/upload APIs are not implemented at [Wander/Services/Remote/SupabaseRepositories.swift](/Users/ryanlieblein/Developer/wander/Wander/Services/Remote/SupabaseRepositories.swift:10).
+- Remote profile shells already carry `avatar_url`; this branch adds `current_profile`, `update_profile_avatar`, Storage upload/delete, and owner avatar propagation through visible-place DTOs.
 - `AuthSession` has no avatar URL field, so sign-in refresh currently rebuilds `currentUser` without preserving a local avatar at [Wander/Services/WanderLocalStore.swift](/Users/ryanlieblein/Developer/wander/Wander/Services/WanderLocalStore.swift:1205).
 - Add already uses native photo import and image decoding patterns in [Wander/Features/Add/AddScreen.swift](/Users/ryanlieblein/Developer/wander/Wander/Features/Add/AddScreen.swift:256).
 - `project.yml` currently has location usage copy but no camera usage description, so camera capture requires adding `NSCameraUsageDescription`.
@@ -138,7 +138,7 @@ Design-system alignment:
 
 ## Engineering Plan
 
-Use built-in iOS pickers and local app-support storage for this slice.
+Use built-in iOS pickers, local app-support storage for instant preview/offline behavior, and a Supabase Storage + profile RPC path for signed-in cross-device behavior.
 
 `plan-eng-review` result: clean with one correction folded in. The local avatar update must not mark the profile as pending remote sync until a real profile-avatar upload pipeline exists.
 
@@ -164,6 +164,15 @@ confirmationDialog
                                 |
                                 v
                          persist snapshot + rerender avatars
+                                |
+                                v
+                         if signed in: upload Storage object
+                                |
+                                v
+                         public.update_profile_avatar(...)
+                                |
+                                v
+                         replace local file URL with remote avatar URL
 ```
 
 Implementation choices:
@@ -186,12 +195,20 @@ Implementation choices:
 - Extend `WanderStore` with a small explicit API:
   - `updateCurrentUserAvatarURL(_ urlString: String?)`
   - The method updates `currentUser`, the matching entry in `profiles`, timestamps, and persistence.
-  - It preserves the current profile sync state and does not increment pending remote sync count, because remote avatar upload is out of scope.
+  - It preserves the current profile sync state and does not increment pending remote sync count; remote avatar upload is attempted directly when the picker flow has processed image bytes.
 - Update `apply(session:)` to preserve the previous local avatar URL when the Clerk session does not provide one.
 - Update `WanderAvatar` to render either:
   - local file URL image,
   - remote URL image if supported by `AsyncImage`,
   - initials fallback.
+- Add `ProfileAvatarRepository`:
+  - Uploads `image/jpeg` bytes to `profile-avatars/<user-id>/avatar.jpg` with upsert.
+  - Builds a public Storage URL with a cache-busting `?v=...`.
+  - Calls `public.update_profile_avatar(avatar_url, storage_path)` to store/clear the durable profile avatar reference.
+  - Deletes the stable Storage object and clears the profile URL on delete.
+- Add `current_profile` hydration on signed-in app start so a fresh install can fetch the user's existing remote avatar.
+- Add `owner_avatar_url` to `visible_places_in_view` and `profile_visible_places` return shapes so map/place cards can render remote owner photos.
+- Protect app-selected avatars from later Clerk webhook overwrites with `profiles.avatar_url_source = 'app'`.
 - Add `NSCameraUsageDescription` in `project.yml` and regenerate the Xcode project after implementation.
 
 ## Testing Plan
@@ -203,13 +220,23 @@ Unit tests:
   - deleting clears `avatarURL` and persists.
   - signed-in auth refresh preserves a locally selected avatar when session has no avatar.
   - persisted avatar URL restores across store reload.
-  - avatar changes do not increase pending sync count while remote avatar upload is out of scope.
+  - avatar changes and remote current-profile hydration do not increase pending sync count.
 - Image helper tests if helper logic is factored outside SwiftUI:
   - oversized portrait image produces square bounded JPEG data.
   - invalid image data returns a recoverable failure.
 - Storage helper tests:
   - writing avatar data creates a file URL under Application Support.
   - deleting succeeds when the file is already missing.
+- Remote repository tests:
+  - current profile maps remote avatar URL.
+  - avatar upload writes the stable Storage path and calls `update_profile_avatar`.
+  - avatar delete removes the stable Storage object and clears `update_profile_avatar`.
+  - visible place/profile-place DTOs hydrate `owner.avatarURL`.
+- SQL/pgTAP tests:
+  - profile avatar bucket and Storage policies exist.
+  - `update_profile_avatar` and `current_profile` are security invoker with expected grants.
+  - callers can update/clear only their own stable Storage path.
+  - Clerk profile mirroring preserves app-selected avatars.
 
 Build/manual checks:
 
@@ -247,8 +274,8 @@ CODE PATHS                                             USER FLOWS
   └── [GAP] pending sync count unchanged
 
 COVERAGE BEFORE IMPLEMENTATION: 0/14 planned paths tested.
-IMPLEMENTED COVERAGE: focused unit coverage for processor, storage, persistence, auth preservation, and non-sync store behavior; simulator screenshot QA on iPhone 17 Pro and iPhone 17e.
-REMAINING DEVICE-ONLY QA: physical camera capture path, because simulator camera availability is gated off.
+IMPLEMENTED COVERAGE: focused unit coverage for processor, storage, persistence, auth preservation, non-sync store behavior, remote repository upload/delete/current-profile mapping, remote visible-place avatar propagation, and current-profile hydration; simulator screenshot QA on iPhone 17 Pro and iPhone 17e.
+REMAINING DEVICE/HOSTED QA: physical camera capture path, because simulator camera availability is gated off; pgTAP profile-avatar SQL test execution, because this shell does not have the `supabase` CLI installed.
 ```
 
 ## Failure Modes
@@ -261,7 +288,8 @@ REMAINING DEVICE-ONLY QA: physical camera capture path, because simulator camera
 | File write | Application Support write fails | Show inline error, keep old avatar | User sees retryable failure |
 | Delete | File already missing | Clear profile reference anyway | User gets desired initials fallback |
 | Auth refresh | Clerk session rebuild drops local avatar | Store test preserves previous local avatar | Photo does not disappear after sign-in refresh |
-| Remote sync | Local file URL treated as remote pending change | Store test verifies pending sync unchanged | No false sync-failed state |
+| Remote upload | Storage or profile RPC fails after local preview | Keep local photo and show inline sync error | User sees photo on this phone and can retry |
+| Remote hydration | Fresh install has no local avatar file | `current_profile` fetch updates `currentUser.avatarURL` | User sees their synced photo on a new device |
 
 ## Worktree Parallelization Strategy
 
@@ -279,7 +307,7 @@ Synthesized from `plan-design-review` and `plan-eng-review`.
   - Surfaced by: Design pass 2/3/7 and Ryan's future place-photo reuse constraint.
   - Files: `Wander/Features/Profile/ProfileScreen.swift`, any small shared/Profile media helper.
   - Verify: library import, camera availability gating, delete, and cancel states.
-- [x] **T3 (P1, human: ~1h / CC: ~20min)** — Local avatar persistence — Store processed avatar files locally without pretending remote upload exists.
+- [x] **T3 (P1, human: ~1h / CC: ~20min)** — Local avatar persistence — Store processed avatar files locally and keep pending sync state honest.
   - Surfaced by: Eng architecture review.
   - Files: `Wander/Services/WanderLocalStore.swift`, new storage/helper file, `WanderTests/WanderStoreTests.swift`.
   - Verify: focused store/storage tests and pending sync count unchanged.
@@ -287,14 +315,21 @@ Synthesized from `plan-design-review` and `plan-eng-review`.
   - Surfaced by: Design pass 6.
   - Files: `Wander/Features/Profile/ProfileScreen.swift`.
   - Verify: labels for add/change/delete and visible import error copy.
+- [x] **T5 (P1, human: ~2h / CC: ~35min)** — Backend avatar sync — Upload signed-in profile avatars to Supabase Storage and store profile avatar URLs.
+  - Surfaced by: Ryan's cross-device requirement.
+  - Files: `Wander/Services/Remote/*`, `Wander/App/WanderBackend.swift`, `Wander/App/WanderRootView.swift`, `supabase/migrations/`, `supabase/tests/`.
+  - Verify: focused remote/store tests, full iOS suite, pgTAP test authored.
+- [x] **T6 (P1, human: ~45min / CC: ~15min)** — Remote avatar propagation — Include owner avatar URLs in remote place DTOs and hydrate current profile on sign-in.
+  - Surfaced by: Ryan's “everywhere my icon is present” requirement.
+  - Files: `Wander/Services/Remote/SupabaseDTOs.swift`, `Wander/Services/WanderLocalStore.swift`, Supabase visible-place RPCs.
+  - Verify: remote repository and store hydration tests.
 
 ## NOT In Scope
 
-- Supabase Storage upload, signed URLs, CDN caching, and cross-device avatar sync.
-- Backend profile mutation RPCs or migrations for avatar upload.
 - Cropping UI beyond the native capture/library picker; this slice uses automatic center-crop.
 - Editing other users' avatars.
-- Replacing all avatar styling across unrelated screens unless they use the shared `WanderAvatar` API naturally.
+- Real-time avatar refresh while another device changes the same profile; current behavior refreshes through startup/current profile and existing social/profile/place fetches.
+- Hosted migration application and pgTAP execution from this shell; the CLI is not installed here.
 
 ## What Already Exists
 
@@ -311,19 +346,22 @@ Design review should stress:
 
 - Whether the avatar edit affordance is obvious enough without adding explanatory copy.
 - Whether delete belongs in the same dialog or in Settings.
-- Whether local-only persistence is honest enough for the first profile picture slice.
+- Whether the inline sync-failure copy is honest without overexplaining backend state.
 
 Engineering review should stress:
 
-- Whether overloading `avatarURL` with a local `file://` URL is acceptable until remote avatar upload exists.
+- Whether overloading `avatarURL` with local `file://` and remote `https://` URLs remains acceptable now that the backend path exists.
 - Whether the picker wrapper belongs in Profile only or a shared media-picking utility.
 - Whether camera capture is worth including now given it requires a camera privacy string and device-only QA.
+- Whether the profile avatar Storage pattern is the right reusable template for future place photos, or whether place photos should get a richer media table.
 
 Resolved by review:
 
 - `avatarURL` may carry a local `file://` URL in this local-first slice, but rendering code must handle schemes explicitly and this must not create a fake pending remote sync.
 - The media picker pattern should be reusable, but the storage path remains profile-specific.
 - Camera capture stays in scope because the user requested native options like take photo; it is hidden when unavailable and must add `NSCameraUsageDescription`.
+- Signed-in profile avatars now upload to a public Supabase Storage bucket at a stable per-user path and store a versioned public URL in `profiles.avatar_url`.
+- Clerk mirroring preserves app-selected avatars so a later Clerk `user.updated` event does not clobber the in-app profile photo.
 
 ## GSTACK REVIEW REPORT
 

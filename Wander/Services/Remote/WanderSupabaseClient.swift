@@ -42,6 +42,19 @@ extension RemoteFunctionCalling {
     }
 }
 
+@MainActor
+protocol RemoteStorageCalling {
+    func uploadObject(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        upsert: Bool
+    ) async throws
+    func deleteObject(bucket: String, path: String) async throws
+    func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL
+}
+
 enum RemoteDecoding {
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -51,7 +64,7 @@ enum RemoteDecoding {
 }
 
 @MainActor
-final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling {
+final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling {
     let configuration: WanderBackendConfiguration
     private let authSession: AuthSessionProviding
     private let urlSession: URLSession
@@ -264,5 +277,151 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling 
             #endif
             throw error
         }
+    }
+
+    func uploadObject(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        upsert: Bool = true
+    ) async throws {
+        let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        let headers = try await authenticatedHeaders()
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("3600", forHTTPHeaderField: "cache-control")
+        request.setValue(upsert ? "true" : "false", forHTTPHeaderField: "x-upsert")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        request.httpBody = data
+
+        #if DEBUG
+        WanderDebugLog.remote.debug("storage upload request bucket=\(bucket, privacy: .public) path=\(path, privacy: .public) bytes=\(data.count, privacy: .public) upsert=\(upsert, privacy: .public)")
+        #endif
+        try await performStorageRequest(request, operation: "upload", bucket: bucket, path: path)
+    }
+
+    func deleteObject(bucket: String, path: String) async throws {
+        let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        let headers = try await authenticatedHeaders()
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        #if DEBUG
+        WanderDebugLog.remote.debug("storage delete request bucket=\(bucket, privacy: .public) path=\(path, privacy: .public)")
+        #endif
+        try await performStorageRequest(
+            request,
+            operation: "delete",
+            bucket: bucket,
+            path: path,
+            treatsNotFoundAsSuccess: true
+        )
+    }
+
+    func publicObjectURL(bucket: String, path: String, cacheBust: String? = nil) throws -> URL {
+        let url = try storageObjectURL(bucket: bucket, path: path, isPublic: true)
+        guard let cacheBust, !cacheBust.isEmpty else {
+            return url
+        }
+
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw WanderRemoteError.invalidResponse("Invalid public storage URL")
+        }
+        components.queryItems = [URLQueryItem(name: "v", value: cacheBust)]
+        guard let versionedURL = components.url else {
+            throw WanderRemoteError.invalidResponse("Invalid versioned public storage URL")
+        }
+        return versionedURL
+    }
+
+    private func storageObjectURL(bucket: String, path: String, isPublic: Bool) throws -> URL {
+        guard let supabaseURL = configuration.supabaseURL else {
+            #if DEBUG
+            WanderDebugLog.remote.error("storage skipped reason=missing_supabase_url")
+            #endif
+            throw WanderRemoteError.notConfigured
+        }
+        guard !bucket.isEmpty, !bucket.contains("/") else {
+            throw WanderRemoteError.invalidResponse("Invalid storage bucket")
+        }
+
+        let pathComponents = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard !pathComponents.isEmpty,
+              pathComponents.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid storage path")
+        }
+
+        var url = supabaseURL
+            .appendingPathComponent("storage")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("object")
+        if isPublic {
+            url = url.appendingPathComponent("public")
+        }
+        url = url.appendingPathComponent(bucket)
+        for component in pathComponents {
+            url = url.appendingPathComponent(component)
+        }
+        return url
+    }
+
+    private func performStorageRequest(
+        _ request: URLRequest,
+        operation: String,
+        bucket: String,
+        path: String,
+        treatsNotFoundAsSuccess: Bool = false
+    ) async throws {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("storage transport failed operation=\(operation, privacy: .public) bucket=\(bucket, privacy: .public) path=\(path, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
+            #endif
+            throw error
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            #if DEBUG
+            WanderDebugLog.remote.error("storage invalid response operation=\(operation, privacy: .public) reason=missing_http_response")
+            #endif
+            throw WanderRemoteError.invalidResponse("Missing HTTP response for storage \(operation)")
+        }
+
+        if treatsNotFoundAsSuccess, httpResponse.statusCode == 404 {
+            #if DEBUG
+            WanderDebugLog.remote.debug("storage success operation=\(operation, privacy: .public) bucket=\(bucket, privacy: .public) path=\(path, privacy: .public) status=404 treated_as=success")
+            #endif
+            return
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            #if DEBUG
+            WanderDebugLog.remote.error("storage failed operation=\(operation, privacy: .public) bucket=\(bucket, privacy: .public) path=\(path, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            #endif
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw WanderRemoteError.notAuthenticated
+            }
+            throw WanderRemoteError.invalidResponse("Storage \(operation) failed with \(httpResponse.statusCode): \(body)")
+        }
+
+        #if DEBUG
+        WanderDebugLog.remote.debug("storage success operation=\(operation, privacy: .public) bucket=\(bucket, privacy: .public) path=\(path, privacy: .public) status=\(httpResponse.statusCode, privacy: .public)")
+        #endif
     }
 }

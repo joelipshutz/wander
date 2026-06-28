@@ -6975,3 +6975,60 @@ Completion checkpoint, 2026-06-28 11:59 PDT:
   `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1`
   Result: 181 tests, 0 failures.
 - Remaining product limitation: profiles on other people's devices still require the future Supabase Storage/profile avatar upload path; this pass ensures any available `avatarURL` renders everywhere locally and through remote profile shells.
+
+## 2026-06-28 12:11 PDT - Codex - Profile Avatar Backend Upload
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: build the backend functionality behind profile pictures so changing a profile photo uploads the image to Supabase Storage, stores a durable avatar reference on the user's Supabase profile, and lets other installed apps see the changed avatar through existing profile/search/map/list/profile DTOs.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/plans/2026-06-28-profile-pictures-plan.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/ProfileAvatarStorage.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/Remote/SupabaseDTOs.swift`
+- `Wander/Services/Remote/SupabaseRepositories.swift`
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/App/WanderBackend.swift`
+- `supabase/migrations/`
+- `supabase/tests/`
+- Focused Swift and SQL tests for upload URL/path persistence and RLS/security posture.
+
+Coordination note: this touches high-conflict backend/store/project-adjacent files already used by the current profile-picture branch. No overlapping local worktree changes were present in this checkout.
+
+Completion checkpoint, 2026-06-28 12:31 PDT:
+
+- Built the backend profile-avatar path on the same `codex/profile-pictures` branch:
+  - Added `ProfileAvatarRepository` and wired `WanderBackend` to upload/delete profile avatar JPEGs through Supabase Storage and `public.update_profile_avatar`.
+  - Added authenticated Storage REST helpers to `WanderSupabaseClient`.
+  - Profile photo saves now write the local file for instant preview, then upload signed-in avatars to `profile-avatars/<user-id>/avatar.jpg`, store a versioned remote URL, and show an inline sync error if the remote path fails.
+  - Profile photo delete now deletes the stable Storage object and clears `profiles.avatar_url` for signed-in users before clearing local state.
+  - Added `current_profile` hydration so a fresh install can fetch the signed-in user's existing remote avatar on app start.
+  - Added `owner_avatar_url` to remote visible-place/profile-place DTOs and Supabase RPC return shapes so other people's app installs receive owner profile photos for place cards/map/profile surfaces.
+  - Added `profiles.avatar_url_source` / `avatar_storage_path`; Clerk mirroring now preserves app-selected avatars instead of clobbering them on later Clerk profile updates.
+  - Explicitly revoked app-level Clerk mirror RPC execute from public/anon/authenticated and pinned the intended service-role-only grant in pgTAP coverage.
+- Added Supabase migration and pgTAP coverage:
+  - `supabase/migrations/20260628122000_profile_avatar_storage.sql`
+  - `supabase/tests/profile_avatars.sql`
+- Updated `docs/plans/2026-06-28-profile-pictures-plan.md` so the durable plan reflects the completed backend scope instead of the earlier local-only slice.
+- Verification:
+  - `git diff --check` passed.
+  - Focused simulator tests passed on available iPhone 17 / iOS 26.5 runtime:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-avatar-backend CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests -only-testing:WanderTests/WanderStoreTests/testRemoteCurrentProfileHydratesAvatarURLWithoutPendingSync -only-testing:WanderTests/ProfileAvatarStorageTests`
+    Result: 20 tests, 0 failures.
+  - Full simulator suite passed:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-avatar-backend CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: 185 tests, 0 failures.
+- SQL test gap:
+  - `supabase --version` and `which supabase` both failed because the Supabase CLI is not installed in this shell.
+  - The pgTAP test is authored but still needs execution in an environment with Supabase CLI/Docker or against the hosted project before applying the migration.
+- Known remaining QA:
+  - Physical camera capture still needs real-device testing.
+  - Hosted migration application and profile-avatar upload smoke test still need Supabase credentials/tooling.

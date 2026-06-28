@@ -1134,6 +1134,21 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func refreshRemoteCurrentProfile(backend: WanderBackend?) async {
+        guard let backend else {
+            return
+        }
+
+        do {
+            if let profile = try await backend.currentProfile() {
+                applyRemoteCurrentProfile(profile)
+            }
+            lastRemoteError = nil
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
     func refreshRemoteVisiblePlaces(backend: WanderBackend?) async {
         await refreshRemoteVisiblePlaces(in: Self.defaultRemoteViewport, backend: backend)
     }
@@ -1493,6 +1508,43 @@ final class WanderStore: ObservableObject {
         }
         upsertRemoteProfileShells(shells)
         upsertRemoteAttributes(from: visiblePlaces)
+    }
+
+    private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {
+        objectWillChange.send()
+
+        let now = Date()
+        let currentLocalID = currentUser.localID
+        let currentProfileID = remoteProfile.id
+
+        currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
+        currentUser.handle = remoteProfile.handle
+        currentUser.searchHandle = remoteProfile.handle.lowercased()
+        currentUser.displayName = remoteProfile.displayName
+        currentUser.avatarURL = remoteProfile.avatarURL
+        currentUser.bio = remoteProfile.bio
+        currentUser.homeArea = remoteProfile.homeArea
+        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+        currentUser.syncStateRaw = SyncState.synced.rawValue
+        currentUser.serverUpdatedAt = now
+        currentUser.updatedAt = now
+
+        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+            profile.serverID = currentUser.serverID
+            profile.handle = currentUser.handle
+            profile.searchHandle = currentUser.searchHandle
+            profile.displayName = currentUser.displayName
+            profile.avatarURL = currentUser.avatarURL
+            profile.bio = currentUser.bio
+            profile.homeArea = currentUser.homeArea
+            profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
+            profile.syncStateRaw = SyncState.synced.rawValue
+            profile.serverUpdatedAt = now
+            profile.updatedAt = now
+        }
+
+        defaultVisibility = remoteProfile.defaultVisibility
+        persist()
     }
 
     private func upsertRemoteAttributes(from visiblePlaces: [VisiblePlace]) {

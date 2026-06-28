@@ -91,6 +91,45 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUser.syncState, .synced)
     }
 
+    func testRemoteCurrentProfileHydratesAvatarURLWithoutPendingSync() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Local Joe",
+                    handle: "localjoe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+        let initialPendingCount = store.pendingSyncCount
+        let remoteAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_live/avatar.jpg?v=remote"
+        let profileRepository = FakeProfileRepository(
+            currentProfile: LocalProfile(
+                localID: "local_profile_current",
+                serverID: "user_live",
+                handle: "joe",
+                displayName: "Joe",
+                avatarURL: remoteAvatarURL,
+                bio: "places worth returning to",
+                homeArea: "Los Angeles",
+                defaultVisibility: .mutuals,
+                syncState: .synced
+            )
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        await store.refreshRemoteCurrentProfile(backend: backend)
+
+        XCTAssertEqual(store.currentUser.id, "user_live")
+        XCTAssertEqual(store.currentUser.handle, "joe")
+        XCTAssertEqual(store.currentUser.avatarURL, remoteAvatarURL)
+        XCTAssertEqual(store.currentUser.defaultVisibility, .mutuals)
+        XCTAssertEqual(store.profileState(for: "user_live")?.shell.avatarURL, remoteAvatarURL)
+        XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
+    }
+
     func testSignedInSessionClaimsGuestSavedPlaces() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let result = store.saveCandidate(
@@ -1735,14 +1774,16 @@ final class WanderStoreTests: XCTestCase {
 @MainActor
 private final class FakeProfileRepository: ProfileRepository {
     private let shells: [ProfileShell]
+    private let currentProfileResult: LocalProfile?
     private(set) var queries: [String] = []
 
-    init(shells: [ProfileShell]) {
+    init(shells: [ProfileShell] = [], currentProfile: LocalProfile? = nil) {
         self.shells = shells
+        self.currentProfileResult = currentProfile
     }
 
     func currentProfile() async throws -> LocalProfile? {
-        nil
+        currentProfileResult
     }
 
     func profile(id: String) async throws -> ProfileViewState {

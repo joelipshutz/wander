@@ -12,6 +12,7 @@ struct ProfileScreen: View {
     @State private var showsProfilePhotoLibrary = false
     @State private var showsProfileCamera = false
     @State private var selectedProfilePhotoItem: PhotosPickerItem?
+    @State private var isProfilePhotoSaving = false
     @State private var profilePhotoError: String?
     @State private var listMode: GraphListMode?
     @State private var savedListMode: SavedPlacesListMode?
@@ -41,7 +42,9 @@ struct ProfileScreen: View {
             }
             .sheet(isPresented: $showsProfileCamera) {
                 ProfileCameraPicker { image in
-                    saveProfilePhoto(image: image)
+                    Task {
+                        await saveProfilePhoto(image: image)
+                    }
                 }
             }
             .sheet(item: $listMode) { mode in
@@ -74,13 +77,15 @@ struct ProfileScreen: View {
 
                 if hasProfilePhoto {
                     Button("Delete Photo", role: .destructive) {
-                        deleteProfilePhoto()
+                        Task {
+                            await deleteProfilePhoto()
+                        }
                     }
                 }
 
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Choose a profile picture for this device.")
+                Text("Choose a profile picture.")
             }
             .navigationDestination(item: $savedListMode) { mode in
                 SavedPlacesListScreen(mode: mode)
@@ -110,10 +115,12 @@ struct ProfileScreen: View {
                     EditableProfileAvatar(
                         initials: store.currentUser.initials,
                         avatarURL: store.currentUser.avatarURL,
-                        size: 56
+                        size: 56,
+                        isSaving: isProfilePhotoSaving
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isProfilePhotoSaving)
                 .accessibilityLabel(hasProfilePhoto ? "Change profile photo" : "Add profile photo")
                 .accessibilityHint("Opens photo options")
 
@@ -306,10 +313,10 @@ struct ProfileScreen: View {
     }
 
     @MainActor
-    private func saveProfilePhoto(image: UIImage) {
+    private func saveProfilePhoto(image: UIImage) async {
         do {
             let jpegData = try WanderImageProcessor.squareJPEGData(from: image)
-            try saveProfilePhoto(jpegData: jpegData)
+            await saveProfilePhoto(jpegData: jpegData)
         } catch {
             profilePhotoError = "Could not use that photo. Try another one."
         }
@@ -320,17 +327,51 @@ struct ProfileScreen: View {
         let jpegData = try await Task.detached(priority: .userInitiated) {
             try WanderImageProcessor.squareJPEGData(from: data)
         }.value
-        try saveProfilePhoto(jpegData: jpegData)
+        await saveProfilePhoto(jpegData: jpegData)
     }
 
     @MainActor
-    private func saveProfilePhoto(jpegData: Data) throws {
-        let url = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
-        store.updateCurrentUserAvatarURL(url.absoluteString)
-        profilePhotoError = nil
+    private func saveProfilePhoto(jpegData: Data) async {
+        isProfilePhotoSaving = true
+        defer { isProfilePhotoSaving = false }
+
+        do {
+            let url = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
+            store.updateCurrentUserAvatarURL(url.absoluteString)
+            profilePhotoError = nil
+        } catch {
+            profilePhotoError = "Could not save this photo. Try again."
+            return
+        }
+
+        guard auth.isSignedIn, backend.canSyncProfileAvatars else { return }
+
+        do {
+            let result = try await backend.uploadProfileAvatar(
+                jpegData: jpegData,
+                userID: store.currentUser.id
+            )
+            store.updateCurrentUserAvatarURL(result.avatarURL)
+            profilePhotoError = nil
+        } catch {
+            profilePhotoError = "Saved on this phone. Could not sync profile photo yet."
+        }
     }
 
-    private func deleteProfilePhoto() {
+    @MainActor
+    private func deleteProfilePhoto() async {
+        isProfilePhotoSaving = true
+        defer { isProfilePhotoSaving = false }
+
+        if auth.isSignedIn, backend.canSyncProfileAvatars {
+            do {
+                try await backend.deleteProfileAvatar(userID: store.currentUser.id)
+            } catch {
+                profilePhotoError = "Could not delete this photo. Try again."
+                return
+            }
+        }
+
         do {
             try ProfileAvatarStorage.live.deleteAvatar()
             store.updateCurrentUserAvatarURL(nil)
@@ -345,6 +386,7 @@ private struct EditableProfileAvatar: View {
     let initials: String
     let avatarURL: String?
     let size: CGFloat
+    let isSaving: Bool
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -355,14 +397,25 @@ private struct EditableProfileAvatar: View {
                 color: WanderTheme.terracotta.color
             )
 
-            Image(systemName: hasAvatar ? "pencil" : "camera.fill")
-                .font(.system(size: 10, weight: .black))
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .frame(width: 22, height: 22)
-                .background(WanderTheme.textInk.color)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
-                .accessibilityHidden(true)
+            if isSaving {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(WanderTheme.textOnAction.color)
+                    .frame(width: 22, height: 22)
+                    .background(WanderTheme.textInk.color)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: hasAvatar ? "pencil" : "camera.fill")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(width: 22, height: 22)
+                    .background(WanderTheme.textInk.color)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                    .accessibilityHidden(true)
+            }
         }
         .frame(width: size + 4, height: size + 4)
         .contentShape(Rectangle())

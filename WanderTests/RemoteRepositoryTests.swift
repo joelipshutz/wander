@@ -28,6 +28,103 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["query"] as? String, "ma")
     }
 
+    func testCurrentProfileCallsExpectedRPCAndMapsAvatar() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["current_profile"] = """
+        [
+          {
+            "id": "user_123",
+            "handle": "joe",
+            "display_name": "Joe",
+            "avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=remote",
+            "bio": "places worth returning to",
+            "home_area": "Los Angeles",
+            "default_visibility": "mutuals"
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let profile = try await repository.currentProfile()
+
+        XCTAssertEqual(profile?.id, "user_123")
+        XCTAssertEqual(profile?.handle, "joe")
+        XCTAssertEqual(
+            profile?.avatarURL,
+            "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=remote"
+        )
+        XCTAssertEqual(profile?.defaultVisibility, .mutuals)
+        XCTAssertEqual(rpc.calls.map(\.name), ["current_profile"])
+        XCTAssertTrue(rpc.rawBodies[0].isEmpty)
+    }
+
+    func testProfileAvatarUploadStoresRemoteURL() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        rpc.responses["update_profile_avatar"] = """
+        {
+          "avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=test-version",
+          "avatar_storage_path": "user_123/avatar.jpg"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseProfileAvatarRepository(
+            rpc: rpc,
+            storage: storage,
+            versionProvider: { "test-version" }
+        )
+        let data = Data([0xFF, 0xD8, 0xFF])
+
+        let result = try await repository.uploadAvatar(jpegData: data, userID: "user_123")
+
+        XCTAssertEqual(
+            result,
+            ProfileAvatarResult(
+                avatarURL: "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=test-version",
+                storagePath: "user_123/avatar.jpg"
+            )
+        )
+        XCTAssertEqual(
+            storage.uploads,
+            [
+                RecordingStorage.Upload(
+                    bucket: "profile-avatars",
+                    path: "user_123/avatar.jpg",
+                    data: data,
+                    contentType: "image/jpeg",
+                    upsert: true
+                )
+            ]
+        )
+        XCTAssertEqual(rpc.calls.map(\.name), ["update_profile_avatar"])
+        XCTAssertEqual(
+            rpc.calls[0].body["avatar_url"] as? String,
+            "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=test-version"
+        )
+        XCTAssertEqual(rpc.calls[0].body["storage_path"] as? String, "user_123/avatar.jpg")
+    }
+
+    func testProfileAvatarDeleteRemovesStorageObjectAndClearsRemoteURL() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        rpc.responses["update_profile_avatar"] = """
+        {
+          "avatar_url": null,
+          "avatar_storage_path": null
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseProfileAvatarRepository(rpc: rpc, storage: storage)
+
+        try await repository.deleteAvatar(userID: "user_123")
+
+        XCTAssertEqual(
+            storage.deletes,
+            [RecordingStorage.Delete(bucket: "profile-avatars", path: "user_123/avatar.jpg")]
+        )
+        XCTAssertEqual(rpc.calls.map(\.name), ["update_profile_avatar"])
+        XCTAssertNil(rpc.calls[0].body["avatar_url"] as Any?)
+        XCTAssertNil(rpc.calls[0].body["storage_path"] as Any?)
+    }
+
     func testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows() async throws {
         let rpc = RecordingRPC()
         rpc.responses["visible_places_in_view"] = """
@@ -38,6 +135,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "owner_user_id": "user_maya",
             "owner_handle": "maya",
             "owner_display_name": "Maya Chen",
+            "owner_avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=1",
             "canonical_name": "Griffith Observatory Trail",
             "category": "hike",
             "latitude": 34.1184,
@@ -71,6 +169,10 @@ final class RemoteRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(places.map { $0.place.canonicalName }, ["Griffith Observatory Trail"])
+        XCTAssertEqual(
+            places[0].owner.avatarURL,
+            "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=1"
+        )
         XCTAssertEqual(places[0].userPlace.status, .been)
         XCTAssertEqual(places[0].userPlace.visibility, .followers)
         XCTAssertEqual(places[0].userPlace.ratingScore, 5)
@@ -128,6 +230,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "owner_user_id": "user_ryan",
             "owner_handle": "ryan",
             "owner_display_name": "Ryan Lee",
+            "owner_avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=1",
             "canonical_name": "Larchmont Noodles",
             "category": "restaurant",
             "latitude": 34.073,
@@ -153,6 +256,10 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertEqual(places.map { $0.place.canonicalName }, ["Larchmont Noodles"])
         XCTAssertEqual(places[0].owner.handle, "ryan")
+        XCTAssertEqual(
+            places[0].owner.avatarURL,
+            "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=1"
+        )
         XCTAssertEqual(places[0].userPlace.status, .wannaGo)
         XCTAssertEqual(rpc.calls.map(\.name), ["profile_visible_places"])
         XCTAssertEqual(rpc.calls[0].body["profile_id"] as? String, "user_ryan")
@@ -170,6 +277,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "owner_user_id": "user_maya",
             "owner_handle": "maya",
             "owner_display_name": "Maya Chen",
+            "owner_avatar_url": null,
             "canonical_name": "Bad Row",
             "category": "hike",
             "latitude": 34.1,
@@ -436,6 +544,55 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(filters.categories, ["coffee"])
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
+    }
+}
+
+@MainActor
+private final class RecordingStorage: RemoteStorageCalling {
+    struct Upload: Equatable {
+        let bucket: String
+        let path: String
+        let data: Data
+        let contentType: String
+        let upsert: Bool
+    }
+
+    struct Delete: Equatable {
+        let bucket: String
+        let path: String
+    }
+
+    private(set) var uploads: [Upload] = []
+    private(set) var deletes: [Delete] = []
+
+    func uploadObject(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        upsert: Bool
+    ) async throws {
+        uploads.append(
+            Upload(
+                bucket: bucket,
+                path: path,
+                data: data,
+                contentType: contentType,
+                upsert: upsert
+            )
+        )
+    }
+
+    func deleteObject(bucket: String, path: String) async throws {
+        deletes.append(Delete(bucket: bucket, path: path))
+    }
+
+    func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {
+        var url = URL(string: "https://example.supabase.co/storage/v1/object/public/\(bucket)/\(path)")!
+        if let cacheBust {
+            url = URL(string: "\(url.absoluteString)?v=\(cacheBust)")!
+        }
+        return url
     }
 }
 
