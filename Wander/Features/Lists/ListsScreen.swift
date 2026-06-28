@@ -473,10 +473,28 @@ private struct ListDetailScreen: View {
                 .accessibilityLabel("Manage collaborators")
             }
         }
-        .sheet(item: $selectedPlace) { place in
-            ListPlaceProfileSheet(place: place)
-                .presentationDetents([.large])
-                .presentationBackground(WanderTheme.canvasWarm.color)
+        .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+            selectedPlaceDestination
+        }
+    }
+
+    private var selectedPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedPlace != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedPlace = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedPlaceDestination: some View {
+        if let selectedPlace {
+            ListPlaceProfileDestination(place: selectedPlace) {
+                self.selectedPlace = nil
+            }
         }
     }
 
@@ -1007,7 +1025,7 @@ private struct ListMapFullScreen: View {
     let list: PlaceListMock
     @State private var position: MapCameraPosition
     @State private var selectedPlace: ListPlaceMock?
-    @State private var isPlaceProfileExpanded = false
+    @State private var profilePlace: ListPlaceMock?
 
     init(list: PlaceListMock, initialSelectedPlaceID: String? = nil) {
         self.list = list
@@ -1016,78 +1034,103 @@ private struct ListMapFullScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Map(position: $position) {
-                ForEach(list.places) { place in
-                    Annotation(place.name, coordinate: place.coordinate) {
-                        Button {
-                            selectedPlace = place
-                            isPlaceProfileExpanded = false
-                        } label: {
-                            ListMapMarker(place: place, isSelected: selectedPlace?.id == place.id)
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Map(position: $position) {
+                    ForEach(list.places) { place in
+                        Annotation(place.name, coordinate: place.coordinate) {
+                            Button {
+                                selectedPlace = place
+                            } label: {
+                                ListMapMarker(place: place, isSelected: selectedPlace?.id == place.id)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .ignoresSafeArea()
+                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                HStack(spacing: WanderTheme.spacing3) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .black))
-                            .frame(width: 44, height: 44)
-                            .background(WanderTheme.surfaceRaised.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close list map")
+                VStack(spacing: 0) {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .black))
+                                .frame(width: 44, height: 44)
+                                .background(WanderTheme.surfaceRaised.color)
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close list map")
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(list.name)
-                            .font(.system(size: 18, weight: .black, design: .rounded))
-                            .lineLimit(1)
-                        Text("\(list.places.count) places")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(list.name)
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                .lineLimit(1)
+                            Text("\(list.places.count) places")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+
+                        Spacer()
                     }
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.92))
+                    .clipShape(Capsule())
+                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, x: 0, y: 8)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.top, WanderTheme.spacing2)
 
                     Spacer()
                 }
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.92))
-                .clipShape(Capsule())
-                .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, x: 0, y: 8)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.top, WanderTheme.spacing2)
 
-                Spacer()
-            }
-
-            if let selectedPlace {
-                PlaceProfileMapSurface(
-                    place: PlaceSheetPlace(listPlace: selectedPlace),
-                    saves: [],
-                    tasteSaves: [],
-                    currentUserID: "you",
-                    action: .none,
-                    isExpanded: $isPlaceProfileExpanded
-                ) {}
-                .zIndex(20)
-            } else {
-                ListMapPlaceRail(list: list) { place in
-                    selectedPlace = place
-                    isPlaceProfileExpanded = false
+                if let selectedPlace {
+                    PlaceProfileMapSurface(
+                        place: PlaceSheetPlace(listPlace: selectedPlace),
+                        saves: [],
+                        tasteSaves: [],
+                        currentUserID: "you",
+                        action: .none,
+                        onOpen: {
+                            profilePlace = selectedPlace
+                        }
+                    ) {}
+                    .zIndex(20)
+                } else {
+                    ListMapPlaceRail(list: list) { place in
+                        selectedPlace = place
+                    }
+                    .zIndex(10)
                 }
-                .zIndex(10)
+            }
+            .background(WanderTheme.canvasWarm.color)
+            .navigationDestination(isPresented: profilePlaceDestinationBinding) {
+                profilePlaceDestination
             }
         }
-        .background(WanderTheme.canvasWarm.color)
+    }
+
+    private var profilePlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { profilePlace != nil },
+            set: { isPresented in
+                if !isPresented {
+                    profilePlace = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var profilePlaceDestination: some View {
+        if let profilePlace {
+            ListPlaceProfileDestination(place: profilePlace) {
+                self.profilePlace = nil
+            }
+        }
     }
 }
 
@@ -1183,20 +1226,19 @@ private struct ListMapPlaceTile: View {
     }
 }
 
-private struct ListPlaceProfileSheet: View {
+private struct ListPlaceProfileDestination: View {
     let place: ListPlaceMock
-    @State private var isExpanded = true
+    let onBack: () -> Void
 
     var body: some View {
-        PlaceProfileMapSurface(
+        PlaceProfileFullScreen(
             place: PlaceSheetPlace(listPlace: place),
             saves: [],
             tasteSaves: [],
             currentUserID: "you",
             action: .none,
-            isExpanded: $isExpanded
+            onBack: onBack
         ) {}
-        .wanderScreen()
     }
 }
 
