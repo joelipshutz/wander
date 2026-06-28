@@ -1,11 +1,12 @@
 import Foundation
 
-struct DiscoverFilters: Equatable {
+struct DiscoverFilters: Codable, Equatable {
     var query: String
     var categories: Set<String> = []
     var area: String?
     var statuses: Set<PlaceStatus> = []
     var relationship: ViewerRelationship?
+    var ownerQuery: String?
     var tags: Set<String> = []
 }
 
@@ -30,8 +31,12 @@ extension DiscoverFilters {
             chips.append(DiscoverFilterChip(id: "relationship_\(relationship.rawValue)", title: relationship.discoverChipTitle))
         }
 
-        if let area {
+        if let area = trimmed(area) {
             chips.append(DiscoverFilterChip(id: "area_\(area)", title: area))
+        }
+
+        if let ownerQuery = trimmed(ownerQuery) {
+            chips.append(DiscoverFilterChip(id: "owner_\(ownerQuery)", title: ownerQuery))
         }
 
         chips.append(contentsOf: tags.sorted().map { tag in
@@ -40,12 +45,60 @@ extension DiscoverFilters {
 
         return chips
     }
+
+    private func trimmed(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
 }
 
-struct DiscoverFilterSchema: Equatable {
+struct DiscoverFilterSchema: Codable, Equatable {
     let allowedCategories: [String]
     let allowedStatuses: [PlaceStatus]
     let allowedRelationships: [ViewerRelationship]
+    let allowedTags: [String]
+
+    init(
+        allowedCategories: [String] = Self.defaultAllowedCategories,
+        allowedStatuses: [PlaceStatus] = PlaceStatus.allCases,
+        allowedRelationships: [ViewerRelationship] = [.owner, .follower, .mutual],
+        allowedTags: [String] = Self.defaultAllowedTags
+    ) {
+        self.allowedCategories = allowedCategories
+        self.allowedStatuses = allowedStatuses
+        self.allowedRelationships = allowedRelationships
+        self.allowedTags = allowedTags
+    }
+
+    static let defaultAllowedCategories = [
+        "bar",
+        "coffee",
+        "fitness studio",
+        "gym",
+        "hike",
+        "hospital",
+        "park",
+        "pharmacy",
+        "pilates studio",
+        "restaurant",
+        "spiritual",
+        "veterinarian"
+    ]
+
+    static let defaultAllowedTags = [
+        "cozy",
+        "date",
+        "dog friendly",
+        "group",
+        "outlets",
+        "patio",
+        "quiet",
+        "sunset",
+        "views",
+        "wifi",
+        "wifi solid",
+        "work"
+    ]
 }
 
 struct VisiblePlace: Identifiable {
@@ -316,7 +369,7 @@ struct DeterministicFilterParser: LLMFilterParser {
             }
         }
 
-        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") {
+        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") || normalized.contains("favorite") || normalized.contains("best") || normalized.contains("recommended") {
             filters.statuses.insert(.been)
         }
 
@@ -324,21 +377,25 @@ struct DeterministicFilterParser: LLMFilterParser {
             filters.statuses.insert(.wannaGo)
         }
 
-        if normalized.contains("friend") || normalized.contains("mutual") {
+        if normalized.contains("my ") || normalized.hasPrefix("my") {
+            filters.relationship = .owner
+        } else if normalized.contains("friend") || normalized.contains("mutual") {
             filters.relationship = .mutual
         } else if normalized.contains("following") || normalized.contains("people") {
             filters.relationship = .follower
         }
 
+        filters.ownerQuery = Self.ownerQuery(from: normalized)
+
         if normalized.contains("la") || normalized.contains("los angeles") {
             filters.area = "LA"
         }
 
-        for area in ["eastside", "silver lake", "larchmont", "echo park", "los feliz"] where normalized.contains(area) {
+        for area in ["eastside", "silver lake", "larchmont", "echo park", "los feliz", "santa monica"] where normalized.contains(area) {
             filters.area = area
         }
 
-        for tag in Self.knownTags where normalized.contains(tag) {
+        for tag in schema.allowedTags where normalized.contains(tag) {
             filters.tags.insert(tag)
         }
 
@@ -353,17 +410,38 @@ struct DeterministicFilterParser: LLMFilterParser {
         "park": ["park", "parks"]
     ]
 
-    private static let knownTags = [
-        "wifi",
-        "work",
-        "patio",
-        "quiet",
-        "cozy",
-        "views",
-        "sunset",
-        "group",
-        "date",
-        "dog friendly"
+    private static func ownerQuery(from normalized: String) -> String? {
+        if let handle = firstCapture(in: normalized, pattern: #"@([a-z0-9_][a-z0-9_.-]{1,30})"#) {
+            return handle
+        }
+
+        if let possessive = firstCapture(in: normalized, pattern: #"\b([a-z][a-z0-9_.-]{1,30})['’]s\b"#),
+           !ignoredOwnerWords.contains(possessive) {
+            return possessive
+        }
+
+        return nil
+    }
+
+    private static func firstCapture(in value: String, pattern: String) -> String? {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        guard let match = expression.firstMatch(in: value, range: range),
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: value)
+        else {
+            return nil
+        }
+        return String(value[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static let ignoredOwnerWords: Set<String> = [
+        "friend",
+        "friends",
+        "people",
+        "rec",
+        "recme",
+        "wander"
     ]
 }
 

@@ -6,6 +6,7 @@ struct WanderRootView: View {
     @EnvironmentObject private var backend: WanderBackend
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
+    @State private var isPresentingAdd = false
     @State private var initialPresentation: WanderInitialPresentation?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
@@ -13,16 +14,19 @@ struct WanderRootView: View {
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
-        analytics: AnalyticsClient = NoopAnalyticsClient()
+        analytics: AnalyticsClient = NoopAnalyticsClient(),
+        parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
-        _selectedTab = State(initialValue: initialTab ?? Self.resolvedInitialTab())
+        let requestedTab = initialTab ?? Self.resolvedInitialTab()
+        _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: WanderStore(
                 fixtures: Self.resolvedFixtures(mode: fixtureMode),
+                parser: parser,
                 analytics: analytics,
                 persistence: persistence
             )
@@ -30,18 +34,22 @@ struct WanderRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             MapScreen()
                 .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
-            AddScreen(resetToken: addTabResetToken)
-                .tabItem { Label(WanderTab.add.title, systemImage: WanderTab.add.systemImage) }
-                .tag(WanderTab.add)
-
             DiscoverScreen()
                 .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
+
+            Color.clear
+                .tabItem { Label(WanderTab.add.title, systemImage: WanderTab.add.systemImage) }
+                .tag(WanderTab.add)
+
+            ListsScreen()
+                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
+                .tag(WanderTab.lists)
 
             ProfileScreen()
                 .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
@@ -50,6 +58,14 @@ struct WanderRootView: View {
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
         .environmentObject(store)
+        .sheet(isPresented: $isPresentingAdd, onDismiss: {
+            addTabResetToken = UUID()
+        }) {
+            AddScreen(resetToken: addTabResetToken)
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+        }
         .sheet(item: $auth.activeGate) { request in
             AuthGateSheet(request: request)
                 .environmentObject(auth)
@@ -83,9 +99,17 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)
         }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            if oldValue == .add, newValue != .add {
+    }
+
+    private var tabSelection: Binding<WanderTab> {
+        Binding {
+            selectedTab
+        } set: { newTab in
+            if newTab == .add {
                 addTabResetToken = UUID()
+                isPresentingAdd = true
+            } else {
+                selectedTab = newTab
             }
         }
     }
@@ -130,7 +154,8 @@ struct WanderRootView: View {
             return .map
         }
 
-        return WanderTab(rawValue: arguments[valueIndex]) ?? .map
+        let tab = WanderTab(rawValue: arguments[valueIndex]) ?? .map
+        return tab == .add ? .map : tab
     }
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
@@ -168,15 +193,17 @@ enum WanderInitialPresentation: String, Identifiable {
 
 enum WanderTab: String, CaseIterable, Hashable {
     case map
-    case add
     case discover
+    case add
+    case lists
     case profile
 
     var title: String {
         switch self {
         case .map: "Map"
-        case .add: "Add"
         case .discover: "Discover"
+        case .add: "Add"
+        case .lists: "Lists"
         case .profile: "Profile"
         }
     }
@@ -184,8 +211,9 @@ enum WanderTab: String, CaseIterable, Hashable {
     var systemImage: String {
         switch self {
         case .map: "map"
-        case .add: "plus.circle.fill"
         case .discover: "sparkle.magnifyingglass"
+        case .add: "plus"
+        case .lists: "bookmark.square"
         case .profile: "person.crop.circle"
         }
     }

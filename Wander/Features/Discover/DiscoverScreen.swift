@@ -4,34 +4,33 @@ struct DiscoverScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
-    @State private var query = ""
-    @State private var results = DiscoverResults(places: [], profiles: [])
-    @State private var contacts: [ContactMatch] = []
+    @State private var selectedMode: DiscoverMode = .places
+    @State private var placesQuery = ""
+    @State private var memberQuery = ""
+    @State private var placeResults = DiscoverResults(places: [], profiles: [])
+    @State private var memberResults: [ProfileShell] = []
     @State private var selectedProfile: SelectedProfile?
     @State private var selectedPlace: SelectedDiscoverPlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
-    @State private var selectedScope: DiscoverPlaceScope = .everyone
-    @State private var parsedChips: [DiscoverFilterChip] = []
+    @State private var selectedOwnerCandidateID: String?
+    @State private var tickerIndex = 0
     @FocusState private var searchFieldFocused: Bool
 
-    private var matchedContacts: [ContactMatch] {
-        contacts.filter(\.isMatchedUser)
-    }
-
-    private var contactUserIDs: Set<String> {
-        Set(matchedContacts.compactMap(\.userID))
-    }
+    private let tickerSuggestions = [
+        "Joe's favorite coffee shops in LA",
+        "Maya's date night spots",
+        "quiet work cafes with wifi",
+        "friends' sunset hikes"
+    ]
 
     private var profileResults: [ProfileShell] {
-        results.profiles.filter { !contactUserIDs.contains($0.id) }
+        memberResults
     }
 
-    private var followedProfiles: [ProfileShell] {
-        let hiddenIDs = contactUserIDs.union(profileResults.map(\.id))
-        return store.following(of: store.currentUser.id)
+    private var friendProfiles: [ProfileShell] {
+        store.following(of: store.currentUser.id)
             .map(store.shell(for:))
-            .filter { !hiddenIDs.contains($0.id) }
     }
 
     private var visiblePlaceSignature: String {
@@ -48,18 +47,88 @@ struct DiscoverScreen: View {
     }
 
     private var placeGroups: [VisiblePlaceGroup] {
-        VisiblePlaceGrouping.groups(from: results.places, currentUserID: store.currentUser.id)
+        VisiblePlaceGrouping.groups(from: filteredPlaceResults, currentUserID: store.currentUser.id)
+    }
+
+    private var filteredPlaceResults: [VisiblePlace] {
+        guard let selectedOwnerCandidateID else {
+            return placeResults.places
+        }
+        return placeResults.places.filter { $0.owner.id == selectedOwnerCandidateID }
+    }
+
+    private var isPlacesSearchActive: Bool {
+        !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isMemberSearchActive: Bool {
+        !memberQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var latestActivityPlaces: [VisiblePlace] {
+        Array(
+            store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
+                .filter { $0.owner.id != store.currentUser.id }
+                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
+                .prefix(10)
+        )
+    }
+
+    private var ambiguousOwnerCandidates: [ProfileShell] {
+        guard isPlacesSearchActive,
+              selectedOwnerCandidateID == nil,
+              let ownerQuery = store.lastDiscoverFilters.ownerQuery?
+                .lowercased()
+                .replacingOccurrences(of: "@", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !ownerQuery.isEmpty
+        else {
+            return []
+        }
+
+        let candidates = friendProfiles.filter { profile in
+            profile.handle.lowercased().contains(ownerQuery)
+                || profile.displayName.lowercased().contains(ownerQuery)
+        }
+        return candidates.count > 1 ? candidates : []
+    }
+
+    private var selectedOwnerCandidate: ProfileShell? {
+        guard let selectedOwnerCandidateID else { return nil }
+        return friendProfiles.first { $0.id == selectedOwnerCandidateID }
+    }
+
+    private var resultExplanation: String {
+        let count = placeGroups.count
+        if let selectedOwnerCandidate {
+            return "\(count) \(count == 1 ? "place" : "places") filtered from \(selectedOwnerCandidate.displayName)"
+        }
+        if let owner = store.lastDiscoverFilters.ownerQuery,
+           !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "\(count) \(count == 1 ? "place" : "places") filtered from \(owner.capitalized)"
+        }
+        return "\(count) \(count == 1 ? "place" : "places") from people you follow"
+    }
+
+    private var placeResultTitle: String {
+        let trimmed = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "places" : trimmed
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    header
-                    searchField
-                    parsedFilterRow
-                    peopleSection
-                    resultsSection
+                    modeTabs
+
+                    switch selectedMode {
+                    case .places:
+                        placesSearchField
+                        placesContent
+                    case .members:
+                        membersSearchField
+                        membersContent
+                    }
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
@@ -67,24 +136,30 @@ struct DiscoverScreen: View {
             .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
             .task {
-                contacts = await store.contactMatches()
                 await refreshRemotePlacesIfNeeded()
-                await refresh()
+                await refreshPlaces()
+                await refreshMembers()
+                await runTicker()
             }
             .onChange(of: auth.isSignedIn) { _, _ in
                 Task {
                     await refreshRemotePlacesIfNeeded()
-                    await refresh()
+                    await refreshPlaces()
+                    await refreshMembers()
                 }
             }
-            .onChange(of: query) { _, _ in
-                Task { await refresh() }
+            .onChange(of: placesQuery) { _, _ in
+                selectedOwnerCandidateID = nil
+                Task { await refreshPlaces() }
             }
-            .onChange(of: selectedScope) { _, _ in
-                Task { await refresh() }
+            .onChange(of: memberQuery) { _, _ in
+                Task { await refreshMembers() }
             }
             .onChange(of: visiblePlaceSignature) { _, _ in
-                Task { await refresh() }
+                Task {
+                    await refreshPlaces()
+                    await refreshMembers()
+                }
             }
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
@@ -145,107 +220,146 @@ struct DiscoverScreen: View {
         }
     }
 
-    private var header: some View {
-        Text("discover")
-            .font(.system(size: 30, weight: .black, design: .rounded))
-            .lineLimit(1)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("hikes in LA, @maya, coffee...", text: $query)
-                .font(.system(size: 15, weight: .medium))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($searchFieldFocused)
-            if !query.isEmpty {
+    private var modeTabs: some View {
+        HStack(spacing: 0) {
+            ForEach(DiscoverMode.allCases) { mode in
                 Button {
-                    query = ""
+                    selectedMode = mode
+                    searchFieldFocused = false
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                    VStack(spacing: WanderTheme.spacing2) {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Image(systemName: mode.systemImage)
+                                .font(.system(size: 16, weight: .black))
+                            Text(mode.title)
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(selectedMode == mode ? WanderTheme.textInk.color : WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: 42)
+
+                        Rectangle()
+                            .fill(selectedMode == mode ? WanderTheme.textInk.color : Color.clear)
+                            .frame(height: 3)
+                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedMode == mode ? .isSelected : [])
             }
         }
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 50)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+        .padding(.top, WanderTheme.spacing1)
+    }
+
+    private var placesSearchField: some View {
+        DiscoverSearchField(
+            text: $placesQuery,
+            placeholder: tickerSuggestions[tickerIndex],
+            isTicker: true,
+            accessibilityLabel: "Search places"
+        )
+        .focused($searchFieldFocused)
+    }
+
+    private var membersSearchField: some View {
+        DiscoverSearchField(
+            text: $memberQuery,
+            placeholder: "Search rec.me members",
+            isTicker: false,
+            accessibilityLabel: "Search rec.me members"
+        )
+        .focused($searchFieldFocused)
     }
 
     @ViewBuilder
-    private var parsedFilterRow: some View {
-        if !parsedChips.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(parsedChips) { chip in
-                        Text(chip.title)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .frame(minHeight: 34)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .background(WanderTheme.surfaceBone.color)
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.terracotta.color.opacity(0.7), lineWidth: 1))
-                    }
-                }
-                .padding(.vertical, WanderTheme.spacing1)
+    private var placesContent: some View {
+        if !ambiguousOwnerCandidates.isEmpty {
+            OwnerDisambiguationSection(
+                candidates: ambiguousOwnerCandidates,
+                recCount: recCount(for:)
+            ) { profile in
+                selectedOwnerCandidateID = profile.id
             }
-            .accessibilityLabel("Parsed search filters")
+            latestActivitySection
+        } else if isPlacesSearchActive {
+            placeResultsSection
+        } else {
+            latestActivitySection
         }
     }
 
-    private var peopleSection: some View {
+    private var placeResultsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("people")
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(placeResultTitle)
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                Text(resultExplanation)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
 
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                AddPersonCard {
-                    query = "@"
-                    searchFieldFocused = true
+            if placeGroups.isEmpty {
+                EmptyPanel(title: "No matching places yet", action: "try another person, place type, or area")
+            } else {
+                ForEach(placeGroups) { group in
+                    DiscoverPlaceResultCard(
+                        group: group,
+                        isSavedByCurrentUser: isSavedByCurrentUser(group.primary),
+                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName
+                    ) {
+                        selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
+                    } save: {
+                        beginSaveDiscoverPlace(group.primary)
+                    } edit: {
+                        beginEditDiscoverPlace(group.primary)
+                    }
                 }
+            }
+        }
+    }
 
+    private var latestActivitySection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack {
+                SectionTitle("Latest Activity")
+                Spacer()
+                Text("Network")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            if latestActivityPlaces.isEmpty {
+                EmptyPanel(title: "No activity yet", action: "follow more people to fill this in")
+            } else {
+                ForEach(latestActivityPlaces) { visiblePlace in
+                    LatestActivityRow(visiblePlace: visiblePlace) {
+                        selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var membersContent: some View {
+        if isMemberSearchActive {
+            memberSearchResultsSection
+        }
+
+        friendsSection
+    }
+
+    private var memberSearchResultsSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            SectionTitle("Member results")
+
+            if profileResults.isEmpty {
+                EmptyPanel(title: "No members found", action: "try a handle or full first name")
+            } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(matchedContacts) { contact in
-                            ContactCard(contact: contact) {
-                                if let userID = contact.userID {
-                                    selectedProfile = SelectedProfile(id: userID)
-                                }
-                            } follow: {
-                                if let userID = contact.userID {
-                                    auth.requireSignIn(for: .followPeople) {
-                                        Task {
-                                            await store.follow(userID: userID, source: .contacts, backend: backend)
-                                            await store.refreshRemoteSocialSurfaces(backend: backend)
-                                            await refresh()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
+                    HStack(spacing: WanderTheme.spacing3) {
                         ForEach(profileResults) { profile in
-                            ProfileMiniCard(profile: profile) {
-                                selectedProfile = SelectedProfile(id: profile.id)
-                            } follow: {
-                                auth.requireSignIn(for: .followPeople) {
-                                    Task {
-                                        await store.follow(userID: profile.id, source: .username, backend: backend)
-                                        await store.refreshRemoteSocialSurfaces(backend: backend)
-                                        await refresh()
-                                    }
-                                }
-                            }
-                        }
-
-                        ForEach(followedProfiles) { profile in
-                            ProfileMiniCard(profile: profile) {
-                                selectedProfile = SelectedProfile(id: profile.id)
-                            } follow: {
+                            MemberResultTile(profile: profile, recCount: recCount(for: profile)) {
                                 selectedProfile = SelectedProfile(id: profile.id)
                             }
                         }
@@ -256,39 +370,22 @@ struct DiscoverScreen: View {
         }
     }
 
-    private var scopeToggle: some View {
-        WanderSegmentedSwitch(
-            options: DiscoverPlaceScope.allCases.map { scope in
-                WanderSegmentOption(id: scope.rawValue, title: scope.title)
-            },
-            selection: Binding(
-                get: { selectedScope.rawValue },
-                set: { selectedScope = DiscoverPlaceScope(rawValue: $0) ?? .everyone }
-            )
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Discover place source")
-    }
-
-    private var resultsSection: some View {
+    private var friendsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("places")
-            scopeToggle
+            HStack {
+                SectionTitle("Friends")
+                Spacer()
+                Text("\(friendProfiles.count)")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
 
-            if results.places.isEmpty {
-                EmptyPanel(title: "No places here yet", action: selectedScope == .myPlaces ? "try friends or everyone" : "try another search")
+            if friendProfiles.isEmpty {
+                EmptyPanel(title: "No friends yet", action: "search members to follow people")
             } else {
-                ForEach(placeGroups) { group in
-                    DiscoverPlaceRow(
-                        visiblePlace: group.primary,
-                        saveCount: group.saveCount,
-                        isSavedByCurrentUser: isSavedByCurrentUser(group.primary)
-                    ) {
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
-                    } save: {
-                        beginSaveDiscoverPlace(group.primary)
-                    } edit: {
-                        beginEditDiscoverPlace(group.primary)
+                ForEach(friendProfiles) { profile in
+                    FriendListRow(profile: profile, recCount: recCount(for: profile)) {
+                        selectedProfile = SelectedProfile(id: profile.id)
                     }
                 }
             }
@@ -349,7 +446,8 @@ struct DiscoverScreen: View {
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
-            await refresh()
+            await refreshPlaces()
+            await refreshMembers()
             savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -365,7 +463,8 @@ struct DiscoverScreen: View {
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
-            await refresh()
+            await refreshPlaces()
+            await refreshMembers()
             savedMessage = result.syncState == .synced ? "Updated." : "Saved here. We'll retry sync."
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -396,7 +495,7 @@ struct DiscoverScreen: View {
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
 
-        return (results.places + store.visiblePlaces())
+        return (placeResults.places + store.visiblePlaces())
             .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
@@ -431,14 +530,63 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func refresh() async {
-        results = await store.discover(query: query, scope: selectedScope, backend: backend)
-        parsedChips = store.lastDiscoverFilters.chips
+    private func refreshPlaces() async {
+        guard isPlacesSearchActive else {
+            placeResults = DiscoverResults(places: [], profiles: [])
+            selectedOwnerCandidateID = nil
+            return
+        }
+
+        placeResults = await store.discover(query: placesQuery, scope: .everyone, backend: backend)
+    }
+
+    private func refreshMembers() async {
+        guard isMemberSearchActive else {
+            memberResults = []
+            return
+        }
+
+        memberResults = await store.discoverMembers(query: memberQuery, backend: backend)
     }
 
     private func refreshRemotePlacesIfNeeded() async {
         guard auth.isSignedIn else { return }
         await store.refreshRemoteSocialSurfaces(backend: backend)
+    }
+
+    private func recCount(for profile: ProfileShell) -> Int {
+        store.visiblePlaces(for: profile.id).count
+    }
+
+    private func runTicker() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            guard !isPlacesSearchActive, selectedMode == .places else { continue }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                tickerIndex = (tickerIndex + 1) % tickerSuggestions.count
+            }
+        }
+    }
+}
+
+private enum DiscoverMode: String, CaseIterable, Identifiable {
+    case places
+    case members
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .places: "Places"
+        case .members: "Members"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .places: "mappin.and.ellipse"
+        case .members: "person.2"
+        }
     }
 }
 
@@ -488,367 +636,331 @@ private struct EmptyPanel: View {
     }
 }
 
-private struct AddPersonCard: View {
-    let action: () -> Void
+private struct DiscoverSearchField: View {
+    @Binding var text: String
+    let placeholder: String
+    let isTicker: Bool
+    let accessibilityLabel: String
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Image(systemName: "person.badge.plus")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(width: 36, height: 36)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-
-                Text("add")
-                    .font(.system(size: 14, weight: .bold))
-                Text("username")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Text("find")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-            }
-            .frame(width: 82, height: 116, alignment: .leading)
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceSand.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a person by username")
-    }
-}
-
-private struct ContactCard: View {
-    let contact: ContactMatch
-    let open: () -> Void
-    let follow: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            WanderAvatar(initials: initials, size: 36, color: WanderTheme.avatarRyan.color)
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(contact.displayName)
-                    .font(.system(size: 14, weight: .bold))
-                    .lineLimit(1)
-                Text(contact.handle.map { "@\($0)" } ?? "on Wander")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Button(contact.isAlreadyFollowing ? "view" : "follow") {
-                contact.isAlreadyFollowing ? open() : follow()
-            }
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
-        }
-        .frame(width: 122, height: 116, alignment: .leading)
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .onTapGesture {
-            open()
-        }
-    }
-
-    private var initials: String {
-        contact.displayName
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
-            .uppercased()
-    }
-}
-
-private struct ProfileMiniCard: View {
-    let profile: ProfileShell
-    let open: () -> Void
-    let follow: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            WanderAvatar(initials: String(profile.displayName.prefix(2)).uppercased(), size: 36, color: WanderTheme.pinSocial.color)
-            Text(profile.displayName)
-                .font(.system(size: 14, weight: .bold))
-                .lineLimit(1)
-            Text("@\(profile.handle) · \(profile.relationship.displayTitle)")
-                .font(.system(size: 12, weight: .medium))
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 19, weight: .black))
                 .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(1)
-            Spacer()
-            Button(profile.relationship == .nonFollower ? "follow" : "view") {
-                profile.relationship == .nonFollower ? follow() : open()
+
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .id(placeholder)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .lineLimit(1)
+                        .transition(isTicker ? .push(from: .bottom).combined(with: .opacity) : .opacity)
+                        .allowsHitTesting(false)
+                }
+
+                TextField("", text: $text)
+                    .font(.system(size: 17, weight: .bold))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .foregroundStyle(WanderTheme.textInk.color)
             }
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                }
+                .accessibilityLabel("Clear search")
+            }
         }
-        .frame(width: 122, height: 116, alignment: .leading)
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .onTapGesture(perform: open)
+        .padding(.leading, WanderTheme.spacing4)
+        .padding(.trailing, text.isEmpty ? WanderTheme.spacing4 : WanderTheme.spacing1)
+        .frame(minHeight: 58)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
-private struct DiscoverPlaceRow: View {
-    let visiblePlace: VisiblePlace
-    let saveCount: Int
+private struct DiscoverPlaceResultCard: View {
+    let group: VisiblePlaceGroup
     let isSavedByCurrentUser: Bool
+    let matchedOwnerName: String
     let openPlace: () -> Void
     let save: () -> Void
     let edit: () -> Void
+
+    private var visiblePlace: VisiblePlace { group.primary }
 
     var body: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Button(action: openPlace) {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                    DiscoverCategoryThumb(category: visiblePlace.place.category, size: 42, iconSize: 18)
+                    DiscoverCategoryThumb(category: visiblePlace.place.category, size: 62, iconSize: 24)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(visiblePlace.place.canonicalName)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .lineLimit(1)
-                        Text("\(saveSummary) · \(visiblePlace.userPlace.status.displayTitle)")
-                            .font(.system(size: 12, weight: .medium))
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Text(visiblePlace.place.canonicalName)
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .lineLimit(1)
+
+                            if let score = group.recommendedScore {
+                                Text(PlaceRating.averageDisplay(score))
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(WanderTheme.textOnAction.color)
+                                    .padding(.horizontal, WanderTheme.spacing2)
+                                    .frame(minHeight: 24)
+                                    .background(WanderTheme.textInk.color)
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        Text(subtitle)
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .lineLimit(1)
-                        if let note = visiblePlace.userPlace.note {
-                            Text(note)
-                                .font(.system(size: 12))
+
+                        if let noteLine {
+                            Text(noteLine)
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
                                 .lineLimit(1)
                         }
+
+                        Text(matchLine)
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .lineLimit(1)
                     }
                 }
             }
             .buttonStyle(.plain)
 
-            Spacer()
+            Spacer(minLength: WanderTheme.spacing2)
 
-            if isSavedByCurrentUser {
-                HStack(spacing: WanderTheme.spacing1) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .black))
-                        .frame(width: 38, height: 38)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .clipShape(Circle())
-                        .accessibilityLabel("\(visiblePlace.place.canonicalName) is already on my map")
-
-                    Button(action: edit) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(width: 38, height: 38)
-                            .background(WanderTheme.textInk.color)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .clipShape(Circle())
-                    }
-                    .accessibilityLabel("Edit \(visiblePlace.place.canonicalName)")
-                }
-            } else {
-                Button(action: save) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .black))
-                        .frame(width: 38, height: 38)
-                        .background(WanderTheme.terracotta.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Save \(visiblePlace.place.canonicalName) to my map")
+            Button(action: isSavedByCurrentUser ? edit : save) {
+                Image(systemName: isSavedByCurrentUser ? "pencil" : "plus")
+                    .font(.system(size: 17, weight: .black))
+                    .frame(width: 48, height: 48)
+                    .background(isSavedByCurrentUser ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
+                    .foregroundStyle(isSavedByCurrentUser ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
+                    .clipShape(Circle())
             }
+            .accessibilityLabel(isSavedByCurrentUser ? "Edit saved place" : "Save place")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
+        )
     }
 
-    private var saveSummary: String {
-        if saveCount > 1 {
-            return "\(visiblePlace.owner.displayName) + \(saveCount - 1) \(saveCount == 2 ? "other" : "others") saved it"
+    private var subtitle: String {
+        [
+            visiblePlace.place.locality,
+            visiblePlace.place.region,
+            visiblePlace.place.category
+        ]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: " · ")
+    }
+
+    private var noteLine: String? {
+        guard let note = visiblePlace.userPlace.note?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !note.isEmpty
+        else {
+            return nil
         }
-        return "\(visiblePlace.owner.displayName) saved it"
+        return "\(matchedOwnerName): \(note)"
+    }
+
+    private var matchLine: String {
+        [
+            matchedOwnerName,
+            visiblePlace.place.category,
+            visiblePlace.userPlace.status.displayTitle,
+            visiblePlace.place.locality
+        ]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: " · ")
     }
 }
 
-private struct DiscoverPlaceDetailSheet: View {
+private struct LatestActivityRow: View {
     let visiblePlace: VisiblePlace
-    let attributes: [LocalPlaceAttribute]
-    let isSavedByCurrentUser: Bool
-    let currentUserID: String
-    let save: () -> Void
-    let edit: () -> Void
-    let openProfile: () -> Void
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
+    let open: () -> Void
 
     var body: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    headerCard
-                    externalActions
-
-                    if !placeFacts.isEmpty {
-                        factSection(title: "place", facts: placeFacts)
-                    }
-
-                    savedByCard
-
-                    if !answerFacts.isEmpty {
-                        factSection(title: "answers", facts: answerFacts)
-                    }
-                }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .wanderScreen()
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("done") {
-                        dismiss()
-                    }
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    shareButton
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                DiscoverCategoryThumb(category: visiblePlace.place.category, size: 50, iconSize: 20)
+        Button(action: open) {
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderAvatar(initials: visiblePlace.owner.initials, size: 42, color: avatarColor)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(visiblePlace.place.canonicalName)
-                        .font(.system(size: 28, weight: .black, design: .rounded))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.78)
-
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(2)
-                    }
-
-                    DiscoverStatusPill(status: visiblePlace.userPlace.status)
-                }
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                mapAction
-            }
-
-            if let noteLine {
-                Text(noteLine)
-                    .font(.system(size: 15, weight: .medium))
-                    .italic()
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
-    }
-
-    @ViewBuilder
-    private var mapAction: some View {
-        if isSavedByCurrentUser {
-            HStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 17, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .background(WanderTheme.surfaceSand.color)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
-                    .accessibilityLabel("Already on your map")
-
-                Button(action: edit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 17, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.textInk.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Edit saved place")
-            }
-        } else {
-            Button(action: save) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel("Save \(visiblePlace.place.canonicalName) to my map")
-        }
-    }
-
-    @ViewBuilder
-    private var externalActions: some View {
-        if let directionsURL {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    DiscoverExternalActionButton(title: "Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
-                        openURL(directionsURL)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var shareButton: some View {
-        if let shareURL {
-            ShareLink(item: shareURL, subject: Text(visiblePlace.place.canonicalName), message: Text(shareText)) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 17, weight: .black))
-                    .frame(width: 38, height: 38)
-                    .background(WanderTheme.surfaceSand.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel("Share place")
-        }
-    }
-
-    private var savedByCard: some View {
-        Button(action: openProfile) {
-            HStack(spacing: WanderTheme.spacing2) {
-                WanderAvatar(initials: visiblePlace.owner.initials, size: 38, color: avatarColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(visiblePlace.owner.displayName) saved it")
+                    Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Text("@\(visiblePlace.owner.handle)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                        PlaceVisibilityIconPill(visibility: visiblePlace.userPlace.visibility, size: 22)
-                    }
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
                 }
+
                 Spacer()
-                Image(systemName: "chevron.right")
+
+                Text(visiblePlace.userPlace.status.displayTitle)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var subtitle: String {
+        [
+            visiblePlace.place.locality,
+            visiblePlace.place.region,
+            visiblePlace.place.category
+        ]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: " · ")
+    }
+
+    private var avatarColor: Color {
+        visiblePlace.owner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
+    }
+}
+
+private struct OwnerDisambiguationSection: View {
+    let candidates: [ProfileShell]
+    let recCount: (ProfileShell) -> Int
+    let select: (ProfileShell) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text("Which person?")
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("Pick who you want to search.")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            ForEach(candidates) { profile in
+                Button {
+                    select(profile)
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 50, color: WanderTheme.pinSocial.color)
+
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                            Text(profile.displayName)
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                            Text("@\(profile.handle)")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                            Text("\(recCount(profile)) rec matches")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textFaint.color)
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+private struct MemberResultTile: View {
+    let profile: ProfileShell
+    let recCount: Int
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 46, color: WanderTheme.pinSocial.color)
+                Text(profile.displayName)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                Text("@\(profile.handle)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(recCount) rec matches")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .frame(width: 148, height: 142, alignment: .leading)
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FriendListRow: View {
+    let profile: ProfileShell
+    let recCount: Int
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 42, color: WanderTheme.pinSocial.color)
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(profile.displayName)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("@\(profile.handle)")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer()
+
+                Text("\(recCount) recs")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -857,207 +969,6 @@ private struct DiscoverPlaceDetailSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open \(visiblePlace.owner.displayName)'s profile")
-    }
-
-    private func factSection(title: String, facts: [DiscoverPlaceFact]) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(title)
-                .font(.system(size: 12, weight: .black))
-                .textCase(.uppercase)
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 106), spacing: WanderTheme.spacing2)],
-                alignment: .leading,
-                spacing: WanderTheme.spacing2
-            ) {
-                ForEach(facts) { fact in
-                    DiscoverFactPill(title: fact.title, systemImage: fact.systemImage)
-                }
-            }
-        }
-    }
-
-    private var subtitle: String? {
-        joinedText([addressLine, categoryDisplay])
-    }
-
-    private var addressLine: String? {
-        let address = trimmed(visiblePlace.place.address)
-        if let address {
-            return address
-        }
-        return joinedText([visiblePlace.place.locality, visiblePlace.place.region])
-    }
-
-    private var categoryDisplay: String? {
-        let category = trimmed(visiblePlace.place.category)
-        return category == "place" ? nil : category
-    }
-
-    private var note: String? {
-        trimmed(visiblePlace.userPlace.note)
-    }
-
-    private var noteLine: String? {
-        guard let note else { return nil }
-        let ownerLabel = visiblePlace.owner.id == currentUserID ? "your note" : "\(visiblePlace.owner.displayName)'s note"
-        return "\(ownerLabel): \"\(note)\""
-    }
-
-    private var placeFacts: [DiscoverPlaceFact] {
-        var facts: [DiscoverPlaceFact] = []
-        if let categoryDisplay {
-            facts.append(DiscoverPlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: visiblePlace.place.category)))
-        }
-        return facts
-    }
-
-    private var answerFacts: [DiscoverPlaceFact] {
-        var facts: [DiscoverPlaceFact] = []
-
-        if let ratingSignal = visiblePlace.userPlace.ratingSignal,
-           !attributes.contains(where: { $0.questionKey == "rating_signal" }) {
-            facts.append(DiscoverPlaceFact(title: ratingSignal, systemImage: "heart.fill"))
-        }
-
-        if let recommendedScore = visiblePlace.recommendedScore,
-           visiblePlace.recommendedCount > 0 {
-            facts.append(DiscoverPlaceFact(title: "Recommended \(PlaceRating.averageDisplay(recommendedScore))", systemImage: "star.fill"))
-        }
-
-        facts.append(contentsOf: attributes.flatMap(attributeFacts(for:)))
-        return facts
-    }
-
-    private var directionsURL: URL? {
-        PlaceExternalLinks.googleMapsDirectionsURL(
-            placeName: visiblePlace.place.canonicalName,
-            latitude: visiblePlace.place.latitude,
-            longitude: visiblePlace.place.longitude
-        )
-    }
-
-    private var shareURL: URL? {
-        PlaceExternalLinks.googleMapsSearchURL(
-            placeName: visiblePlace.place.canonicalName,
-            address: visiblePlace.place.address,
-            locality: visiblePlace.place.locality
-        )
-    }
-
-    private var shareText: String {
-        PlaceExternalLinks.shareSummary(
-            placeName: visiblePlace.place.canonicalName,
-            locality: visiblePlace.place.locality,
-            status: visiblePlace.userPlace.status
-        )
-    }
-
-    private var avatarColor: Color {
-        visiblePlace.owner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
-    }
-
-    private func attributeFacts(for attribute: LocalPlaceAttribute) -> [DiscoverPlaceFact] {
-        decodedValues(from: attribute.valueJSON).map { value in
-            DiscoverPlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
-        }
-    }
-
-    private func icon(for questionKey: String) -> String {
-        switch questionKey {
-        case "interest_signal": "heart.fill"
-        case "rating_signal": "heart.fill"
-        case "work_setup": "laptopcomputer"
-        case "strenuousness": "figure.hiking"
-        case "price": "dollarsign.circle.fill"
-        case "occasion", "best_for": "sparkles"
-        default: "tag.fill"
-        }
-    }
-
-    private func decodedValues(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        if let values = try? JSONDecoder().decode([String].self, from: data) {
-            return values
-        }
-        if let value = try? JSONDecoder().decode(String.self, from: data) {
-            return [value]
-        }
-        if let value = try? JSONDecoder().decode(Bool.self, from: data) {
-            return [value ? "yes" : "no"]
-        }
-        if let value = try? JSONDecoder().decode(Int.self, from: data) {
-            return ["\(value)"]
-        }
-        if let value = try? JSONDecoder().decode(Double.self, from: data) {
-            return [value.formatted()]
-        }
-        return []
-    }
-
-    private func joinedText(_ values: [String?]) -> String? {
-        let parts = values.compactMap(trimmed)
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func trimmed(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed?.isEmpty == false ? trimmed : nil
-    }
-}
-
-private struct DiscoverPlaceFact: Identifiable {
-    var id: String { "\(systemImage)-\(title)" }
-    let title: String
-    let systemImage: String
-}
-
-private struct DiscoverExternalActionButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .black))
-                Text(title)
-                    .font(.system(size: 13, weight: .black))
-                    .lineLimit(1)
-            }
-            .frame(minHeight: 42)
-            .padding(.horizontal, WanderTheme.spacing4)
-            .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-    }
-}
-
-private struct DiscoverFactPill: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .bold))
-            Text(title)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-        }
-        .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 36)
-        .background(WanderTheme.surfaceSand.color)
-        .foregroundStyle(WanderTheme.textInk.color)
-        .clipShape(Capsule())
     }
 }
 
@@ -1073,19 +984,5 @@ private struct DiscoverCategoryThumb: View {
             .frame(width: size, height: size)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())
-    }
-}
-
-private struct DiscoverStatusPill: View {
-    let status: PlaceStatus
-
-    var body: some View {
-        Text(status == .been ? "been" : "wanna")
-            .font(.system(size: 12, weight: .black))
-            .padding(.horizontal, WanderTheme.spacing2)
-            .frame(minHeight: 28)
-            .background(status == .been ? WanderTheme.categorySage.color.opacity(0.22) : WanderTheme.sunTint.color)
-            .foregroundStyle(status == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color)
-            .clipShape(Capsule())
     }
 }

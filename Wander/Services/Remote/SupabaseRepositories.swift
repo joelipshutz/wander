@@ -208,8 +208,49 @@ struct SupabaseExtractionRepository: ExtractionRepository {
     }
 }
 
+struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
+    private let functions: RemoteFunctionCalling
+
+    init(functions: RemoteFunctionCalling) {
+        self.functions = functions
+    }
+
+    func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        try await functions.invoke(
+            "parse-discover-query",
+            body: ParseDiscoverQueryParams(query: query, schema: schema)
+        )
+    }
+}
+
+struct RemoteDiscoverFilterParser: LLMFilterParser {
+    private let repository: any DiscoverFilterParsingRepository
+    private let fallback: any LLMFilterParser
+
+    init(
+        repository: any DiscoverFilterParsingRepository,
+        fallback: any LLMFilterParser = DeterministicFilterParser()
+    ) {
+        self.repository = repository
+        self.fallback = fallback
+    }
+
+    func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        do {
+            return try await repository.parseFilters(query: query, schema: schema)
+        } catch {
+            return try await fallback.parse(query: query, schema: schema)
+        }
+    }
+}
+
 private struct SearchProfilesParams: Encodable {
     let query: String
+}
+
+private struct ParseDiscoverQueryParams: Encodable {
+    let query: String
+    let schema: DiscoverFilterSchema
 }
 
 private struct ProfileIDParams: Encodable {

@@ -716,6 +716,18 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(results.profiles.isEmpty)
     }
 
+    func testDiscoverNaturalLanguageCanFilterByOwnerQuery() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Joe's favorite coffee spots in LA")
+
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.owner.handle == "joe" })
+        XCTAssertTrue(results.places.allSatisfy { $0.place.category == "coffee" })
+        XCTAssertEqual(store.lastDiscoverFilters.ownerQuery, "joe")
+        XCTAssertEqual(store.lastDiscoverFilters.statuses, [.been])
+    }
+
     func testDiscoverParserCachesAndTracksAnalytics() async {
         let analytics = RecordingAnalyticsClient()
         let parser = FakeFilterParser(
@@ -782,6 +794,39 @@ final class WanderStoreTests: XCTestCase {
         let results = await store.discover(query: "@so", backend: backend)
 
         XCTAssertEqual(results.profiles.map(\.handle), ["sofia"])
+        XCTAssertEqual(profileRepository.queries, ["so"])
+        XCTAssertNotNil(store.profileState(for: "user_sofia"))
+    }
+
+    func testDiscoverMembersSearchDoesNotInvokePlaceParser() async {
+        let parser = FakeFilterParser()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), parser: parser)
+
+        let profiles = await store.discoverMembers(query: "Maya")
+
+        XCTAssertEqual(profiles.map(\.handle), ["maya"])
+        XCTAssertTrue(parser.queries.isEmpty)
+    }
+
+    func testDiscoverMembersMergesRemoteProfileSearch() async {
+        let store = makeStore()
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_sofia",
+                    handle: "sofia",
+                    displayName: "Sofia Rivera",
+                    avatarURL: nil,
+                    bio: nil,
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        let profiles = await store.discoverMembers(query: "@so", backend: backend)
+
+        XCTAssertEqual(profiles.map(\.handle), ["sofia"])
         XCTAssertEqual(profileRepository.queries, ["so"])
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
