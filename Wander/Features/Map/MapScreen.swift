@@ -264,7 +264,6 @@ struct MapScreen: View {
                         }
                         .frame(height: 48)
                     }
-                    .padding(.top, WanderTheme.spacing2)
 
                     Spacer()
 
@@ -279,6 +278,8 @@ struct MapScreen: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .safeAreaPadding(.top, WanderTheme.spacing2)
 
                 selectedPlaceProfileSurface
             }
@@ -327,6 +328,7 @@ struct MapScreen: View {
             .navigationDestination(isPresented: placeProfileDestinationBinding) {
                 selectedPlaceProfileDestination
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
