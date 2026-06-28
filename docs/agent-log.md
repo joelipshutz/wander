@@ -6823,3 +6823,23 @@ Checkpoint:
 
 - Resolved `Wander/Features/Discover/DiscoverScreen.swift` by keeping the current Places/Members redesign from `main` and adding the native `NavigationStack` place-profile destination from PR #43.
 - Resolved `docs/agent-log.md` as an append-only log, preserving both the PR #43 navigation entry and the build 48/49 mainline release history.
+
+Outcome, 2026-06-28 08:30 PDT:
+
+- PR #43 was squash-merged into `main` as `8f1d032` (`fix: present place profiles with navigation push (#43)`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 49 to build 50 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `8d13915` (`chore: bump testflight build 50`).
+- Build 50 validation initially caught REC-40 Lists merge fallout where `ListsScreen` still called the old `PlaceProfileMapSurface(isExpanded:)` API. Fixed Lists place-profile presentation to use native navigation destinations and pushed `8d82f5f` (`fix: align list place profiles with navigation push`) before upload.
+- `git diff --check` passed.
+- Simulator build passed:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build50-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed on the documented target:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build50-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build50.xcarchive`; archived `CFBundleVersion` verified as `50`.
+- Export options: `/private/tmp/WanderExportUpload50.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 50 --archive-path /private/tmp/Wander-0.1-build50.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build50-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (50)` id `e376eabe-924c-44f7-875a-97288e538848` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack: posted tester-facing build 50 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782660612379839`.
+- Known deferred area: list creation/editing remains local/mock-functional from REC-40; backend list persistence and invite links remain follow-up scope.
