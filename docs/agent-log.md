@@ -7032,3 +7032,30 @@ Completion checkpoint, 2026-06-28 12:31 PDT:
 - Known remaining QA:
   - Physical camera capture still needs real-device testing.
   - Hosted migration application and profile-avatar upload smoke test still need Supabase credentials/tooling.
+
+## 2026-06-28 12:49 PDT - Codex - Profile Avatar Hosted Backend Check
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`.
+
+Goal: answer whether the profile-avatar backend was part of the plan and why Xcode testing still shows `Saved on this phone. Could not sync profile photo yet.`
+
+Findings:
+
+- Plan/history distinction:
+  - The first profile-picture implementation commit was local-first and explicitly logged Supabase Storage cross-device sync as out of scope.
+  - After Ryan asked for avatars everywhere and then asked to build the backend functionality, the plan was updated to include backend avatar sync and remote propagation.
+  - The branch now implements the app/backend code path and includes the SQL migration/test files, but hosted Supabase migration application is still not complete.
+- Hosted Supabase probe:
+  - A safe unauthenticated PostgREST probe to `public.update_profile_avatar` returned `PGRST202`, meaning the function is not present in the hosted schema cache.
+  - This explains the app behavior: local file save succeeds, then remote profile avatar sync fails because the hosted RPC/bucket migration is not live.
+- Tooling/access state:
+  - `supabase` is not installed on PATH.
+  - Bundled Node/pnpm can run Supabase CLI via `pnpm dlx supabase`; version checked as `2.108.0`.
+  - `supabase migration list --linked` failed because the repo is not locally linked.
+  - `supabase projects list` failed because no `SUPABASE_ACCESS_TOKEN` is available in this shell.
+  - Environment checks found no `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD`; `/Users/ryanlieblein/.openclaw/workspace/.env.keys` did not contain Supabase credential variable names.
+
+Current blocker: to apply `supabase/migrations/20260628122000_profile_avatar_storage.sql` to the hosted project, the session needs either a Supabase access token/login plus DB password/linking, or another authenticated database migration path.
