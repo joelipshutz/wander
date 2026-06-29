@@ -113,4 +113,17 @@ final class NavigationContractTests: XCTestCase {
             )
         )
     }
+
+    @MainActor
+    func testPlaceProfileFullBleedHeaderKeepsMinimumTopInset() {
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: 0),
+            54
+        )
+
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: 62),
+            62
+        )
+    }
 }

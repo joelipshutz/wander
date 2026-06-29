@@ -85,6 +85,10 @@ struct PlaceProfileFullScreen: View {
             && abs(translation.height) <= edgeSwipeMaximumVerticalDrift
     }
 
+    static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
+        PlaceProfileMapHeader.resolvedTopInset(from: safeAreaTopInset)
+    }
+
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
@@ -246,13 +250,15 @@ private struct PlaceProfileFullView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
+
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
                     place: place,
                     action: action,
                     shareURL: shareURL,
                     shareText: shareText,
-                    topInset: proxy.safeAreaInsets.top,
+                    topInset: headerTopInset,
                     onBack: onBack,
                     onAction: onAction
                 )
@@ -582,6 +588,8 @@ private struct PlaceProfileFullView: View {
 }
 
 private struct PlaceProfileMapHeader: View {
+    static let minimumFullBleedTopInset: CGFloat = 54
+
     let place: PlaceSheetPlace
     let action: PlaceSheetAction
     let shareURL: URL?
@@ -667,6 +675,10 @@ private struct PlaceProfileMapHeader: View {
         }
         .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
+    }
+
+    static func resolvedTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
+        max(safeAreaTopInset, minimumFullBleedTopInset)
     }
 
     private func headerRegion(latitude: Double, longitude: Double) -> MKCoordinateRegion {

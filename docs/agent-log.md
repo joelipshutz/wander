@@ -7301,3 +7301,35 @@ Public TestFlight: https://testflight.apple.com/join/knEhRa6t
 
 Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
 ```
+## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
+
+Agent: Codex
+Branch: `codex/layout-chrome-fix`
+Worktree: `/private/tmp/recme-layout-chrome-fix`
+Starting status: fresh worktree from `origin/main` at `cf5f3ef`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: unavailable; `curl http://localhost:4000/api/tasks` failed with connection refused.
+
+Goal: fix Joe-reported TestFlight build 51 layout regression focused on the Map search/filter chrome and Place Profile back/header controls from screenshots `IMG_2908.png` and `IMG_2907.png`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused layout/navigation tests if there is a stable unit-level seam.
+
+Completion checkpoint, 2026-06-28 12:20 PDT:
+
+- Fixed Map search/filter chrome by giving the overlay a full-screen top-aligned frame, adding safe-area top padding, and hiding the empty `NavigationStack` navigation bar so the map stays full-bleed instead of leaving a blank header region.
+- Fixed Place Profile full-bleed header controls by restoring a minimum top inset when `GeometryProxy.safeAreaInsets.top` resolves to `0` under `.ignoresSafeArea`, keeping back/edit/share controls below the status/Dynamic Island/TestFlight chrome.
+- Added focused `NavigationContractTests` coverage for the full-bleed header inset fallback.
+- `git diff --check` passed.
+- First focused `xcodebuild test` attempt hung while waiting for XCTest workers and was interrupted; after `build-for-testing`, focused `NavigationContractTests` passed with:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-layout-chrome-test CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+- Simulator build passed with:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-layout-chrome-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual QA screenshots captured and reviewed:
+  - iPhone 16 Plus map: `/private/tmp/recme-layout-chrome-map-final.png`
+  - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
+  - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
+  - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`
