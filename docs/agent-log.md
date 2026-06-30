@@ -7422,3 +7422,52 @@ Release checkpoint, 2026-06-30 09:28 PDT:
 - PR #45 merged to `main` as `5908f1fa6` (`Add profile picture picker`).
 - Reusing clean release worktree `/private/tmp/recme-testflight-build53`, now fast-forwarded to latest `origin/main`.
 - Bumping `CURRENT_PROJECT_VERSION` from 53 to 54 for the requested TestFlight release.
+
+Outcome, 2026-06-30 09:48 PDT:
+
+- Pushed build-number commit `b40d869ef` (`chore: bump testflight build 54`) to `main`; `CURRENT_PROJECT_VERSION` is `54` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Deleted merged remote branch `codex/profile-pictures`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build54-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build54-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build54.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=54` verified.
+- Export options: `/private/tmp/WanderExportUpload54.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 54 --archive-path /private/tmp/Wander-0.1-build54.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build54-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (54)` id `191c3d1c-45bc-49d5-9ec2-d441e59b2305` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: attempted to post the required tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`), but the Codex Slack connector returned `token_expired` / HTTP 401. No `slack` CLI or `SLACK_*` credential was available locally, and Chrome fallback requires explicit user approval/re-auth because the connector auth failure alone does not permit using the user's browser session.
+- Required Slack message to post after Slack re-auth:
+
+```text
+**rec.me TestFlight build 54 is live/approved**
+
+Public TestFlight link: [https://testflight.apple.com/join/knEhRa6t](https://testflight.apple.com/join/knEhRa6t)
+
+**What changed**
+- Profile photos are now testable end to end: add, change, and delete from Profile.
+- Signed-in profile photos sync through Supabase Storage and update across the app.
+- Avatars now pull through on profile/settings surfaces, Discover member results, place cards, lists/collaborators, and map/place profile surfaces wherever that profile icon appears.
+- The profile photo edit menu has been repositioned to drop from the avatar while keeping the native iOS action feel.
+
+**Please test**
+- Tap your avatar on Profile, choose library or camera, and confirm the menu/actions feel right.
+- Delete the photo and confirm the placeholder comes back everywhere.
+- Relaunch the app and confirm your avatar persists.
+- Use another account/device to confirm the changed avatar appears on place cards, Discover > Members, profiles, lists/collaborators, and map/place profile surfaces.
+- Try a weak/offline connection if you can: local avatar should remain, with a clear sync warning if remote upload fails.
+
+**Known/deferred**
+- Camera capture still needs real-device QA; simulator may hide camera when unavailable.
+- The Map search bar intentionally has no trailing profile icon after build 53.
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps for anything weird.
+```
+
+Known issues:
+
+- Slack release note still needs posting after the Slack connector is re-authenticated or Ryan explicitly approves a browser-session fallback.
+- Camera capture should be verified on a real device.
+- Map search bar intentionally has no trailing profile icon after build 53.
