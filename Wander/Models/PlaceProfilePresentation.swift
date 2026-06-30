@@ -26,7 +26,7 @@ struct PlaceActualRating: Equatable {
         case .own:
             "Your rating"
         case .trusted:
-            "Actual rating"
+            "Overall rating"
         }
     }
 
@@ -62,7 +62,8 @@ struct PlaceFitRating: Equatable {
 }
 
 struct PlaceProfilePresentation: Equatable {
-    let actualRating: PlaceActualRating?
+    let overallRating: PlaceActualRating?
+    let ownRating: PlaceActualRating?
     let fitRating: PlaceFitRating?
     let commonTags: [PlaceCommonTag]
 
@@ -80,38 +81,53 @@ enum PlaceProfilePresenter {
         currentUserID: String
     ) -> PlaceProfilePresentation {
         let commonTags = commonTags(from: saves, currentUserID: currentUserID)
-        let actualRating = actualRating(from: saves, currentUserID: currentUserID)
+        let overallRating = overallRating(from: saves, currentUserID: currentUserID)
+        let ownRating = ownRating(from: saves, currentUserID: currentUserID)
         let fitRating = fitRating(
             placeID: placeID,
             category: category,
             commonTags: commonTags,
-            actualRating: actualRating,
+            ratingEvidence: ownRating ?? overallRating,
             saves: saves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
         )
 
         return PlaceProfilePresentation(
-            actualRating: actualRating,
+            overallRating: overallRating,
+            ownRating: ownRating,
             fitRating: fitRating,
             commonTags: commonTags
         )
     }
 
-    static func actualRating(
+    static func ownRating(
         from saves: [PlaceSaveSummary],
         currentUserID: String
     ) -> PlaceActualRating? {
         if let ownRating = saves
-            .first(where: { $0.visiblePlace.owner.id == currentUserID })?
+            .first(where: {
+                $0.visiblePlace.owner.id == currentUserID
+                    && $0.visiblePlace.userPlace.status == .been
+            })?
             .visiblePlace
             .userPlace
             .ratingScore {
             return PlaceActualRating(score: Double(ownRating), count: 1, source: .own)
         }
 
+        return nil
+    }
+
+    static func overallRating(
+        from saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> PlaceActualRating? {
         let localScores = saves
-            .filter { $0.visiblePlace.userPlace.status == .been }
+            .filter {
+                $0.visiblePlace.owner.id != currentUserID
+                    && $0.visiblePlace.userPlace.status == .been
+            }
             .compactMap(\.visiblePlace.userPlace.ratingScore)
 
         if !localScores.isEmpty {
@@ -119,7 +135,10 @@ enum PlaceProfilePresenter {
             return PlaceActualRating(score: average, count: localScores.count, source: .trusted)
         }
 
-        guard let aggregateSource = saves.first(where: { $0.visiblePlace.recommendedScore != nil }),
+        guard let aggregateSource = saves.first(where: {
+            $0.visiblePlace.owner.id != currentUserID
+                && $0.visiblePlace.recommendedScore != nil
+        }),
               let score = aggregateSource.visiblePlace.recommendedScore,
               aggregateSource.visiblePlace.recommendedCount > 0
         else {
@@ -182,7 +201,7 @@ enum PlaceProfilePresenter {
         placeID: String,
         category: String,
         commonTags: [PlaceCommonTag],
-        actualRating: PlaceActualRating?,
+        ratingEvidence: PlaceActualRating?,
         saves: [PlaceSaveSummary],
         tasteSaves: [PlaceSaveSummary],
         currentUserID: String
@@ -192,13 +211,13 @@ enum PlaceProfilePresenter {
         var evidence = 0
         var reasons: [String] = []
 
-        if let actualRating {
-            let ratingFit = min(10, max(0, actualRating.score * 2))
-            let weight = actualRating.source == .own ? 0.42 : 0.30
+        if let ratingEvidence {
+            let ratingFit = min(10, max(0, ratingEvidence.score * 2))
+            let weight = ratingEvidence.source == .own ? 0.42 : 0.30
             weightedTotal += ratingFit * weight
             totalWeight += weight
-            evidence += actualRating.source == .own ? 2 : 1
-            reasons.append(actualRating.source == .own ? "You rated this \(actualRating.displayScore)/5." : "\(actualRating.subtitle) average \(actualRating.displayScore)/5.")
+            evidence += ratingEvidence.source == .own ? 2 : 1
+            reasons.append(ratingEvidence.source == .own ? "You rated this \(ratingEvidence.displayScore)/5." : "\(ratingEvidence.subtitle) average \(ratingEvidence.displayScore)/5.")
         }
 
         let tasteProfile = TasteProfile(

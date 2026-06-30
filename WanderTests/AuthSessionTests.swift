@@ -152,4 +152,36 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(facts.first { $0.id == "blocks" }?.body.contains("hides profiles, places, search results, and map content") == true)
         XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("not part of this alpha") == true)
     }
+
+    func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
+        XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "stealth mode for new saves")
+
+        let notPrivateCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .followers)
+        XCTAssertTrue(notPrivateCopy.contains("new places"))
+        XCTAssertTrue(notPrivateCopy.contains("people who follow you"))
+        XCTAssertTrue(notPrivateCopy.contains("turn stealth on"))
+
+        let privateCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .selfOnly)
+        XCTAssertTrue(privateCopy.contains("new places start private"))
+        XCTAssertTrue(privateCopy.contains("Only you can see them"))
+
+        let lockedCopy = SettingsDefaultPlacePrivacySurface.helperCopy(for: .selfOnly, isLockedByPrivateProfile: true)
+        XCTAssertTrue(lockedCopy.contains("Locked on by Private Profile"))
+        XCTAssertTrue(lockedCopy.contains("while Private Profile is on"))
+
+        XCTAssertEqual(SettingsProfilePrivacySurface.title, "Private profile")
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("saved places are in stealth mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: true).contains("new collaborative lists are unavailable"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: false).contains("username can appear in search"))
+        XCTAssertFalse(SettingsProfilePrivacySurface.body(isEnabled: false).contains("Stealth mode below"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Places saved by you will switch to stealth mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Been and Wanna Go"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("username will be hidden"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("existing collaborative lists stay unchanged"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("new collaborative lists are unavailable"))
+        XCTAssertFalse(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Stealth mode will stay activated"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("username can appear in search again"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("existing places will stay in stealth mode"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("future saves will follow"))
+    }
 }

@@ -5543,6 +5543,149 @@ Outcome:
 - Known issue: no simulator screenshots were captured because the request explicitly asked for inline mockups rather than compiling in Xcode; the ASCII mockups are included in both the PR body and `docs/mockups/edit-place-category-schema.md`.
 - Next step: Ryan/Joe review the edit-place taxonomy and mockups, especially whether the initial editable subcategory list is the right MVP breadth before a backend/schema implementation pass.
 
+## 2026-06-26 14:37 PDT - Codex - Instagram and Apple Maps link fixes
+
+Agent: Codex
+Branch/worktree: `codex/link-fixes-instagram-apple` at `/Users/ryanlieblein/Developer/wander`.
+Starting status: root checkout was clean on `main` but behind `origin/main`; fetched `origin`, fast-forwarded to `3d6cf5216`, inspected existing worktrees, read recent `docs/agent-log.md`, and created a short-lived feature branch in the root checkout so Xcode/phone testing points at this branch.
+
+Goal: investigate why Instagram location links and Apple Maps links are not reliably becoming add-place candidates, implement the fixes in a PR, and create a physical-device build Ryan can test on his phone.
+
+Expected files:
+
+- `Wander/Services/LinkPlaceParser.swift`
+- `Wander/Services/MapKitPlaceResolver.swift`
+- `WanderTests/LinkPlaceParserTests.swift`
+- possibly `supabase/functions/extraction-worker/index.ts` if the backend extraction path needs matching Apple/Instagram support
+- `docs/agent-log.md`
+
+Plan:
+
+- Reproduce supported and failing link shapes with focused parser tests before changing behavior.
+- Fix root causes in the parser/resolver path instead of broadening unsupported links blindly.
+- Run focused tests and a simulator/device build, then open a draft PR for testing.
+
+Root cause:
+
+- The current failing Apple Maps example in Slack is `https://maps.apple/p/hDU04tUWpbVsMn`. It redirects to `https://maps.apple.com/place?address=2327%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=34.004387,-118.485816&name=Urth%20Caff%C3%A9&place-id=I1BEA961C41ECB5A7&map=explore`, but the app only expanded Google short-map hosts, so it treated `maps.apple` as unsupported.
+- Expanded Apple Maps links can include both `address` and `name`; the parser preferred `address` before `name`, which could search the street address as the place name.
+- Apple Maps `ll`/`sll` coordinate hints were not used as `areaHint`, making ambiguous place-name searches less reliable.
+- The reported Instagram example is `https://www.instagram.com/ronan_la`, a business profile URL, not an `/explore/locations/...` URL. The existing parser intentionally handled only Instagram location slugs and ignored profile slugs.
+
+Implementation:
+
+- Recognize `maps.apple` as a short map link and expand it through the same local resolver redirect path as Google short links.
+- Prefer Apple/Map link `name`/`title`/`place` query values before `address`, and preserve `ll`/`sll`/`center`/`coordinate` values as area hints for MapKit search.
+- Parse safe top-level Instagram profile slugs such as `ronan_la` into manual place-name hints while continuing to reject reserved Instagram paths like posts/reels/stories.
+- Added parser regression coverage for the exact expanded Urth Café Apple Maps target, `maps.apple` short-link recognition, Instagram profile slugs, and Instagram post rejection.
+- Hardened the Supabase extraction worker for backend parity: `maps.apple` redirect support, Apple `coordinate` support, Apple path/query name extraction, and `name`/`title`/`place` preference before address.
+
+Validation:
+
+- `curl -Ls` confirmed `https://maps.apple/p/hDU04tUWpbVsMn` redirects to the coordinate-backed Urth Café Apple Maps URL above.
+- `git diff --check` passed.
+- Focused simulator XCTest could not run because local CoreSimulator is out of date: installed `1051.54.0`, Xcode expects `1051.55.0`.
+- Focused physical-device XCTest reached build preparation but failed before running tests because `WanderTests` cannot code sign on device without an Info.plist/generated Info.plist.
+- Generic `build-for-testing` also failed in local tooling/asset-catalog thinning after the CoreSimulator mismatch.
+- Physical iPhone app build succeeded for `Ry’s iPhone` (`00008130-0008095E3408001C`) with `** BUILD SUCCEEDED **`; this compiled `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`.
+- `xcrun xcdevice list --timeout=5` confirmed `Ry’s iPhone` is visible over USB. `xcrun devicectl device install app` hung twice with no output and was interrupted; Xcode was opened on this branch so Ryan can use the visible Run button if CLI install remains stuck.
+
+Handoff:
+
+- Commit: `22fc12a4b` (`fix: support apple and instagram place links`).
+- Draft PR: https://github.com/joelipshutz/wander/pull/40
+- Branch remains checked out in the root Xcode workspace: `codex/link-fixes-instagram-apple`.
+- Test in Xcode on `Ry’s iPhone` by running the app from this branch, then paste:
+  - `https://maps.apple/p/hDU04tUWpbVsMn` - should resolve to an Urth Café candidate instead of unsupported-link/draft behavior.
+  - `https://www.instagram.com/ronan_la` - should search from the `ronan la` profile hint and show place candidates instead of unsupported-link behavior.
+  - An Instagram post/reel URL - should still avoid creating a bogus place from the media ID.
+
+Follow-up checkpoint, 2026-06-26 15:04 PDT:
+
+- Ryan confirmed Instagram links now work, but an Apple Maps link for Heavy Handed produced a save candidate named `2912 Main St` instead of the business name.
+- Starting status: `codex/link-fixes-instagram-apple` was clean and tracking `origin/codex/link-fixes-instagram-apple`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` were checked before editing.
+- Root cause: the first fix covered Apple URLs with an explicit `name=` field. Address-plus-coordinate Apple URLs still parsed `address=` into `ManualPlaceInput.name`, and `MapKitPlaceResolver.resolveLink` immediately searched/saved that address string instead of using the coordinate to resolve nearby POIs.
+- Expected files touched for this follow-up: `Wander/Services/MapKitPlaceResolver.swift`, `WanderTests/LinkPlaceParserTests.swift`, `supabase/functions/extraction-worker/index.ts`, and `docs/agent-log.md`.
+- Implementation direction: when an Apple Maps parsed link has a valid coordinate and the parsed name looks like a street address, use the existing nearby POI lookup instead of the manual address search path. The backend extraction worker should also avoid treating address-only Apple query fields as business names.
+- Implemented `LinkPlaceResolutionHeuristics` and routed parsed Apple address-plus-coordinate links through `nearbyPlaceCandidates(near:)` in `MapKitPlaceResolver`.
+- Added regression coverage for address-only Apple coordinate links and named Apple coordinate links in `LinkPlaceParserTests`.
+- Updated the Supabase extraction worker to only accept Apple Maps names from path/name/title/place/q/query fields when they are not coordinates or street-address-looking strings; it no longer falls back to `address=` for Apple candidates.
+- Validation: `git diff --check` passed.
+- Validation: focused XCTest on installed `iPhone 17 Pro, OS 26.5` compiled the app and `WanderTests` bundle, including `LinkPlaceParser.swift` and `MapKitPlaceResolver.swift`, but failed at simulator bootstrap with `Early unexpected exit, operation never finished bootstrapping`; no Swift compile error was reported.
+- Validation: the old documented `iPhone 16 Plus, OS 18.6` simulator destination is not installed on this machine.
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with `** BUILD SUCCEEDED **` using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+- Validation gap: `deno check supabase/functions/extraction-worker/index.ts` could not run because `deno` is not installed.
+
+Follow-up checkpoint, 2026-06-26 15:38 PDT:
+
+- Ryan tested `https://maps.apple/p/7n_0yn8JorskgD` on the PR branch and it still showed `2912 Main St`.
+- Expanded the exact short link with `curl -Ls`; it redirects to `https://maps.apple.com/place?address=2912%20Main%20St,%20Santa%20Monica,%20CA%20%2090405,%20United%20States&coordinate=33.999113,-118.481057&name=Heavy%20Handed&place-id=IDED6F7257BB76BBF&map=explore`, so Apple is providing the correct `name=Heavy Handed`.
+- Reproduced the bad MapKit behavior with a temporary `/private/tmp/mapkit_probe`: searching natural language `Heavy Handed 33.999113,-118.481057` returns only `name=2912 Main St`.
+- Reproduced the desired MapKit behavior with the same probe: searching natural language `Heavy Handed` while setting the request region around `33.999113,-118.481057` returns `name=Heavy Handed` first.
+- Root cause: `resolveManualEntry` appended coordinate area hints into `naturalLanguageQuery`; MapKit interpreted that as an address lookup and returned the address candidate.
+- Fix direction: build manual/link MapKit searches with coordinate hints as `request.region`, not query text, while preserving text area hints like `Santa Monica` in the query.
+- Implemented the fix in `MapKitPlaceResolver.resolveManualEntry` by turning coordinate area hints into a tight `MKLocalSearch.Request.region` instead of query text, with focused coverage in `LinkPlaceParserTests`.
+- Validation: focused simulator test command for `WanderTests/LinkPlaceParserTests` compiled and launched, then failed in the environment with XCTest app bootstrap kill before connection (`Early unexpected exit`).
+- Validation: physical-device build for `Ry’s iPhone` (`00008130-0008095E3408001C`) succeeded with exit code 0 using `/private/tmp/DerivedData-link-fixes-heavy-handed-phone`.
+
+Merge/release checkpoint, 2026-06-26 16:00 PDT:
+
+- Ryan confirmed the PR #40 Apple Maps fix works on device and explicitly requested squash-merge to `main`, a TestFlight build, Slack update, and REC-46/REC-47 completion in Linear.
+- Starting status: root checkout clean on `codex/link-fixes-instagram-apple` at `57154a702`; `git fetch origin`, `git status --short --branch`, and `git worktree list` checked before merge/release work.
+- PR #40 metadata: open draft, base `main`, head `codex/link-fixes-instagram-apple`, head SHA `57154a702`, merge state `CLEAN`, no GitHub checks reported.
+- Expected files for release follow-up after merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`, `docs/agent-log.md`, and temporary TestFlight release notes outside the repo.
+
+## 2026-06-26 16:11 PDT - Codex - PR #40 Merge and Build 46 TestFlight Release
+
+Agent: Codex
+Branch/worktree: `main` at `/Users/ryanlieblein/Developer/wander`
+
+Goal: finish Ryan's requested PR #40 squash merge, package the Apple Maps/Instagram link fixes into TestFlight build 46, post the tester Slack update, and move REC-46/REC-47 to Done after TestFlight availability.
+
+Merge:
+
+- Marked PR #40 ready for review after Ryan confirmed device testing passed.
+- Squash-merged PR #40 into `main` with merge commit `aad975d11` (`Fix Apple Maps and Instagram link add`) and deleted the remote PR branch.
+- Included release scope since build 45: PR #40 only; app-side Apple Maps short-link/name/coordinate resolution, Instagram business profile link parsing, parser tests, and extraction-worker parity.
+
+Build bump:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `45` to `46` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Ran `xcodegen generate`; reverted broad generated project-setting churn and kept the narrow build-number change pattern used by build 45.
+- Pushed build-number commit `311ae1d92` (`chore: bump testflight build 46`) to `main`.
+
+Validation:
+
+- Elevated clean simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: `** BUILD SUCCEEDED **`.
+- Documented `iPhone 16 Plus, OS=18.6` test destination is not installed on this machine; reran on available `iPhone 17 Pro, OS=26.5`.
+- First full suite run found one test expectation mismatch: the exact Apple Maps URL decodes to `Urth Caffé`, while the regression test expected `Urth Café`.
+- Fixed the test expectation to match Apple's decoded place name and reran validation.
+- Focused `LinkPlaceParserTests/testParsesExpandedMapsAppleShortLinkDestination` passed on `iPhone 17 Pro, OS=26.5`.
+- Full simulator suite passed on `iPhone 17 Pro, OS=26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build46 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`
+
+TestFlight:
+
+- Archive path: `/private/tmp/Wander-0.1-build46.xcarchive`.
+- Archived `CFBundleVersion` verified as `46`.
+- Export options: `/private/tmp/WanderExportUpload46.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 46 --archive-path /private/tmp/Wander-0.1-build46.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build46-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (46)` id `065b612e-5a1b-4cdd-aca9-709aa9fb0ed8` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+
+Linear:
+
+- Added completion comments to `REC-46` and `REC-47` with PR #40, merge commit, build 46, validation, and TestFlight status.
+- Moved `REC-46` and `REC-47` to `Done`.
+
+Slack:
+
+- Posted tester-facing build 46 release note to `#testflight-feedback` (`C0BAA7DG2AC`) after TestFlight approval.
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782537106044699`.
+
 ## 2026-06-24 14:20 PDT - Codex - Beli-Inspired Place/Profile Design Review
 
 Agent: Codex
@@ -6040,3 +6183,1216 @@ Outcome:
 - PR: https://github.com/joelipshutz/wander/pull/37
 - Tests/checks: `git diff --cached --check`; `scripts/install-agent-skills.sh --check` with the expected local-indexing conflicts noted above.
 - No app code, project file, Supabase migration, TestFlight build, Slack post, or Linear product issue status change.
+## 2026-06-26 15:30 PDT - Codex - REC-40 Lists tab mockups and issue split
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/private/tmp/recme-rec-40-lists-mockups`
+Starting status: clean branch from `origin/main` at `3d6cf5216`.
+
+Goal: triage Linear `REC-40`, split the broad Lists/collabs/map/share/deep-link work into clearer Linear follow-up issues, and build an initial SwiftUI mockup with simulator screenshots across the Lists tab states requested by Ryan.
+
+Coordination:
+
+- Root checkout is on `codex/link-fixes-instagram-apple` and is clean; it is intentionally untouched.
+- Other Codex worktrees exist for photo extraction, place detail planning, and REC-39 Discover LLM search. This work is isolated because REC-40 touches app navigation and likely high-conflict UI files.
+- REC-40 is currently Backlog. Direction from Ryan on 2026-06-26 narrows this first pass to the Lists tab, creation flow, list tiles, list detail rows, and deferred follow-up issues for map/place-profile/share-link work.
+
+Expected files:
+
+- `Wander/App/*`
+- `Wander/Features/Lists/*`
+- `Wander/Models/*`
+- `Wander/Services/*`
+- `WanderTests/*`
+- `project.yml`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-26 22:06 PDT:
+
+- Implemented the REC-40 Lists tab SwiftUI mock on `codex/rec-40-lists-mockups`, replacing the Add bottom tab with a Lists tab and a raised center Add-place button.
+- Added `Wander/Features/Lists/ListsScreen.swift` with My lists, Friends, and Collabs tabs; empty first-run state; new/edit list sheets; list detail rows with remove affordances; stealth/collaborator visual states; and launch-argument scenarios for screenshot capture.
+- Split REC-40 into focused Linear follow-up issues for core list UI, creation/editing, friends lists, collaborative invites/share links, map saved-place list actions, list map behavior, place profile follow-up, and App Store fallback for invite links.
+- Captured simulator screenshots in `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/`, including no-lists, create, detail, edit, My/Friends/Collabs, and smaller-phone layout checks.
+- Applied Ryan's follow-up request to make the center bottom plus more floaty: increased the button to 66pt, lifted it above the tray, widened the white rim, and added layered shadow.
+- Verification so far: `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-build CODE_SIGNING_ALLOWED=NO` passed with the existing traditional headermap warning.
+
+Checkpoint, 2026-06-26 22:31 PDT:
+
+- Merged latest `origin/main` into `codex/rec-40-lists-mockups`; resolved the generated `Wander.xcodeproj/project.pbxproj` conflict by keeping build 46 from `main` plus the new Lists source membership.
+- Added explicit XcodeGen `schemes.Wander` wiring so the documented `xcodebuild test -scheme Wander` test action includes `WanderTests`.
+- Restored generated project settings required for tests after `xcodegen generate`: `PRODUCT_NAME`, Debug `ENABLE_TESTABILITY`, Debug `ONLY_ACTIVE_ARCH`, Debug optimization/conditions, app runpaths, and hosted unit-test `TEST_HOST`/`BUNDLE_LOADER`/runpaths.
+- The exact documented test destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed on this machine, so it failed before running app code with "requested device could not be found."
+- Full simulator suite passed on installed destination `platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tests-iphone17pro-v4 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: command exited 0; remaining output was non-fatal signed-binary stripping warnings and the existing traditional headermap warning.
+
+Outcome, 2026-06-26 22:40 PDT:
+
+- Draft PR opened: https://github.com/joelipshutz/wander/pull/42
+- Linear `REC-40` moved to `In Review` with the PR attached and a testing/screenshot note.
+- Branch `codex/rec-40-lists-mockups` pushed to origin and then moved into the primary checkout `/Users/ryanlieblein/Developer/wander` so Xcode opens this branch for local testing.
+- Temporary implementation worktree `/private/tmp/recme-rec-40-lists-mockups` is clean and detached at the same commit.
+- Known follow-ups remain in Linear child issues: map saved-place list actions, real invite/share link handling, place profile controls, list map behavior, and App Store invite fallback.
+
+## 2026-06-26 23:20 PDT - Codex - REC-40 Lists interaction follow-up
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: apply Ryan's follow-up on the REC-40 PR by lowering the center add button into the tab tray, making Lists mock interactions tappable, removing username summaries from My Lists tiles, running `/plan-eng-review`, and staging the PR for another test pass.
+
+Coordination:
+
+- The Xcode-facing checkout is already on the REC-40 PR branch and is the requested implementation location.
+- The prior `/private/tmp/recme-rec-40-lists-mockups` worktree is detached and clean; no overlapping edits are expected there.
+- Other existing worktrees are on unrelated branches for category/photo/place/discover work.
+- `/plan-eng-review` preflight found no branch-specific design doc, no gstack brain digest, and no prior gstack learnings for this branch, so this pass proceeds as a standard focused engineering review.
+
+Expected files:
+
+- `Wander/App/WanderRootView.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 00:30 PDT:
+
+- Replaced the partially floating Add control with a custom five-item bottom tray in `WanderRootView`: Map, Discover, Add, Lists, Profile. The Add action still presents the existing add-place sheet, but now sits directly between Discover and Lists.
+- Added bottom clearance to `PlaceProfileMapSurface` and wired Map's selected-place surfaces to use it so the new tray does not cover the standard map place card.
+- Replaced the list map sheet with `ListMapFullScreen`, a full-screen MapKit view scoped to the selected list's places only. Map pins and the horizontal place rail select a list place and open the shared `PlaceProfileMapSurface` presentation.
+- Replaced collaborator mock invite buttons with searchable friend/add sheets for both entry points: the existing list collaborator button and the new-list collaborator plus.
+- Added deterministic REC-40 visual QA launch scenario `mapSelectedPlace` for the selected list-map place card and `createCollaboratorsSearch` for the new-list collaborator search flow.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tray-map-build3 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-tray-map-tests3 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - `git diff --check` passed.
+- Screenshots reviewed from the final build:
+  - `/private/tmp/rec40-lists-followup3-screenshots/bottom-tray-five.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/list-map-fullscreen.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/list-map-place-card.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/existing-collaborator-friend-search.png`
+  - `/private/tmp/rec40-lists-followup3-screenshots/create-list-collaborator-search.png`
+- Deferred/product decisions unchanged: real list persistence, real friend graph source, invite links/SMS/deep-link routing, and map saved-place add-to-list writes stay out of this REC-40 mock/interactions PR.
+
+Outcome, 2026-06-27 00:33 PDT:
+
+- Follow-up implementation is ready to push to PR #42 on `codex/rec-40-lists-mockups` for Ryan's Xcode testing.
+- No TestFlight build or build-number bump requested.
+- Known test gap: visual verification used the available iPhone 17 Pro / iOS 26.5 simulator because the documented iPhone 16 Plus / iOS 18.6 destination is not installed on this machine.
+
+Checkpoint, 2026-06-26 23:38 PDT:
+
+- `/plan-eng-review` result: scope accepted as a focused PR follow-up. Existing code already had a center Add sheet action, Lists tabs, mocked list models, editor sheet, and list detail shell; this pass reuses those instead of adding persistence or new services.
+- Decisions applied: keep interactions local/mock-functional; do not touch place profile; do not add backend list persistence; do not add SMS/deep-link invite handling; do not add map saved-place list writes in this PR.
+- Updated the center Add button in `WanderRootView` from a higher 66pt floating button to a 58pt tray button between Discover and Lists so it no longer sits over Map content.
+- Wired Lists interactions in `ListsScreen`: collaborator toolbar button opens a collaborator sheet, map preview opens a list map sheet, place rows open a place summary sheet, row X removes the place locally and updates the count, and editor-sheet collaborator plus stages/unstages a mock invitee.
+- Removed collaborator/user summaries under My Lists tiles while leaving collaborator summaries visible for Friends and Collabs tabs.
+- Added launch scenarios for collaborator, map, and place-detail visual QA states plus a unit contract test for those arguments.
+- Wrote `/plan-eng-review` test artifact to `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryan-codex-rec-40-lists-mockups-eng-review-test-plan-20260626-233524.md`. `gstack-review-log` could not run because this local helper depends on `bun`, which is not on PATH, so the equivalent jq-built review JSON was appended directly to the branch review JSONL.
+- Verification:
+  - Sandboxed `xcodebuild build` failed before compiling app code because CoreSimulator was denied and SwiftPM could not resolve GitHub hosts; reran elevated as required by repo guidance.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-lists-followup-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-lists-followup-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+- Screenshots reviewed:
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/rec40-followup-map-tray-plus.png`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/rec40-followup-my-lists-no-usernames.png`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/rec40-followup-collaborators-sheet.png`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/rec40-followup-list-map-sheet.png`
+  - `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/rec40-lists-20260626/screenshots/rec40-followup-place-detail-sheet.png`
+- Open decisions to carry forward in existing or follow-up Linear scope: real list persistence schema/API, invite link/deep-link/SMS behavior, map saved-place add-to-list action, and whether list map previews later route to the global Map tab or a dedicated list-scoped map surface.
+
+Outcome, 2026-06-26 23:42 PDT:
+
+- Commit prepared as `Fix REC-40 list interactions` on `codex/rec-40-lists-mockups`; use the PR branch head for the final immutable hash.
+- PR remains https://github.com/joelipshutz/wander/pull/42 and should receive this follow-up commit when pushed.
+- Tests/build passed on the installed simulator target listed above; the documented iPhone 16 Plus / iOS 18.6 simulator remains unavailable on this machine from the earlier REC-40 pass.
+- Known deferred areas are unchanged from the eng review: real persistence, invite deep links/SMS, map add-to-list writes, and place-profile integrations.
+
+## 2026-06-26 23:58 PDT - Codex - REC-40 bottom tray and list map follow-up
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: apply Ryan's latest testing feedback by making the center plus sit as the fifth bottom-tray item between Discover and Lists, replacing the list map sheet with a full-screen list-scoped map that opens standard-style place profile cards, and changing collaborator add flows to friend search/add surfaces.
+
+Coordination:
+
+- The Xcode-facing checkout is already on the REC-40 PR branch and is clean.
+- Existing `/private/tmp/recme-rec-40-lists-mockups` remains detached and stale; continue in the primary checkout per Ryan's Xcode testing request.
+- Other active worktrees are on unrelated category/photo/place/discover branches.
+
+Expected files:
+
+- `Wander/App/WanderRootView.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+## 2026-06-27 09:46 PDT - Codex - REC-40 native bottom tray correction
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: fix Ryan's testing feedback that the custom bottom tray is visually wrong. Restore the original native tab bar styling and make the only tray change be inserting Add between Discover and Lists, yielding exactly one bottom tray in the order Map, Discover, Add, Lists, Profile.
+
+Coordination:
+
+- The Xcode-facing checkout is already on the REC-40 PR branch and clean.
+- Other worktrees are detached or on unrelated branches; no overlapping local edits found.
+
+Expected files:
+
+- `Wander/App/WanderRootView.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 10:00 PDT:
+
+- Removed the custom `WanderBottomTray` entirely and restored the native SwiftUI `TabView` tab bar.
+- Inserted Add as the center native tab item in the requested order: Map, Discover, Add, Lists, Profile.
+- Kept Add as an action rather than a destination by intercepting the Add tab selection and presenting the existing `AddScreen` sheet while preserving the current selected tab.
+- Removed the temporary map place-card bottom padding that was only needed for the custom tray.
+- Updated navigation contract tests to lock the five-item tray order and ensure launch args cannot select Add as a blank initial tab.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-native-tab-fix-build2 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-native-tab-fix-tests2 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - Screenshot reviewed: `/private/tmp/rec40-native-tab-fix-screenshots/native-five-tab-tray-final.png`.
+
+Outcome, 2026-06-27 10:00 PDT:
+
+- Native bottom tray correction is ready to push to PR #42 on `codex/rec-40-lists-mockups` for Xcode testing.
+
+## 2026-06-27 10:08 PDT - Codex - REC-40 add places and list management follow-up
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: apply Ryan's latest Lists feedback by adding a way to add places from inside a list, restricting collaborator invite candidates to the user's current friends, and adding a destructive Delete List action with confirmation copy that changes for collaborative lists.
+
+Coordination:
+
+- The Xcode-facing checkout is clean and on the REC-40 PR branch.
+- `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also appears at the same commit/branch name in `git worktree list`; do not edit there.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `Wander/Services/WanderLocalStore.swift` or related store/model files if friend graph access needs a small helper
+- `WanderTests/NavigationContractTests.swift` if new visual QA launch states are added
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 10:47 PDT:
+
+- Added a saved-place search surface directly under the list title/metadata on the list detail page. It pulls from `WanderStore.currentUserVisiblePlaces`, excludes places already in the list by normalized name/category, and locally appends selected places to the current list view.
+- Replaced hardcoded collaborator invite candidates with dynamic mutual-follow friends from `WanderStore.following(of: currentUser).filter { relationship == .mutual }`. The demo fixture currently has one mutual friend, so the screenshot shows only that one; live tester accounts should mirror their actual friends list.
+- Added a destructive `Delete List` button under `Save changes` on edit-list sheets. Confirming delete removes the list from the current local Lists UI state.
+- Added delete confirmation copy:
+  - Solo list: `Are you sure you want to delete this list?`
+  - Collaborative list: `Are you sure you want to delete this list? You will be deleting it for everybody.`
+- Added visual QA launch states for solo/collaborative delete confirmations and locked them in `NavigationContractTests`.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-list-management-build4 CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-list-management-tests3 CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+  - `git diff --check` passed.
+- Screenshots reviewed:
+  - `/private/tmp/rec40-list-management-screenshots/list-add-place-search.png`
+  - `/private/tmp/rec40-list-management-screenshots/friend-only-collaborators.png`
+  - `/private/tmp/rec40-list-management-screenshots/delete-list-confirmation.png`
+  - `/private/tmp/rec40-list-management-screenshots/collab-delete-list-confirmation.png`
+
+Outcome, 2026-06-27 10:47 PDT:
+
+- REC-40 Lists management follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.
+- Remaining product/backend gap: list additions, collaborator mutations, and deletions are local/mock-functional in this PR; durable persistence/schema remains future work.
+
+## 2026-06-27 11:04 PDT - Codex - REC-40 phone test visibility fix
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: respond to Ryan's phone-test report that the delete button and other list-management changes are not visible. Verify branch/source state, make the add-place and delete affordances harder to miss, rebuild, and push a fresh branch head for device testing.
+
+Coordination:
+
+- Source checkout contains the previous list-management code at `9be076c74`.
+- `git worktree list` still shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also on `codex/rec-40-lists-mockups`, so keep working only in `/Users/ryanlieblein/Developer/wander`.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 13:59 PDT:
+
+- Verified `/Users/ryanlieblein/Developer/wander` is on `codex/rec-40-lists-mockups` at `9be076c74`, and the source already contained the previous add-place/search/delete changes.
+- Made the list detail add-place control more obvious by adding an `add places` heading above the saved-place search field.
+- Moved edit-sheet actions into a pinned bottom safe-area action stack so `Save changes` and `Delete List` are visible without scrolling.
+- Verification:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-phone-visible-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-phone-visible-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and the existing traditional headermap warning.
+- Screenshots reviewed:
+  - `/private/tmp/rec40-phone-visible-screenshots/add-places-visible.png`
+  - `/private/tmp/rec40-phone-visible-screenshots/pinned-delete-visible.png`
+
+Outcome, 2026-06-27 13:59 PDT:
+
+- Phone visibility follow-up is ready to commit and push to PR #42 on `codex/rec-40-lists-mockups`.
+
+## 2026-06-27 14:58 PDT - Codex - REC-40/REC-39 landing and TestFlight release
+
+Agent: Codex
+Branch: `codex/rec-40-lists-mockups`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean, tracking `origin/codex/rec-40-lists-mockups` after `git fetch origin`.
+
+Goal: resolve Ryan's report that the REC-40 delete/save/add-place changes are not visible on device by verifying the branch stack, squash-merging REC-40 and any real REC-39 dependency to `main` without conflicts, creating a new TestFlight build from latest `main`, posting Slack tracking, and updating Linear.
+
+Coordination:
+
+- Primary checkout is clean at `0b61c62b5`.
+- `git worktree list` still shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` also attached to `codex/rec-40-lists-mockups`; do not edit or reset that worktree during landing.
+- Because this is an explicit TestFlight request, release work is in scope after the intended PRs land.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+
+Checkpoint, 2026-06-27 15:07 PDT:
+
+- Confirmed REC-39 is already merged as PR #41 (`Implement REC-39 Discover LLM search`) and included on `origin/main` before REC-40 landing.
+- Merged latest `origin/main` into `codex/rec-40-lists-mockups` to clear PR #42's GitHub `DIRTY` merge state.
+- Resolved the functional overlap by preserving REC-39's `LLMFilterParser` injection in `WanderRootView` while layering REC-40's native five-item tab order: Map, Discover, Add, Lists, Profile.
+- Resolved generated project conflicts by regenerating `Wander.xcodeproj` from the merged `project.yml`; project version remains build 48 until the post-merge TestFlight bump.
+- Resolved the append-only `docs/agent-log.md` conflict with a union merge so REC-39/TestFlight history and REC-40 implementation history are both preserved.
+- Verified the visible REC-40 controls are present in source after merge: list detail `add places`, edit-sheet `Save changes`, edit-sheet `Delete List`, and friend-only collaborator candidates from mutual follows.
+- Verification:
+  - `git diff --cached --check` passed.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec40-merge-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec40-merge-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed elevated with existing signed-binary stripping warnings and traditional headermap warnings.
+
+Checkpoint, 2026-06-27 15:18 PDT:
+
+- PR #42 was marked ready and squash-merged to `main` on GitHub as `80912a283b1d440bf1afa6c3ded1f7ead4656151` (`Add REC-40 list tab flows`).
+- Local `main` had an unpushed build-48 release-log commit; it was rebased on top of the REC-40 squash merge rather than discarded.
+- Started the explicit TestFlight release requested by Ryan from latest `main`.
+- Incremented `CURRENT_PROJECT_VERSION` from build 48 to build 49 in `project.yml` and regenerated `Wander.xcodeproj` with `xcodegen generate`.
+- Verification:
+  - `git diff --check` passed.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build49-build CODE_SIGNING_ALLOWED=NO` passed elevated with the existing traditional headermap warning.
+  - First full `xcodebuild test` attempt using `/private/tmp/DerivedData-build49-tests` failed before tests connected: `Early unexpected exit, operation never finished bootstrapping`.
+  - Rerun passed: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build49-tests2 CODE_SIGNING_ALLOWED=NO -jobs 1` with existing signed-binary stripping warnings and traditional headermap warnings.
+
+Outcome, 2026-06-27 15:27 PDT:
+
+- Pushed `main` through build-number commit `d53568108` (`chore: bump testflight build 49`).
+- Archive path: `/private/tmp/Wander-0.1-build49.xcarchive`; archived `CFBundleVersion` verified as `49`.
+- Export options: `/private/tmp/WanderExportUpload49.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 49 --archive-path /private/tmp/Wander-0.1-build49.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build49-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (49)` id `e41891c1-de01-4281-a7f7-f4303269b4a0` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Linear: `REC-40` and `REC-39` are both `Done`; added build 49 release comments to both issues.
+- Slack: posted tester-facing build 49 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782599197883959`.
+- Known deferred areas for REC-40 remain: list additions/collaborator edits/deletes are local/mock-functional; backend persistence, SMS/deep-link invites, and place-profile add-to-list actions remain follow-up scope.
+
+## 2026-06-25 08:17 PDT - Codex - Full-Screen Place Profile
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch from `origin/main` at `3d6cf52` after build 45 release log.
+
+Goal: make the place profile open as a true full-screen detail page across entrypoints instead of a sheet that shows map/background at top or bottom. Decide and implement detail-page chrome without bottom tabs for this full-screen context unless the existing code makes that unsafe.
+
+Coordination:
+
+- Root checkout is on stale `codex/rating-score-reset`; this work is isolated in the temporary worktree above.
+- Mission Control task creation failed because `localhost:4000` was unreachable.
+- GBrain search timed out on a transient PGLite lock; the lock directory was gone on inspection, so this pass is using repo docs and implementation context.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Potential place-profile entrypoints in `Wander/Features/Profile/` and `Wander/Features/Discover/`
+- Focused tests if presentation behavior is covered or can be covered cleanly.
+
+Checkpoint:
+
+- Decided full place profile should not show bottom tabs. It is a task-level detail surface, not one of the four root app tabs, and keeping tabs visible was the source of the sheet/background bleed.
+- Changed the map selected-place flow so the map keeps the compact preview card, then opens the full place profile in a `fullScreenCover`.
+- Changed Discover and Profile saved-place entrypoints from bottom-sheet presentation to the same full-screen place profile surface.
+- Routed full-screen save/edit actions through the existing save/edit flows after dismissing the full-screen detail, avoiding stacked sheet state.
+- Updated the shared back button accessibility label from map-specific copy to `Close place profile`.
+
+Verification:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-place-profile-fullscreen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 152 tests, 0 failures.
+
+Known issues:
+
+- Visual simulator screenshot pass was not run in this session. The implementation is compile/test verified, but final visual QA should still tap through Map, Discover, and Profile on a simulator before TestFlight.
+
+Outcome:
+
+- Commit: `feat: present place profiles full screen` on branch `codex/place-profile-fullscreen`.
+- PR: https://github.com/joelipshutz/wander/pull/38
+
+## 2026-06-26 15:32 PDT - Codex - REC-48 Place Pin Stability And Ratings
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean branch at `6fc0060`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: apply the approved `/plan-eng-review` recommendations for REC-48 on top of PR #38: stable grouped map-pin selection, deterministic mixed owner/status marker rendering, and separate fit/overall/own rating semantics in place profiles.
+
+Coordination:
+
+- Linear issue: https://linear.app/recme/issue/REC-48/place-pins-should-not-cycle-views-and-place-profiles-should
+- Root checkout remains on stale `codex/rating-score-reset`; this work stays in the isolated PR #38 worktree.
+- Fetched `origin` before edits; no new `main` update appeared in fetch output.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Models/PlaceProfilePresentation.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+
+Checkpoint:
+
+- Reworked map selection around stable `VisiblePlaceGroup` keys so tapping a grouped place always resolves to the current user's save when present instead of cycling through other people's saves.
+- Made mixed-owner map pin rendering deterministic: current user outline first, social outline second, and `.been` takes precedence over `.wannaGo` within each ownership class. Selection still gets a halo/scale affordance, but the pin's line style and base icon shape no longer mutate on tap.
+- Split place profile ratings into `fitRating`, `overallRating`, and `ownRating`. Unsaved and want states can now show fit plus trusted overall rating while hiding the current user's own rating unless the current user has actually been.
+- Kept per-person save cards from showing a rating for `wannaGo` saves, even if stale/mock data includes a rating score.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser`
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-focused CODE_SIGNING_ALLOWED=NO -jobs 1` with 154 tests, 0 failures.
+
+## 2026-06-26 16:42 PDT - Codex - REC-48 Physical Place Grouping Follow-Up
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-fullscreen`
+Starting status: clean at `39f09e8`, tracking `origin/codex/place-profile-fullscreen`.
+
+Goal: fix Joe's on-device report that tapping Mutsu can still cycle between multiple saved versions and the current user's want view does not include Ryan's followed note. Re-apply the place-profile state contract from the design review: if the current user has a save, that save owns the page state every time; social saves render as rings and evidence inside that same page.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/DiscoverModels.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- Possibly `Wander/Features/Map/MapScreen.swift` if the native MapKit feature path also needs a guard.
+
+Checkpoint:
+
+- Found the remaining split: `VisiblePlaceGrouping.key(for:)` still treated provider IDs as the first grouping boundary, so the same physical place could stay split when separate saves had different MapKit/provider IDs.
+- Reworked `VisiblePlaceGrouping` around alias-aware physical place matching: same normalized name plus nearby coordinate, same normalized name plus address, or exact provider alias can now resolve to one group. The group key is the current user's primary save key when present.
+- Updated Map selection to store the resolved group key rather than the tapped row's raw key, preventing alternate social aliases from driving the selected profile.
+- Updated Map, Discover, and Profile place-profile save aggregation to use `VisiblePlaceGrouping.matches(...)`, so followed notes/ratings from duplicate physical-place rows appear inside the same profile.
+- Added regression coverage for Joe's Mutsu state: current user `wannaGo` plus Ryan `been` with different provider IDs/categories still renders one group, current-user primary state, and dashed current-user plus solid social outlines.
+- Added a second regression for same-name/same-address rows with different coordinates.
+
+Verification:
+
+- `git diff --check` passed.
+- Focused regression run passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/VisiblePlaceGroupingTests -only-testing:WanderTests/MapPinOutlineBuilderTests -only-testing:WanderTests/PlaceProfilePresentationTests -only-testing:WanderTests/WanderStoreTests/testVisiblePlaceGroupingDeduplicatesSharedSavesAndPrefersCurrentUser` with 15 tests, 0 failures.
+- Full suite passed: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec48-mutsu CODE_SIGNING_ALLOWED=NO -jobs 1` with 157 tests, 0 failures.
+
+## 2026-06-26 23:14 PDT - Codex - PR #38 Merge and Build 47 TestFlight Release
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: fresh worktree checked out at PR #38 head `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for release edits. Fetched `origin`; latest `origin/main` is build 46 release commit `6705fb5`.
+
+Goal: fulfill Joe's explicit request to push a new build for the place-profile/full-screen/REC-48 work: update PR #38 onto latest `main`, complete the merge gate, squash-merge to `main`, bump the next TestFlight build number, archive/upload, run the TestFlight helper, update linked status, and post the required tester-facing Slack note.
+
+Expected files before merge/release:
+
+- `docs/agent-log.md`
+- Possible merge-only updates from current `origin/main`
+- Later release bump on `main`: `project.yml` and `Wander.xcodeproj/project.pbxproj`
+
+Release scope since build 46:
+
+- PR #38: full-screen place profiles from Map, Discover, and Profile.
+- PR #38 REC-48 follow-up: stable physical-place grouping, current-user-primary place profile state, deterministic mixed ownership pin outlines, and rating semantics across unsaved/want/been states.
+
+## 2026-06-26 23:16 PDT - Codex - PR #38 Merge-Only Review
+
+Agent: Codex
+Branch: `codex/place-profile-fullscreen`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: PR #38 is open, ready, and mergeable at `7ece39c`; root checkout remains on stale `codex/rating-score-reset` and is not being used for landing work.
+
+Goal: review, visually QA, and squash-merge PR #38 to `main` after Joe confirmed "let's do it." This run is merge-only: no build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note unless Joe explicitly asks for a TestFlight release after merge.
+
+Coordination notes:
+
+- Existing log entry above mentions a Build 47 TestFlight release goal, but no build 47 bump exists on `origin/main`; `project.yml` still reports `CURRENT_PROJECT_VERSION: "46"`.
+- Latest completed release on `origin/main` is build 46, logged by `6705fb5`.
+- Mission Control task: `8ba743d7-2123-47ef-a587-d922038db3a8`.
+
+Expected files for this review/landing pass:
+
+- `docs/agent-log.md`
+- Existing PR #38 implementation files only if review/QA finds a blocker that needs a fix before merge.
+
+Checkpoint, 2026-06-26 23:29 PDT:
+
+- Current Joe request was handled as PR #38 landing work. PR #38 is now merged to `main` at `b31c9aa`, and `main` also contains build-number bump commit `a9a8ce9` for build 47.
+- No archive/upload, TestFlight helper, build attachment, or Slack release note was run in this pass.
+- Pre-landing review found one blocker in the physical grouping fallback: coordinate-only aliases were too broad and could group different venues that share a map coordinate.
+- Fixed grouping so coordinate-only aliases are used only when there is no usable name/address/provider key.
+- Added regression coverage for different named places at the exact same coordinate so Mutsu/Maru-style stacked map results do not collapse incorrectly.
+- `git diff --check` passed.
+- Focused elevated simulator regression run passed: 13 tests, 0 failures.
+- Full elevated simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-pr38-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 166 tests, 0 failures, `** TEST SUCCEEDED **`.
+- Visual QA screenshots passed on iPhone 16 Plus and iPhone 16e with demo fixtures:
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded.png`
+  - `/private/tmp/recme-pr38-visual/discover-demo.png`
+  - `/private/tmp/recme-pr38-visual/profile-demo.png`
+  - `/private/tmp/recme-pr38-visual/map-woodcat-expanded-iphone16e.png`
+## 2026-06-26 23:52 PDT - Codex - Place Profile Navigation Push Fix
+
+Agent: Codex
+Branch: `codex/place-profile-navigation-push`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean worktree on new branch from `main` after fetching `origin`; root checkout remains on `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: `abfa221a-a17a-4fc3-929b-836e18a3feb2`
+
+Goal: fix Joe's simulator feedback that place profiles still behave like pop-up sheets. Convert Map, Discover, and Profile place profile detail from `fullScreenCover`/overlay modal presentation to native `NavigationStack` push/pop behavior while keeping save/edit forms as sheets.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Possible focused tests if route state needs new regression coverage.
+
+Plan checkpoint:
+
+- Existing full place profile UI is reusable; this is a presentation architecture fix, not a redesign.
+- `PlaceProfileMapSurface` currently owns a `fullScreenCover`; Map also tracks `isPlaceSheetExpanded`, which makes the profile feel like a sheet even with a custom back button.
+- Discover and Profile saved-list entry points also use `fullScreenCover`, so the fix should be applied consistently across all place-profile entry points.
+
+Completion checkpoint, 2026-06-27 00:08 PDT:
+
+- Converted Map, Discover, and Profile saved-list place profile entry points from `fullScreenCover` to native `NavigationStack` destinations.
+- Map now keeps the bottom preview card as a map overlay, but tapping it pushes `PlaceProfileFullScreen` as a navigation destination. The destination hides the default nav/tab bars so the profile remains full-screen while using native push/pop behavior.
+- Preserved the existing `-WanderMapPlace` and legacy `-WanderMapSheetExpanded` launch flags for visual QA, now mapping the expanded flag to initial place-profile navigation presentation.
+- Added `NavigationContractTests.testMapScreenCanResolvePlaceProfileLaunchArgumentsForVisualQA`.
+- `git diff --check` passed.
+- Simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-nav-push-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Focused simulator test passed: `NavigationContractTests`, 5 tests, 0 failures.
+- Full simulator suite passed:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-nav-push-test CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 167 tests, 0 failures.
+- Simulator smoke on iPhone 16 Plus passed using:
+  `-WanderUseDemoFixtures -WanderMapPlace 'Woodcat Coffee' -WanderMapSheetExpanded`
+- Screenshots:
+  - `/private/tmp/recme-nav-push-woodcat-profile.png`
+  - `/private/tmp/recme-nav-push-woodcat-back-map.png`
+- Computer Use verified the profile screen exposes `Close place profile` as an accessible button and clicking it returns to the map with the preview card and tab bar visible.
+
+## 2026-06-26 14:57 PDT - Codex - REC-39 Discover LLM Search
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch from `origin/main` at `3d6cf5216` after fetching origin. Root checkout is on separate clean branch `codex/link-fixes-instagram-apple`.
+
+Goal: implement Linear `REC-39` (`Add LLM-based search in Discover tab`) and open a PR. Linear was moved to `In Progress` and assigned to `ryan.lieblein` before implementation.
+
+Coordination:
+
+- Discover/search is a high-conflict area, so this work is isolated in a new worktree.
+- Existing prunable temporary worktrees are unrelated; active `/Users/ryanlieblein/Developer/Wander-worktrees/photo-extraction-real` and `place-detail-eng-plan` appear unrelated to this Discover parser task.
+- Durable decisions say the LLM parser must send only the raw query phrase plus allowed filter schema, never friend graph/place/contact/user data.
+
+Expected files:
+
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Services/DiscoverModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/DiscoverParserTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Implemented the REC-39 Discover natural-language parser path with a remote Supabase edge-function repository plus deterministic fallback.
+- Added `ownerQuery` to `DiscoverFilters`, default schema allow-lists for categories/statuses/relationships/tags, owner chips, and local owner-name/handle filtering so queries like `Joe's favorite coffee spots in LA` can filter visible places.
+- Wired the app to use `RemoteDiscoverFilterParser` when Supabase is configured, while preserving the deterministic parser for local/unconfigured runs and as a remote-failure fallback.
+- Added `supabase/functions/parse-discover-query`, which sends only the raw query and fixed schema to OpenAI with `store: false`, validates the response against allow-lists, requires an authenticated request, and avoids sending graph/place/contact/user data.
+- Added focused tests for deterministic possessive-query parsing, store owner filtering, edge-function payload encoding, and remote fallback behavior.
+- `xcodebuild test` on the documented `iPhone 16 Plus, OS=18.6` destination could not run because that simulator is not installed in this environment; reran on available `iPhone 17 Pro, OS=26.5`.
+- Tests passed: focused `xcodebuild test ... -only-testing:WanderTests/DiscoverParserTests ... -only-testing:WanderTests/RemoteRepositoryTests/testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema ... -only-testing:WanderTests/RemoteRepositoryTests/testRemoteDiscoverFilterParserFallsBackToDeterministicParser` on `iPhone 17 Pro, OS=26.5`; full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-discover-full CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`.
+- `git diff --check` passed.
+- Deno and Supabase CLI are not installed in this shell, so the new edge function was not locally type-checked with Deno.
+
+Outcome:
+
+- Implementation commit: `054aa8b8d78977a6377a916d513444c83b3b1add` (`feat: add discover llm search parsing`).
+- PR: https://github.com/joelipshutz/wander/pull/41
+- Linear: `REC-39` remains `In Progress` per request, assigned to `ryan.lieblein`, with a PR/validation comment added.
+- GitHub connector PR creation returned `403 Resource not accessible by integration`; branch push succeeded with git, and the PR was created with `gh pr create` using the existing redacted git HTTPS credential because the stored `gh` token itself is invalid.
+- Known issue: deploy-time Deno type-check should be run from an environment with Deno or Supabase CLI installed before deploying `parse-discover-query`.
+
+## 2026-06-26 23:50 PDT - Codex - REC-39 Discover Places/Members Redesign
+
+Agent: Codex
+Branch: `codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`
+Starting status: clean branch tracking `origin/codex/rec-39-discover-llm-search` after fetching origin. `origin/main` advanced to `3b3135633`; root checkout is on `codex/rec-40-lists-mockups`.
+
+Goal: redesign the Discover tab in PR #41 around top-level `Places` and `Members` modes, with Places using the natural-language search from REC-39, empty Places showing a vertical latest-activity feed, unresolved person searches showing a compact disambiguation prompt, and Members using the same search chrome only for member lookup.
+
+Coordination:
+
+- User explicitly warned that PR #40 has concurrent tray/List-tab work. Do not touch app shell, root tab navigation, or bottom tray files in this task.
+- Expected files: `Wander/Features/Discover/DiscoverScreen.swift`, focused Discover/store tests if needed, `docs/agent-log.md`.
+- Requested review gates: run `design-review` and `plan-eng-review` on this implementation and fold the findings into PR #41.
+
+Checkpoint:
+
+- Plan-eng review gate applied to keep scope in the existing Discover/store architecture: reuse `WanderStore.discover(query:scope:backend:)`, add a separate member-only search path instead of mixing members into the LLM place parser, and avoid app shell/root tab/tray files because PR #40 is active.
+- Design review gate applied against `DESIGN.md` and the Beli header reference: Discover now uses top `Places`/`Members` mode tabs, search as the first real control, no big Discover title, compact results/list rows, 44pt+ tap targets, and no visible instructional copy beyond short trust/context lines.
+- Implemented the Places mode with a rotating natural-language placeholder, vertical latest network activity when empty, interpreted place results when a query resolves, and a compact ambiguous-person selector that resolves in place.
+- Implemented the Members mode with the same search chrome backed by member lookup only, horizontal member-result tiles during search, and a compact friends list with saved-rec counts below.
+- Added `WanderStore.discoverMembers(query:backend:)` so member search can merge remote profiles without invoking the place parser or consuming LLM calls.
+- Added focused store tests for member search avoiding the parser and merging remote profile results.
+- Build/test validation used available `iPhone 17 Pro, OS=26.5` because the documented `iPhone 16 Plus, OS=18.6` simulator is not installed here.
+- First focused `xcodebuild test` stalled at simulator worker materialization before producing useful diagnostics; package resolution passed, and a concrete-destination build then exposed a Swift 6 closure return issue in `WanderLocalStore.searchProfiles(handleQuery:)`, which was fixed.
+- Validation passed after the fix: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator/DerivedData.
+- `git diff --check` passed.
+- Visual review note: installed and launched the built app on the booted iPhone 17 Pro simulator and captured `/private/tmp/rec39-launch.png`; desktop automation permission blocked switching to the Discover tab for a direct Discover screenshot, so the design review evidence is source-level plus build/test validation rather than a tab-specific screenshot.
+- `gstack-review-log` could not persist dashboard metadata because the script validates JSON with `bun`, and `bun` is not installed in this shell; review findings are recorded here instead.
+
+Outcome:
+
+- PR #41 is updated with the Discover Places/Members redesign and member-only search path.
+- Tests/checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-redesign-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; focused Discover member/owner tests; full `xcodebuild test` on the same simulator and DerivedData.
+- Known issue: a direct Discover-tab simulator screenshot was not captured because desktop automation permissions blocked switching tabs; app launch screenshot exists at `/private/tmp/rec39-launch.png`.
+- No app shell, root tab navigation, bottom tray, `Wander/App/`, `MapScreen`, project file, Supabase migration, TestFlight build, Slack post, or Linear status changes were made in this pass.
+
+## 2026-06-27 00:45 PDT - Codex - REC-39 V1 Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-39-v1-release-20260627` tracking `origin/codex/rec-39-discover-llm-search`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean at PR #41 head `811ca973c`; latest `origin/main` is `3b3135633`. Root checkout was moved from clean `codex/rec-40-lists-mockups` to this temporary PR41 update branch for merge/release work.
+
+Goal: Ryan approved REC-39 v1 and requested squash-merge to `main`, push a TestFlight build, and post the tester-facing Slack note.
+
+Coordination:
+
+- PR #41 is currently conflicting with `main`; resolve latest-main conflicts before merge.
+- PR #40 remains separate and must not be included in this release.
+- Explicit TestFlight release requested, so this run must bump `CURRENT_PROJECT_VERSION`, archive/upload, run the TestFlight helper, and post to `#testflight-feedback` if upload/helper succeeds or is confirmed processing/available.
+
+Expected files before merge: conflict-resolution edits in REC-39 touched files plus `docs/agent-log.md`.
+
+Checkpoint:
+
+- Merged latest `origin/main` into temporary release branch `codex/rec-39-v1-release-20260627`; only conflict was `docs/agent-log.md`, resolved by keeping main's PR38/TestFlight build 47 history and re-appending the REC-39 entries.
+- Reviewed the Discover merge with the PR38 full-screen place-profile changes. Kept Discover place results on `PlaceProfileFullScreen` and removed the obsolete private `DiscoverPlaceDetailSheet` path so v1 does not ship two competing place-detail presentations.
+- Fixed merge fallout in `DiscoverScreen.saveSummaries(for:)` by reading from `placeResults.places` instead of the stale `results.places` identifier.
+- Checks passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-release-build CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
+
+Checkpoint:
+
+- PR #41 was squash-merged into `main` as `1a9818169b82000542e8dfcaa85621d4c18e7755` (`Implement REC-39 Discover LLM search`).
+- Fast-forwarded local `main` to `origin/main` and started the explicit TestFlight release requested by Ryan.
+- Incremented `CURRENT_PROJECT_VERSION` from build 47 to build 48 in `project.yml`; next step is `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` matches.
+- Ran `xcodegen generate`; it produced unrelated project-setting normalization in this shell, so the project diff was narrowed back to the same build-number-only pattern used for build 47 while preserving the generated build number.
+- Build 48 validation passed: `git diff --check`; `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec39-build48 CODE_SIGNING_ALLOWED=NO -jobs 1 -quiet`; `xcodebuild test` with the same project/scheme/destination/DerivedData.
+
+Outcome:
+
+- Pushed build-number commit `948d7bcbb` (`chore: bump testflight build 48`) to `main`.
+- Archive path: `/private/tmp/Wander-0.1-build48.xcarchive`; archived `CFBundleVersion` verified as `48`.
+- Export options: `/private/tmp/WanderExportUpload48.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 48 --archive-path /private/tmp/Wander-0.1-build48.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build48-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (48)` id `879997f5-eb6e-4e80-bea4-5fc1ab45104d` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Linear: `REC-39` was already `Done`; added final release comment with PR #41, build 48, validation, archive/upload, and TestFlight status.
+- Slack: posted tester-facing build 48 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782547872716159`.
+
+## 2026-06-28 08:10 PDT - Codex - Place Profile Navigation Build 50 Release
+
+Agent: Codex
+Branch: `codex/place-profile-navigation-push`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: resumed from Joe's explicit TestFlight request after `origin/main` advanced through builds 48 and 49. PR #43 conflicted with the newer REC-39/REC-40 Discover/List work, so this pass is resolving the branch onto latest `origin/main` before merge.
+Mission Control task: `7947eac0-fa14-4767-b7db-6585a121f999`
+
+Goal: finish Joe's explicit TestFlight request by merging PR #43, bumping the next build from 49 to 50, archiving/uploading, running the TestFlight helper, and posting the required `#testflight-feedback` note.
+
+Checkpoint:
+
+- Resolved `Wander/Features/Discover/DiscoverScreen.swift` by keeping the current Places/Members redesign from `main` and adding the native `NavigationStack` place-profile destination from PR #43.
+- Resolved `docs/agent-log.md` as an append-only log, preserving both the PR #43 navigation entry and the build 48/49 mainline release history.
+
+Outcome, 2026-06-28 08:30 PDT:
+
+- PR #43 was squash-merged into `main` as `8f1d032` (`fix: present place profiles with navigation push (#43)`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 49 to build 50 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `8d13915` (`chore: bump testflight build 50`).
+- Build 50 validation initially caught REC-40 Lists merge fallout where `ListsScreen` still called the old `PlaceProfileMapSurface(isExpanded:)` API. Fixed Lists place-profile presentation to use native navigation destinations and pushed `8d82f5f` (`fix: align list place profiles with navigation push`) before upload.
+- `git diff --check` passed.
+- Simulator build passed:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build50-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed on the documented target:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build50-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build50.xcarchive`; archived `CFBundleVersion` verified as `50`.
+- Export options: `/private/tmp/WanderExportUpload50.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 50 --archive-path /private/tmp/Wander-0.1-build50.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build50-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (50)` id `e376eabe-924c-44f7-875a-97288e538848` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack: posted tester-facing build 50 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782660612379839`.
+- Known deferred area: list creation/editing remains local/mock-functional from REC-40; backend list persistence and invite links remain follow-up scope.
+
+## 2026-06-28 10:29 PDT - Codex - Place Profile Edge Swipe Back
+
+Agent: Codex
+Branch: `codex/place-profile-edge-swipe`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean branch from current `main` after build 50 release; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: `3bb9ca04-3798-4d78-8e95-d3f4c0008070`
+
+Goal: add left-edge swipe-to-go-back behavior to the pushed Place Profile screen from every entrypoint. The custom back button already works; the missing piece is preserving/recreating iOS's interactive pop gesture after hiding the system navigation bar for the full-screen place profile design.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused navigation/UI tests if the gesture can be covered without brittle UI automation.
+
+Completion checkpoint, 2026-06-28 10:38 PDT:
+
+- Added a shared left-edge drag gesture to `PlaceProfileFullScreen` that calls the same `onBack` path as the custom back button when the gesture starts at the left edge and moves right far enough.
+- Updated `PlaceProfileFullView` to paint edge-to-edge under the status/home areas while keeping header controls and scroll content padded by safe-area insets.
+- Added focused threshold coverage in `NavigationContractTests` so non-edge drags, short drags, and mostly vertical drags do not trigger the back action.
+- `git diff --check` passed.
+- Focused simulator tests passed:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+- Simulator build passed and was installed/launched on the booted iPhone 16 Plus simulator:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual sanity screenshot: `/private/tmp/recme-edge-swipe-place-profile.png`.
+
+Release outcome, 2026-06-28 11:04 PDT:
+
+- PR #44 was squash-merged into `main` as `9b668de` (`fix: add place profile edge swipe back (#44)`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 50 to build 51 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `74bb5b1` (`chore: bump testflight build 51`).
+- Release Mission Control task: `b039ca6e-dc2c-4244-b68c-278ed6c0a7bf`.
+- Simulator build passed:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build51-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full simulator suite passed on the documented target with 175 tests:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build51-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build51.xcarchive`; archived `CFBundleVersion` verified as `51`.
+- Export options: `/private/tmp/WanderExportUpload51.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 51 --archive-path /private/tmp/Wander-0.1-build51.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build51-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (51)` id `b5f1ae25-4ed3-4caa-94d7-f4768305b85c` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack: posted tester-facing build 51 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
+- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782669825924449`.
+- Known deferred area: save/edit forms still intentionally open as sheets; list creation/editing remains local/mock-functional from REC-40, with backend list persistence and invite links remaining follow-up scope.
+
+## 2026-06-28 11:28 PDT - Codex - Deploy Discover OpenAI Parser
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean `main` at `origin/main` after `git fetch origin`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
+Mission Control task: `65a58cda-8527-46f5-a616-4ef4dba0e468`
+
+Goal: deploy the existing `supabase/functions/parse-discover-query` Edge Function, set/verify server-side OpenAI secret availability, smoke test Discover natural-language parsing against hosted Supabase, and record any extraction-worker classifier setup status.
+
+Expected files:
+
+- `docs/agent-log.md`
+
+Outcome, 2026-06-28 11:35 PDT:
+
+- Set hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw` from the local operational env file; no key value was written to git or logs.
+- Added the missing `parse-discover-query` function block to `supabase/config.toml` with `verify_jwt = false`, matching the existing app-invoked Edge Function pattern where the function code requires an Authorization header and the iOS client sends authenticated headers.
+- Documented the Discover parser deploy path in `docs/setup.md`.
+- Deployed `parse-discover-query` with:
+  `npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
+- Deployed current `extraction-worker` with:
+  `npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
+- Hosted smoke test for `parse-discover-query` passed:
+  - no Authorization header returned `401 {"error":"missing_authorization"}`
+  - authorized smoke query `Joe favorite coffee spots in LA` returned `categories=["coffee"]`, `area="LA"`, `statuses=["been"]`, `ownerQuery="Joe"`
+- Hosted smoke test for `extraction-worker` reached the deployed function and returned `401 {"error":"missing_authorization"}` without Authorization.
+- `git diff --check` passed.
+- No iOS build/TestFlight bump needed because the shipped app already calls `parse-discover-query` when Supabase is configured and falls back locally on failure. Existing running app sessions may keep per-query in-memory deterministic parse cache until restart or a new query string is used.
+
+## 2026-06-28 11:52 PDT - Codex - Scope Modular AI Provider Layer
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: clean `main` at `origin/main`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
+Mission Control task: `ecb7852e-bb71-46cf-8bdd-1c29272594ee`
+
+Goal: scope whether the Discover natural-language parser and extraction-worker category classifier can be modularized so Rec.me can swap OpenAI for Anthropic or an OpenAI-compatible/open-source endpoint without changing app contracts.
+
+Planning outcome:
+
+- App-side contract is already mostly insulated: iOS calls Supabase Edge Functions and falls back to the deterministic parser when the remote parser fails.
+- Server-side provider logic is not yet modular: `parse-discover-query` and `extraction-worker` each own OpenAI-specific transport, key lookup, timeout, model selection, response parsing, and provider step names.
+- Recommended scope is a server-side shared structured-JSON provider layer under `supabase/functions/_shared/ai/`, with OpenAI as the first production adapter and Anthropic/OpenAI-compatible adapters behind the same interface.
+- Preserve current function APIs, current deterministic fallbacks, and current hosted behavior. No TestFlight bump is required unless the follow-up also adds app-side debouncing/request throttling.
+
+## 2026-06-28 12:02 PDT - Codex - Implement Modular AI Provider Layer
+
+Agent: Codex
+Branch: `codex/modular-ai-provider`
+Worktree: `/private/tmp/recme-place-profile-release`
+Starting status: branch created from current `main`; existing uncommitted planning log entry is Codex-owned and carried onto this branch. Mission Control local API is not reachable, so this log is the coordination source for this task.
+
+Goal: implement the scoped provider-neutral structured JSON layer for Supabase Edge Functions so Discover parsing and extraction category classification can switch away from OpenAI without changing iOS contracts.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/setup.md`
+- `supabase/functions/_shared/ai/*`
+- `supabase/functions/parse-discover-query/index.ts`
+- `supabase/functions/extraction-worker/index.ts`
+- Focused Deno tests for provider adapter behavior and current fallback semantics.
+
+Completion checkpoint, 2026-06-28 12:19 PDT:
+
+- Added `supabase/functions/_shared/ai/` with a provider-neutral `structuredJSON` entrypoint and OpenAI, Anthropic, and OpenAI-compatible adapters.
+- Refactored `parse-discover-query` to call the shared provider layer while preserving the existing authenticated function API, `model_unavailable` response for missing provider config, OpenAI default model, and deterministic iOS fallback behavior.
+- Refactored `extraction-worker` category enrichment to call the shared provider layer, record neutral `ai_*` provider steps, preserve deterministic fallback on provider failure, and use provider-neutral `category_source: "ai"` for newly applied model classifications.
+- Documented the new provider/env knobs in `docs/setup.md`, while keeping existing OpenAI secret/model/timeout env names as backwards-compatible fallbacks.
+- Validation passed:
+  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
+  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
+  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
+  `git diff --check`
+- No iOS build, archive, TestFlight upload, or hosted Supabase function deploy was run for this implementation pass.
+
+Handoff:
+
+- Commit: `535515b` (`feat: add modular ai provider layer`)
+- PR: `https://github.com/joelipshutz/wander/pull/48`
+- Restart instructions: review/merge PR #48, then deploy both `parse-discover-query` and `extraction-worker` Supabase functions when ready. Existing OpenAI secrets continue to work by default; set `WANDER_AI_PROVIDER`, provider key/model envs, and optional `WANDER_AI_BASE_URL` only when switching providers.
+
+Merge/deploy outcome, 2026-06-28 12:28 PDT:
+
+- PR #48 was squash-merged into `main` as `eb6746d` (`Add modular AI provider layer (#48)`).
+- Re-ran pre-merge validation on the PR head:
+  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
+  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
+  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
+  `git diff --check origin/main...HEAD`
+- Deployed merged `parse-discover-query` and `extraction-worker` to Supabase project `rugmtlgufrhlxwfkumhw` with `npx supabase functions deploy ... --use-api`.
+- Hosted smoke checks after deploy:
+  - `parse-discover-query` without Authorization returned `401 {"error":"missing_authorization"}`.
+  - `extraction-worker` with a dummy `job_id` and no Authorization returned `401 {"error":"missing_authorization"}`.
+  - Authorized Discover smoke initially exposed an existing sanitizer bug where `wanna_go` could become `wannago`; fixed the parser sanitizer to preserve underscores, re-ran `deno check`, redeployed `parse-discover-query`, and confirmed `places I want to try in LA` returns `statuses=["wanna_go"]`.
+- No TestFlight build was created because this was a backend Edge Function deploy only; build 51 remains the current TestFlight binary.
+## 2026-06-27 14:55 PDT - Codex - REC-42/REC-43 Settings Copy And Toggle Layout
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch created from `origin/main` at `948d7bcbb`.
+
+Goal: implement REC-42 and REC-43 by clarifying the private profile and stealth mode settings copy, and fixing the clipped stealth-mode toggle in the Settings page.
+
+Coordination:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is clean but currently on `codex/rec-40-lists-mockups`, so this work is isolated in a new worktree.
+- `git worktree list` also shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` pointing at the REC-40 branch; no overlapping files are expected there.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- Focused settings/navigation tests if existing coverage needs updating
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-27 15:16 PDT:
+
+- Rebased the branch onto latest `origin/main` at `80912a283` after REC-40 landed.
+- Implemented settings privacy copy updates:
+  - Renamed the settings section from `default stealth mode` to `privacy`.
+  - Changed the default-place privacy toggle label to `stealth mode for new saves`.
+  - Added state-specific helper copy so the setting explains what on/off means for newly saved places.
+  - Added a `Private profile` explanatory row that clarifies username search/suggestions and that per-place privacy still controls saved-place visibility.
+- Fixed the clipped settings toggle by updating `PlaceVisibilityStealthToggle` so embedded/no-container use no longer applies a zero-radius clipping mask, while retaining the existing contained style for Add/Map save flows.
+- Expanded expected touched files to include `Wander/DesignSystem/WanderTheme.swift` and `WanderTests/AuthSessionTests.swift`.
+- Verification:
+  - `git diff --check` passed.
+  - Initial documented simulator destination `iPhone 16 Plus, OS=18.6` is not installed here; available validation used `iPhone 17 Pro, OS=26.5`.
+  - Focused `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch` passed after fixing a local SwiftUI property-name collision.
+  - Rebased full suite passed: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-rebased-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Full-suite warnings were existing signed-binary stripping warnings plus the existing traditional headermap warning.
+- Final rebased Settings screenshots reviewed:
+  - `/private/tmp/rec42-43-settings-rebased-iphone17pro.png`
+  - `/private/tmp/rec42-43-settings-rebased-iphone17e.png`
+- Visual result: no clipped switch on either phone size; privacy copy wraps within the card and remains readable above the fold on the smaller phone.
+
+Blocked handoff, 2026-06-27 15:18 PDT:
+
+- Local implementation commit created: `208200cc9` (`Clarify settings privacy copy`).
+- Attempted `git push -u origin codex/rec-42-43-settings-copy`, but the Codex approval reviewer rejected the push because external transfer to the GitHub remote needs explicit user approval.
+- Branch has not been pushed and no PR has been opened yet.
+- Restart after approval: from `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`, run `git push -u origin codex/rec-42-43-settings-copy`, then open a PR against `main` with the validation notes above.
+
+## 2026-06-27 22:00 PDT - Codex - Private Profile Mode Behavior
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin` and rebase onto `origin/main` at `34dcd6f79`; branch has two local commits ahead of `origin/main` from the prior settings pass.
+
+Goal: implement Ryan's private profile behavior: show Private Profile above default stealth mode, lock stealth on when private profile is enabled, lock save/edit privacy to stealth when private, keep private profiles out of search and list collaboration, and show transition warnings for changing private profile state.
+
+Assumption:
+
+- Ryan's warning directions appear reversed relative to the behavior description. Implementation will follow the product model that Private Profile on means everything private/hidden, and Private Profile off means searchable/collaboration-capable with default stealth configurable.
+
+Expected files:
+
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/DesignSystem/WanderTheme.swift`
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- Focused model/store/UI-copy tests
+- `docs/agent-log.md`
+
+Checkpoint, 2026-06-28 00:29 PDT:
+
+- Implemented Private Profile as persisted local profile/store state.
+- Settings now shows `Private profile` above `stealth mode for new saves`.
+- Private Profile changes are confirmation-gated:
+  - Turning on warns that saved places/lists become private, username search is hidden, collaboration is unavailable, and stealth stays locked on.
+  - Turning off warns that username search and list collaboration return, and new saves can be visible by default unless stealth remains on.
+- Private Profile on now:
+  - Forces default visibility to `self`.
+  - Marks existing current-user saved places private.
+  - Forces future saves and edits through Add/Map/Discover/Profile save paths to `self`.
+  - Keeps local private profiles out of username search and contact matches.
+  - Locks the Add/Map save sheet stealth controls on and disabled.
+  - Locks list editor stealth on, disables collaborator entry points, and filters private profiles from collaborator candidates.
+- Added focused tests for Settings copy, persisted private profile mode, search exclusion, and forced save visibility.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testUsernameSearchHidesPrivateProfiles -only-testing:WanderTests/WanderStoreTests/testPrivateProfileLocksDefaultVisibilityAndFutureSaves -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch`.
+  - Final full XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-final-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - Default Settings off state:
+    `/private/tmp/private-profile-settings-iphone17pro.png`
+    `/private/tmp/private-profile-settings-iphone17e.png`
+  - Private Profile locked-on Settings state, using simulator-only persisted local store setup:
+    `/private/tmp/private-profile-settings-locked-iphone17pro.png`
+    `/private/tmp/private-profile-settings-locked-iphone17e.png`
+- Visual result: Private Profile appears above stealth mode, the stealth switch is visibly grayed/locked on when Private Profile is enabled, and copy wraps cleanly on iPhone 17 Pro and iPhone 17e.
+- Local implementation commit: `0792ba5cc` (`Implement private profile privacy lock`).
+- Known handoff issue: branch is still local because the earlier `git push` was rejected by the approval reviewer for external transfer without explicit user approval. Push and PR creation remain blocked until Ryan approves that transfer.
+
+## 2026-06-28 00:44 PDT - Codex - Private Profile Copy And Stealth Icon Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch had four local commits ahead of `origin/main`.
+
+Goal: remove the redundant "Stealth mode below controls whether new saves start hidden" sentence from the Private Profile off-state copy, change the Private Profile warning to say stealth mode stays activated, and add an icon next to the shared stealth mode option.
+
+Expected files:
+
+- `Wander/DesignSystem/WanderTheme.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Private Profile off-state Settings body to only say the username can appear in search and list collaboration is available.
+- Updated the Private Profile on-warning copy from "Stealth mode will stay locked on" to "Stealth mode will stay activated."
+- Added an `eye.slash.fill` SF Symbol next to the shared `PlaceVisibilityStealthToggle` title so Settings, Add, and Map save/edit flows all show a stealth/privacy icon.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-copy-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-stealth-icon-iphone17pro.png`
+  - `/private/tmp/private-profile-stealth-icon-iphone17e.png`
+- Visual result: shorter Private Profile copy fits cleanly; the stealth icon appears beside the stealth mode title without clipping or crowding on iPhone 17 Pro and iPhone 17e.
+- Local follow-up commit: `cc225b568` (`Tighten private profile settings copy`).
+- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. After the required fetch, branch is four commits behind latest `origin/main`; rebase before opening a PR.
+
+## 2026-06-28 09:10 PDT - Codex - Stealth Row Alignment Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 6, behind 4 versus `origin/main`.
+
+Goal: align the `stealth mode for new saves` row with the Private Profile row above it by giving the shared stealth toggle the same leading icon column treatment.
+
+Expected files:
+
+- `Wander/DesignSystem/WanderTheme.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated `PlaceVisibilityStealthToggle` so the stealth icon sits in the same 38pt leading icon column used by the Private Profile row, aligning the stealth title/helper text with the row above.
+- Validation:
+  - `git diff --check` passed.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-alignment-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
+  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-stealth-aligned-iphone17pro.png`
+  - `/private/tmp/private-profile-stealth-aligned-iphone17e.png`
+- Visual result: the `stealth mode for new saves` title and helper copy now align with the Private Profile title/helper copy above on iPhone 17 Pro and iPhone 17e.
+
+## 2026-06-28 09:33 PDT - Codex - Existing Collaborative Lists Private Profile Rule
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 7, behind 6 versus `origin/main`.
+
+Goal: update Private Profile behavior and disclaimer copy so existing collaborative lists remain unchanged, while Private Profile prevents creating new collaborative lists or adding new collaborators. Remove the warning sentence that says stealth mode will stay activated.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated Private Profile settings copy so the enabled state says new collaborative lists are unavailable, and the enabling warning says saved places and solo lists become private while existing collaborative lists stay unchanged.
+- Removed the warning sentence that said "Stealth mode will stay activated."
+- Updated list collaboration UI behavior:
+  - Brand-new lists clear/disable staged collaborators while Private Profile is on.
+  - Existing collaborative lists keep their existing collaborators while Private Profile is on.
+  - Existing collaborative list invite surfaces show the current collaborators and explain that new invites are unavailable.
+  - Solo lists keep the collaborator controls disabled while Private Profile is on.
+- Added a `collabEdit` visual QA scenario for opening an existing collaborative list editor without the delete-confirmation alert.
+- Validation:
+  - `git diff --check` passed.
+  - Sandboxed `xcodebuild test` failed before app code ran because CoreSimulator/user cache access was blocked; reran the same focused tests with elevated permissions.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
+  - Existing warnings only: traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-new-collab-blocked-list-editor-final.png`
+  - `/private/tmp/private-profile-existing-collab-list-editor-final.png`
+- Visual result: Private Profile blocks new collaborative lists without overlap, and existing collaborative lists show locked stealth plus a compact "existing collaborators" summary that stays clear of the save/delete action bar.
+- Local implementation commit: `bb2b1ed83` (`Preserve existing list collaborators in private profile`).
+- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. Rebase or merge latest `origin/main` before opening a PR because the branch is behind.
+
+## 2026-06-28 12:08 PDT - Codex - Clarified Private Profile Visibility Rules
+
+Agent: Codex
+Branch: `codex/rec-42-43-settings-copy`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
+Starting status: clean after `git fetch origin`; branch is local only and currently ahead 9, behind 8 versus `origin/main`.
+
+Goal: update Private Profile behavior to match Ryan's clarified product rules: only places saved by the current user are forced stealth, future saves stay stealth while enabled, turning Private Profile off does not restore visibility, and existing collaborative lists remain editable for existing friend-network collaboration.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Features/Lists/ListsScreen.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint:
+
+- Updated `WanderLocalStore` so Private Profile no longer overwrites the stored `defaultVisibility`; it forces `.selfOnly` through `effectiveDefaultVisibility` and save-time visibility while enabled.
+- Strengthened store tests to verify:
+  - all current-user saved places switch to stealth when Private Profile turns on;
+  - other users' saved-place rows are not mutated;
+  - future saves are forced stealth while Private Profile is on;
+  - turning Private Profile off does not restore existing place visibility;
+  - the user's underlying default visibility preference survives the Private Profile round trip.
+- Updated Settings copy so enabling Private Profile says Been/Wanna Go places switch to stealth, future saves stay stealth, username is hidden, followers and existing collaborative lists stay unchanged, and new collaborative lists are unavailable.
+- Updated the turn-off warning to be informational only: existing places stay stealth, username can appear in search again, and future saves follow the `stealth mode for new saves` setting.
+- Updated list collaboration behavior:
+  - new/solo lists cannot become collaborative while Private Profile is on;
+  - owned existing collaborative lists can still add/remove friend-network collaborators while Private Profile is on;
+  - private profiles are hidden from global username search but remain available inside mutual-friend collaborator search;
+  - collaborator rows match by handle as well as id to avoid duplicate mock/profile entries.
+- Validation:
+  - `git diff --check` passed.
+  - Sandboxed focused `xcodebuild test` failed before app code ran because CoreSimulator/user cache access and package fetches were blocked; reran with elevated permissions and existing DerivedData.
+  - Focused XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testPrivateProfileForcesCurrentAndFutureSavesStealthWithoutRestoringOnDisable -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
+  - Full XCTest passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - Existing warnings only: traditional headermap warnings.
+- Visual QA screenshots reviewed:
+  - `/private/tmp/private-profile-new-list-collab-blocked-clarified.png`
+  - `/private/tmp/private-profile-existing-collab-manage-clarified-final.png`
+- Visual result: new lists show collaboration blocked while Private Profile is on; existing collaborative lists show locked stealth, compact collaborator summary, and a visible add/manage control without bottom action-bar overlap.
+- Local implementation commit: `9a1ae13bc` (`Clarify private profile visibility rules`).
+
+## 2026-06-28 12:46 PDT - Codex - Private Profile TestFlight Release
+
+Agent: Codex
+Branch: `codex/private-profile-testflight-release`
+Worktree: `/private/tmp/recme-private-profile-release`
+Starting status: clean branch from latest `origin/main` (`65b196319`) after `git fetch origin`; source feature branch `codex/rec-42-43-settings-copy` is local-only at `8b93092e0` and is ahead 11, behind 10 versus `origin/main`.
+
+Goal: squash-merge the local Private Profile/settings/list-collaboration branch to `main`, increment the TestFlight build from 51 to 52, run build/tests, archive/upload to TestFlight, run the TestFlight helper, and post tester-facing Slack notes to `#testflight-feedback`.
+
+Expected files:
+
+- `Wander/**`
+- `WanderTests/**`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Outcome, 2026-06-28 13:08 PDT:
+
+- Squash-merged the local Private Profile branch into the release worktree as `84ea0b5b0` (`Implement private profile controls`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 51 to build 52 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `5e01d887b` (`chore: bump testflight build 52`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build52-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build52-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build52.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=52` verified.
+- Export options: `/private/tmp/WanderExportUpload52.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 52 --archive-path /private/tmp/Wander-0.1-build52.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build52-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (52)` id `7240093e-4c5e-4395-956c-50bb629cbc62` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: this Codex runtime did not expose a callable Slack send/draft tool, and no `SLACK_*` credential variable was available in the local env file. Post this required tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`):
+
+```text
+rec.me build 52 is live/approved in TestFlight.
+
+What changed:
+- Private Profile is now wired across settings, saves, and local list collaboration.
+- Turning Private Profile on puts your saved Been/Wanna Go places into stealth mode and keeps future saves stealth while it is on.
+- Turning Private Profile off does not bulk-restore visibility; existing places stay stealth, and future saves follow the stealth mode for new saves setting.
+- New collaborative lists are blocked while Private Profile is on, but owned existing collaborative lists can still add/remove friend-network collaborators.
+
+Please test:
+- Settings > Private profile on/off warnings and locked stealth-mode behavior.
+- Save a new place while Private Profile is on and confirm stealth stays locked on.
+- Turn Private Profile off and confirm existing places remain stealth while the default new-save setting is configurable again.
+- Try new list creation while Private Profile is on and confirm collaboration is blocked.
+- Edit an existing collaborative list you own and confirm collaborators remain and friend-network add/remove still works.
+
+Known/deferred:
+- List creation/editing is still local/mock-functional; backend list persistence and invite links remain follow-up scope.
+- Private Profile does not bulk-restore place visibility when turned off.
+
+Public TestFlight: https://testflight.apple.com/join/knEhRa6t
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+```
+
+## 2026-06-29 18:52 PDT - Codex - Category Schema Latest Page View Mockups
+
+Agent: Codex
+Branch: `codex/edit-category-schema-review`
+Worktree: `/private/tmp/recme-edit-category-schema`
+Starting status: fresh isolated worktree from `origin/codex/edit-category-schema`; root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated `codex/profile-pictures`.
+
+Goal: update/review the category schema SwiftUI design captures against the latest place page views, run practical plan-eng-review, plan-design-review, and ios-design-review lenses, and show refreshed inline SwiftUI mockups for saved been, saved wanna, unsaved place, edit sheets, save flow, and picker.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift` merge resolution if latest page-view changes conflict with category controls.
+- Temporary screenshot harness edits in SwiftUI/test files, to be removed before handoff.
+
+Checkpoint:
+
+- Recreated `/private/tmp/recme-edit-category-schema` because the prior worktree was prunable/missing.
+- Merged latest `origin/main` into the isolated review branch so captures include the current page-view behavior through PR #49.
+- Resolved `MapScreen.swift` by preserving latest `selectSavedResult` page navigation/private-profile visibility handling while keeping the category branch's edited `submission.candidate` payload and place-type picker sheet.
+- Resolved `docs/agent-log.md` by preserving both the PR #39 category entry and later mainline release history.
+## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
+
+Agent: Codex
+Branch: `codex/layout-chrome-fix`
+Worktree: `/private/tmp/recme-layout-chrome-fix`
+Starting status: fresh worktree from `origin/main` at `cf5f3ef`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: unavailable; `curl http://localhost:4000/api/tasks` failed with connection refused.
+
+Goal: fix Joe-reported TestFlight build 51 layout regression focused on the Map search/filter chrome and Place Profile back/header controls from screenshots `IMG_2908.png` and `IMG_2907.png`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused layout/navigation tests if there is a stable unit-level seam.
+
+Completion checkpoint, 2026-06-28 12:20 PDT:
+
+- Fixed Map search/filter chrome by giving the overlay a full-screen top-aligned frame, adding safe-area top padding, and hiding the empty `NavigationStack` navigation bar so the map stays full-bleed instead of leaving a blank header region.
+- Fixed Place Profile full-bleed header controls by restoring a minimum top inset when `GeometryProxy.safeAreaInsets.top` resolves to `0` under `.ignoresSafeArea`, keeping back/edit/share controls below the status/Dynamic Island/TestFlight chrome.
+- Added focused `NavigationContractTests` coverage for the full-bleed header inset fallback.
+- `git diff --check` passed.
+- First focused `xcodebuild test` attempt hung while waiting for XCTest workers and was interrupted; after `build-for-testing`, focused `NavigationContractTests` passed with:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-layout-chrome-test CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+- Simulator build passed with:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-layout-chrome-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual QA screenshots captured and reviewed:
+  - iPhone 16 Plus map: `/private/tmp/recme-layout-chrome-map-final.png`
+  - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
+  - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
+  - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`

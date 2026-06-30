@@ -6,12 +6,12 @@ struct MapScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
-    @State private var selectedPlaceID: String?
+    @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
     @State private var ignoreNextMapFeatureClear = false
     @State private var mapSaveFlow: MapPlaceSaveContext?
-    @State private var isPlaceSheetExpanded: Bool
+    @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery = ""
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
@@ -44,10 +44,10 @@ struct MapScreen: View {
 
     init(
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
-        startsExpanded: Bool = ProcessInfo.processInfo.arguments.contains("-WanderMapSheetExpanded")
+        startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation()
     ) {
         self.initialPlaceQuery = initialPlaceQuery
-        _isPlaceSheetExpanded = State(initialValue: startsExpanded)
+        _isPlaceProfilePresented = State(initialValue: startsExpanded)
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -67,27 +67,19 @@ struct MapScreen: View {
         }
     }
 
-    private var mapAnnotationPlaces: [VisiblePlace] {
-        var orderedPlaceIDs: [String] = []
-        var representatives: [String: VisiblePlace] = [:]
-
-        for visiblePlace in visiblePlaces {
-            let placeID = visiblePlace.place.id
-            if let current = representatives[placeID] {
-                if shouldPreferMapRepresentative(visiblePlace, over: current) {
-                    representatives[placeID] = visiblePlace
-                }
-            } else {
-                orderedPlaceIDs.append(placeID)
-                representatives[placeID] = visiblePlace
-            }
-        }
-
-        return orderedPlaceIDs.compactMap { representatives[$0] }
+    private var visiblePlaceGroups: [VisiblePlaceGroup] {
+        VisiblePlaceGrouping.groups(
+            from: visiblePlaces,
+            currentUserID: store.currentUser.id
+        )
     }
 
-    private var visiblePlaceIDs: [String] {
-        visiblePlaces.map(\.id)
+    private var mapAnnotationPlaces: [VisiblePlace] {
+        visiblePlaceGroups.map(\.primary)
+    }
+
+    private var visiblePlaceGroupKeys: [String] {
+        visiblePlaceGroups.map(\.key)
     }
 
     private var initialCameraPlaces: [VisiblePlace] {
@@ -133,8 +125,8 @@ struct MapScreen: View {
     }
 
     private var selectedPlace: VisiblePlace? {
-        guard let selectedPlaceID else { return nil }
-        return visiblePlaces.first { $0.id == selectedPlaceID }
+        guard let selectedPlaceGroupKey else { return nil }
+        return visiblePlaceGroups.first { $0.key == selectedPlaceGroupKey }?.primary
     }
 
     private var selectedSearchCandidate: PlaceCandidate? {
@@ -165,170 +157,178 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Map(position: $position, selection: $selectedMapFeature) {
-                UserAnnotation()
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Map(position: $position, selection: $selectedMapFeature) {
+                    UserAnnotation()
 
-                ForEach(mapAnnotationPlaces) { visiblePlace in
-                    Annotation(
-                        visiblePlace.place.canonicalName,
-                        coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
-                    ) {
-                        Button {
-                            clearNativeMapFeatureSelection()
-                            selectedPlaceID = visiblePlace.id
-                            selectedSearchCandidateID = nil
-                            isPlaceSheetExpanded = false
-                        } label: {
-                            MapPlaceMarker(
-                                visiblePlace: visiblePlace,
-                                saves: saveSummaries(for: visiblePlace),
-                                currentUserID: store.currentUser.id,
-                                isSelected: isSelectedMapRepresentative(visiblePlace)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                ForEach(mappableSearchCandidates) { candidate in
-                    if let latitude = candidate.latitude,
-                       let longitude = candidate.longitude {
+                    ForEach(mapAnnotationPlaces) { visiblePlace in
                         Annotation(
-                            candidate.name,
-                            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                            visiblePlace.place.canonicalName,
+                            coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
                         ) {
                             Button {
                                 clearNativeMapFeatureSelection()
-                                selectedSearchCandidateID = candidate.id
-                                selectedPlaceID = nil
-                                isPlaceSheetExpanded = false
+                                selectVisiblePlace(visiblePlace)
+                                selectedSearchCandidateID = nil
+                                isPlaceProfilePresented = false
                             } label: {
-                                SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
+                                MapPlaceMarker(
+                                    visiblePlace: visiblePlace,
+                                    saves: saveSummaries(for: visiblePlace),
+                                    currentUserID: store.currentUser.id,
+                                    isSelected: isSelectedMapRepresentative(visiblePlace)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .mapFeatureSelectionDisabled { feature in
-                feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
-            }
-            .mapFeatureSelectionContent { _ in }
-            .modifier(HideNativeMapFeatureAccessory())
-            .tint(Self.currentLocationTint)
-            .ignoresSafeArea()
-            .onChange(of: selectedMapFeature) { _, feature in
-                handleMapFeatureSelection(feature)
-            }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                currentSearchRegion = context.region
-            }
 
-            VStack(spacing: 0) {
-                VStack(spacing: WanderTheme.spacing2) {
-                    SearchBar(
-                        query: $mapQuery,
-                        userInitials: store.currentUser.initials,
-                        onSubmit: submitMapSearch
-                    )
-                    if shouldShowTypeahead {
-                        MapTypeaheadList(
-                            suggestions: typeaheadSuggestions,
-                            isLoading: isLoadingTypeahead,
-                            onSelect: selectTypeaheadSuggestion
-                        )
-                        .padding(.horizontal, WanderTheme.spacing3)
-                    } else if let mapSearchMessage {
-                        MapSearchMessage(text: mapSearchMessage)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                    }
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            ForEach(MapFilter.allCases) { filter in
-                                if filter == .social {
-                                    MapSocialFilterMenu(
-                                        isSelected: selectedFilters.contains(.social),
-                                        selectedOwner: selectedSocialOwner,
-                                        ownerOptions: socialOwnerOptions,
-                                        showAll: showAllSocialPlaces,
-                                        hideSocial: hideSocialPlaces,
-                                        selectOwner: showSocialPlaces
-                                    )
-                                } else {
-                                    Button {
-                                        toggle(filter)
-                                    } label: {
-                                        MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
-                                    }
-                                    .buttonStyle(.plain)
+                    ForEach(mappableSearchCandidates) { candidate in
+                        if let latitude = candidate.latitude,
+                           let longitude = candidate.longitude {
+                            Annotation(
+                                candidate.name,
+                                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                            ) {
+                                Button {
+                                    clearNativeMapFeatureSelection()
+                                    selectedSearchCandidateID = candidate.id
+                                    selectedPlaceGroupKey = nil
+                                    isPlaceProfilePresented = false
+                                } label: {
+                                    SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing1)
                     }
-                    .frame(height: 48)
                 }
-                .padding(.top, WanderTheme.spacing2)
+                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .mapFeatureSelectionDisabled { feature in
+                    feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
+                }
+                .mapFeatureSelectionContent { _ in }
+                .modifier(HideNativeMapFeatureAccessory())
+                .tint(Self.currentLocationTint)
+                .ignoresSafeArea()
+                .onChange(of: selectedMapFeature) { _, feature in
+                    handleMapFeatureSelection(feature)
+                }
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    currentSearchRegion = context.region
+                }
 
-                Spacer()
-
-                if !isPlaceSheetExpanded {
-                    HStack {
-                        Spacer()
-                        RecenterButton(isLoading: isRecenteringOnUser) {
-                            recenterOnUser()
+                VStack(spacing: 0) {
+                    VStack(spacing: WanderTheme.spacing2) {
+                        SearchBar(
+                            query: $mapQuery,
+                            userInitials: store.currentUser.initials,
+                            onSubmit: submitMapSearch
+                        )
+                        if shouldShowTypeahead {
+                            MapTypeaheadList(
+                                suggestions: typeaheadSuggestions,
+                                isLoading: isLoadingTypeahead,
+                                onSelect: selectTypeaheadSuggestion
+                            )
+                            .padding(.horizontal, WanderTheme.spacing3)
+                        } else if let mapSearchMessage {
+                            MapSearchMessage(text: mapSearchMessage)
+                                .padding(.horizontal, WanderTheme.spacing3)
                         }
-                        .padding(.trailing, WanderTheme.spacing3)
-                        .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapFilter.allCases) { filter in
+                                    if filter == .social {
+                                        MapSocialFilterMenu(
+                                            isSelected: selectedFilters.contains(.social),
+                                            selectedOwner: selectedSocialOwner,
+                                            ownerOptions: socialOwnerOptions,
+                                            showAll: showAllSocialPlaces,
+                                            hideSocial: hideSocialPlaces,
+                                            selectOwner: showSocialPlaces
+                                        )
+                                    } else {
+                                        Button {
+                                            toggle(filter)
+                                        } label: {
+                                            MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, WanderTheme.spacing1)
+                        }
+                        .frame(height: 48)
+                    }
+
+                    Spacer()
+
+                    if !isPlaceProfilePresented {
+                        HStack {
+                            Spacer()
+                            RecenterButton(isLoading: isRecenteringOnUser) {
+                                recenterOnUser()
+                            }
+                            .padding(.trailing, WanderTheme.spacing3)
+                            .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
+                        }
                     }
                 }
-            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .safeAreaPadding(.top, WanderTheme.spacing2)
 
-            selectedPlaceProfileSurface
-        }
-        .background(WanderTheme.canvasWarm.color)
-        .onAppear {
-            resolveInitialSelection()
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .task {
-            await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .onChange(of: auth.isSignedIn) { _, isSignedIn in
-            guard isSignedIn else { return }
-            Task {
+                selectedPlaceProfileSurface
+            }
+            .background(WanderTheme.canvasWarm.color)
+            .onAppear {
+                resolveInitialSelection()
+                centerMapOnInitialPlacesIfNeeded()
+            }
+            .task {
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                 centerMapOnInitialPlacesIfNeeded()
             }
-        }
-        .onChange(of: visiblePlaceIDs) { _, ids in
-            if let current = selectedPlaceID, !ids.contains(current) {
-                selectedPlaceID = nil
-                isPlaceSheetExpanded = false
+            .onChange(of: auth.isSignedIn) { _, isSignedIn in
+                guard isSignedIn else { return }
+                Task {
+                    await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                    centerMapOnInitialPlacesIfNeeded()
+                }
             }
-            centerMapOnInitialPlacesIfNeeded()
-        }
-        .onChange(of: mapQuery) { _, _ in
-            handleMapQueryChange()
-            if let firstVisibleID = visiblePlaceIDs.first, !visiblePlaceIDs.contains(selectedPlaceID ?? "") {
-                selectedPlaceID = firstVisibleID
-                isPlaceSheetExpanded = false
+            .onChange(of: visiblePlaceGroupKeys) { _, keys in
+                if let current = selectedPlaceGroupKey, !keys.contains(current) {
+                    selectedPlaceGroupKey = nil
+                    isPlaceProfilePresented = false
+                }
+                centerMapOnInitialPlacesIfNeeded()
             }
-        }
-        .onDisappear {
-            typeaheadTask?.cancel()
-            mapFeatureResolutionTask?.cancel()
-        }
-        .sheet(item: $mapSaveFlow) { context in
-            MapPlaceSaveFlowSheet(context: context) { submission in
-                await saveMapFlowSubmission(submission)
+            .onChange(of: mapQuery) { _, _ in
+                handleMapQueryChange()
+                if let firstGroupKey = visiblePlaceGroupKeys.first,
+                   !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
+                    selectedPlaceGroupKey = firstGroupKey
+                    isPlaceProfilePresented = false
+                }
             }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+            .onDisappear {
+                typeaheadTask?.cancel()
+                mapFeatureResolutionTask?.cancel()
+            }
+            .sheet(item: $mapSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveMapFlowSubmission(submission)
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .navigationDestination(isPresented: placeProfileDestinationBinding) {
+                selectedPlaceProfileDestination
+            }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
@@ -362,9 +362,9 @@ struct MapScreen: View {
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         selectedMapFeature = nil
-        selectedPlaceID = nil
+        selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
     }
 
     private func clearNativeMapFeatureSelection() {
@@ -379,27 +379,29 @@ struct MapScreen: View {
     private func clearMapFeatureCandidateSelection() {
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
-        selectedPlaceID = nil
+        selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
         mapSearchCandidates = []
         mapSearchMessage = nil
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
     }
 
     private func resolveInitialSelection() {
-        guard selectedPlaceID == nil else { return }
+        guard selectedPlaceGroupKey == nil else { return }
 
         if let initialPlaceQuery {
             let normalized = initialPlaceQuery.lowercased()
-            selectedPlaceID = visiblePlaces.first { visiblePlace in
+            if let initialPlace = visiblePlaces.first(where: { visiblePlace in
                 visiblePlace.id.lowercased().contains(normalized)
                     || visiblePlace.place.id.lowercased().contains(normalized)
                     || visiblePlace.place.canonicalName.lowercased().contains(normalized)
-            }?.id
+            }) {
+                selectVisiblePlace(initialPlace)
+            }
         }
 
-        if selectedPlaceID == nil {
-            selectedPlaceID = visiblePlaces.first?.id
+        if selectedPlaceGroupKey == nil, let firstVisiblePlace = visiblePlaces.first {
+            selectVisiblePlace(firstVisiblePlace)
         }
     }
 
@@ -421,33 +423,19 @@ struct MapScreen: View {
         saveSummaries(for: selectedPlace).map(\.visiblePlace.owner)
     }
 
-    private func shouldPreferMapRepresentative(_ candidate: VisiblePlace, over current: VisiblePlace) -> Bool {
-        let candidateIsCurrentUser = candidate.owner.id == store.currentUser.id
-        let currentIsCurrentUser = current.owner.id == store.currentUser.id
-
-        if candidateIsCurrentUser != currentIsCurrentUser {
-            return candidateIsCurrentUser
-        }
-
-        if candidate.id == selectedPlaceID {
-            return true
-        }
-
-        if current.id == selectedPlaceID {
-            return false
-        }
-
-        return false
-    }
-
     private func isSelectedMapRepresentative(_ visiblePlace: VisiblePlace) -> Bool {
-        selectedPlace?.place.id == visiblePlace.place.id
+        guard let selectedPlaceGroupKey else { return false }
+        return VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        )?.key == selectedPlaceGroupKey
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
         let summaries = store.visiblePlaces()
-            .filter { $0.place.id == selectedPlace.place.id }
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
                 seen.insert(visiblePlace.userPlace.id)
@@ -477,6 +465,35 @@ struct MapScreen: View {
         }
     }
 
+    private func selectVisiblePlace(_ visiblePlace: VisiblePlace) {
+        selectedPlaceGroupKey = VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
+    }
+
+    private func selectSavedResult(_ result: SaveResult) {
+        guard let visiblePlace = store.visiblePlaces().first(where: { $0.userPlace.id == result.userPlaceID }) else {
+            return
+        }
+
+        selectVisiblePlace(visiblePlace)
+    }
+
+    private var placeProfileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                isPlaceProfilePresented && hasSelectedProfile
+            },
+            set: { isPresented in
+                if !isPresented {
+                    isPlaceProfilePresented = false
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private var selectedPlaceProfileSurface: some View {
         if let selectedSearchCandidate {
@@ -486,12 +503,12 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .add,
-                isExpanded: $isPlaceSheetExpanded
+                onOpen: openSelectedPlaceProfile
             ) {
                 mapSaveFlow = MapPlaceSaveContext.addCandidate(
                     selectedSearchCandidate,
                     sourceType: .manual,
-                    defaultVisibility: store.defaultVisibility
+                    defaultVisibility: store.effectiveDefaultVisibility
                 )
             }
             .zIndex(30)
@@ -502,11 +519,65 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
-                isExpanded: $isPlaceSheetExpanded
+                onOpen: openSelectedPlaceProfile
             ) {
                 performAction(for: selectedPlace)
             }
             .zIndex(30)
+        }
+    }
+
+    @ViewBuilder
+    private var selectedPlaceProfileDestination: some View {
+        if let selectedSearchCandidate {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(candidate: selectedSearchCandidate),
+                saves: saveSummaries(for: selectedSearchCandidate),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .add,
+                onBack: {
+                    isPlaceProfilePresented = false
+                },
+                onAction: {
+                    dismissPlaceProfileThen {
+                        mapSaveFlow = MapPlaceSaveContext.addCandidate(
+                            selectedSearchCandidate,
+                            sourceType: .manual,
+                            defaultVisibility: store.defaultVisibility
+                        )
+                    }
+                }
+            )
+        } else if let selectedPlace {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                saves: saveSummaries(for: selectedPlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: action(for: selectedPlace),
+                onBack: {
+                    isPlaceProfilePresented = false
+                },
+                onAction: {
+                    dismissPlaceProfileThen {
+                        performAction(for: selectedPlace)
+                    }
+                }
+            )
+        }
+    }
+
+    private func openSelectedPlaceProfile() {
+        guard hasSelectedProfile else { return }
+        isPlaceProfilePresented = true
+    }
+
+    private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
+        isPlaceProfilePresented = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            action()
         }
     }
 
@@ -538,17 +609,17 @@ struct MapScreen: View {
             let candidates = try await mapKitCandidates(for: query)
             mapSearchCandidates = candidates.filter { !isAlreadyVisible(candidate: $0) }
 
-            if let firstVisibleID = visiblePlaceIDs.first {
-                selectedPlaceID = firstVisibleID
+            if let firstVisiblePlace = visiblePlaces.first {
+                selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
                 mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing unsaved map results."
             } else if let firstCandidate = mapSearchCandidates.first {
-                selectedPlaceID = nil
+                selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
                 mapSearchMessage = "Map result. Tap + to add it."
             } else {
-                selectedPlaceID = nil
+                selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
                 mapSearchMessage = "No saved places or map results found."
             }
@@ -605,18 +676,18 @@ struct MapScreen: View {
 
         if let visiblePlace = visiblePlace(matching: candidate) {
             clearNativeMapFeatureSelection()
-            selectedPlaceID = visiblePlace.id
+            selectVisiblePlace(visiblePlace)
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
-            isPlaceSheetExpanded = false
+            isPlaceProfilePresented = false
             mapSearchMessage = nil
             return
         }
 
         mapSearchCandidates = [candidate]
-        selectedPlaceID = nil
+        selectedPlaceGroupKey = nil
         selectedSearchCandidateID = candidate.id
-        isPlaceSheetExpanded = false
+        isPlaceProfilePresented = false
         mapSearchMessage = "Map place. Tap + to add it."
     }
 
@@ -693,7 +764,7 @@ struct MapScreen: View {
         case .add:
             mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
-                defaultVisibility: store.defaultVisibility,
+                defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
         case .edit:
@@ -712,9 +783,8 @@ struct MapScreen: View {
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
-        store.currentUserVisiblePlaces.first { mine in
-            mine.place.id == visiblePlace.place.id
-                || mine.place.canonicalName.caseInsensitiveCompare(visiblePlace.place.canonicalName) == .orderedSame
+        return store.currentUserVisiblePlaces.first { mine in
+            VisiblePlaceGrouping.matches(mine, visiblePlace)
         }
     }
 
@@ -740,7 +810,7 @@ struct MapScreen: View {
             )
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
-            selectedPlaceID = result.userPlaceID
+            selectSavedResult(result)
             mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
             showTransientMapSearchMessage("Added to your map.")
 
@@ -761,7 +831,7 @@ struct MapScreen: View {
                 backend: auth.isSignedIn ? backend : nil
             )
             selectedSearchCandidateID = nil
-            selectedPlaceID = result.userPlaceID
+            selectSavedResult(result)
             showTransientMapSearchMessage("Updated saved place.")
 
             if !auth.isSignedIn {
@@ -788,10 +858,18 @@ struct MapScreen: View {
     }
 
     private func visiblePlace(matching candidate: PlaceCandidate) -> VisiblePlace? {
-        baseVisiblePlaces.first { visiblePlace in
+        guard let match = baseVisiblePlaces.first(where: { visiblePlace in
             visiblePlace.place.sourceProviderPlaceID == candidate.sourceProviderPlaceID
                 || visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
+        }) else {
+            return nil
         }
+
+        return VisiblePlaceGrouping.matchingGroup(
+            for: match,
+            in: baseVisiblePlaces,
+            currentUserID: store.currentUser.id
+        )?.primary ?? match
     }
 
     private func upsertMapSearchCandidate(_ candidate: PlaceCandidate) {
@@ -906,12 +984,12 @@ struct MapScreen: View {
 
         switch suggestion.source {
         case .saved(let visiblePlace):
-            selectedPlaceID = visiblePlace.id
+            selectVisiblePlace(visiblePlace)
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
             center(on: visiblePlace)
         case .mapKit(let candidate):
-            selectedPlaceID = nil
+            selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
@@ -1125,7 +1203,7 @@ struct MapScreen: View {
         return street
     }
 
-    private static func resolvedInitialMapPlaceQuery(from arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {
+    static func resolvedInitialMapPlaceQuery(from arguments: [String] = ProcessInfo.processInfo.arguments) -> String? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderMapPlace") else {
             return nil
         }
@@ -1136,6 +1214,10 @@ struct MapScreen: View {
         }
 
         return arguments[valueIndex]
+    }
+
+    static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        arguments.contains("-WanderMapSheetExpanded")
     }
 
     private static func normalized(_ value: String) -> String {
@@ -1670,8 +1752,8 @@ private struct WanderMapPin: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: isSelected ? 17 : 16, weight: .bold))
-            .frame(width: isSelected ? 42 : 38, height: isSelected ? 42 : 38)
+            .font(.system(size: 16, weight: .bold))
+            .frame(width: 38, height: 38)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
             .overlay(outlineLayer)
@@ -1704,7 +1786,7 @@ private struct WanderMapPin: View {
     }
 
     private var outlineLineWidth: CGFloat {
-        outlines.count > 1 ? (isSelected ? 3 : 2.5) : (isSelected ? 4 : 3)
+        outlines.count > 1 ? 2.5 : 3
     }
 
     private func outlinePadding(for index: Int) -> CGFloat {
@@ -1768,18 +1850,21 @@ struct MapPinOutline: Identifiable, Equatable {
 enum MapPinOutlineBuilder {
     static func outlines(for states: [MapPinSaveState]) -> [MapPinOutline] {
         [
-            firstOutline(for: .currentUser, in: states),
-            firstOutline(for: .social, in: states)
+            outline(for: .currentUser, in: states),
+            outline(for: .social, in: states)
         ]
         .compactMap { $0 }
     }
 
-    private static func firstOutline(
+    private static func outline(
         for ownership: MapPinSaveOwnership,
         in states: [MapPinSaveState]
     ) -> MapPinOutline? {
-        guard let state = states.first(where: { $0.ownership == ownership }) else { return nil }
-        return MapPinOutline(ownership: ownership, status: state.status)
+        let matchingStates = states.filter { $0.ownership == ownership }
+        guard !matchingStates.isEmpty else { return nil }
+
+        let status: PlaceStatus = matchingStates.contains { $0.status == .been } ? .been : .wannaGo
+        return MapPinOutline(ownership: ownership, status: status)
     }
 }
 
@@ -2034,6 +2119,7 @@ struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedCategory: String
     @State private var selectedStatus: PlaceStatus
@@ -2080,6 +2166,19 @@ struct MapPlaceSaveFlowSheet: View {
         )
     }
 
+    private var saveVisibility: PlaceVisibility {
+        store.isPrivateProfile ? .selfOnly : selectedVisibility
+    }
+
+    private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
+        Binding(
+            get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
+            set: { newVisibility in
+                selectedVisibility = store.isPrivateProfile ? .selfOnly : newVisibility
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -2101,6 +2200,16 @@ struct MapPlaceSaveFlowSheet: View {
             .sheet(isPresented: $isChoosingPlaceType) {
                 PlaceTypePickerSheet(selectedCategory: $selectedCategory) {
                     syncAnswersForCurrentQuestions()
+                }
+            }
+            .onAppear {
+                if store.isPrivateProfile {
+                    selectedVisibility = .selfOnly
+                }
+            }
+            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
+                if isPrivateProfile {
+                    selectedVisibility = .selfOnly
                 }
             }
         }
@@ -2224,7 +2333,17 @@ struct MapPlaceSaveFlowSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
-            PlaceVisibilityStealthToggle(visibility: $selectedVisibility)
+            PlaceVisibilityStealthToggle(
+                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
+                visibility: selectedVisibilityForStealthToggle,
+                helperCopy: { visibility in
+                    store.isPrivateProfile
+                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
+                        : visibility.stealthModeHelperCopy
+                }
+            )
+            .disabled(store.isPrivateProfile)
+            .opacity(store.isPrivateProfile ? 0.56 : 1)
 
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
@@ -2432,7 +2551,7 @@ struct MapPlaceSaveFlowSheet: View {
             context: context,
             candidate: selectedCandidate,
             status: selectedStatus,
-            visibility: selectedVisibility,
+            visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts()
@@ -3104,7 +3223,7 @@ struct PlaceSheet: View {
     }
 
     private var hasRatings: Bool {
-        presentation.fitRating != nil || presentation.actualRating != nil
+        presentation.fitRating != nil || presentation.overallRating != nil || presentation.ownRating != nil
     }
 
     private var whyItFitsSection: some View {
@@ -3305,7 +3424,7 @@ private struct PlaceProfileRatingStrip: View {
                 )
             }
 
-            if let actualRating = presentation.actualRating {
+            if let actualRating = presentation.overallRating ?? presentation.ownRating {
                 PlaceProfileMetricCard(
                     title: actualRating.title,
                     value: actualRating.displayScore,

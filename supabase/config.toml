@@ -427,3 +427,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/extraction-worker/deno.json"
 entrypoint = "./functions/extraction-worker/index.ts"
+
+[functions.parse-discover-query]
+enabled = true
+verify_jwt = false
+import_map = "./functions/parse-discover-query/deno.json"
+entrypoint = "./functions/parse-discover-query/index.ts"

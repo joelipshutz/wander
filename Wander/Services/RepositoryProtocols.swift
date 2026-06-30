@@ -439,3 +439,8 @@ protocol DiscoverRepository {
     func parseFilters(query: String) async throws -> DiscoverFilters
     func search(filters: DiscoverFilters) async throws -> DiscoverResults
 }
+
+@MainActor
+protocol DiscoverFilterParsingRepository {
+    func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters
+}

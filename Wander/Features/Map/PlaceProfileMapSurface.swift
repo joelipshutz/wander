@@ -7,7 +7,7 @@ struct PlaceProfileMapSurface: View {
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
-    @Binding var isExpanded: Bool
+    let onOpen: () -> Void
     let onAction: () -> Void
 
     private var presentation: PlaceProfilePresentation {
@@ -21,45 +21,84 @@ struct PlaceProfileMapSurface: View {
     }
 
     var body: some View {
-        Group {
-            if isExpanded {
-                PlaceProfileFullView(
-                    place: place,
-                    presentation: presentation,
-                    saves: saves,
-                    currentUserID: currentUserID,
-                    action: action,
-                    onBack: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            isExpanded = false
-                        }
-                    },
-                    onAction: onAction
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                VStack {
-                    Spacer(minLength: 0)
-                    PlaceProfilePreviewCard(
-                        place: place,
-                        presentation: presentation,
-                        saves: saves,
-                        currentUserID: currentUserID,
-                        action: action,
-                        onOpen: {
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
-                                isExpanded = true
-                            }
-                        },
-                        onAction: onAction
-                    )
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing3)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+        VStack {
+            Spacer(minLength: 0)
+            PlaceProfilePreviewCard(
+                place: place,
+                presentation: presentation,
+                saves: saves,
+                currentUserID: currentUserID,
+                action: action,
+                onOpen: onOpen,
+                onAction: onAction
+            )
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing3)
         }
-        .animation(.spring(response: 0.30, dampingFraction: 0.86), value: isExpanded)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+struct PlaceProfileFullScreen: View {
+    private static let edgeSwipeActivationWidth: CGFloat = 28
+    private static let edgeSwipeMinimumTranslation: CGFloat = 80
+    private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+
+    let place: PlaceSheetPlace
+    let saves: [PlaceSaveSummary]
+    let tasteSaves: [PlaceSaveSummary]
+    let currentUserID: String
+    let action: PlaceSheetAction
+    let onBack: () -> Void
+    let onAction: () -> Void
+
+    private var presentation: PlaceProfilePresentation {
+        PlaceProfilePresenter.presentation(
+            placeID: place.id,
+            category: place.category,
+            saves: saves,
+            tasteSaves: tasteSaves,
+            currentUserID: currentUserID
+        )
+    }
+
+    var body: some View {
+        PlaceProfileFullView(
+            place: place,
+            presentation: presentation,
+            saves: saves,
+            currentUserID: currentUserID,
+            action: action,
+            onBack: onBack,
+            onAction: onAction
+        )
+        .preferredColorScheme(.light)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .simultaneousGesture(edgeSwipeBackGesture)
+    }
+
+    static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
+        startX <= edgeSwipeActivationWidth
+            && translation.width >= edgeSwipeMinimumTranslation
+            && abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+    }
+
+    static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
+        PlaceProfileMapHeader.resolvedTopInset(from: safeAreaTopInset)
+    }
+
+    private var edgeSwipeBackGesture: some Gesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onEnded { value in
+                if Self.shouldTriggerEdgeSwipeBack(
+                    startX: value.startLocation.x,
+                    translation: value.translation
+                ) {
+                    onBack()
+                }
+            }
     }
 }
 
@@ -151,10 +190,14 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var previewSignal: String? {
-        if let rating = presentation.actualRating {
+        if let rating = presentation.overallRating {
             let names = participantNames(limit: 2)
             let prefix = names.isEmpty ? rating.title : names.joined(separator: " + ")
             return "\(prefix) · ★ \(rating.displayScore)"
+        }
+
+        if let rating = presentation.ownRating {
+            return "You · ★ \(rating.displayScore)"
         }
 
         let names = participantNames(limit: 2)
@@ -187,7 +230,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private func participantNames(limit: Int) -> [String] {
         saves
-            .filter { $0.visiblePlace.owner.id != currentUserID || presentation.actualRating?.source == .own }
+            .filter { $0.visiblePlace.owner.id != currentUserID }
             .map { $0.visiblePlace.owner.id == currentUserID ? "You" : $0.visiblePlace.owner.displayName.components(separatedBy: " ").first ?? $0.visiblePlace.owner.displayName }
             .uniquePreservingOrder()
             .prefix(limit)
@@ -206,51 +249,58 @@ private struct PlaceProfileFullView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(spacing: 0) {
-            PlaceProfileMapHeader(
-                place: place,
-                action: action,
-                shareURL: shareURL,
-                shareText: shareText,
-                onBack: onBack,
-                onAction: onAction
-            )
+        GeometryReader { proxy in
+            let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    heading
+            VStack(spacing: 0) {
+                PlaceProfileMapHeader(
+                    place: place,
+                    action: action,
+                    shareURL: shareURL,
+                    shareText: shareText,
+                    topInset: headerTopInset,
+                    onBack: onBack,
+                    onAction: onAction
+                )
 
-                    if let fitSentence {
-                        Text(fitSentence)
-                            .font(.system(size: 19, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .fixedSize(horizontal: false, vertical: true)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        heading
+
+                        if let fitSentence {
+                            Text(fitSentence)
+                                .font(.system(size: 19, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        PlaceProfileTagRail(tags: displayTags, compact: false)
+
+                        ratingSection
+
+                        if !actionItems.isEmpty {
+                            actionRow
+                        }
+
+                        whyItFitsSection
+                        bestForSection
+                        ownNoteSection
+                        trustedNotesSection
+                        detailsSection
                     }
-
-                    PlaceProfileTagRail(tags: displayTags, compact: false)
-
-                    ratingSection
-
-                    if !actionItems.isEmpty {
-                        actionRow
-                    }
-
-                    whyItFitsSection
-                    bestForSection
-                    ownNoteSection
-                    trustedNotesSection
-                    detailsSection
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing8 + proxy.safeAreaInsets.bottom)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
+                .background(WanderTheme.surfaceBone.color)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(WanderTheme.surfaceBone.color)
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: 0))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 24, x: 0, y: -8)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
     private var heading: some View {
@@ -279,7 +329,7 @@ private struct PlaceProfileFullView: View {
 
     @ViewBuilder
     private var ratingSection: some View {
-        if presentation.fitRating != nil || presentation.actualRating != nil {
+        if presentation.fitRating != nil || displayRating != nil {
             HStack(spacing: WanderTheme.spacing2) {
                 if let fitRating = presentation.fitRating {
                     PlaceProfileRatingTile(
@@ -292,12 +342,12 @@ private struct PlaceProfileFullView: View {
                     )
                 }
 
-                if let actualRating = presentation.actualRating {
+                if let displayRating {
                     PlaceProfileRatingTile(
-                        value: actualRating.displayScore,
+                        value: displayRating.displayScore,
                         suffix: "/5",
-                        title: "Actual rating",
-                        subtitle: actualRating.source == .own ? "your saved rating" : actualRating.subtitle,
+                        title: displayRating.title,
+                        subtitle: displayRating.subtitle,
                         systemImage: "star.fill",
                         tint: WanderTheme.stateWarning.color
                     )
@@ -440,7 +490,8 @@ private struct PlaceProfileFullView: View {
 
     private var hasWhyItFitsEvidence: Bool {
         !presentation.whyItFits.isEmpty
-            || presentation.actualRating != nil
+            || presentation.overallRating != nil
+            || presentation.ownRating != nil
             || !displayTags.isEmpty
             || trustedSaves.count >= 2
     }
@@ -465,18 +516,22 @@ private struct PlaceProfileFullView: View {
         saves.filter { $0.visiblePlace.owner.id != currentUserID }
     }
 
+    private var displayRating: PlaceActualRating? {
+        presentation.overallRating ?? presentation.ownRating
+    }
+
     private var whyItFitsPrimary: String {
         if let firstReason = presentation.whyItFits.first {
             return firstReason
         }
-        if let actualRating = presentation.actualRating {
-            if actualRating.source == .own {
-                return "You rated this \(actualRating.displayScore)/5."
-            }
+        if let overallRating = presentation.overallRating {
             if let trustedName = trustedSaves.first?.visiblePlace.owner.displayName.components(separatedBy: " ").first {
-                return "\(trustedName) rated this \(actualRating.displayScore)/5."
+                return "\(trustedName) rated this \(overallRating.displayScore)/5."
             }
-            return "\(actualRating.subtitle.capitalized) average \(actualRating.displayScore)/5."
+            return "\(overallRating.subtitle.capitalized) average \(overallRating.displayScore)/5."
+        }
+        if let ownRating = presentation.ownRating {
+            return "You rated this \(ownRating.displayScore)/5."
         }
         if trustedSaves.count >= 2 {
             return "\(trustedSaves.count) people you follow saved this place."
@@ -488,7 +543,7 @@ private struct PlaceProfileFullView: View {
         if presentation.fitRating != nil {
             return "Based on places you saved and people you follow."
         }
-        if presentation.actualRating != nil {
+        if presentation.overallRating != nil || presentation.ownRating != nil {
             return "Your map gets more personal as you save places."
         }
         if displayTags.count >= 2 {
@@ -533,10 +588,13 @@ private struct PlaceProfileFullView: View {
 }
 
 private struct PlaceProfileMapHeader: View {
+    static let minimumFullBleedTopInset: CGFloat = 54
+
     let place: PlaceSheetPlace
     let action: PlaceSheetAction
     let shareURL: URL?
     let shareText: String
+    let topInset: CGFloat
     let onBack: () -> Void
     let onAction: () -> Void
 
@@ -577,7 +635,7 @@ private struct PlaceProfileMapHeader: View {
                             .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Back to map preview")
+                    .accessibilityLabel("Close place profile")
 
                     Spacer()
 
@@ -613,10 +671,14 @@ private struct PlaceProfileMapHeader: View {
                 Spacer()
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing4 + topInset)
         }
-        .frame(height: 214)
+        .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
+    }
+
+    static func resolvedTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
+        max(safeAreaTopInset, minimumFullBleedTopInset)
     }
 
     private func headerRegion(latitude: Double, longitude: Double) -> MKCoordinateRegion {
@@ -921,7 +983,7 @@ private struct PlaceProfileSaveCard: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 Spacer()
-                if let ratingScore = userPlace.ratingScore {
+                if let ratingScore = displayedRatingScore {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(ratingScore) / 5")
                             .font(.system(size: 13, weight: .black))
@@ -964,6 +1026,11 @@ private struct PlaceProfileSaveCard: View {
 
     private var userPlace: LocalUserPlace {
         summary.visiblePlace.userPlace
+    }
+
+    private var displayedRatingScore: Int? {
+        guard userPlace.status == .been else { return nil }
+        return userPlace.ratingScore
     }
 
     private var note: String? {
@@ -1087,13 +1154,12 @@ private enum PlaceProfileCopy {
             return "Strong fit based on your saved places."
         }
 
-        if let actualRating = presentation.actualRating {
-            switch actualRating.source {
-            case .own:
-                return "You rated this \(actualRating.displayScore)/5."
-            case .trusted:
-                return "Trusted rating: \(actualRating.displayScore)/5."
-            }
+        if let overallRating = presentation.overallRating {
+            return "Trusted rating: \(overallRating.displayScore)/5."
+        }
+
+        if let ownRating = presentation.ownRating {
+            return "You rated this \(ownRating.displayScore)/5."
         }
 
         return nil

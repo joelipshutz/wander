@@ -143,20 +143,32 @@ The hosted migrations and Clerk profile webhook have been pushed/deployed. The l
 
 The `extraction-worker` Edge Function was last deployed from branch `codex/m6-roadmap-next` on 2026-06-15. It supports coordinate-backed Google Maps, Apple Maps, and generic coordinate metadata links while leaving unsupported/photo/social sources as drafts/manual rescue.
 
-The `extraction-worker` can optionally enrich extracted candidate categories through OpenAI. The API key must stay server-side as a Supabase Edge Function secret, never in the iOS app bundle or tracked config:
+The `extraction-worker` can optionally enrich extracted candidate categories through the shared server-side AI provider layer. The `parse-discover-query` Edge Function uses the same layer for Discover natural-language search parsing. Provider keys must stay server-side as Supabase Edge Function secrets, never in the iOS app bundle or tracked config:
 
 ```bash
 npx supabase secrets set OPENAI_API_KEY=<openai-project-key> --project-ref "$WANDER_SUPABASE_PROJECT_REF"
 ```
 
-Runtime knobs:
+Provider/runtime knobs:
 
-- `OPENAI_API_KEY` or `WANDER_OPENAI_API_KEY`: required to enable model-backed classification.
-- `WANDER_OPENAI_CATEGORY_MODEL`: optional model override; defaults to `gpt-5.4-nano`.
-- `WANDER_OPENAI_CATEGORY_MODE`: optional mode; defaults to `ambiguous`, which calls OpenAI only when deterministic inference falls back to `place`. Set to `all` to classify every coordinate-backed extraction candidate.
-- `WANDER_OPENAI_CATEGORY_TIMEOUT_MS`: optional timeout override; defaults to `3500` and caps at `10000`.
+- `WANDER_AI_PROVIDER`: optional provider selector; defaults to `openai`. Supported values: `openai`, `anthropic`, `openai-compatible`.
+- `WANDER_AI_API_KEY`: optional generic provider key. For OpenAI, existing `OPENAI_API_KEY` and `WANDER_OPENAI_API_KEY` still work.
+- `ANTHROPIC_API_KEY` or `WANDER_ANTHROPIC_API_KEY`: required when `WANDER_AI_PROVIDER=anthropic`.
+- `WANDER_AI_BASE_URL`: required for `openai-compatible` endpoints, for example a local or hosted `/v1` compatible API. OpenAI-compatible endpoints may omit an API key if the server is local/private and does not require auth.
+- `WANDER_AI_MODEL`: optional generic model override.
+- `WANDER_AI_DISCOVER_MODEL`: model for Discover parsing. OpenAI still falls back to `WANDER_OPENAI_DISCOVER_MODEL`, then `gpt-5.4-nano`.
+- `WANDER_AI_CATEGORY_MODEL`: model for extraction category classification. OpenAI still falls back to `WANDER_OPENAI_CATEGORY_MODEL`, then `gpt-5.4-nano`.
+- `WANDER_AI_DISCOVER_TIMEOUT_MS`, `WANDER_AI_CATEGORY_TIMEOUT_MS`, or `WANDER_AI_TIMEOUT_MS`: optional timeout overrides; defaults to `3500` and caps at `10000`. Legacy `WANDER_OPENAI_DISCOVER_TIMEOUT_MS` and `WANDER_OPENAI_CATEGORY_TIMEOUT_MS` still work.
+- `WANDER_AI_CATEGORY_MODE`: optional mode; defaults to `ambiguous`, which calls the AI provider only when deterministic inference falls back to `place`. Set to `all` to classify every coordinate-backed extraction candidate. Legacy `WANDER_OPENAI_CATEGORY_MODE` still works.
 
-The worker sends only the approved place classification payload to OpenAI: place name, address/locality/region/country, source provider, source type, and current inferred category. Requests set `store: false`; if the secret is missing or the call fails, extraction falls back to deterministic category inference.
+The worker sends only the approved place classification payload to the selected provider: place name, address/locality/region/country, source provider, source type, and current inferred category. OpenAI requests set `store: false`; if provider config is missing or the call fails, extraction falls back to deterministic category inference.
+
+The `parse-discover-query` Edge Function sends only the raw query plus the fixed allowed filter schema to the selected provider. OpenAI requests set `store: false`; the iOS app falls back to deterministic local parsing if the function is missing, provider config is missing, or the call fails.
+
+```bash
+npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
 
 Current hosted SQL test status:
 

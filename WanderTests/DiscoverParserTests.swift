@@ -17,4 +17,22 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.relationship, .mutual)
         XCTAssertEqual(filters.area, "LA")
     }
+
+    func testDeterministicParserMapsPossessiveNaturalLanguageSearch() async throws {
+        let parser = DeterministicFilterParser()
+        let schema = DiscoverFilterSchema(
+            allowedCategories: ["coffee", "hike", "restaurant"],
+            allowedStatuses: [.been, .wannaGo],
+            allowedRelationships: [.owner, .follower, .mutual],
+            allowedTags: ["quiet", "wifi"]
+        )
+
+        let filters = try await parser.parse(query: "Joe's favorite coffee spots in LA", schema: schema)
+
+        XCTAssertEqual(filters.categories, ["coffee"])
+        XCTAssertEqual(filters.statuses, [.been])
+        XCTAssertEqual(filters.ownerQuery, "joe")
+        XCTAssertEqual(filters.area, "LA")
+        XCTAssertEqual(filters.chips.map(\.title), ["coffee", "been", "LA", "joe"])
+    }
 }
