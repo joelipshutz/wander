@@ -7059,3 +7059,55 @@ Findings:
   - Environment checks found no `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD`; `/Users/ryanlieblein/.openclaw/workspace/.env.keys` did not contain Supabase credential variable names.
 
 Current blocker: to apply `supabase/migrations/20260628122000_profile_avatar_storage.sql` to the hosted project, the session needs either a Supabase access token/login plus DB password/linking, or another authenticated database migration path.
+
+## 2026-06-28 13:02 PDT - Codex - Supabase Access Setup For Profile Avatars
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: stop treating hosted Supabase as an external blocker, set up real Supabase CLI access for this checkout, link the hosted project if credentials permit, apply the profile-avatar migration, and verify the live RPC/storage contract.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Possibly Supabase local link metadata if the CLI writes project link state.
+
+Coordination note: this is backend/hosted migration work on the current profile-picture branch. No overlapping local changes were present.
+
+Checkpoint, 2026-06-28 13:10 PDT:
+
+- Supabase CLI access is now real in this shell:
+  - Logged in through `pnpm dlx supabase login --name wander-profile-avatar --no-browser`.
+  - Linked the local checkout to hosted project `rugmtlgufrhlxwfkumhw` (`wander`).
+- Hosted migration state before push showed only `20260628122000_profile_avatar_storage` missing remotely.
+- Ran `supabase db push --linked --dry-run`; it showed only `20260628122000_profile_avatar_storage.sql`.
+- Applied `20260628122000_profile_avatar_storage.sql` to hosted Supabase with `supabase db push --linked --yes`.
+- Verified hosted state:
+  - `supabase migration list --linked` now shows `20260628122000` present locally and remotely.
+  - Bucket metadata exists for `profile-avatars`: public, JPEG-only, 524288 byte limit.
+  - Function grants verified: authenticated can execute `public.update_profile_avatar` and `public.current_profile`; anon cannot; service_role can execute `app.mirror_clerk_profile`; authenticated cannot.
+  - Storage policies verified: public read plus authenticated owner insert/update/delete.
+- Follow-up bug found during hosted pgTAP verification:
+  - `app.update_profile_avatar` used a PL/pgSQL variable named `current_user`.
+  - PostgreSQL also exposes `current_user` as a special identifier, so the path check could compare against the role name `authenticated` rather than the Clerk profile id.
+  - Added follow-up migration `20260628201000_fix_profile_avatar_current_user_variable.sql` to rename the variable to `current_profile_id` while preserving security invoker/search_path/grants.
+
+Completion checkpoint, 2026-06-28 13:23 PDT:
+
+- Applied the follow-up function fix to hosted Supabase:
+  - `supabase db push --linked --dry-run` showed only `20260628201000_fix_profile_avatar_current_user_variable.sql`.
+  - `supabase db push --linked --yes` hung at the remote connection phase and was cancelled before application output.
+  - Applied the migration SQL with `supabase db query --linked --file supabase/migrations/20260628201000_fix_profile_avatar_current_user_variable.sql`.
+  - The official `supabase migration repair --linked --status applied 20260628201000` command also hung at the remote connection phase and was cancelled before application output.
+  - Recorded the applied migration version in `supabase_migrations.schema_migrations` through linked `supabase db query` so local and remote migration history match.
+- Hosted verification:
+  - `supabase migration list --linked` now shows `20260628122000` and `20260628201000` present locally and remotely.
+  - Hosted function body check confirms `app.update_profile_avatar` uses `current_profile_id text := app.current_user_id()` and no longer uses the bad `current_user text := app.current_user_id()` variable.
+  - Hosted profile-avatar pgTAP SQL file now runs through linked `supabase db query --linked --file supabase/tests/profile_avatars.sql` with the final assertion passing.
+- Test file maintenance:
+  - Updated `supabase/tests/profile_avatars.sql` to avoid switching simulated authenticated users mid-file under the hosted query runner and corrected the plan count to 27.
+- Known remaining QA:
+  - Ryan should retry profile photo upload in Xcode against the now-migrated hosted backend.
+  - Physical camera capture still needs real-device testing.

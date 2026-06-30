@@ -2,7 +2,7 @@
 
 Date: 2026-06-28
 Branch: `codex/profile-pictures`
-Status: implemented with local Swift tests passing; hosted/Supabase CLI migration test still needs an environment with `supabase` installed
+Status: implemented; local Swift tests pass and hosted Supabase migrations/profile-avatar SQL verification have been applied against `rugmtlgufrhlxwfkumhw`
 
 ## Goal
 
@@ -275,7 +275,7 @@ CODE PATHS                                             USER FLOWS
 
 COVERAGE BEFORE IMPLEMENTATION: 0/14 planned paths tested.
 IMPLEMENTED COVERAGE: focused unit coverage for processor, storage, persistence, auth preservation, non-sync store behavior, remote repository upload/delete/current-profile mapping, remote visible-place avatar propagation, and current-profile hydration; simulator screenshot QA on iPhone 17 Pro and iPhone 17e.
-REMAINING DEVICE/HOSTED QA: physical camera capture path, because simulator camera availability is gated off; pgTAP profile-avatar SQL test execution, because this shell does not have the `supabase` CLI installed.
+REMAINING DEVICE QA: physical camera capture path, because simulator camera availability is gated off. Hosted profile-avatar migrations and pgTAP SQL verification have run against linked Supabase.
 ```
 
 ## Failure Modes
@@ -318,7 +318,7 @@ Synthesized from `plan-design-review` and `plan-eng-review`.
 - [x] **T5 (P1, human: ~2h / CC: ~35min)** — Backend avatar sync — Upload signed-in profile avatars to Supabase Storage and store profile avatar URLs.
   - Surfaced by: Ryan's cross-device requirement.
   - Files: `Wander/Services/Remote/*`, `Wander/App/WanderBackend.swift`, `Wander/App/WanderRootView.swift`, `supabase/migrations/`, `supabase/tests/`.
-  - Verify: focused remote/store tests, full iOS suite, pgTAP test authored.
+  - Verify: focused remote/store tests, full iOS suite, hosted profile-avatar pgTAP SQL verification.
 - [x] **T6 (P1, human: ~45min / CC: ~15min)** — Remote avatar propagation — Include owner avatar URLs in remote place DTOs and hydrate current profile on sign-in.
   - Surfaced by: Ryan's “everywhere my icon is present” requirement.
   - Files: `Wander/Services/Remote/SupabaseDTOs.swift`, `Wander/Services/WanderLocalStore.swift`, Supabase visible-place RPCs.
@@ -329,7 +329,7 @@ Synthesized from `plan-design-review` and `plan-eng-review`.
 - Cropping UI beyond the native capture/library picker; this slice uses automatic center-crop.
 - Editing other users' avatars.
 - Real-time avatar refresh while another device changes the same profile; current behavior refreshes through startup/current profile and existing social/profile/place fetches.
-- Hosted migration application and pgTAP execution from this shell; the CLI is not installed here.
+- Physical camera capture on a real device.
 
 ## What Already Exists
 
@@ -362,6 +362,7 @@ Resolved by review:
 - Camera capture stays in scope because the user requested native options like take photo; it is hidden when unavailable and must add `NSCameraUsageDescription`.
 - Signed-in profile avatars now upload to a public Supabase Storage bucket at a stable per-user path and store a versioned public URL in `profiles.avatar_url`.
 - Clerk mirroring preserves app-selected avatars so a later Clerk `user.updated` event does not clobber the in-app profile photo.
+- Hosted Supabase project `rugmtlgufrhlxwfkumhw` has the profile-avatar storage migration plus a follow-up fix for the `app.update_profile_avatar` current-user variable applied and verified.
 
 ## GSTACK REVIEW REPORT
 

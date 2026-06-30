@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(26);
+select plan(27);
 
 select ok(
   exists (
@@ -218,15 +218,15 @@ select is(
 );
 
 set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_clerk_avatar', true);
+select set_config('request.jwt.claim.sub', 'user_avatar_owner', true);
 
 select is(
   public.update_profile_avatar(
-    'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_clerk_avatar/avatar.jpg?v=app',
-    'user_clerk_avatar/avatar.jpg'
+    'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_avatar_owner/avatar.jpg?v=app',
+    'user_avatar_owner/avatar.jpg'
   )->>'avatar_url',
-  'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_clerk_avatar/avatar.jpg?v=app',
-  'signed-in profile can replace Clerk avatar with app avatar'
+  'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_avatar_owner/avatar.jpg?v=app',
+  'signed-in profile can set app avatar before Clerk update'
 );
 
 reset role;
@@ -236,9 +236,9 @@ select is(
     'evt_avatar_update',
     'user.updated',
     '2026-06-28T19:21:00Z',
-    'user_clerk_avatar',
-    'clerkavatar',
-    'Clerk Avatar Updated',
+    'user_avatar_owner',
+    'avatarowner',
+    'Avatar Owner Updated',
     'https://clerk.example/new.jpg'
   )->>'action',
   'upserted',
@@ -249,9 +249,9 @@ select is(
   (
     select avatar_url
     from public.profiles
-    where id = 'user_clerk_avatar'
+    where id = 'user_avatar_owner'
   ),
-  'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_clerk_avatar/avatar.jpg?v=app',
+  'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_avatar_owner/avatar.jpg?v=app',
   'Clerk update preserves app-selected avatar URL'
 );
 
@@ -259,7 +259,7 @@ select is(
   (
     select avatar_url_source
     from public.profiles
-    where id = 'user_clerk_avatar'
+    where id = 'user_avatar_owner'
   ),
   'app',
   'Clerk update preserves app avatar source'
