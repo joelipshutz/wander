@@ -7393,3 +7393,28 @@ Plan:
 - Bump `CURRENT_PROJECT_VERSION` from 52 to 53.
 - Regenerate the Xcode project with XcodeGen.
 - Build/test, archive, upload, run the TestFlight helper, update Linear, and post the required Slack tester note if Slack tooling is available.
+
+Outcome, 2026-06-30 01:09 PDT:
+
+- PR #50 merged to `main` as `ba5fbbed6` (`Remove map search bar avatar`).
+- Bumped `CURRENT_PROJECT_VERSION` from 52 to 53 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `16d7307f3` (`chore: bump testflight build 53`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build53-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build53-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Test result: 180 tests, 0 failures.
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build53.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=53` verified.
+- Export options: `/private/tmp/WanderExportUpload53.plist`, with `manageAppVersionAndBuildNumber=false`.
+- First `xcodebuild -exportArchive` upload attempt with API key `BU88FB5ZG4` failed before upload with `exportArchive Cloud signing permission error` and missing local `iOS Distribution` certificate; this matches the known Ryan-side key limitation from build 33.
+- Retried export/upload with replacement API key `P4ZR59AXMD`; upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 53 --archive-path /private/tmp/Wander-0.1-build53.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build53-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (53)` id `9c74002d-cd13-447f-bbe9-08a3f29c3f23` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Updated Linear `REC-64` to `Done`, attached PR #50 and TestFlight links, and added a completion comment with build 53 details.
+- Tester-facing Slack note posted to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782806986332249`.
+
+Known issues:
+
+- No backend/data behavior changed in this build.
+- Visual confirmation should focus on iPhone sizes; iPad-specific layout remains deferred.
