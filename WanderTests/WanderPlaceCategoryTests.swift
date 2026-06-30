@@ -13,6 +13,39 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.symbolName(for: "hike"), "figure.hiking")
     }
 
+    func testDisplayTaxonomySeparatesBroadCategoryAndSubcategory() {
+        let restaurant = WanderPlaceCategory.display(for: "restaurant")
+        XCTAssertEqual(restaurant.category, "Food & drink")
+        XCTAssertEqual(restaurant.subcategory, "Restaurant")
+        XCTAssertEqual(restaurant.primaryCategory, "restaurant")
+        XCTAssertEqual(restaurant.compactTitle, "Restaurant · Food & drink")
+
+        let transit = WanderPlaceCategory.display(for: "transportation")
+        XCTAssertEqual(transit.category, "Transportation & transit")
+        XCTAssertEqual(transit.subcategory, "Transit stop")
+
+        let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
+        XCTAssertEqual(providerRestaurant.primaryCategory, "restaurant")
+        XCTAssertEqual(providerRestaurant.category, "Food & drink")
+        XCTAssertEqual(providerRestaurant.subcategory, "Thai restaurant")
+
+        let providerStore = WanderPlaceCategory.display(for: "art supply store")
+        XCTAssertEqual(providerStore.category, "Shopping")
+        XCTAssertEqual(providerStore.subcategory, "Art supply store")
+    }
+
+    func testQuestionCategoryRoutesProviderSubcategoriesToSmartQuestions() {
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "thai restaurant"), "restaurant")
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "coffee shop"), "coffee")
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "waterfall"), "hike")
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "4-star hotel"), "hotel")
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "art supply store"), "shop")
+
+        let restaurantBlocks = AddQuestionTemplates.blocks(category: "thai restaurant", status: .been)
+        XCTAssertEqual(restaurantBlocks.map(\.key), ["price", "occasion", "restaurant_tags"])
+        XCTAssertFalse(restaurantBlocks.contains { $0.key == PlaceMemoryAttributeKeys.personalLabels })
+    }
+
     func testMapKitHealthAndFitnessCategories() {
         XCTAssertEqual(WanderPlaceCategory.primary(for: .hospital), "hospital")
         XCTAssertEqual(WanderPlaceCategory.primary(for: .fitnessCenter), "gym")
@@ -61,7 +94,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · restaurant"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -77,7 +110,27 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · restaurant"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
         )
+    }
+
+    func testSwiftTaxonomyMatchesSharedTaxonomyIDs() throws {
+        struct SharedTaxonomy: Decodable {
+            struct Category: Decodable {
+                let id: String
+            }
+
+            let categories: [Category]
+        }
+
+        let testFile = URL(fileURLWithPath: #filePath)
+        let repoRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let taxonomyURL = repoRoot.appendingPathComponent("shared/place-taxonomy.json")
+        let data = try Data(contentsOf: taxonomyURL)
+        let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
+
+        XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.map(\.id))
     }
 }

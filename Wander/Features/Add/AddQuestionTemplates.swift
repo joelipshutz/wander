@@ -21,7 +21,7 @@ struct AddQuestionBlock: Identifiable, Equatable {
 
 enum AddQuestionTemplates {
     static func blocks(category: String, status: PlaceStatus) -> [AddQuestionBlock] {
-        let normalizedCategory = category.lowercased()
+        let normalizedCategory = WanderPlaceCategory.questionCategory(for: category)
         var blocks: [AddQuestionBlock] = []
 
         if status == .wannaGo {

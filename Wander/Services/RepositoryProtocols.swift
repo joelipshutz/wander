@@ -46,6 +46,11 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
     let id: String
     let name: String
     let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let categorySource: String
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     var address: String? = nil
     var locality: String? = nil
     var region: String? = nil
@@ -60,6 +65,69 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
     var timeZoneIdentifier: String? = nil
     var actionLinksJSON: String? = nil
     let confidence: Double
+
+    init(
+        id: String,
+        name: String,
+        category: String,
+        primaryCategory: String? = nil,
+        subcategory: String? = nil,
+        categorySource: String = PlaceCategorySource.provider.rawValue,
+        categoryConfidence: Double? = nil,
+        rawProviderType: String? = nil,
+        address: String? = nil,
+        locality: String? = nil,
+        region: String? = nil,
+        country: String? = nil,
+        latitude: Double?,
+        longitude: Double?,
+        sourceProvider: String = "mapkit",
+        sourceProviderPlaceID: String? = nil,
+        distanceMeters: Double? = nil,
+        websiteURLString: String? = nil,
+        phoneNumber: String? = nil,
+        timeZoneIdentifier: String? = nil,
+        actionLinksJSON: String? = nil,
+        confidence: Double
+    ) {
+        let assignment = primaryCategory.map {
+            WanderPlaceCategory.assignment(
+                primaryCategory: $0,
+                subcategory: subcategory,
+                source: categorySource,
+                confidence: categoryConfidence,
+                rawProviderType: rawProviderType ?? category
+            )
+        } ?? WanderPlaceCategory.assignment(
+            forRawCategory: rawProviderType ?? category,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType ?? category
+        )
+
+        self.id = id
+        self.name = name
+        self.category = assignment.legacyCategory
+        self.primaryCategory = assignment.primaryCategory
+        self.subcategory = assignment.subcategory
+        self.categorySource = assignment.source
+        self.categoryConfidence = assignment.confidence ?? categoryConfidence ?? confidence
+        self.rawProviderType = assignment.rawProviderType
+        self.address = address
+        self.locality = locality
+        self.region = region
+        self.country = country
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.distanceMeters = distanceMeters
+        self.websiteURLString = websiteURLString
+        self.phoneNumber = phoneNumber
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.actionLinksJSON = actionLinksJSON
+        self.confidence = confidence
+    }
 }
 
 struct PlaceActionLink: Equatable, Codable, Identifiable {
@@ -96,6 +164,54 @@ struct PlaceActionLink: Equatable, Codable, Identifiable {
 }
 
 extension PlaceCandidate {
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType
+        )
+    }
+
+    func recategorized(as category: String) -> PlaceCandidate {
+        recategorized(
+            as: WanderPlaceCategory.assignment(
+                forRawCategory: category,
+                source: PlaceCategorySource.user.rawValue,
+                confidence: 1,
+                rawProviderType: rawProviderType ?? category
+            )
+        )
+    }
+
+    func recategorized(as assignment: PlaceCategoryAssignment) -> PlaceCandidate {
+        PlaceCandidate(
+            id: id,
+            name: name,
+            category: assignment.legacyCategory,
+            primaryCategory: assignment.primaryCategory,
+            subcategory: assignment.subcategory,
+            categorySource: assignment.source,
+            categoryConfidence: assignment.confidence,
+            rawProviderType: assignment.rawProviderType ?? rawProviderType,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            distanceMeters: distanceMeters,
+            websiteURLString: websiteURLString,
+            phoneNumber: phoneNumber,
+            timeZoneIdentifier: timeZoneIdentifier,
+            actionLinksJSON: actionLinksJSON,
+            confidence: confidence
+        )
+    }
+
     var actionLinks: [PlaceActionLink] {
         PlaceActionLink.decode(actionLinksJSON)
     }
@@ -121,7 +237,8 @@ extension PlaceCandidate {
     ) -> String {
         let locality = Self.trimmed(self.locality)
         let address = Self.addressWithoutDuplicateLocality(self.address, locality: locality)
-        let category = includeCategory && !self.category.isEmpty && self.category != "place" ? self.category : nil
+        let categoryDisplay = WanderPlaceCategory.display(for: categoryAssignment).compactTitle
+        let category = includeCategory && !categoryDisplay.isEmpty && self.primaryCategory != "place" ? categoryDisplay : nil
         let baseParts: [String?] = [
             includeDistance ? previewFormattedDistance : nil,
             address,
@@ -224,6 +341,11 @@ struct PlaceDraft: Equatable {
     let serverID: String?
     let canonicalName: String
     let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let categorySource: String
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     let address: String?
     let locality: String?
     let region: String?
@@ -237,6 +359,69 @@ struct PlaceDraft: Equatable {
     var phoneNumber: String? = nil
     var timeZoneIdentifier: String? = nil
     var actionLinksJSON: String? = nil
+
+    init(
+        localID: String,
+        serverID: String?,
+        canonicalName: String,
+        category: String,
+        primaryCategory: String? = nil,
+        subcategory: String? = nil,
+        categorySource: String = PlaceCategorySource.provider.rawValue,
+        categoryConfidence: Double? = nil,
+        rawProviderType: String? = nil,
+        address: String?,
+        locality: String?,
+        region: String?,
+        country: String?,
+        latitude: Double,
+        longitude: Double,
+        sourceProvider: String,
+        sourceProviderPlaceID: String?,
+        confidence: Double?,
+        websiteURLString: String? = nil,
+        phoneNumber: String? = nil,
+        timeZoneIdentifier: String? = nil,
+        actionLinksJSON: String? = nil
+    ) {
+        let assignment = primaryCategory.map {
+            WanderPlaceCategory.assignment(
+                primaryCategory: $0,
+                subcategory: subcategory,
+                source: categorySource,
+                confidence: categoryConfidence,
+                rawProviderType: rawProviderType ?? category
+            )
+        } ?? WanderPlaceCategory.assignment(
+            forRawCategory: rawProviderType ?? category,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType ?? category
+        )
+
+        self.localID = localID
+        self.serverID = serverID
+        self.canonicalName = canonicalName
+        self.category = assignment.legacyCategory
+        self.primaryCategory = assignment.primaryCategory
+        self.subcategory = assignment.subcategory
+        self.categorySource = assignment.source
+        self.categoryConfidence = assignment.confidence ?? categoryConfidence ?? confidence
+        self.rawProviderType = assignment.rawProviderType
+        self.address = address
+        self.locality = locality
+        self.region = region
+        self.country = country
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.confidence = confidence
+        self.websiteURLString = websiteURLString
+        self.phoneNumber = phoneNumber
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.actionLinksJSON = actionLinksJSON
+    }
 }
 
 struct UserPlaceDraft: Equatable {
@@ -246,6 +431,10 @@ struct UserPlaceDraft: Equatable {
     let note: String?
     let ratingSignal: String?
     let ratingScore: Int?
+    let categoryOverride: String?
+    let subcategoryOverride: String?
+    let categoryOverrideSource: String?
+    let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
     let sourceType: String
     let attributes: [PlaceAttributeDraft]
@@ -257,6 +446,10 @@ struct UserPlaceDraft: Equatable {
         note: String?,
         ratingSignal: String? = nil,
         ratingScore: Int? = nil,
+        categoryOverride: String? = nil,
+        subcategoryOverride: String? = nil,
+        categoryOverrideSource: String? = nil,
+        categoryOverrideConfidence: Double? = nil,
         nearbyConfirmed: Bool,
         sourceType: String,
         attributes: [PlaceAttributeDraft]
@@ -267,6 +460,10 @@ struct UserPlaceDraft: Equatable {
         self.note = note
         self.ratingSignal = ratingSignal
         self.ratingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
+        self.categoryOverride = categoryOverride
+        self.subcategoryOverride = subcategoryOverride
+        self.categoryOverrideSource = categoryOverrideSource
+        self.categoryOverrideConfidence = categoryOverrideConfidence
         self.nearbyConfirmed = nearbyConfirmed
         self.sourceType = sourceType
         self.attributes = attributes

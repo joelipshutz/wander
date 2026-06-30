@@ -5,6 +5,12 @@ import {
   structuredJSON,
 } from "../_shared/ai/structured-json.ts";
 import type { StructuredJSONResult } from "../_shared/ai/types.ts";
+import {
+  allowedPlaceCategories,
+  inferPlaceCategory,
+  isPlaceCategory,
+} from "../_shared/place-taxonomy.ts";
+import type { PlaceCategory } from "../_shared/place-taxonomy.ts";
 
 type WorkerJob = {
   id: string;
@@ -37,9 +43,11 @@ type ExtractedCandidate = {
   id: string;
   name: string;
   category: string;
+  primary_category?: string | null;
   subcategory?: string | null;
   category_source?: "deterministic" | "ai" | "openai";
   category_confidence?: number;
+  raw_provider_type?: string | null;
   address?: string | null;
   locality?: string | null;
   region?: string | null;
@@ -61,18 +69,6 @@ type ExtractionResult = {
 };
 
 const jsonHeaders = { "Content-Type": "application/json" };
-const allowedCategories = [
-  "spiritual",
-  "coffee",
-  "park",
-  "hike",
-  "restaurant",
-  "bar",
-  "place",
-] as const;
-
-type PlaceCategory = typeof allowedCategories[number];
-
 type AICategorySuggestion = {
   category: PlaceCategory;
   subcategory: string;
@@ -324,8 +320,11 @@ function googleMapsCandidate(
     id: `extracted_${source.normalized_source_hash}`,
     name,
     category: inferredCategory(name),
+    primary_category: inferredCategory(name),
+    subcategory: null,
     category_source: "deterministic",
     category_confidence: deterministicCategoryConfidence(name),
+    raw_provider_type: inferredCategory(name),
     latitude: coordinates.latitude,
     longitude: coordinates.longitude,
     source_provider: "google_maps_link",
@@ -355,8 +354,11 @@ function appleMapsCandidate(
     id: `extracted_${source.normalized_source_hash}`,
     name,
     category: inferredCategory(name),
+    primary_category: inferredCategory(name),
+    subcategory: null,
     category_source: "deterministic",
     category_confidence: deterministicCategoryConfidence(name),
+    raw_provider_type: inferredCategory(name),
     latitude: coordinates.latitude,
     longitude: coordinates.longitude,
     source_provider: "apple_maps_link",
@@ -400,8 +402,11 @@ async function webMetadataCoordinateCandidate(
       id: `extracted_${source.normalized_source_hash}`,
       name: cleanTitle(name),
       category: inferredCategory(name),
+      primary_category: inferredCategory(name),
+      subcategory: null,
       category_source: "deterministic",
       category_confidence: deterministicCategoryConfidence(name),
+      raw_provider_type: inferredCategory(name),
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
       source_provider: "web_metadata",
@@ -634,6 +639,7 @@ async function enrichCandidateCategory(
   return {
     ...candidate,
     category: shouldApplyCategory ? suggestion.category : candidate.category,
+    primary_category: shouldApplyCategory ? suggestion.category : candidate.primary_category,
     subcategory: sanitizeSubcategory(suggestion.subcategory),
     category_source: shouldApplyCategory ? "ai" : candidate.category_source,
     category_confidence: shouldApplyCategory
@@ -727,7 +733,7 @@ function categoryJSONSchema(): Record<string, unknown> {
     properties: {
       category: {
         type: "string",
-        enum: allowedCategories,
+        enum: allowedPlaceCategories,
       },
       subcategory: {
         type: "string",
@@ -777,10 +783,6 @@ function validateCategorySuggestion(
   };
 }
 
-function isPlaceCategory(value: string): value is PlaceCategory {
-  return (allowedCategories as readonly string[]).includes(value);
-}
-
 function shouldApplyAICategory(
   currentCategory: string,
   suggestion: AICategorySuggestion,
@@ -815,19 +817,7 @@ function roundConfidence(value: number): number {
 }
 
 function inferredCategory(name: string): PlaceCategory {
-  const lowered = name.toLowerCase();
-  if (
-    /(temple|shrine|meditation|spiritual|church|chapel|cathedral|mosque|synagogue)/
-      .test(lowered)
-  ) return "spiritual";
-  if (/(coffee|cafe|espresso|roaster|bakery)/.test(lowered)) return "coffee";
-  if (/(park|playground|garden|plaza|beach|lake)/.test(lowered)) return "park";
-  if (/(trail|hike|canyon|mountain|observatory)/.test(lowered)) return "hike";
-  if (
-    /(restaurant|noodle|pizza|taco|sushi|grill|kitchen|diner)/.test(lowered)
-  ) return "restaurant";
-  if (/(bar|wine|brewery|cocktail|pub)/.test(lowered)) return "bar";
-  return "place";
+  return inferPlaceCategory(name);
 }
 
 function deterministicCategoryConfidence(name: string): number {

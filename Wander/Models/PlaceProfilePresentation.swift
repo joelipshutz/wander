@@ -341,7 +341,7 @@ private struct TasteProfile {
         var tagTitles: [String: String] = [:]
 
         for summary in likedSaves {
-            let category = summary.visiblePlace.place.category.lowercased()
+            let category = summary.visiblePlace.effectiveCategory.lowercased()
             categoryCounts[category, default: 0] += 1
 
             for tag in Set(summary.attributes.flatMap(PlaceProfileTagParser.tags(from:))) {

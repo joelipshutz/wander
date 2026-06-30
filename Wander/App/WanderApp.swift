@@ -19,11 +19,23 @@ struct WanderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WanderRootView(analytics: analytics, parser: discoverParser)
-                .environmentObject(auth)
-                .environmentObject(backend)
-                .modelContainer(WanderModelContainer.preview)
+            #if DEBUG
+            if let mockupPage = CategoryTaxonomyMockupPage.resolved() {
+                CategoryTaxonomyMockupRoot(page: mockupPage)
+            } else {
+                appRoot
+            }
+            #else
+            appRoot
+            #endif
         }
+    }
+
+    private var appRoot: some View {
+        WanderRootView(analytics: analytics, parser: discoverParser)
+            .environmentObject(auth)
+            .environmentObject(backend)
+            .modelContainer(WanderModelContainer.preview)
     }
 
     private static func makeDiscoverParser(

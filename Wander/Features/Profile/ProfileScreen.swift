@@ -889,7 +889,7 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var categories: [String] {
-        Array(Set(allModePlaces.map(\.place.category))).sorted()
+        Array(Set(allModePlaces.map(\.effectiveCategory))).sorted()
     }
 
     private var metadataTags: [String] {
@@ -1130,7 +1130,7 @@ private struct SavedPlacesListScreen: View {
 
     private func matchesSelectedCategory(_ visiblePlace: VisiblePlace) -> Bool {
         guard let selectedCategory else { return true }
-        return visiblePlace.place.category == selectedCategory
+        return visiblePlace.effectiveCategory == selectedCategory
     }
 
     private func matchesSelectedMetadataTag(_ visiblePlace: VisiblePlace) -> Bool {
@@ -1144,7 +1144,7 @@ private struct SavedPlacesListScreen: View {
 
         let searchable = [
             visiblePlace.place.canonicalName,
-            visiblePlace.place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.place.locality,
             visiblePlace.userPlace.note,
             visiblePlace.userPlace.ratingSignal,
@@ -1204,7 +1204,7 @@ private struct SavedPlacesListScreen: View {
         switch submission.context.mode {
         case .add(let sourceType):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -1219,7 +1219,7 @@ private struct SavedPlacesListScreen: View {
             return result
         case .edit(let visiblePlace):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -1484,7 +1484,7 @@ private struct ProfilePlaceRow: View {
     }
 
     private var icon: String {
-        WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+        WanderPlaceCategory.symbolName(for: visiblePlace.categoryAssignment)
     }
 
     private var subtitle: String {

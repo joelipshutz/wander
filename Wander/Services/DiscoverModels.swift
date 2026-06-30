@@ -70,20 +70,7 @@ struct DiscoverFilterSchema: Codable, Equatable {
         self.allowedTags = allowedTags
     }
 
-    static let defaultAllowedCategories = [
-        "bar",
-        "coffee",
-        "fitness studio",
-        "gym",
-        "hike",
-        "hospital",
-        "park",
-        "pharmacy",
-        "pilates studio",
-        "restaurant",
-        "spiritual",
-        "veterinarian"
-    ]
+    static let defaultAllowedCategories = WanderPlaceCategory.editableCategories.filter { $0 != "place" }
 
     static let defaultAllowedTags = [
         "cozy",
@@ -123,6 +110,44 @@ struct VisiblePlace: Identifiable {
             return userPlace.recommendedCount
         }
         return userPlace.status == .been && userPlace.ratingScore != nil ? 1 : 0
+    }
+
+    var categoryAssignment: PlaceCategoryAssignment {
+        if let override = userPlace.categoryOverride {
+            return PlaceCategoryAssignment(
+                primaryCategory: override,
+                subcategory: userPlace.subcategoryOverride,
+                source: userPlace.categoryOverrideSource ?? PlaceCategorySource.user.rawValue,
+                confidence: userPlace.categoryOverrideConfidence,
+                rawProviderType: place.rawProviderType
+            )
+        }
+
+        return place.categoryAssignment
+    }
+
+    var effectiveCategory: String {
+        categoryAssignment.primaryCategory
+    }
+
+    var effectiveSubcategory: String? {
+        categoryAssignment.subcategory
+    }
+
+    var effectiveCategoryDisplay: PlaceCategoryDisplay {
+        WanderPlaceCategory.display(for: categoryAssignment)
+    }
+}
+
+extension LocalPlace {
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType
+        )
     }
 }
 

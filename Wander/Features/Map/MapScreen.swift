@@ -57,7 +57,7 @@ struct MapScreen: View {
 
         return places.filter { visiblePlace in
             visiblePlace.place.canonicalName.lowercased().contains(normalizedQuery)
-                || visiblePlace.place.category.lowercased().contains(normalizedQuery)
+                || visiblePlace.effectiveCategoryDisplay.compactTitle.lowercased().contains(normalizedQuery)
                 || (visiblePlace.place.locality?.lowercased().contains(normalizedQuery) ?? false)
                 || visiblePlace.owner.displayName.lowercased().contains(normalizedQuery)
                 || visiblePlace.owner.handle.lowercased().contains(normalizedQuery)
@@ -731,6 +731,9 @@ struct MapScreen: View {
                 id: sourceID,
                 name: name,
                 category: category(for: item),
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: item.pointOfInterestCategory == nil ? 0.72 : 0.86,
+                rawProviderType: item.pointOfInterestCategory?.rawValue,
                 address: address(for: item.placemark),
                 locality: item.placemark.locality,
                 region: item.placemark.administrativeArea,
@@ -798,7 +801,7 @@ struct MapScreen: View {
             }
 
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -810,7 +813,7 @@ struct MapScreen: View {
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
             selectSavedResult(result)
-            mapSearchCandidates.removeAll { $0.id == submission.context.candidate.id }
+            mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
             showTransientMapSearchMessage("Added to your map.")
 
             if !auth.isSignedIn {
@@ -820,7 +823,7 @@ struct MapScreen: View {
             return result
         case .edit(let visiblePlace):
             let result = await store.saveCandidate(
-                submission.context.candidate,
+                submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
@@ -959,7 +962,7 @@ struct MapScreen: View {
     private func matchesTypeahead(_ visiblePlace: VisiblePlace, normalizedQuery: String) -> Bool {
         [
             visiblePlace.place.canonicalName,
-            visiblePlace.place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.place.locality,
             visiblePlace.owner.displayName,
             "@\(visiblePlace.owner.handle)",
@@ -1154,6 +1157,9 @@ struct MapScreen: View {
             id: sourceID,
             name: title,
             category: category(for: feature),
+            categorySource: PlaceCategorySource.provider.rawValue,
+            categoryConfidence: 0.78,
+            rawProviderType: feature.pointOfInterestCategory?.rawValue,
             address: nil,
             locality: nil,
             region: nil,
@@ -1366,7 +1372,7 @@ private struct MapSearchSuggestion: Identifiable {
         let subtitle = [
             saveLabel,
             visiblePlace.place.locality,
-            visiblePlace.place.category
+            visiblePlace.effectiveCategoryDisplay.compactTitle
         ]
         .compactMap { value -> String? in
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1378,7 +1384,7 @@ private struct MapSearchSuggestion: Identifiable {
             id: "saved_\(visiblePlace.id)",
             title: visiblePlace.place.canonicalName,
             subtitle: subtitle.isEmpty ? "saved on Wander" : subtitle,
-            category: visiblePlace.place.category,
+            category: visiblePlace.effectiveCategory,
             source: .saved(visiblePlace)
         )
     }
@@ -1759,7 +1765,7 @@ private struct WanderMapPin: View {
                     .padding(-4)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: isSelected ? 9 : 6, x: 0, y: 2)
-            .accessibilityLabel("\(accessibilityOwnershipLabel) \(visiblePlace.place.category), \(visiblePlace.place.canonicalName)")
+            .accessibilityLabel("\(accessibilityOwnershipLabel) \(visiblePlace.effectiveCategoryDisplay.compactTitle), \(visiblePlace.place.canonicalName)")
     }
 
     private var outlineLayer: some View {
@@ -1778,7 +1784,7 @@ private struct WanderMapPin: View {
     }
 
     private var symbol: String {
-        WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+        WanderPlaceCategory.symbolName(for: visiblePlace.categoryAssignment)
     }
 
     private var outlineLineWidth: CGFloat {
@@ -1890,6 +1896,11 @@ struct PlaceSheetPlace {
     let id: String
     let name: String
     let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let categorySource: String
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     let address: String?
     let locality: String?
     let region: String?
@@ -1905,10 +1916,25 @@ struct PlaceSheetPlace {
     let noteOwnerID: String?
     let noteOwnerName: String?
 
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType
+        )
+    }
+
     init(visiblePlace: VisiblePlace) {
         self.id = visiblePlace.place.id
         self.name = visiblePlace.place.canonicalName
-        self.category = visiblePlace.place.category
+        self.category = visiblePlace.effectiveCategory
+        self.primaryCategory = visiblePlace.effectiveCategory
+        self.subcategory = visiblePlace.effectiveSubcategory
+        self.categorySource = visiblePlace.categoryAssignment.source
+        self.categoryConfidence = visiblePlace.categoryAssignment.confidence
+        self.rawProviderType = visiblePlace.place.rawProviderType
         self.address = visiblePlace.place.address
         self.locality = visiblePlace.place.locality
         self.region = visiblePlace.place.region
@@ -1929,6 +1955,11 @@ struct PlaceSheetPlace {
         self.id = candidate.id
         self.name = candidate.name
         self.category = candidate.category
+        self.primaryCategory = candidate.primaryCategory
+        self.subcategory = candidate.subcategory
+        self.categorySource = candidate.categorySource
+        self.categoryConfidence = candidate.categoryConfidence
+        self.rawProviderType = candidate.rawProviderType
         self.address = candidate.address
         self.locality = candidate.locality
         self.region = candidate.region
@@ -1960,6 +1991,14 @@ struct MapPlaceSaveContext: Identifiable {
     let initialRatingScore: Int
     let initialNote: String
     let initialAnswers: [String: Set<String>]
+    let initialPersonalLabels: Set<String>
+
+    var isEditing: Bool {
+        if case .edit = mode {
+            return true
+        }
+        return false
+    }
 
     var title: String {
         switch mode {
@@ -2000,7 +2039,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: PlaceRating.defaultScore,
             initialNote: "",
-            initialAnswers: [:]
+            initialAnswers: [:],
+            initialPersonalLabels: []
         )
     }
 
@@ -2016,7 +2056,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: "",
-            initialAnswers: initialAnswers(from: attributes)
+            initialAnswers: initialAnswers(from: attributes),
+            initialPersonalLabels: initialPersonalLabels(from: attributes)
         )
     }
 
@@ -2031,7 +2072,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: visiblePlace.userPlace.note ?? "",
-            initialAnswers: initialAnswers(from: attributes)
+            initialAnswers: initialAnswers(from: attributes),
+            initialPersonalLabels: initialPersonalLabels(from: attributes)
         )
     }
 
@@ -2039,7 +2081,12 @@ struct MapPlaceSaveContext: Identifiable {
         PlaceCandidate(
             id: visiblePlace.place.id,
             name: visiblePlace.place.canonicalName,
-            category: visiblePlace.place.category,
+            category: visiblePlace.effectiveCategory,
+            primaryCategory: visiblePlace.effectiveCategory,
+            subcategory: visiblePlace.effectiveSubcategory,
+            categorySource: visiblePlace.categoryAssignment.source,
+            categoryConfidence: visiblePlace.categoryAssignment.confidence,
+            rawProviderType: visiblePlace.place.rawProviderType,
             address: visiblePlace.place.address,
             locality: visiblePlace.place.locality,
             region: visiblePlace.place.region,
@@ -2061,6 +2108,7 @@ struct MapPlaceSaveContext: Identifiable {
         let decoder = JSONDecoder()
 
         for attribute in attributes {
+            guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels else { continue }
             guard let data = attribute.valueJSON.data(using: .utf8) else { continue }
             if let values = try? decoder.decode([String].self, from: data) {
                 answers[attribute.questionKey] = Set(values)
@@ -2071,10 +2119,22 @@ struct MapPlaceSaveContext: Identifiable {
 
         return answers
     }
+
+    private static func initialPersonalLabels(from attributes: [LocalPlaceAttribute]) -> Set<String> {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }),
+              let data = attribute.valueJSON.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return []
+        }
+
+        return Set(values)
+    }
 }
 
 struct MapPlaceSaveSubmission {
     let context: MapPlaceSaveContext
+    let candidate: PlaceCandidate
     let status: PlaceStatus
     let visibility: PlaceVisibility
     let ratingScore: Int?
@@ -2093,10 +2153,13 @@ struct MapPlaceSaveFlowSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @State private var step: MapPlaceSaveStep = .confirm
+    @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Int
     @State private var selectedAnswers: [String: Set<String>]
+    @State private var personalLabels: Set<String>
+    @State private var isChoosingPlaceType = false
     @State private var note: String
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -2104,15 +2167,44 @@ struct MapPlaceSaveFlowSheet: View {
     init(context: MapPlaceSaveContext, onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?) {
         self.context = context
         self.onSave = onSave
+        _step = State(initialValue: context.isEditing ? .details : .confirm)
+        _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
         _selectedRatingScore = State(initialValue: context.initialRatingScore)
         _selectedAnswers = State(initialValue: context.initialAnswers)
+        _personalLabels = State(initialValue: context.initialPersonalLabels)
         _note = State(initialValue: context.initialNote)
     }
 
     private var questionBlocks: [AddQuestionBlock] {
-        AddQuestionTemplates.blocks(category: context.candidate.category, status: selectedStatus)
+        AddQuestionTemplates.blocks(category: selectedAssignment.primaryCategory, status: selectedStatus)
+    }
+
+    private var selectedCandidate: PlaceCandidate {
+        context.candidate.recategorized(as: selectedAssignmentForSave)
+    }
+
+    private var selectedAssignmentForSave: PlaceCategoryAssignment {
+        if selectedAssignment.comparableKey == context.candidate.categoryAssignment.comparableKey,
+           context.candidate.categorySource != PlaceCategorySource.user.rawValue {
+            return context.candidate.categoryAssignment
+        }
+
+        return selectedAssignment.withSource(.user, confidence: 1)
+    }
+
+    private var personalLabelBlock: AddQuestionBlock {
+        AddQuestionBlock(
+            key: PlaceMemoryAttributeKeys.personalLabels,
+            title: "my labels",
+            tag: "labels",
+            kind: .multiTag,
+            valueType: "personal_label",
+            options: PlacePersonalLabelSuggestions.options(category: selectedAssignment.primaryCategory, status: selectedStatus),
+            defaultValues: [],
+            minimumOptionWidth: 104
+        )
     }
 
     private var saveVisibility: PlaceVisibility {
@@ -2146,6 +2238,11 @@ struct MapPlaceSaveFlowSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(WanderTheme.canvasWarm.color)
+            .sheet(isPresented: $isChoosingPlaceType) {
+                PlaceTypePickerSheet(selectedAssignment: $selectedAssignment) {
+                    syncAnswersForCurrentQuestions()
+                }
+            }
             .onAppear {
                 if store.isPrivateProfile {
                     selectedVisibility = .selfOnly
@@ -2162,7 +2259,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
-                if step == .details {
+                if step == .details && !context.isEditing {
                     Button {
                         errorMessage = nil
                         step = .confirm
@@ -2223,6 +2320,11 @@ struct MapPlaceSaveFlowSheet: View {
     private var detailsContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             candidateCard
+            placeTypeSection
+
+            if context.isEditing {
+                saveAsSection
+            }
 
             if selectedStatus == .been {
                 PlaceRatingSlider(score: $selectedRatingScore)
@@ -2236,6 +2338,15 @@ struct MapPlaceSaveFlowSheet: View {
                     ) { option in
                         toggleAnswer(option, in: block)
                     }
+                }
+            }
+
+            MapSaveQuestionBlock(title: personalLabelBlock.title, tag: personalLabelBlock.tag) {
+                MapSaveQuestionOptions(
+                    block: personalLabelBlock,
+                    selectedValues: personalLabels
+                ) { option in
+                    togglePersonalLabel(option)
                 }
             }
 
@@ -2285,9 +2396,74 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private var placeTypeSection: some View {
+        let display = WanderPlaceCategory.display(for: selectedAssignmentForSave, sourceLabel: selectedCategorySourceLabel)
+
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack {
+                Text("place type")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+                Text(display.sourceLabel)
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .padding(.vertical, WanderTheme.spacing1)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Capsule())
+            }
+
+            Button {
+                isChoosingPlaceType = true
+            } label: {
+                VStack(spacing: 0) {
+                    PlaceTypeRow(title: "category", value: display.category)
+                    Divider().background(WanderTheme.borderHairline.color)
+                    PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
+                }
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var selectedCategorySourceLabel: String {
+        if selectedAssignmentForSave.source == PlaceCategorySource.user.rawValue {
+            return "edited"
+        }
+        return WanderPlaceCategory.display(for: selectedAssignmentForSave).sourceLabel
+    }
+
+    private var saveAsSection: some View {
+        MapSavePickerBlock(title: "save as") {
+            HStack(spacing: WanderTheme.spacing2) {
+                MapSaveChoicePill(title: "been", isSelected: selectedStatus == .been) {
+                    selectedStatus = .been
+                    syncAnswersForCurrentQuestions()
+                }
+                MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
+                    selectedStatus = .wannaGo
+                    syncAnswersForCurrentQuestions()
+                }
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
     private var candidateCard: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: context.candidate.category)
+            CategoryThumb(category: selectedAssignment.primaryCategory)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(context.candidate.name)
@@ -2312,10 +2488,20 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var candidateSubtitle: String {
-        context.candidate.previewSubtitle(includeDistance: false)
+        selectedCandidate.previewSubtitle(
+            includeDistance: false,
+            includeCategory: false,
+            trailingParts: [WanderPlaceCategory.display(for: selectedAssignmentForSave).compactTitle]
+        )
     }
 
     private func prepareDetails() {
+        syncAnswersForCurrentQuestions()
+        errorMessage = nil
+        step = .details
+    }
+
+    private func syncAnswersForCurrentQuestions() {
         let allowedKeys = Set(questionBlocks.map(\.key))
         var nextAnswers = selectedAnswers.filter { allowedKeys.contains($0.key) }
 
@@ -2324,8 +2510,6 @@ struct MapPlaceSaveFlowSheet: View {
         }
 
         selectedAnswers = nextAnswers
-        errorMessage = nil
-        step = .details
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
@@ -2345,8 +2529,16 @@ struct MapPlaceSaveFlowSheet: View {
         selectedAnswers[block.key] = values
     }
 
+    private func togglePersonalLabel(_ option: String) {
+        if personalLabels.contains(option) {
+            personalLabels.remove(option)
+        } else {
+            personalLabels.insert(option)
+        }
+    }
+
     private func attributeDrafts() -> [PlaceAttributeDraft] {
-        questionBlocks.compactMap { block in
+        var drafts: [PlaceAttributeDraft] = questionBlocks.compactMap { block -> PlaceAttributeDraft? in
             let values = orderedSelections(for: block)
             guard !values.isEmpty else { return nil }
 
@@ -2357,6 +2549,19 @@ struct MapPlaceSaveFlowSheet: View {
                 return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValues: values)
             }
         }
+
+        let orderedPersonalLabels = orderedPersonalLabelSelections()
+        if !orderedPersonalLabels.isEmpty {
+            drafts.append(
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: orderedPersonalLabels
+                )
+            )
+        }
+
+        return drafts
     }
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
@@ -2370,6 +2575,17 @@ struct MapPlaceSaveFlowSheet: View {
         return optionSelections + customSelections
     }
 
+    private func orderedPersonalLabelSelections() -> [String] {
+        let options = personalLabelBlock.options
+        let optionSelections = options.filter { personalLabels.contains($0) }
+        let customSelections = personalLabels
+            .filter { value in
+                !options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted()
+        return optionSelections + customSelections
+    }
+
     private func save() {
         guard !isSaving else { return }
         isSaving = true
@@ -2377,6 +2593,7 @@ struct MapPlaceSaveFlowSheet: View {
 
         let submission = MapPlaceSaveSubmission(
             context: context,
+            candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
@@ -2427,6 +2644,245 @@ private struct MapSaveChoicePill: View {
                 .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct PlaceTypeRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+            Text(value)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textFaint.color)
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 48)
+    }
+}
+
+private struct PlaceTypePickerSheet: View {
+    @Binding var selectedAssignment: PlaceCategoryAssignment
+    let onSelect: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var customSubcategory = ""
+
+    private var filteredCategories: [String] {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedQuery.isEmpty else {
+            return WanderPlaceCategory.editableCategories
+        }
+
+        return WanderPlaceCategory.editableCategories.filter { category in
+            let display = WanderPlaceCategory.display(for: category)
+            return category.localizedCaseInsensitiveContains(normalizedQuery)
+                || display.category.localizedCaseInsensitiveContains(normalizedQuery)
+                || (display.subcategory?.localizedCaseInsensitiveContains(normalizedQuery) ?? false)
+        }
+    }
+
+    private var selectedPrimaryCategory: String {
+        selectedAssignment.primaryCategory
+    }
+
+    private var selectedSuggestions: [String] {
+        WanderPlaceCategory.subcategorySuggestions(for: selectedPrimaryCategory)
+    }
+
+    private var customSubcategoryValue: String? {
+        WanderPlaceCategory.normalizedSubcategory(customSubcategory)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    TextField("search categories or subcategories", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .tint(WanderTheme.terracotta.color)
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+
+                    pickerSection(title: query.isEmpty ? "suggested" : "matches", categories: filteredCategories)
+                    subcategorySection
+                }
+                .padding(WanderTheme.spacing4)
+            }
+            .background(WanderTheme.canvasWarm.color)
+            .navigationTitle("choose place type")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+        }
+    }
+
+    private var subcategorySection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("subcategory")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                if !selectedSuggestions.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 126), spacing: WanderTheme.spacing2)],
+                        alignment: .leading,
+                        spacing: WanderTheme.spacing2
+                    ) {
+                        ForEach(selectedSuggestions, id: \.self) { subcategory in
+                            MapSaveChoicePill(
+                                title: subcategory,
+                                isSelected: selectedAssignment.subcategory?.caseInsensitiveCompare(subcategory) == .orderedSame
+                            ) {
+                                selectedAssignment = PlaceCategoryAssignment(
+                                    primaryCategory: selectedPrimaryCategory,
+                                    subcategory: subcategory,
+                                    source: PlaceCategorySource.user.rawValue,
+                                    confidence: 1,
+                                    rawProviderType: selectedAssignment.rawProviderType
+                                )
+                                onSelect()
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: WanderTheme.spacing2) {
+                    TextField("custom subcategory", text: $customSubcategory)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .tint(WanderTheme.terracotta.color)
+                        .textInputAutocapitalization(.words)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minHeight: 44)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                    Button {
+                        guard let customSubcategoryValue else { return }
+                        selectedAssignment = PlaceCategoryAssignment(
+                            primaryCategory: selectedPrimaryCategory,
+                            subcategory: customSubcategoryValue,
+                            source: PlaceCategorySource.user.rawValue,
+                            confidence: 1,
+                            rawProviderType: selectedAssignment.rawProviderType
+                        )
+                        customSubcategory = ""
+                        onSelect()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .black))
+                            .frame(width: 44, height: 44)
+                            .background(WanderTheme.textInk.color)
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(customSubcategoryValue == nil)
+                    .opacity(customSubcategoryValue == nil ? 0.45 : 1)
+                    .accessibilityLabel("Use custom subcategory")
+                }
+            }
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+    }
+
+    private func pickerSection(title: String, categories: [String]) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            VStack(spacing: 0) {
+                ForEach(Array(categories.enumerated()), id: \.element) { index, category in
+                    PlaceTypePickerOption(
+                        category: category,
+                        isSelected: category == selectedAssignment.primaryCategory
+                    ) {
+                        selectedAssignment = WanderPlaceCategory.assignment(
+                            primaryCategory: category,
+                            subcategory: WanderPlaceCategory.defaultSubcategory(for: category),
+                            source: PlaceCategorySource.user.rawValue,
+                            confidence: 1,
+                            rawProviderType: selectedAssignment.rawProviderType
+                        )
+                        onSelect()
+                    }
+
+                    if index < categories.count - 1 {
+                        Divider().background(WanderTheme.borderHairline.color)
+                    }
+                }
+            }
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+    }
+}
+
+private struct PlaceTypePickerOption: View {
+    let category: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var display: PlaceCategoryDisplay {
+        WanderPlaceCategory.display(for: category)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: WanderPlaceCategory.symbolName(for: category))
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 34, height: 34)
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(display.subcategory ?? display.category)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text(display.category)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                }
+            }
+            .padding(WanderTheme.spacing3)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -2709,7 +3165,7 @@ struct PlaceSheet: View {
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                CategoryThumb(category: place.category)
+                CategoryThumb(category: place.primaryCategory)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     HStack {
@@ -2796,7 +3252,7 @@ struct PlaceSheet: View {
 
     private var expandedHeader: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: place.category)
+            CategoryThumb(category: place.primaryCategory)
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(place.name)
                     .font(.system(size: 26, weight: .black))
@@ -2896,7 +3352,7 @@ struct PlaceSheet: View {
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
             placeID: place.id,
-            category: place.category,
+            category: place.primaryCategory,
             saves: saves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
@@ -2960,8 +3416,9 @@ struct PlaceSheet: View {
     }
 
     private var categoryDisplay: String? {
-        let category = trimmed(place.category)
-        return category == "place" ? nil : category
+        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
+        let trimmedDisplay = trimmed(display)
+        return place.primaryCategory == "place" ? nil : trimmedDisplay
     }
 
     private var selectedNote: String? {
@@ -2977,7 +3434,7 @@ struct PlaceSheet: View {
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
         if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: place.category)))
+            facts.append(PlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: place.categoryAssignment)))
         }
         return facts
     }
