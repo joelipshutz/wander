@@ -19,8 +19,12 @@ extension DiscoverFilters {
     var chips: [DiscoverFilterChip] {
         var chips: [DiscoverFilterChip] = []
 
-        chips.append(contentsOf: categories.sorted().map { category in
-            DiscoverFilterChip(id: "category_\(category)", title: category)
+        let normalizedCategories = Set(categories.map(WanderPlaceCategory.normalizedPrimaryCategory)).sorted()
+        chips.append(contentsOf: normalizedCategories.map { category in
+            DiscoverFilterChip(
+                id: "category_\(category)",
+                title: WanderPlaceCategory.broadCategory(for: category)
+            )
         })
 
         chips.append(contentsOf: statuses.sorted { $0.rawValue < $1.rawValue }.map { status in
@@ -428,6 +432,16 @@ struct DeterministicFilterParser: LLMFilterParser {
     }
 
     private static let categoryAliases: [String: [String]] = [
+        "food_drink": ["coffee", "cafe", "cafes", "work from", "restaurant", "restaurants", "noodle", "noodles", "dinner", "lunch", "bar", "bars", "drink", "drinks", "patio"],
+        "outdoors_nature": ["hike", "hikes", "trail", "trails", "park", "parks", "beach", "waterfall"],
+        "arts_culture_faith": ["museum", "gallery", "temple", "church", "shrine"],
+        "entertainment": ["movie", "concert", "venue", "arcade", "tourist attraction"],
+        "health_wellness": ["wellness", "spa", "hospital", "pharmacy", "clinic"],
+        "sports_fitness": ["gym", "fitness", "pilates", "yoga", "court"],
+        "shopping": ["shop", "shops", "store", "stores", "boutique", "market"],
+        "services": ["salon", "barber", "vet", "veterinarian", "repair"],
+        "lodging": ["hotel", "motel", "resort", "stay"],
+        "transportation_transit": ["airport", "train", "bus", "transit", "parking"],
         "coffee": ["coffee", "cafe", "cafes", "work from"],
         "restaurant": ["restaurant", "restaurants", "noodle", "noodles", "dinner", "lunch"],
         "hike": ["hike", "hikes", "trail", "trails"],

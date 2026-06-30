@@ -6,8 +6,8 @@ select plan(10);
 
 select is(
   app.place_primary_category('4-star hotel'),
-  'hotel',
-  'hotel provider subtypes normalize to hotel'
+  'lodging',
+  'hotel provider subtypes normalize to lodging'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -44,14 +44,14 @@ select isnt_empty(
 
 select is(
   (select category from public.places where source_provider_place_id = 'category-jitlada'),
-  'restaurant',
-  'legacy places.category is backfilled to primary category'
+  'food_drink',
+  'legacy places.category is backfilled to broad primary category'
 );
 
 select is(
   (select primary_category from public.places where source_provider_place_id = 'category-jitlada'),
-  'restaurant',
-  'primary_category stores the filterable category'
+  'food_drink',
+  'primary_category stores the filterable broad category'
 );
 
 select is(
@@ -67,7 +67,7 @@ select isnt_empty(
       '{
         "canonical_name": "Corner Bodega Category Test",
         "category": "coffee",
-        "primary_category": "coffee",
+        "primary_category": "food_drink",
         "subcategory": "Coffee shop",
         "category_source": "user",
         "raw_provider_type": "coffee shop",
@@ -82,7 +82,7 @@ select isnt_empty(
         "visibility": "followers",
         "nearby_confirmed": false,
         "source_type": "manual",
-        "category_override": "shop",
+        "category_override": "shopping",
         "subcategory_override": "Corner store",
         "category_override_source": "user",
         "category_override_confidence": 1
@@ -95,7 +95,7 @@ select isnt_empty(
 
 select is(
   (select category from public.places where source_provider_place_id = 'category-bodega'),
-  'coffee',
+  'food_drink',
   'user override does not rewrite shared place category'
 );
 
@@ -107,14 +107,14 @@ select is(
 
 select is(
   (select category_override from public.user_places up join public.places p on p.id = up.place_id where p.source_provider_place_id = 'category-bodega'),
-  'shop',
+  'shopping',
   'user override is stored on user_places'
 );
 
 select isnt_empty(
   $$
     select *
-    from app.profile_visible_places('user_category_owner', null, array['shop'])
+    from app.profile_visible_places('user_category_owner', null, array['shopping'])
     where canonical_name = 'Corner Bodega Category Test'
   $$,
   'profile filters match effective user override category'

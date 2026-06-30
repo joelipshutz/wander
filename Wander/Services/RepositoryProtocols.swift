@@ -30,6 +30,10 @@ struct PlaceFilters: Equatable {
     var categories: Set<String> = []
     var ownerScopes: Set<String> = []
     var ownerIDs: Set<String> = []
+
+    var normalizedCategories: Set<String> {
+        Set(categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
+    }
 }
 
 struct ManualPlaceInput: Equatable {
@@ -90,6 +94,10 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
         actionLinksJSON: String? = nil,
         confidence: Double
     ) {
+        let categoryInput = WanderPlaceCategory.categoryInferenceInput(
+            category: category,
+            rawProviderType: rawProviderType
+        )
         let assignment = primaryCategory.map {
             WanderPlaceCategory.assignment(
                 primaryCategory: $0,
@@ -99,7 +107,7 @@ struct PlaceCandidate: Identifiable, Equatable, Codable {
                 rawProviderType: rawProviderType ?? category
             )
         } ?? WanderPlaceCategory.assignment(
-            forRawCategory: rawProviderType ?? category,
+            forRawCategory: categoryInput,
             source: categorySource,
             confidence: categoryConfidence,
             rawProviderType: rawProviderType ?? category
@@ -384,6 +392,10 @@ struct PlaceDraft: Equatable {
         timeZoneIdentifier: String? = nil,
         actionLinksJSON: String? = nil
     ) {
+        let categoryInput = WanderPlaceCategory.categoryInferenceInput(
+            category: category,
+            rawProviderType: rawProviderType
+        )
         let assignment = primaryCategory.map {
             WanderPlaceCategory.assignment(
                 primaryCategory: $0,
@@ -393,7 +405,7 @@ struct PlaceDraft: Equatable {
                 rawProviderType: rawProviderType ?? category
             )
         } ?? WanderPlaceCategory.assignment(
-            forRawCategory: rawProviderType ?? category,
+            forRawCategory: categoryInput,
             source: categorySource,
             confidence: categoryConfidence,
             rawProviderType: rawProviderType ?? category

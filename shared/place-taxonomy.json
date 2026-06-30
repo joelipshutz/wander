@@ -1,132 +1,154 @@
 {
-  "version": 1,
+  "version": 2,
   "categories": [
     {
-      "id": "coffee",
+      "id": "food_drink",
       "group": "Food & drink",
-      "default_subcategory": "Coffee shop",
-      "symbol": "cup.and.saucer.fill",
-      "aliases": ["coffee", "coffee shop", "cafe", "espresso", "roaster", "bakery"],
-      "subcategories": ["Coffee shop", "Cafe", "Bakery", "Roaster", "Tea shop"]
-    },
-    {
-      "id": "restaurant",
-      "group": "Food & drink",
+      "detail": "Restaurants, coffee, bars, markets",
       "default_subcategory": "Restaurant",
       "symbol": "fork.knife",
-      "aliases": ["restaurant", "thai restaurant", "fast food restaurant", "food", "food market", "taqueria", "ramen", "sushi", "pizza", "diner", "kitchen"],
-      "subcategories": ["Restaurant", "Thai restaurant", "Fast food restaurant", "Sushi restaurant", "Pizza restaurant", "Ramen restaurant", "Taqueria", "Diner"]
+      "editable": true,
+      "aliases": ["food_drink", "food and drink", "food & drink", "food", "drink", "coffee", "coffee shop", "cafe", "espresso", "roaster", "bakery", "tea shop", "restaurant", "thai restaurant", "fast food restaurant", "taqueria", "ramen", "sushi", "pizza", "diner", "kitchen", "grill", "noodle", "taco", "food market", "bar", "brewery", "winery", "cocktail", "pub", "nightlife"],
+      "subcategories": ["Restaurant", "Coffee shop", "Cafe", "Bakery", "Tea shop", "Juice bar", "Ice cream shop", "Dessert shop", "Donut shop", "Bagel shop", "Sandwich shop", "Fast food restaurant", "Food truck", "Food court", "Food market", "Farmers market", "Thai restaurant", "Mexican restaurant", "Japanese restaurant", "Sushi restaurant", "Ramen restaurant", "Chinese restaurant", "Korean restaurant", "Vietnamese restaurant", "Indian restaurant", "Italian restaurant", "Pizza restaurant", "Mediterranean restaurant", "Seafood restaurant", "Steakhouse", "Diner", "Brunch spot", "Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Dive bar", "Rooftop bar", "Nightlife"]
     },
     {
-      "id": "bar",
-      "group": "Food & drink",
-      "default_subcategory": "Bar",
-      "symbol": "wineglass.fill",
-      "aliases": ["bar", "brewery", "winery", "nightlife", "cocktail", "pub"],
-      "subcategories": ["Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Nightlife"]
-    },
-    {
-      "id": "hike",
+      "id": "outdoors_nature",
       "group": "Outdoors & nature",
-      "default_subcategory": "Hike or trail",
-      "symbol": "figure.hiking",
-      "aliases": ["hike", "trail", "waterfall", "hot spring", "canyon", "mountain", "observatory"],
-      "subcategories": ["Hike or trail", "Trail", "Waterfall", "Hot spring", "Canyon", "Scenic overlook"]
-    },
-    {
-      "id": "park",
-      "group": "Outdoors & nature",
+      "detail": "Parks, trails, beaches, overlooks",
       "default_subcategory": "Park",
       "symbol": "tree.fill",
-      "aliases": ["park", "national park", "playground", "garden", "plaza", "beach", "lake"],
-      "subcategories": ["Park", "National park", "Garden", "Beach", "Playground", "Dog park"]
+      "editable": true,
+      "aliases": ["outdoors_nature", "outdoors", "nature", "hike", "hiking", "trail", "waterfall", "hot spring", "canyon", "mountain", "observatory", "park", "national park", "playground", "garden", "plaza", "beach", "lake", "campground"],
+      "subcategories": ["Park", "National park", "State park", "Garden", "Botanical garden", "Beach", "Lake", "River", "Waterfall", "Hot spring", "Hike or trail", "Trailhead", "Scenic overlook", "Canyon", "Mountain", "Campground", "Picnic area", "Dog park", "Playground", "Pier", "Marina", "Nature preserve", "Observatory"]
     },
     {
-      "id": "gym",
+      "id": "arts_culture_faith",
+      "group": "Arts, culture & faith",
+      "detail": "Museums, galleries, temples, landmarks",
+      "default_subcategory": "Museum",
+      "symbol": "sparkles",
+      "editable": true,
+      "aliases": ["arts_culture_faith", "arts", "culture", "faith", "museum", "gallery", "art gallery", "theater", "theatre", "historic", "landmark", "monument", "library", "church", "temple", "shrine", "mosque", "synagogue", "chapel", "cathedral", "meditation"],
+      "subcategories": ["Museum", "Art museum", "Gallery", "Art gallery", "Public art", "Theater", "Historic site", "Landmark", "Monument", "Cultural center", "Library", "Bookstore", "Temple", "Shrine", "Church", "Cathedral", "Mosque", "Synagogue", "Chapel", "Meditation center", "Spiritual place"]
+    },
+    {
+      "id": "entertainment",
+      "group": "Entertainment",
+      "detail": "Venues, movies, games, attractions",
+      "default_subcategory": "Entertainment venue",
+      "symbol": "ticket.fill",
+      "editable": true,
+      "aliases": ["entertainment", "tourist attraction", "attraction", "venue", "movie", "cinema", "concert", "music venue", "arena", "stadium", "arcade", "bowling", "zoo", "aquarium", "amusement", "theme park", "comedy"],
+      "subcategories": ["Entertainment venue", "Tourist attraction", "Movie theater", "Music venue", "Concert hall", "Comedy club", "Theater", "Arena", "Stadium", "Arcade", "Bowling alley", "Karaoke", "Pool hall", "Casino", "Zoo", "Aquarium", "Amusement park", "Theme park", "Escape room", "Event venue"]
+    },
+    {
+      "id": "health_wellness",
       "group": "Health & wellness",
+      "detail": "Care, spas, pharmacies, recovery",
+      "default_subcategory": "Wellness studio",
+      "symbol": "cross.case.fill",
+      "editable": true,
+      "aliases": ["health_wellness", "health", "wellness", "wellness studio", "spa", "massage", "meditation", "hospital", "urgent care", "medical center", "health center", "clinic", "doctor", "dentist", "pharmacy", "drugstore", "therapy", "salon"],
+      "subcategories": ["Wellness studio", "Spa", "Massage", "Sauna", "Bathhouse", "Meditation center", "Therapy office", "Hospital", "Urgent care", "Medical center", "Clinic", "Doctor", "Dentist", "Optometrist", "Pharmacy", "Drugstore", "Chiropractor", "Acupuncture", "Physical therapy", "Recovery studio"]
+    },
+    {
+      "id": "sports_fitness",
+      "group": "Sports & fitness",
+      "detail": "Gyms, courts, studios, fields",
       "default_subcategory": "Gym",
       "symbol": "dumbbell.fill",
-      "aliases": ["gym", "fitness center", "training", "strength", "workout"],
-      "subcategories": ["Gym", "Fitness center", "Climbing gym", "Boxing gym", "Training studio"]
+      "editable": true,
+      "aliases": ["sports_fitness", "sports", "fitness", "gym", "fitness center", "training", "strength", "workout", "pilates", "reformer", "lagree", "yoga", "barre", "climbing gym", "boxing gym", "court", "field", "skate", "swim", "surf"],
+      "subcategories": ["Gym", "Fitness center", "Training studio", "Pilates studio", "Reformer pilates", "Lagree studio", "Yoga studio", "Barre studio", "Boxing gym", "Martial arts gym", "Climbing gym", "Dance studio", "Spin studio", "Tennis court", "Basketball court", "Soccer field", "Baseball field", "Golf course", "Pool", "Skate park", "Ski area", "Surf spot"]
     },
     {
-      "id": "fitness studio",
-      "group": "Health & wellness",
-      "default_subcategory": "Fitness studio",
-      "symbol": "figure.strengthtraining.traditional",
-      "aliases": ["fitness studio", "yoga studio", "barre", "wellness studio", "stretch", "studio"],
-      "subcategories": ["Fitness studio", "Yoga studio", "Barre studio", "Wellness studio", "Stretch studio"]
-    },
-    {
-      "id": "pilates studio",
-      "group": "Health & wellness",
-      "default_subcategory": "Pilates studio",
-      "symbol": "figure.mind.and.body",
-      "aliases": ["pilates studio", "pilates", "reformer", "lagree"],
-      "subcategories": ["Pilates studio", "Reformer pilates", "Lagree studio"]
-    },
-    {
-      "id": "spiritual",
-      "group": "Arts, culture & faith",
-      "default_subcategory": "Spiritual place",
-      "symbol": "sparkles",
-      "aliases": ["spiritual", "church", "temple", "shrine", "mosque", "synagogue", "chapel", "cathedral", "meditation"],
-      "subcategories": ["Spiritual place", "Temple", "Shrine", "Church", "Mosque", "Synagogue", "Meditation center"]
-    },
-    {
-      "id": "hospital",
-      "group": "Health & wellness",
-      "default_subcategory": "Hospital",
-      "symbol": "cross.case.fill",
-      "aliases": ["hospital", "urgent care", "medical center", "health center"],
-      "subcategories": ["Hospital", "Urgent care", "Medical center", "Clinic"]
-    },
-    {
-      "id": "pharmacy",
-      "group": "Health & wellness",
-      "default_subcategory": "Pharmacy",
-      "symbol": "pills.fill",
-      "aliases": ["pharmacy", "drugstore"],
-      "subcategories": ["Pharmacy", "Drugstore"]
-    },
-    {
-      "id": "veterinarian",
-      "group": "Services",
-      "default_subcategory": "Veterinarian",
-      "symbol": "pawprint.fill",
-      "aliases": ["veterinarian", "veterinary clinic", "animal hospital", "animal service", "pet clinic", "pet hospital"],
-      "subcategories": ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic"]
-    },
-    {
-      "id": "hotel",
-      "group": "Lodging",
-      "default_subcategory": "Hotel",
-      "symbol": "bed.double.fill",
-      "aliases": ["hotel", "motel", "resort", "3 star hotel", "4 star hotel", "5 star hotel", "lodging"],
-      "subcategories": ["Hotel", "Motel", "Resort", "Boutique hotel", "3-star hotel", "4-star hotel", "5-star hotel"]
-    },
-    {
-      "id": "shop",
+      "id": "shopping",
       "group": "Shopping",
+      "detail": "Stores, markets, supplies, malls",
       "default_subcategory": "Shop",
       "symbol": "bag.fill",
-      "aliases": ["shop", "store", "art supply store", "mall", "boutique", "market"],
-      "subcategories": ["Shop", "Store", "Art supply store", "Boutique", "Market", "Mall"]
+      "editable": true,
+      "aliases": ["shopping", "shop", "store", "retail", "art supply store", "mall", "boutique", "market", "grocery", "bookstore", "flower", "hardware", "furniture"],
+      "subcategories": ["Shop", "Store", "Boutique", "Market", "Mall", "Grocery store", "Convenience store", "Art supply store", "Bookstore", "Record store", "Clothing store", "Shoe store", "Jewelry store", "Gift shop", "Flower shop", "Home goods store", "Furniture store", "Hardware store", "Electronics store", "Vintage store", "Thrift store", "Pet store"]
     },
     {
-      "id": "transportation",
+      "id": "services",
+      "group": "Services",
+      "detail": "Salons, repairs, pet care, errands",
+      "default_subcategory": "Service business",
+      "symbol": "scissors",
+      "editable": true,
+      "aliases": ["services", "service", "salon", "barber", "nail", "laundry", "dry cleaner", "tailor", "repair", "bank", "atm", "post office", "shipping", "veterinarian", "veterinary", "animal hospital", "animal service", "pet clinic"],
+      "subcategories": ["Service business", "Hair salon", "Barber", "Nail salon", "Beauty salon", "Laundry", "Dry cleaner", "Tailor", "Shoe repair", "Phone repair", "Auto repair", "Car wash", "Bank", "ATM", "Post office", "Shipping center", "Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic", "Pet groomer"]
+    },
+    {
+      "id": "lodging",
+      "group": "Lodging",
+      "detail": "Hotels, resorts, stays",
+      "default_subcategory": "Hotel",
+      "symbol": "bed.double.fill",
+      "editable": true,
+      "aliases": ["lodging", "hotel", "motel", "resort", "inn", "hostel", "bnb", "bed and breakfast", "boutique hotel", "3 star hotel", "4 star hotel", "5 star hotel"],
+      "subcategories": ["Hotel", "Motel", "Resort", "Boutique hotel", "Inn", "Hostel", "Bed and breakfast", "Vacation rental", "Cabin", "Camp stay", "3-star hotel", "4-star hotel", "5-star hotel"]
+    },
+    {
+      "id": "transportation_transit",
       "group": "Transportation & transit",
+      "detail": "Airports, stations, parking, rides",
       "default_subcategory": "Transit stop",
       "symbol": "tram.fill",
-      "aliases": ["transportation", "transit", "transit station", "airport", "train station", "bus station", "ferry", "subway"],
-      "subcategories": ["Transit stop", "Airport", "Train station", "Bus station", "Ferry terminal", "Subway station"]
+      "editable": true,
+      "aliases": ["transportation_transit", "transportation", "transportation and transit", "transit", "transit station", "airport", "train station", "bus station", "ferry", "subway", "station", "parking", "garage", "rental car", "gas station", "ev charging"],
+      "subcategories": ["Transit stop", "Airport", "Train station", "Bus station", "Subway station", "Light rail station", "Ferry terminal", "Taxi stand", "Ride pickup", "Parking lot", "Parking garage", "Rental car", "Gas station", "EV charging station", "Bike share", "Car share", "Rest stop"]
+    },
+    {
+      "id": "education",
+      "group": "Education",
+      "detail": "Schools, campuses, classes, learning",
+      "default_subcategory": "School",
+      "symbol": "graduationcap.fill",
+      "editable": true,
+      "aliases": ["education", "school", "university", "college", "campus", "class", "learning", "tutor", "academy", "library"],
+      "subcategories": ["School", "Elementary school", "High school", "College", "University", "Campus", "Preschool", "Daycare", "Tutoring center", "Language school", "Music school", "Art class", "Cooking class", "Workshop", "Library", "Study spot"]
+    },
+    {
+      "id": "work_venues",
+      "group": "Work & venues",
+      "detail": "Offices, coworking, meetings, events",
+      "default_subcategory": "Coworking space",
+      "symbol": "building.2.fill",
+      "editable": true,
+      "aliases": ["work_venues", "work", "venue", "office", "coworking", "co working", "conference", "meeting", "event space", "studio", "warehouse", "production"],
+      "subcategories": ["Coworking space", "Office", "Meeting room", "Conference center", "Event space", "Studio", "Production studio", "Photo studio", "Warehouse", "Workshop space", "Convention center", "Business center", "Rooftop venue", "Private event room"]
+    },
+    {
+      "id": "home_neighborhood",
+      "group": "Home & neighborhood",
+      "detail": "Homes, buildings, blocks, local anchors",
+      "default_subcategory": "Neighborhood spot",
+      "symbol": "house.fill",
+      "editable": true,
+      "aliases": ["home_neighborhood", "home", "neighborhood", "apartment", "condo", "house", "building", "block", "local spot", "landmark"],
+      "subcategories": ["Neighborhood spot", "Home", "Apartment building", "Condo", "House", "Block", "Courtyard", "Community garden", "Neighborhood landmark", "Local shortcut", "Viewpoint", "Meetup spot", "Building", "Lobby"]
+    },
+    {
+      "id": "public_services",
+      "group": "Public services",
+      "detail": "Civic, safety, government, utilities",
+      "default_subcategory": "Public service",
+      "symbol": "building.columns.fill",
+      "editable": true,
+      "aliases": ["public_services", "public service", "public services", "government", "city hall", "courthouse", "police", "fire station", "embassy", "dmv", "utility"],
+      "subcategories": ["Public service", "Government office", "City hall", "Courthouse", "Police station", "Fire station", "Embassy", "Consulate", "DMV", "Public restroom", "Recycling center", "Utility office", "Community center", "Civic building"]
     },
     {
       "id": "place",
       "group": "Place",
+      "detail": "Internal fallback for weak provider data",
       "default_subcategory": null,
       "symbol": "mappin",
-      "aliases": ["place", "point of interest", "tourist attraction"],
+      "editable": false,
+      "aliases": ["place", "point of interest", "unknown"],
       "subcategories": []
     }
   ]

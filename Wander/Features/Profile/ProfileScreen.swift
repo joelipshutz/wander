@@ -1008,7 +1008,10 @@ private struct SavedPlacesListScreen: View {
                         Button {
                             selectedValue.wrappedValue = selectedValue.wrappedValue == value ? nil : value
                         } label: {
-                            WanderChip(title: value, isSelected: selectedValue.wrappedValue == value)
+                            WanderChip(
+                                title: title == "type" ? WanderPlaceCategory.broadCategory(for: value) : value,
+                                isSelected: selectedValue.wrappedValue == value
+                            )
                         }
                         .buttonStyle(.plain)
                     }

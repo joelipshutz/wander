@@ -364,7 +364,8 @@ private struct TasteProfile {
 
         let affinity = Double(count) / Double(likedSaveCount)
         let score = 6.5 + min(1, affinity) * 3.5
-        let label = normalizedCategory == "place" ? "places like this" : "\(normalizedCategory) places"
+        let displayCategory = WanderPlaceCategory.broadCategory(for: normalizedCategory).lowercased()
+        let label = normalizedCategory == "place" ? "places like this" : "\(displayCategory) places"
         return (score, "Matches \(label) you save.")
     }
 

@@ -2178,7 +2178,10 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var questionBlocks: [AddQuestionBlock] {
-        AddQuestionTemplates.blocks(category: selectedAssignment.primaryCategory, status: selectedStatus)
+        AddQuestionTemplates.blocks(
+            category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
+            status: selectedStatus
+        )
     }
 
     private var selectedCandidate: PlaceCandidate {
@@ -2201,7 +2204,11 @@ struct MapPlaceSaveFlowSheet: View {
             tag: "labels",
             kind: .multiTag,
             valueType: "personal_label",
-            options: PlacePersonalLabelSuggestions.options(category: selectedAssignment.primaryCategory, status: selectedStatus),
+            options: PlacePersonalLabelSuggestions.options(
+                category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
+                status: selectedStatus,
+                locality: context.candidate.locality
+            ),
             defaultValues: [],
             minimumOptionWidth: 104
         )
@@ -2398,6 +2405,9 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var placeTypeSection: some View {
         let display = WanderPlaceCategory.display(for: selectedAssignmentForSave, sourceLabel: selectedCategorySourceLabel)
+        let categoryValue = selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.fallbackPlace
+            ? "choose category"
+            : display.category
 
         return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
@@ -2418,7 +2428,7 @@ struct MapPlaceSaveFlowSheet: View {
                 isChoosingPlaceType = true
             } label: {
                 VStack(spacing: 0) {
-                    PlaceTypeRow(title: "category", value: display.category)
+                    PlaceTypeRow(title: "category", value: categoryValue)
                     Divider().background(WanderTheme.borderHairline.color)
                     PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
                 }
@@ -2679,17 +2689,22 @@ private struct PlaceTypePickerSheet: View {
     @State private var query = ""
     @State private var customSubcategory = ""
 
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var filteredCategories: [String] {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else {
+        let queryText = normalizedQuery.lowercased()
+        guard !queryText.isEmpty else {
             return WanderPlaceCategory.editableCategories
         }
 
         return WanderPlaceCategory.editableCategories.filter { category in
-            let display = WanderPlaceCategory.display(for: category)
-            return category.localizedCaseInsensitiveContains(normalizedQuery)
-                || display.category.localizedCaseInsensitiveContains(normalizedQuery)
-                || (display.subcategory?.localizedCaseInsensitiveContains(normalizedQuery) ?? false)
+            WanderPlaceCategory.broadCategory(for: category).localizedCaseInsensitiveContains(queryText)
+                || WanderPlaceCategory.categoryDetail(for: category).localizedCaseInsensitiveContains(queryText)
+                || WanderPlaceCategory.subcategorySuggestions(for: category).contains { subcategory in
+                    subcategory.localizedCaseInsensitiveContains(queryText)
+                }
         }
     }
 
@@ -2697,8 +2712,24 @@ private struct PlaceTypePickerSheet: View {
         selectedAssignment.primaryCategory
     }
 
+    private var hasEditableSelection: Bool {
+        WanderPlaceCategory.editableCategories.contains(selectedPrimaryCategory)
+    }
+
     private var selectedSuggestions: [String] {
         WanderPlaceCategory.subcategorySuggestions(for: selectedPrimaryCategory)
+    }
+
+    private var filteredSubcategories: [String] {
+        let queryText = normalizedQuery
+        guard !queryText.isEmpty else {
+            return selectedSuggestions
+        }
+
+        let matches = selectedSuggestions.filter { subcategory in
+            subcategory.localizedCaseInsensitiveContains(queryText)
+        }
+        return matches.isEmpty ? selectedSuggestions : matches
     }
 
     private var customSubcategoryValue: String? {
@@ -2709,7 +2740,7 @@ private struct PlaceTypePickerSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    TextField("search categories or subcategories", text: $query)
+                    TextField("search category or subcategory", text: $query)
                         .textFieldStyle(.plain)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
@@ -2718,7 +2749,7 @@ private struct PlaceTypePickerSheet: View {
                         .background(WanderTheme.surfaceRaised.color)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
 
-                    pickerSection(title: query.isEmpty ? "suggested" : "matches", categories: filteredCategories)
+                    pickerSection(categories: filteredCategories)
                     subcategorySection
                 }
                 .padding(WanderTheme.spacing4)
@@ -2740,18 +2771,31 @@ private struct PlaceTypePickerSheet: View {
 
     private var subcategorySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("subcategory")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            HStack {
+                Text("subcategory")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+                if hasEditableSelection {
+                    Text("\(selectedSuggestions.count)")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                }
+            }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                if !selectedSuggestions.isEmpty {
+                if !hasEditableSelection {
+                    Text("Choose one of the primary categories above, then pick the most specific type here.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if !filteredSubcategories.isEmpty {
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 126), spacing: WanderTheme.spacing2)],
                         alignment: .leading,
                         spacing: WanderTheme.spacing2
                     ) {
-                        ForEach(selectedSuggestions, id: \.self) { subcategory in
+                        ForEach(filteredSubcategories, id: \.self) { subcategory in
                             MapSaveChoicePill(
                                 title: subcategory,
                                 isSelected: selectedAssignment.subcategory?.caseInsensitiveCompare(subcategory) == .orderedSame
@@ -2769,41 +2813,43 @@ private struct PlaceTypePickerSheet: View {
                     }
                 }
 
-                HStack(spacing: WanderTheme.spacing2) {
-                    TextField("custom subcategory", text: $customSubcategory)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .tint(WanderTheme.terracotta.color)
-                        .textInputAutocapitalization(.words)
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(minHeight: 44)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                if hasEditableSelection {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        TextField("custom subcategory", text: $customSubcategory)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .tint(WanderTheme.terracotta.color)
+                            .textInputAutocapitalization(.words)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .frame(minHeight: 44)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
-                    Button {
-                        guard let customSubcategoryValue else { return }
-                        selectedAssignment = PlaceCategoryAssignment(
-                            primaryCategory: selectedPrimaryCategory,
-                            subcategory: customSubcategoryValue,
-                            source: PlaceCategorySource.user.rawValue,
-                            confidence: 1,
-                            rawProviderType: selectedAssignment.rawProviderType
-                        )
-                        customSubcategory = ""
-                        onSelect()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .black))
-                            .frame(width: 44, height: 44)
-                            .background(WanderTheme.textInk.color)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .clipShape(Circle())
+                        Button {
+                            guard let customSubcategoryValue else { return }
+                            selectedAssignment = PlaceCategoryAssignment(
+                                primaryCategory: selectedPrimaryCategory,
+                                subcategory: customSubcategoryValue,
+                                source: PlaceCategorySource.user.rawValue,
+                                confidence: 1,
+                                rawProviderType: selectedAssignment.rawProviderType
+                            )
+                            customSubcategory = ""
+                            onSelect()
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 15, weight: .black))
+                                .frame(width: 44, height: 44)
+                                .background(WanderTheme.textInk.color)
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(customSubcategoryValue == nil)
+                        .opacity(customSubcategoryValue == nil ? 0.45 : 1)
+                        .accessibilityLabel("Use custom subcategory")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(customSubcategoryValue == nil)
-                    .opacity(customSubcategoryValue == nil ? 0.45 : 1)
-                    .accessibilityLabel("Use custom subcategory")
                 }
             }
             .padding(WanderTheme.spacing3)
@@ -2812,11 +2858,17 @@ private struct PlaceTypePickerSheet: View {
         }
     }
 
-    private func pickerSection(title: String, categories: [String]) -> some View {
+    private func pickerSection(categories: [String]) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            HStack {
+                Text("category")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+                Text("\(WanderPlaceCategory.editableCategories.count)")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
 
             VStack(spacing: 0) {
                 ForEach(Array(categories.enumerated()), id: \.element) { index, category in
@@ -2850,10 +2902,6 @@ private struct PlaceTypePickerOption: View {
     let isSelected: Bool
     let action: () -> Void
 
-    private var display: PlaceCategoryDisplay {
-        WanderPlaceCategory.display(for: category)
-    }
-
     var body: some View {
         Button(action: action) {
             HStack(spacing: WanderTheme.spacing3) {
@@ -2865,12 +2913,13 @@ private struct PlaceTypePickerOption: View {
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(display.subcategory ?? display.category)
+                    Text(WanderPlaceCategory.broadCategory(for: category))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text(display.category)
+                    Text(WanderPlaceCategory.categoryDetail(for: category))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
                 }
 
                 Spacer()

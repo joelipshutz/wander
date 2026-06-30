@@ -155,6 +155,10 @@ final class LocalPlace {
     var updatedAt: Date
 
     init(localID: String, serverID: String? = nil, canonicalName: String, category: String, primaryCategory: String? = nil, subcategory: String? = nil, categorySource: String = PlaceCategorySource.provider.rawValue, categoryConfidence: Double? = nil, rawProviderType: String? = nil, address: String? = nil, locality: String? = nil, region: String? = nil, country: String? = nil, latitude: Double, longitude: Double, sourceProvider: String = "mapkit", sourceProviderPlaceID: String? = nil, confidence: Double? = nil, websiteURLString: String? = nil, phoneNumber: String? = nil, timeZoneIdentifier: String? = nil, actionLinksJSON: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now) {
+        let categoryInput = WanderPlaceCategory.categoryInferenceInput(
+            category: category,
+            rawProviderType: rawProviderType
+        )
         let assignment = primaryCategory.map {
             WanderPlaceCategory.assignment(
                 primaryCategory: $0,
@@ -164,7 +168,7 @@ final class LocalPlace {
                 rawProviderType: rawProviderType ?? category
             )
         } ?? WanderPlaceCategory.assignment(
-            forRawCategory: rawProviderType ?? category,
+            forRawCategory: categoryInput,
             source: categorySource,
             confidence: categoryConfidence,
             rawProviderType: rawProviderType ?? category

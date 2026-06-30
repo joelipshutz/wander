@@ -7726,3 +7726,47 @@ Known issues:
 - Slack release note still needs posting after Slack tooling is exposed/restored or Ryan explicitly approves a browser/app-session fallback.
 - Camera capture should be verified on a real device.
 - Live category picker has not yet been converted to the approved 14 broad primary category taxonomy; that remains follow-up implementation.
+
+## 2026-06-30 15:30 PDT - Codex - Production Category Taxonomy UI Correction
+
+Agent: Codex
+Branch: `codex/category-production-ui`
+Worktree: `/private/tmp/recme-category-production-ui`
+Starting status: clean `codex/category-production-ui...origin/main` at `d740c6f80` after `git fetch origin`; root checkout is on unrelated `codex/profile-pictures` work and is not used.
+
+Goal: correct build 55's category miss by shipping the approved 14-primary-category taxonomy as production UI and data behavior instead of DEBUG-only mockups.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `shared/place-taxonomy.json`
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- category-related Swift tests
+- `supabase/functions/_shared/place-taxonomy.ts`
+- `supabase/functions/_shared/place-taxonomy.test.ts`
+- Supabase category migration/tests if backend normalization must change
+
+Coordination notes:
+
+- `MapScreen.swift`, `WanderLocalStore.swift`, `project.yml`, the Xcode project, `docs/agent-log.md`, and Supabase migrations are high-conflict files.
+- No overlapping uncommitted edits exist in this new worktree.
+- Product decision: the live app should show only broad primary categories in the primary category picker, then show the full UX taxonomy as subcategories below the selected primary category. Tags and personal labels should be visually and semantically distinct.
+
+Implementation checkpoint, 2026-06-30 16:08 PDT:
+
+- Converted the live taxonomy from mixed primary IDs (`coffee`, `restaurant`, `hike`, `hotel`, etc.) to 14 editable broad primary categories plus a hidden `place` fallback.
+- Updated the live save/edit place sheet so the primary picker shows only broad categories and the subcategory area shows the full subcategory list for the selected primary category, with custom subcategory support.
+- Preserved smart-question behavior by deriving question templates from subcategory (`Coffee shop`, `Thai restaurant`, `Trail`) while storing/filtering by broad primary category.
+- Normalized local and remote category filters so old/provider values such as `coffee`, `restaurant`, `thai restaurant`, and `shop` still match the new broad categories.
+- Updated personal label suggestions to be distinct from place tags, including locality-aware defaults like `LA favorite`.
+- Added Supabase migration `20260630154000_broad_category_taxonomy.sql` to replace category normalization, migrate old primary categories to broad categories, preserve provider/user specifics as subcategories, and update category constraints.
+- Validation:
+  - `git diff --check` passed.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-category-production-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed after resolving packages.
+  - Full iOS simulator tests passed on installed iPhone 17 / iOS 26.5:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-category-production-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Edge taxonomy test passed:
+    `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` -> 2 passed, 0 failed.
+  - Local `supabase test db` could not run because Docker/local Postgres is unavailable (`Cannot connect to the Docker daemon` / local PgClient connection failed).
+  - Hosted rollback verification succeeded against the linked project by applying `20260630081500_category_metadata_framework.sql` and `20260630154000_broad_category_taxonomy.sql` plus `supabase/tests/category_metadata.sql` inside one transaction, then rolling back. Returned pgTAP row: `ok 10 - profile filters match effective user override category`.

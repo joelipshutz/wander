@@ -105,7 +105,7 @@ async function parseWithAI(
         {
           raw_query: "Joe's favorite coffee spots in LA",
           output: {
-            categories: ["coffee"],
+            categories: ["food_drink"],
             area: "LA",
             statuses: ["been"],
             relationship: null,
@@ -116,7 +116,7 @@ async function parseWithAI(
         {
           raw_query: "friends hikes with sunset views",
           output: {
-            categories: ["hike"],
+            categories: ["outdoors_nature"],
             area: null,
             statuses: [],
             relationship: "mutual",
@@ -188,18 +188,20 @@ function discoverSchema(value: unknown): DiscoverFilterSchema {
     : {};
   return {
     allowedCategories: stringArray(input.allowedCategories, [
-      "bar",
-      "coffee",
-      "fitness studio",
-      "gym",
-      "hike",
-      "hospital",
-      "park",
-      "pharmacy",
-      "pilates studio",
-      "restaurant",
-      "spiritual",
-      "veterinarian",
+      "food_drink",
+      "outdoors_nature",
+      "arts_culture_faith",
+      "entertainment",
+      "health_wellness",
+      "sports_fitness",
+      "shopping",
+      "services",
+      "lodging",
+      "transportation_transit",
+      "education",
+      "work_venues",
+      "home_neighborhood",
+      "public_services",
     ]),
     allowedStatuses: stringArray(input.allowedStatuses, ["been", "wanna_go"]),
     allowedRelationships: stringArray(input.allowedRelationships, [
