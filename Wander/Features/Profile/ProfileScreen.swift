@@ -8,6 +8,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var showsSettings = false
+    @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
     @State private var showsProfileCamera = false
     @State private var selectedProfilePhotoItem: PhotosPickerItem?
@@ -16,6 +17,10 @@ struct ProfileScreen: View {
     @State private var listMode: GraphListMode?
     @State private var savedListMode: SavedPlacesListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
+
+    private let profilePhotoMenuWidth: CGFloat = 232
+    private let profilePhotoMenuAnchorOffsetX: CGFloat = 35
+    private let profilePhotoMenuTopGap: CGFloat = 2
 
     var body: some View {
         NavigationStack {
@@ -31,6 +36,11 @@ struct ProfileScreen: View {
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
+            }
+            .overlayPreferenceValue(ProfilePhotoAvatarBoundsPreferenceKey.self) { anchor in
+                GeometryReader { proxy in
+                    profilePhotoMenuOverlay(anchor: anchor, proxy: proxy)
+                }
             }
             .wanderScreen()
             .sheet(isPresented: $showsSettings) {
@@ -85,32 +95,8 @@ struct ProfileScreen: View {
     private var ownerHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top) {
-                Menu {
-                    Section {
-                        if isCameraAvailable {
-                            Button {
-                                presentProfileCamera()
-                            } label: {
-                                Label("Take Photo", systemImage: "camera.fill")
-                            }
-                        }
-
-                        Button {
-                            presentProfilePhotoLibrary()
-                        } label: {
-                            Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        }
-                    }
-
-                    if hasProfilePhoto {
-                        Section {
-                            Button(role: .destructive) {
-                                confirmDeleteProfilePhoto()
-                            } label: {
-                                Label("Delete Photo", systemImage: "trash")
-                            }
-                        }
-                    }
+                Button {
+                    toggleProfilePhotoMenu()
                 } label: {
                     EditableProfileAvatar(
                         initials: store.currentUser.initials,
@@ -118,6 +104,12 @@ struct ProfileScreen: View {
                         size: 56,
                         isSaving: isProfilePhotoSaving
                     )
+                    .anchorPreference(
+                        key: ProfilePhotoAvatarBoundsPreferenceKey.self,
+                        value: .bounds
+                    ) { bounds in
+                        bounds
+                    }
                 }
                 .buttonStyle(.plain)
                 .disabled(isProfilePhotoSaving)
@@ -155,6 +147,56 @@ struct ProfileScreen: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    @ViewBuilder
+    private func profilePhotoMenuOverlay(anchor: Anchor<CGRect>?, proxy: GeometryProxy) -> some View {
+        if showsProfilePhotoMenu, let anchor {
+            let avatarFrame = proxy[anchor]
+
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    hideProfilePhotoMenu()
+                }
+                .accessibilityHidden(true)
+                .zIndex(1)
+
+            ProfilePhotoActionMenu(
+                isCameraAvailable: isCameraAvailable,
+                hasProfilePhoto: hasProfilePhoto,
+                takePhoto: {
+                    hideProfilePhotoMenu()
+                    presentProfileCamera()
+                },
+                chooseFromLibrary: {
+                    hideProfilePhotoMenu()
+                    presentProfilePhotoLibrary()
+                },
+                deletePhoto: {
+                    hideProfilePhotoMenu()
+                    confirmDeleteProfilePhoto()
+                }
+            )
+            .offset(
+                x: profilePhotoMenuLeading(for: avatarFrame, containerWidth: proxy.size.width),
+                y: profilePhotoMenuTop(for: avatarFrame)
+            )
+            .transition(.scale(scale: 0.97, anchor: .topLeading).combined(with: .opacity))
+            .zIndex(2)
+        }
+    }
+
+    private func profilePhotoMenuLeading(for avatarFrame: CGRect, containerWidth: CGFloat) -> CGFloat {
+        let preferredLeading = avatarFrame.midX - profilePhotoMenuAnchorOffsetX
+        let screenPadding = WanderTheme.spacing4
+        let maxLeading = max(screenPadding, containerWidth - profilePhotoMenuWidth - screenPadding)
+        return min(max(preferredLeading, screenPadding), maxLeading)
+    }
+
+    private func profilePhotoMenuTop(for avatarFrame: CGRect) -> CGFloat {
+        avatarFrame.maxY + profilePhotoMenuTopGap
     }
 
     private var statsGrid: some View {
@@ -300,6 +342,20 @@ struct ProfileScreen: View {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
 
+    private func toggleProfilePhotoMenu() {
+        guard !isProfilePhotoSaving else { return }
+        withAnimation(.easeOut(duration: 0.14)) {
+            showsProfilePhotoMenu.toggle()
+        }
+    }
+
+    private func hideProfilePhotoMenu() {
+        guard showsProfilePhotoMenu else { return }
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsProfilePhotoMenu = false
+        }
+    }
+
     private func presentProfileCamera() {
         showsProfileCamera = true
     }
@@ -396,6 +452,127 @@ struct ProfileScreen: View {
             profilePhotoError = nil
         } catch {
             profilePhotoError = "Could not delete this photo. Try again."
+        }
+    }
+}
+
+private struct ProfilePhotoAvatarBoundsPreferenceKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+private struct ProfilePhotoActionMenu: View {
+    let isCameraAvailable: Bool
+    let hasProfilePhoto: Bool
+    let takePhoto: () -> Void
+    let chooseFromLibrary: () -> Void
+    let deletePhoto: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ProfilePhotoMenuCaret()
+                .fill(Color(.systemBackground).opacity(0.94))
+                .background(.regularMaterial, in: ProfilePhotoMenuCaret())
+                .frame(width: 18, height: 9)
+                .padding(.leading, 25)
+
+            VStack(spacing: 0) {
+                if isCameraAvailable {
+                    ProfilePhotoActionMenuButton(
+                        title: "Take Photo",
+                        systemImage: "camera.fill",
+                        action: takePhoto
+                    )
+                    menuDivider
+                }
+
+                ProfilePhotoActionMenuButton(
+                    title: "Choose from Library",
+                    systemImage: "photo.on.rectangle",
+                    action: chooseFromLibrary
+                )
+
+                if hasProfilePhoto {
+                    menuDivider
+                    ProfilePhotoActionMenuButton(
+                        title: "Delete Photo",
+                        systemImage: "trash",
+                        role: .destructive,
+                        isDestructive: true,
+                        action: deletePhoto
+                    )
+                }
+            }
+            .frame(width: 232)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(.systemBackground).opacity(0.94))
+            )
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 10)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var menuDivider: some View {
+        Divider()
+            .padding(.leading, 48)
+    }
+}
+
+private struct ProfilePhotoActionMenuButton: View {
+    let title: String
+    let systemImage: String
+    var role: ButtonRole?
+    var isDestructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: role, action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 22)
+                    .foregroundStyle(iconColor)
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(textColor)
+
+                Spacer(minLength: 0)
+            }
+            .frame(height: 49)
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var iconColor: Color {
+        isDestructive ? Color(.systemRed) : Color(.systemBlue)
+    }
+
+    private var textColor: Color {
+        isDestructive ? Color(.systemRed) : Color.primary
+    }
+}
+
+private struct ProfilePhotoMenuCaret: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.closeSubpath()
         }
     }
 }

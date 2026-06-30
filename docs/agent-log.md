@@ -7486,3 +7486,34 @@ Slack auth follow-up, 2026-06-30 10:18 PDT:
 - Current conclusion: Slack OAuth was refreshed in the ChatGPT UI, but the active Codex tool session is still holding a stale token. A new Codex tool session/restart/new turn may be required before MCP Slack tools pick up the refreshed grant.
 - Left the ChatGPT Slack settings tab open as a browser handoff.
 - Next: on the next turn or after restarting Codex, rerun `slack_list_workspaces`. If it succeeds, post the build 54 tester-facing Slack note from the previous log entry.
+
+## 2026-06-30 14:20 PDT - Codex - Profile Photo Menu Placement Polish
+
+Agent: Codex
+Branch: `main` (direct per Ryan request)
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main...origin/main` after `git fetch origin`
+
+Goal:
+
+- Commit the approved SwiftUI profile-photo menu placement to `main`.
+- Replace the profile avatar `Menu` with an anchored native-style action bubble that sits directly below the profile circle, keeps the photo visible, and includes a small caret touching the avatar bottom.
+
+Expected files:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `docs/agent-log.md`
+
+Outcome checkpoint, 2026-06-30 14:42 PDT:
+
+- Replaced the profile avatar `Menu` with a custom anchored SwiftUI action bubble using an avatar bounds anchor preference.
+- Preserved the existing camera, photo-library, and delete flows; destructive delete still appears only when a profile photo exists.
+- Live simulator verification passed:
+  - `iPhone 17, OS 26.5`: tapped Profile avatar and saved `/private/tmp/profile-photo-menu-iphone17.png`.
+  - `iPhone 17e, OS 26.5`: tapped Profile avatar and saved `/private/tmp/profile-photo-menu-iphone17e.png`.
+- Validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-profile-menu-polish-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-menu-polish-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The first build caught a Swift 6 concurrency issue with mutable `PreferenceKey.defaultValue`; fixed by using an immutable `static let` in the final anchor preference key.
+- Direct commit to `main` is next, per Ryan's explicit request.
