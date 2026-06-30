@@ -7678,3 +7678,51 @@ Plan:
 - Regenerate the Xcode project with XcodeGen.
 - Commit and push the build-number bump to `main`.
 - Run build/test validation, archive, upload, run `scripts/testflight-release.mjs`, and post the tester-facing Slack note to `#testflight-feedback` if the Slack connector is available.
+
+Outcome, 2026-06-30 15:22 PDT:
+
+- Pushed build-number commit `b4d24940a` (`chore: bump testflight build 55`) to `main`; `CURRENT_PROJECT_VERSION` is `55` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build55-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build55-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build55.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=55` verified.
+- Export options: `/private/tmp/WanderExportUpload55.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 55 --archive-path /private/tmp/Wander-0.1-build55.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build55-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (55)` id `80752759-a0e2-49fb-a0a8-6fa89e94f25f` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: this Codex runtime exposes no `slack_send_message`/workspace/channel Slack MCP tools, no `slack` CLI, and no `SLACK_*` env credentials. Slack.app and Chrome are installed locally, but posting through the user's browser/app session was not attempted without explicit approval.
+- Required tester-facing Slack note for `#testflight-feedback` (`C0BAA7DG2AC`):
+
+```text
+**rec.me TestFlight build 55 is live/approved**
+
+Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+
+**What changed**
+- Profile photo actions now open directly below the avatar while keeping the photo visible.
+- Edit/save place now includes category metadata controls: place type, subcategory, Been/Wanna Go state, and personal labels.
+- Category metadata now stores primary category, subcategory, source, confidence, and raw provider type.
+- Provider subcategories like Thai restaurant, 4-star hotel, art supply store, and train station should still filter by the broader category.
+
+**Please test**
+- Tap your avatar on Profile and confirm camera, library, and delete flows still feel right.
+- Save or edit a place and check the Been/Wanna Go toggle, place type, subcategory, and personal labels.
+- Try provider-style place types and confirm Map/Discover/Profile filters still behave.
+- Edit a saved place category/subcategory and confirm it changes your saved place without unexpectedly changing shared/social place data.
+- Browse Map, Discover, Lists, and Profile for missing avatars, broken rows, or odd category text.
+
+**Known/deferred**
+- The approved 14-primary-category taxonomy screens are included as DEBUG SwiftUI mockups; the live picker still uses the earlier canonical category IDs grouped under broader headings.
+- Camera capture still needs real-device QA; simulator may hide camera when unavailable.
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+```
+
+Known issues:
+
+- Slack release note still needs posting after Slack tooling is exposed/restored or Ryan explicitly approves a browser/app-session fallback.
+- Camera capture should be verified on a real device.
+- Live category picker has not yet been converted to the approved 14 broad primary category taxonomy; that remains follow-up implementation.
