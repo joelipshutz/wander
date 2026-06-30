@@ -7367,3 +7367,29 @@ Completion checkpoint, 2026-06-29 19:08 PDT:
   - Full simulator suite passed on available iPhone 17 / iOS 26.5:
     `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec64-tests-iphone17 CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Known gap: simulator screenshots were not captured; this branch is prepared for build/test validation, and visual confirmation of the removed icon should happen during the requested build testing pass.
+
+## 2026-06-30 00:46 PDT - Codex - TestFlight Build 53 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main` at `ba5fbbed6` tracking `origin/main`; root checkout remains on `codex/profile-pictures` and is not used for release edits.
+
+Goal: package the latest `main` into a new TestFlight build so Ryan can test the merged Map search avatar removal.
+
+Included app-code changes since completed TestFlight build 52:
+
+- PR #49 / `cbb88cf20`: align Map search/filter chrome and Place Profile safe-area header controls.
+- PR #50 / `ba5fbbed6`: remove the trailing profile/avatar icon from the Map search bar.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+
+Plan:
+
+- Bump `CURRENT_PROJECT_VERSION` from 52 to 53.
+- Regenerate the Xcode project with XcodeGen.
+- Build/test, archive, upload, run the TestFlight helper, update Linear, and post the required Slack tester note if Slack tooling is available.
