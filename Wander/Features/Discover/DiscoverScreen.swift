@@ -25,7 +25,7 @@ struct DiscoverScreen: View {
     ]
 
     private var profileResults: [ProfileShell] {
-        memberResults
+        memberResults.map(latestProfileShell)
     }
 
     private var friendProfiles: [ProfileShell] {
@@ -556,6 +556,14 @@ struct DiscoverScreen: View {
 
     private func recCount(for profile: ProfileShell) -> Int {
         store.visiblePlaces(for: profile.id).count
+    }
+
+    private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
+        guard let localProfile = store.profiles.first(where: { $0.id == profile.id }) else {
+            return profile
+        }
+
+        return store.shell(for: localProfile)
     }
 
     private func runTicker() async {

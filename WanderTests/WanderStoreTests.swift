@@ -927,6 +927,33 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
 
+    func testDiscoverMembersKeepsRemoteAvatarWhenLocalShellIsStale() async {
+        let store = makeStore()
+        let avatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=remote"
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_ryan",
+                    handle: "ryan",
+                    displayName: "Ryan Updated",
+                    avatarURL: avatarURL,
+                    bio: "remote profile",
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        let profiles = await store.discoverMembers(query: "ry", backend: backend)
+
+        XCTAssertEqual(profiles.map(\.handle), ["ryan"])
+        XCTAssertEqual(profiles.first?.displayName, "Ryan Updated")
+        XCTAssertEqual(profiles.first?.avatarURL, avatarURL)
+        XCTAssertEqual(profiles.first?.relationship, .mutual)
+        XCTAssertEqual(store.profileState(for: "user_ryan")?.shell.avatarURL, avatarURL)
+        XCTAssertEqual(profileRepository.queries, ["ry"])
+    }
+
     func testRemoteVisiblePlacesHydrateProfilesAndAttributesWithoutLocalFollow() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

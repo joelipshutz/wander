@@ -7167,3 +7167,32 @@ Completion checkpoint, 2026-06-30 00:43 PDT:
   - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
 - Known remaining QA:
   - Ryan should tap the profile avatar in Xcode/simulator and confirm the native menu placement/feel is the right tradeoff.
+
+## 2026-06-30 00:44 PDT - Codex - Discover Members Avatar Retention
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: fix Discover > Members so profile photos carry through and stay updated there after a user changes their profile picture.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Discover/DiscoverScreen.swift` and/or `Wander/Services/WanderLocalStore.swift`
+- Focused tests if the data flow fix lands in store behavior.
+
+Coordination note: this is a narrow avatar propagation fix on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-30 00:56 PDT:
+
+- Fixed Discover > Members search result tiles so each `ProfileShell` resolves through the latest local store profile before rendering, allowing avatar changes to show even if `memberResults` held an older shell.
+- Fixed `WanderStore.mergeProfileShells` so duplicate local/remote member search shells keep fresh remote avatar and bio data while preserving the strongest local/remote relationship state.
+- Added regression coverage for a stale local member shell being merged with a remote shell that has the new avatar URL.
+- Verification:
+  - `git diff --check`
+  - Focused: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testDiscoverMembersKeepsRemoteAvatarWhenLocalShellIsStale`
+  - Full: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 186 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should search a member in Discover > Members after changing/uploading a profile photo and confirm the member tile/friend row now shows the photo.

@@ -1659,15 +1659,53 @@ final class WanderStore: ObservableObject {
     }
 
     private func mergeProfileShells(_ shells: [ProfileShell]) -> [ProfileShell] {
-        var seen = Set<String>()
         var merged: [ProfileShell] = []
 
-        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) && !seen.contains(shell.id) {
-            seen.insert(shell.id)
-            merged.append(shell)
+        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) {
+            if let existingIndex = merged.firstIndex(where: { $0.id == shell.id }) {
+                merged[existingIndex] = mergedProfileShell(merged[existingIndex], with: shell)
+            } else {
+                merged.append(shell)
+            }
         }
 
         return merged
+    }
+
+    private func mergedProfileShell(_ existing: ProfileShell, with incoming: ProfileShell) -> ProfileShell {
+        ProfileShell(
+            id: existing.id,
+            handle: incoming.handle,
+            displayName: incoming.displayName,
+            avatarURL: nonEmpty(incoming.avatarURL) ?? existing.avatarURL,
+            bio: nonEmpty(incoming.bio) ?? existing.bio,
+            relationship: strongestRelationship(existing.relationship, incoming.relationship)
+        )
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+
+        return value
+    }
+
+    private func strongestRelationship(_ lhs: ViewerRelationship, _ rhs: ViewerRelationship) -> ViewerRelationship {
+        relationshipRank(lhs) >= relationshipRank(rhs) ? lhs : rhs
+    }
+
+    private func relationshipRank(_ relationship: ViewerRelationship) -> Int {
+        switch relationship {
+        case .owner:
+            return 3
+        case .mutual:
+            return 2
+        case .follower:
+            return 1
+        case .nonFollower:
+            return 0
+        }
     }
 
     private func normalizedHandleQuery(_ query: String) -> String {
