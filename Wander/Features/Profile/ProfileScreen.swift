@@ -8,7 +8,6 @@ struct ProfileScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var showsSettings = false
-    @State private var showsProfilePhotoDialog = false
     @State private var showsProfilePhotoLibrary = false
     @State private var showsProfileCamera = false
     @State private var selectedProfilePhotoItem: PhotosPickerItem?
@@ -86,8 +85,32 @@ struct ProfileScreen: View {
     private var ownerHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top) {
-                Button {
-                    showsProfilePhotoDialog = true
+                Menu {
+                    Section {
+                        if isCameraAvailable {
+                            Button {
+                                presentProfileCamera()
+                            } label: {
+                                Label("Take Photo", systemImage: "camera.fill")
+                            }
+                        }
+
+                        Button {
+                            presentProfilePhotoLibrary()
+                        } label: {
+                            Label("Choose from Library", systemImage: "photo.on.rectangle")
+                        }
+                    }
+
+                    if hasProfilePhoto {
+                        Section {
+                            Button(role: .destructive) {
+                                confirmDeleteProfilePhoto()
+                            } label: {
+                                Label("Delete Photo", systemImage: "trash")
+                            }
+                        }
+                    }
                 } label: {
                     EditableProfileAvatar(
                         initials: store.currentUser.initials,
@@ -100,20 +123,6 @@ struct ProfileScreen: View {
                 .disabled(isProfilePhotoSaving)
                 .accessibilityLabel(hasProfilePhoto ? "Change profile photo" : "Add profile photo")
                 .accessibilityHint("Opens photo options")
-                .popover(
-                    isPresented: $showsProfilePhotoDialog,
-                    attachmentAnchor: .point(.bottom),
-                    arrowEdge: .top
-                ) {
-                    ProfilePhotoActionsPopover(
-                        hasProfilePhoto: hasProfilePhoto,
-                        cameraAvailable: isCameraAvailable,
-                        takePhoto: presentProfileCamera,
-                        chooseLibrary: presentProfilePhotoLibrary,
-                        deletePhoto: confirmDeleteProfilePhoto
-                    )
-                    .presentationCompactAdaptation(.popover)
-                }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(store.currentUser.displayName)
@@ -292,17 +301,14 @@ struct ProfileScreen: View {
     }
 
     private func presentProfileCamera() {
-        showsProfilePhotoDialog = false
         showsProfileCamera = true
     }
 
     private func presentProfilePhotoLibrary() {
-        showsProfilePhotoDialog = false
         showsProfilePhotoLibrary = true
     }
 
     private func confirmDeleteProfilePhoto() {
-        showsProfilePhotoDialog = false
         Task {
             await deleteProfilePhoto()
         }
@@ -391,74 +397,6 @@ struct ProfileScreen: View {
         } catch {
             profilePhotoError = "Could not delete this photo. Try again."
         }
-    }
-}
-
-private struct ProfilePhotoActionsPopover: View {
-    let hasProfilePhoto: Bool
-    let cameraAvailable: Bool
-    let takePhoto: () -> Void
-    let chooseLibrary: () -> Void
-    let deletePhoto: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if cameraAvailable {
-                ProfilePhotoActionRow(
-                    title: "Take Photo",
-                    systemImage: "camera.fill",
-                    action: takePhoto
-                )
-            }
-
-            ProfilePhotoActionRow(
-                title: "Choose from Library",
-                systemImage: "photo.on.rectangle",
-                action: chooseLibrary
-            )
-
-            if hasProfilePhoto {
-                Divider()
-                    .padding(.vertical, WanderTheme.spacing1)
-
-                ProfilePhotoActionRow(
-                    title: "Delete Photo",
-                    systemImage: "trash.fill",
-                    isDestructive: true,
-                    action: deletePhoto
-                )
-            }
-        }
-        .padding(.vertical, WanderTheme.spacing1)
-        .frame(width: 212)
-    }
-}
-
-private struct ProfilePhotoActionRow: View {
-    let title: String
-    let systemImage: String
-    var isDestructive = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(width: 18)
-
-                Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .lineLimit(1)
-
-                Spacer(minLength: WanderTheme.spacing2)
-            }
-            .foregroundStyle(isDestructive ? WanderTheme.stateError.color : WanderTheme.textInk.color)
-            .frame(height: 38)
-            .padding(.horizontal, WanderTheme.spacing3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 

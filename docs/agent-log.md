@@ -7139,3 +7139,31 @@ Completion checkpoint, 2026-06-29 18:58 PDT:
   - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
 - Known remaining QA:
   - Ryan should tap the avatar in Xcode/simulator to confirm the popover placement and size feel right on the target device.
+
+## 2026-06-30 00:39 PDT - Codex - Profile Photo Native Menu Iteration
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: restore the native iOS feel of the profile photo upload menu while preserving the improved avatar-anchored placement, then push the branch for Ryan to test.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+
+Coordination note: this is a narrow Profile UI iteration on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-30 00:43 PDT:
+
+- Replaced the hand-built `ProfilePhotoActionsPopover` with a native SwiftUI `Menu` attached directly to the profile avatar.
+- Preserved the profile photo actions: take photo when camera is available, choose from library, and delete photo when an avatar exists.
+- Kept the avatar label visually unchanged while letting iOS render the menu, separators, icons, and destructive action styling.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should tap the profile avatar in Xcode/simulator and confirm the native menu placement/feel is the right tradeoff.
