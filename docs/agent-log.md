@@ -7471,3 +7471,18 @@ Known issues:
 - Slack release note still needs posting after the Slack connector is re-authenticated or Ryan explicitly approves a browser-session fallback.
 - Camera capture should be verified on a real device.
 - Map search bar intentionally has no trailing profile icon after build 53.
+
+Slack auth follow-up, 2026-06-30 10:18 PDT:
+
+- Investigated why Slack posting was blocked after build 54.
+- Confirmed all Slack MCP calls failed before reaching Slack with the same connector-layer `HTTP 401 token_expired` error:
+  - `slack_send_message`
+  - `slack_search_channels`
+  - `slack_list_workspaces`
+- Local Slack app metadata showed `isEnabled=true` but `isAccessible=false`, consistent with an installed connector whose OAuth/session was stale.
+- Opened `https://chatgpt.com/apps/slack/asdk_app_69a1d78e929881919bba0dbda1f6436d` in Chrome with elevated Launch Services access because sandboxed `open` failed and the short Chrome/Safari app names did not resolve.
+- In ChatGPT's Slack app settings, the app showed as connected since Jun 9, 2026. Clicking `Manage` refreshed the browser UI to `Slack is now connected`.
+- After that UI reconnect, the active Codex MCP connector session still returned `HTTP 401 token_expired` for `slack_list_workspaces`; tool re-discovery did not refresh the already-running connector session.
+- Current conclusion: Slack OAuth was refreshed in the ChatGPT UI, but the active Codex tool session is still holding a stale token. A new Codex tool session/restart/new turn may be required before MCP Slack tools pick up the refreshed grant.
+- Left the ChatGPT Slack settings tab open as a browser handoff.
+- Next: on the next turn or after restarting Codex, rerun `slack_list_workspaces`. If it succeeds, post the build 54 tester-facing Slack note from the previous log entry.
