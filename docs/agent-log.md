@@ -7613,3 +7613,28 @@ Landing checkpoint, 2026-06-30 14:45 PDT:
 - Committed the approved DEBUG-only mockup hook/source as `033bcfcc8` (`docs: add approved category taxonomy mockups`).
 - PR #39 was open against `main` but GitHub reported it as conflicting, so the branch was updated from latest `origin/main`.
 - During merge conflict resolution, `docs/agent-log.md` was based on latest `origin/main` and these category PR entries were re-added so build 54/profile-photo history was preserved.
+
+Pre-merge verification, 2026-06-30 14:55 PDT:
+
+- Pushed updated PR branch to `origin/codex/edit-category-schema`; GitHub then reported PR #39 as mergeable.
+- `git diff --check` passed.
+- Full simulator suite passed on installed iPhone 17 / iOS 26.5:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-category-landing-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- XCTest result bundle: `/private/tmp/DerivedData-category-landing-tests/Logs/Test/Test-Wander-2026.06.30_14-47-58--0700.xcresult`. `xcresulttool get test-results summary` was attempted but hit a local TestReport cache permission error after the test command itself exited 0.
+- Deno taxonomy test passed:
+  `env PATH=... pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` -> 2 passed, 0 failed.
+- Hosted Supabase rollback verification passed using `/private/tmp/category_metadata_tap_capture_landing.sql` against the linked project via the root checkout link metadata:
+  - `1..10`
+  - `ok 1 - hotel provider subtypes normalize to hotel`
+  - `ok 2 - legacy/provider subcategory save succeeds`
+  - `ok 3 - legacy places.category is backfilled to primary category`
+  - `ok 4 - primary_category stores the filterable category`
+  - `ok 5 - subcategory stores the provider subtype`
+  - `ok 6 - user category override save succeeds`
+  - `ok 7 - user override does not rewrite shared place category`
+  - `ok 8 - user source is not stored as the shared place category source`
+  - `ok 9 - user override is stored on user_places`
+  - `ok 10 - profile filters match effective user override category`
+- Pre-landing review found no blocking SQL/data safety, enum completeness, LLM trust-boundary, shell-injection, or race/concurrency issue in the PR diff.
+- Product caveat: the approved 14-primary-category taxonomy screens are committed as DEBUG SwiftUI mockups. The live production picker in this PR still uses the earlier canonical taxonomy IDs such as `coffee`, `restaurant`, `bar`, `hike`, and `hotel`, displayed under broad groups like `Food & drink`; converting the live schema/picker fully to 14 broad primary categories remains follow-up implementation.
+- No TestFlight release was requested, so no build-number bump, archive/upload, TestFlight attachment, or tester-facing Slack release note should happen in this landing.
