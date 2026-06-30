@@ -353,11 +353,22 @@ struct ExtractionJobResult: Equatable {
     let errorMessage: String?
 }
 
+struct ProfileAvatarResult: Equatable {
+    let avatarURL: String
+    let storagePath: String
+}
+
 @MainActor
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
+}
+
+@MainActor
+protocol ProfileAvatarRepository {
+    func uploadAvatar(jpegData: Data, userID: String) async throws -> ProfileAvatarResult
+    func deleteAvatar(userID: String) async throws
 }
 
 @MainActor

@@ -3238,7 +3238,12 @@ private struct SaveReviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                WanderAvatar(initials: owner.initials, size: 34, color: avatarColor)
+                WanderAvatar(
+                    initials: owner.initials,
+                    avatarURL: owner.avatarURL,
+                    size: 34,
+                    color: avatarColor
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(owner.id == currentUserID ? "You" : owner.displayName)
                         .font(.system(size: 15, weight: .black))
@@ -3380,7 +3385,12 @@ private struct Facepile: View {
     var body: some View {
         HStack(spacing: -8) {
             ForEach(Array(profiles.prefix(3).enumerated()), id: \.element.id) { index, profile in
-                WanderAvatar(initials: profile.initials, size: 26, color: color(for: profile))
+                WanderAvatar(
+                    initials: profile.initials,
+                    avatarURL: profile.avatarURL,
+                    size: 26,
+                    color: color(for: profile)
+                )
                     .zIndex(Double(3 - index))
             }
         }

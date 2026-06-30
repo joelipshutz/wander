@@ -132,6 +132,7 @@ struct WanderRootView: View {
                     WanderDebugLog.sync.debug("signed-in backfill trigger remote=\(backend.canUseRemoteData, privacy: .public)")
                 }
                 #endif
+                await store.refreshRemoteCurrentProfile(backend: backend)
                 let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
                 #if DEBUG
                 WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public)")

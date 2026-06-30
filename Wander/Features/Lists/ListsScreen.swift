@@ -1053,7 +1053,12 @@ private struct FriendCollaboratorSearchContent: View {
 
             ForEach(selectedCollaborators) { collaborator in
                 HStack(spacing: WanderTheme.spacing2) {
-                    WanderAvatar(initials: collaborator.initials, size: 32, color: collaborator.color)
+                    WanderAvatar(
+                        initials: collaborator.initials,
+                        avatarURL: avatarURL(for: collaborator),
+                        size: 32,
+                        color: collaborator.color
+                    )
                     Text("@\(collaborator.handle)")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
@@ -1086,7 +1091,12 @@ private struct FriendCollaboratorSearchContent: View {
             }
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
-                WanderAvatar(initials: friend.initials, size: 40, color: friend.color)
+                WanderAvatar(
+                    initials: friend.initials,
+                    avatarURL: friend.avatarURL,
+                    size: 40,
+                    color: friend.color
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(friend.name)
@@ -1113,6 +1123,16 @@ private struct FriendCollaboratorSearchContent: View {
 
     private func isSameCollaborator(_ lhs: ListCollaboratorMock, _ rhs: ListCollaboratorMock) -> Bool {
         lhs.id == rhs.id || lhs.handle == rhs.handle
+    }
+
+    private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
+        if let avatarURL = collaborator.avatarURL {
+            return avatarURL
+        }
+
+        return store.profiles.first { profile in
+            profile.id == collaborator.id || profile.handle == collaborator.handle
+        }?.avatarURL
     }
 }
 
@@ -1730,7 +1750,12 @@ private struct ListEditorSheet: View {
             } else {
                 ForEach(stagedCollaborators) { collaborator in
                     HStack(spacing: WanderTheme.spacing2) {
-                        WanderAvatar(initials: collaborator.initials, size: 32, color: collaborator.color)
+                        WanderAvatar(
+                            initials: collaborator.initials,
+                            avatarURL: avatarURL(for: collaborator),
+                            size: 32,
+                            color: collaborator.color
+                        )
                         Text("@\(collaborator.handle)")
                             .font(.system(size: 13, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
@@ -1757,6 +1782,16 @@ private struct ListEditorSheet: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
+
+    private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
+        if let avatarURL = collaborator.avatarURL {
+            return avatarURL
+        }
+
+        return store.profiles.first { profile in
+            profile.id == collaborator.id || profile.handle == collaborator.handle
+        }?.avatarURL
+    }
 }
 
 private struct ListDestructiveButton: View {
@@ -1780,16 +1815,32 @@ private struct ListDestructiveButton: View {
 }
 
 private struct FacePileView: View {
+    @EnvironmentObject private var store: WanderStore
     let collaborators: [ListCollaboratorMock]
     var size: CGFloat
 
     var body: some View {
         HStack(spacing: -8) {
             ForEach(collaborators.prefix(3)) { collaborator in
-                WanderAvatar(initials: collaborator.initials, size: size, color: collaborator.color)
+                WanderAvatar(
+                    initials: collaborator.initials,
+                    avatarURL: avatarURL(for: collaborator),
+                    size: size,
+                    color: collaborator.color
+                )
             }
         }
         .frame(minWidth: collaborators.isEmpty ? 0 : size + CGFloat(max(0, min(collaborators.count, 3) - 1)) * (size - 8), alignment: .leading)
+    }
+
+    private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
+        if let avatarURL = collaborator.avatarURL {
+            return avatarURL
+        }
+
+        return store.profiles.first { profile in
+            profile.id == collaborator.id || profile.handle == collaborator.handle
+        }?.avatarURL
     }
 }
 
@@ -1937,13 +1988,15 @@ private struct ListCollaboratorMock: Identifiable {
     let name: String
     let initials: String
     let handle: String
+    let avatarURL: String?
     let color: Color
 
-    init(id: String, name: String, initials: String, handle: String? = nil, color: Color) {
+    init(id: String, name: String, initials: String, handle: String? = nil, avatarURL: String? = nil, color: Color) {
         self.id = id
         self.name = name
         self.initials = initials
         self.handle = handle ?? name.lowercased()
+        self.avatarURL = avatarURL
         self.color = color
     }
 
@@ -1953,6 +2006,7 @@ private struct ListCollaboratorMock: Identifiable {
             name: profile.displayName,
             initials: profile.initials,
             handle: profile.handle,
+            avatarURL: profile.avatarURL,
             color: Self.color(for: profile.handle)
         )
     }

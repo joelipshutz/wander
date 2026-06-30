@@ -937,6 +937,7 @@ private struct PlaceProfileFacepile: View {
                 ForEach(displaySaves) { save in
                     WanderAvatar(
                         initials: save.visiblePlace.owner.id == currentUserID ? "Y" : save.visiblePlace.owner.initials,
+                        avatarURL: save.visiblePlace.owner.avatarURL,
                         size: 34,
                         color: color(for: save.visiblePlace.owner)
                     )
@@ -973,7 +974,12 @@ private struct PlaceProfileSaveCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                WanderAvatar(initials: owner.id == currentUserID ? "Y" : owner.initials, size: 34, color: avatarColor)
+                WanderAvatar(
+                    initials: owner.id == currentUserID ? "Y" : owner.initials,
+                    avatarURL: owner.avatarURL,
+                    size: 34,
+                    color: avatarColor
+                )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(owner.id == currentUserID ? "You" : owner.displayName)
                         .font(.system(size: 14, weight: .black))

@@ -25,7 +25,7 @@ struct DiscoverScreen: View {
     ]
 
     private var profileResults: [ProfileShell] {
-        memberResults
+        memberResults.map(latestProfileShell)
     }
 
     private var friendProfiles: [ProfileShell] {
@@ -558,6 +558,14 @@ struct DiscoverScreen: View {
         store.visiblePlaces(for: profile.id).count
     }
 
+    private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
+        guard let localProfile = store.profiles.first(where: { $0.id == profile.id }) else {
+            return profile
+        }
+
+        return store.shell(for: localProfile)
+    }
+
     private func runTicker() async {
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 2_600_000_000)
@@ -812,7 +820,12 @@ private struct LatestActivityRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: WanderTheme.spacing3) {
-                WanderAvatar(initials: visiblePlace.owner.initials, size: 42, color: avatarColor)
+                WanderAvatar(
+                    initials: visiblePlace.owner.initials,
+                    avatarURL: visiblePlace.owner.avatarURL,
+                    size: 42,
+                    color: avatarColor
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
@@ -878,7 +891,12 @@ private struct OwnerDisambiguationSection: View {
                     select(profile)
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
-                        WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 50, color: WanderTheme.pinSocial.color)
+                        WanderAvatar(
+                            initials: String(profile.displayName.prefix(1)),
+                            avatarURL: profile.avatarURL,
+                            size: 50,
+                            color: WanderTheme.pinSocial.color
+                        )
 
                         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                             Text(profile.displayName)
@@ -916,7 +934,12 @@ private struct MemberResultTile: View {
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 46, color: WanderTheme.pinSocial.color)
+                WanderAvatar(
+                    initials: String(profile.displayName.prefix(1)),
+                    avatarURL: profile.avatarURL,
+                    size: 46,
+                    color: WanderTheme.pinSocial.color
+                )
                 Text(profile.displayName)
                     .font(.system(size: 16, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -947,7 +970,12 @@ private struct FriendListRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: WanderTheme.spacing3) {
-                WanderAvatar(initials: String(profile.displayName.prefix(1)), size: 42, color: WanderTheme.pinSocial.color)
+                WanderAvatar(
+                    initials: String(profile.displayName.prefix(1)),
+                    avatarURL: profile.avatarURL,
+                    size: 42,
+                    color: WanderTheme.pinSocial.color
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(profile.displayName)

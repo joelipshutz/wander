@@ -8,7 +8,11 @@ struct SupabaseProfileRepository: ProfileRepository {
     }
 
     func currentProfile() async throws -> LocalProfile? {
-        throw WanderRemoteError.notImplemented("currentProfile")
+        let rows: [RemoteCurrentProfileDTO] = try await rpc.call(
+            "current_profile",
+            params: EmptyParams()
+        )
+        return rows.first?.localProfile()
     }
 
     func profile(id: String) async throws -> ProfileViewState {
@@ -21,6 +25,74 @@ struct SupabaseProfileRepository: ProfileRepository {
             params: SearchProfilesParams(query: handleQuery)
         )
         return rows.map { $0.profileShell() }
+    }
+}
+
+struct SupabaseProfileAvatarRepository: ProfileAvatarRepository {
+    private static let bucket = "profile-avatars"
+    private let rpc: RemoteProcedureCalling
+    private let storage: RemoteStorageCalling
+    private let versionProvider: () -> String
+
+    init(
+        rpc: RemoteProcedureCalling,
+        storage: RemoteStorageCalling,
+        versionProvider: @escaping () -> String = { UUID().uuidString }
+    ) {
+        self.rpc = rpc
+        self.storage = storage
+        self.versionProvider = versionProvider
+    }
+
+    func uploadAvatar(jpegData: Data, userID: String) async throws -> ProfileAvatarResult {
+        let path = try avatarPath(userID: userID)
+        try await storage.uploadObject(
+            bucket: Self.bucket,
+            path: path,
+            data: jpegData,
+            contentType: "image/jpeg",
+            upsert: true
+        )
+
+        let avatarURL = try storage.publicObjectURL(
+            bucket: Self.bucket,
+            path: path,
+            cacheBust: versionProvider()
+        ).absoluteString
+        let response: UpdateProfileAvatarResponse = try await rpc.call(
+            "update_profile_avatar",
+            params: UpdateProfileAvatarParams(avatarURL: avatarURL, storagePath: path)
+        )
+
+        guard let storedAvatarURL = response.avatarURL, !storedAvatarURL.isEmpty,
+              let storedPath = response.avatarStoragePath, !storedPath.isEmpty
+        else {
+            throw WanderRemoteError.invalidResponse("Profile avatar update returned no avatar URL")
+        }
+
+        return ProfileAvatarResult(avatarURL: storedAvatarURL, storagePath: storedPath)
+    }
+
+    func deleteAvatar(userID: String) async throws {
+        let path = try avatarPath(userID: userID)
+        try await storage.deleteObject(bucket: Self.bucket, path: path)
+
+        let _: UpdateProfileAvatarResponse = try await rpc.call(
+            "update_profile_avatar",
+            params: UpdateProfileAvatarParams(avatarURL: nil, storagePath: nil)
+        )
+    }
+
+    private func avatarPath(userID: String) throws -> String {
+        let trimmedUserID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUserID.isEmpty,
+              !trimmedUserID.contains("/"),
+              !trimmedUserID.contains("..")
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid profile avatar owner id")
+        }
+
+        return "\(trimmedUserID)/avatar.jpg"
     }
 }
 
@@ -246,6 +318,28 @@ struct RemoteDiscoverFilterParser: LLMFilterParser {
 
 private struct SearchProfilesParams: Encodable {
     let query: String
+}
+
+private struct EmptyParams: Encodable {}
+
+private struct UpdateProfileAvatarParams: Encodable {
+    let avatarURL: String?
+    let storagePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case avatarURL = "avatar_url"
+        case storagePath = "storage_path"
+    }
+}
+
+private struct UpdateProfileAvatarResponse: Decodable {
+    let avatarURL: String?
+    let avatarStoragePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case avatarURL = "avatar_url"
+        case avatarStoragePath = "avatar_storage_path"
+    }
 }
 
 private struct ParseDiscoverQueryParams: Encodable {
