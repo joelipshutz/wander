@@ -7364,6 +7364,25 @@ Checkpoint:
 - Merged latest `origin/main` into the isolated review branch so captures include the current page-view behavior through PR #49.
 - Resolved `MapScreen.swift` by preserving latest `selectSavedResult` page navigation/private-profile visibility handling while keeping the category branch's edited `submission.candidate` payload and place-type picker sheet.
 - Resolved `docs/agent-log.md` by preserving both the PR #39 category entry and later mainline release history.
+
+Completion checkpoint, 2026-06-29 19:14 PDT:
+
+- Merge commit created locally: `4b0b5c461` (`origin/main` into `codex/edit-category-schema-review`). Branch was not pushed.
+- Ran practical `/plan-eng-review`, `/plan-design-review`, and `/ios-design-review` lenses against the merged category schema UI. This was a screenshot/simulator-based iOS design review; no real-device `gstack-ios-qa-daemon` session was available or used.
+- Temporary SwiftUI screenshot harness was added, used, and removed before handoff. Final worktree after cleanup only contains this agent-log completion note.
+- Focused screenshot test passed:
+  `RECME_CATEGORY_SCREENSHOT_DIR=/private/tmp/recme-edit-category-latest-screenshots xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-edit-category-latest-screenshots CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/EditPlaceCategoryLatestScreenshotTests/testCaptureLatestPageViewScreenshots`
+- Captured screenshots for review:
+  - `/private/tmp/recme-edit-category-latest-screenshots/profile-saved-been.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/profile-saved-wanna.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/profile-unsaved.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/edit-saved-been.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/edit-saved-wanna.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/save-unsaved-confirm.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/save-unsaved-details.png`
+  - `/private/tmp/recme-edit-category-latest-screenshots/choose-place-type.png`
+- Review outcome: no blocking engineering/design issue found in the category schema UI after aligning with latest place-page chrome. Main follow-up for implementation is to keep regression coverage around `MapPlaceSaveSubmission.candidate`, edited category persistence, personal labels, private-profile forced stealth visibility, and the category picker taxonomy.
+
 ## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
 
 Agent: Codex
