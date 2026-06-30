@@ -7383,6 +7383,28 @@ Completion checkpoint, 2026-06-29 19:14 PDT:
   - `/private/tmp/recme-edit-category-latest-screenshots/choose-place-type.png`
 - Review outcome: no blocking engineering/design issue found in the category schema UI after aligning with latest place-page chrome. Main follow-up for implementation is to keep regression coverage around `MapPlaceSaveSubmission.candidate`, edited category persistence, personal labels, private-profile forced stealth visibility, and the category picker taxonomy.
 
+## 2026-06-30 00:51 PDT - Codex - Category Schema Plan Engineering Gap Review
+
+Agent: Codex
+Branch: `codex/edit-category-schema-review`
+Worktree: `/private/tmp/recme-edit-category-schema`
+Starting status: branch clean and ahead of `origin/codex/edit-category-schema` by 29; fetched `origin` before final review. Root checkout `/Users/ryanlieblein/Developer/wander` remains on unrelated dirty `codex/profile-pictures` work and was not edited.
+
+Goal: run a focused `/plan-eng-review` lens on the edit-place category schema plan/current branch and identify implementation gaps before this becomes the durable category metadata contract.
+
+Review checkpoint:
+
+- Inspected app taxonomy, edit/save flow, local store filtering, profile filters, Discover parser schema, Supabase save RPC contract, and extraction-worker AI category classifier.
+- Confirmed `git diff --check origin/main...HEAD` passes.
+- Main gaps found:
+  - Category/subcategory/source/confidence are not yet persisted as first-class app or Supabase fields; the app still derives broad category/subcategory from one `category` string.
+  - Local, remote, Discover, and Profile filters still compare exact raw `place.category`, so provider subcategories like `thai restaurant` can miss `restaurant` filters.
+  - Swift editable taxonomy and extraction-worker AI enum can drift; the worker currently classifies only `spiritual`, `coffee`, `park`, `hike`, `restaurant`, `bar`, and `place`.
+  - Supabase `save_own_place` overwrites shared `places.category` on provider-id conflict, so a user's category correction could rewrite the canonical place for everyone unless user override/source semantics are added.
+  - No regression coverage yet for filter normalization, AI taxonomy parity, server persistence of subcategory metadata, or conflict/override behavior.
+
+No code changes were made in this checkpoint beyond this log entry.
+
 ## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
 
 Agent: Codex
