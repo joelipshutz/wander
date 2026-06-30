@@ -18,6 +18,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Wander uses the camera only when you choose to take a photo in the app.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Wander uses your location once to suggest nearby places. It never broadcasts live location.</string>
 	<key>UILaunchScreen</key>

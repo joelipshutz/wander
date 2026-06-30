@@ -5502,47 +5502,6 @@ Merge outcome:
 - No build-number bump, archive, upload, TestFlight helper, or Slack TestFlight release note was run because Ryan explicitly said not to push to TestFlight.
 - Remaining operational step: store the OpenAI project key as hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw`, then deploy `supabase/functions/extraction-worker`.
 
-## 2026-06-25 11:21 PDT - Codex - Edit Place Category Schema UX
-
-Agent: Codex
-Branch/worktree: `codex/edit-category-schema` at `/private/tmp/recme-edit-category-schema`, created from latest `origin/main`.
-Starting status: root checkout `/Users/ryanlieblein/Developer/wander` was clean on `main` before branch work; fetched `origin`, inspected worktrees/status and recent `docs/agent-log.md`. Existing worktrees are unrelated, and this work is isolated because it touches the high-conflict map save/edit sheet.
-
-Goal: implement a PR for the edit-place category schema UX: keep canonical category/subcategory separate from personal labels and smart-question answers, skip the confirm/save-as step for edits, keep a been/wanna selector on the edit details page, and provide inline mockups for review without compiling Xcode.
-
-Expected files:
-
-- `Wander/Features/Map/MapScreen.swift`
-- `Wander/Features/Add/AddQuestionTemplates.swift`
-- supporting model/helper files under `Wander/Models` or `Wander/Services`
-- focused tests under `WanderTests`
-- docs/mockup handoff file
-- `docs/agent-log.md`
-
-Validation plan:
-
-- `git diff --check`
-- focused unit tests for category taxonomy/question behavior if feasible
-- iOS build/test only if Swift changes require broader compiler validation and the environment allows it
-
-Checkpoint:
-
-- Implemented category display metadata with canonical category/subcategory separation, including `Transportation & transit`, provider subtype normalization for smart questions, and a personal-label attribute key.
-- Updated the Map save/edit sheet so edit flows open directly on details, expose a been/wanna selector, allow category/subcategory correction, and persist `personal_labels` separately from smart-question answers.
-- Threaded edited candidates through Map/Profile/Discover save callbacks so category corrections can update local place metadata instead of only UI state.
-- Added review-only mockups in `docs/mockups/edit-place-category-schema.md`.
-- `git diff --check` passed.
-- The repo-standard iPhone 16 Plus iOS 18.6 simulator was unavailable on this machine; reran on installed iPhone 17 Pro simulator `DD656EC3-75E6-4377-A808-FB805E27A17C`.
-- Final focused elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testUpdatingCandidateCanPersistCategoryCorrectionAndPersonalLabels` (`8` tests, `0` failures).
-- Final full elevated XCTest passed after the provider-subcategory display patch: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=DD656EC3-75E6-4377-A808-FB805E27A17C' -derivedDataPath /private/tmp/DerivedData-edit-category-schema-full CODE_SIGNING_ALLOWED=NO -jobs 1` (`155` tests, `0` failures).
-
-Outcome:
-
-- Implementation commit: `c3ea8dae486e0682dcea733505c00ef6b0aa280d` (`feat: add edit place category metadata controls`).
-- PR: https://github.com/joelipshutz/wander/pull/39
-- Known issue: no simulator screenshots were captured because the request explicitly asked for inline mockups rather than compiling in Xcode; the ASCII mockups are included in both the PR body and `docs/mockups/edit-place-category-schema.md`.
-- Next step: Ryan/Joe review the edit-place taxonomy and mockups, especially whether the initial editable subcategory list is the right MVP breadth before a backend/schema implementation pass.
-
 ## 2026-06-26 14:37 PDT - Codex - Instagram and Apple Maps link fixes
 
 Agent: Codex
@@ -6913,377 +6872,330 @@ Completion checkpoint, 2026-06-28 10:38 PDT:
   `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-edge-swipe CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Visual sanity screenshot: `/private/tmp/recme-edge-swipe-place-profile.png`.
 
-Release outcome, 2026-06-28 11:04 PDT:
-
-- PR #44 was squash-merged into `main` as `9b668de` (`fix: add place profile edge swipe back (#44)`).
-- Bumped `CURRENT_PROJECT_VERSION` from build 50 to build 51 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `74bb5b1` (`chore: bump testflight build 51`).
-- Release Mission Control task: `b039ca6e-dc2c-4244-b68c-278ed6c0a7bf`.
-- Simulator build passed:
-  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build51-build CODE_SIGNING_ALLOWED=NO -jobs 1`
-- Full simulator suite passed on the documented target with 175 tests:
-  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-build51-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
-- Archive path: `/private/tmp/Wander-0.1-build51.xcarchive`; archived `CFBundleVersion` verified as `51`.
-- Export options: `/private/tmp/WanderExportUpload51.plist`, with `manageAppVersionAndBuildNumber=false`.
-- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
-- Ran `node scripts/testflight-release.mjs --build-number 51 --archive-path /private/tmp/Wander-0.1-build51.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build51-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
-- Helper confirmed build `0.1 (51)` id `b5f1ae25-4ed3-4caa-94d7-f4768305b85c` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
-- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
-- Slack: posted tester-facing build 51 release note to `#testflight-feedback` (`C0BAA7DG2AC`).
-- Slack permalink: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782669825924449`.
-- Known deferred area: save/edit forms still intentionally open as sheets; list creation/editing remains local/mock-functional from REC-40, with backend list persistence and invite links remaining follow-up scope.
-
-## 2026-06-28 11:28 PDT - Codex - Deploy Discover OpenAI Parser
+## 2026-06-28 11:05 PDT - Codex - Profile Pictures Planning
 
 Agent: Codex
-Branch: `main`
-Worktree: `/private/tmp/recme-place-profile-release`
-Starting status: clean `main` at `origin/main` after `git fetch origin`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
-Mission Control task: `65a58cda-8527-46f5-a616-4ef4dba0e468`
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch from current `origin/main`.
 
-Goal: deploy the existing `supabase/functions/parse-discover-query` Edge Function, set/verify server-side OpenAI secret availability, smoke test Discover natural-language parsing against hosted Supabase, and record any extraction-worker classifier setup status.
+Goal: plan and implement first profile-picture upload/edit flow. Tapping the profile avatar on the Profile page should present native iOS photo options such as take photo, choose from library, and delete existing photo where applicable.
+
+Requested review gates before implementation:
+
+- Run `plan-design-review` for the user-facing avatar edit interaction.
+- Run `plan-eng-review` because this is the first photo upload/media-selection surface.
 
 Expected files:
 
 - `docs/agent-log.md`
+- A feature plan under `docs/plans/`
+- `Wander/Features/Profile/` profile UI files
+- `Wander/Models/` or `Wander/Services/` only if the plan confirms local avatar state needs model/store support
+- `WanderTests/` focused tests for avatar state/picker behavior where feasible
 
-Outcome, 2026-06-28 11:35 PDT:
+Coordination note: existing worktrees are active/prunable, but none appear to target Profile avatar editing. Avoid unrelated app shell, map, project, and Supabase changes unless the review explicitly identifies a dependency.
 
-- Set hosted Supabase Edge Function secret `OPENAI_API_KEY` on project `rugmtlgufrhlxwfkumhw` from the local operational env file; no key value was written to git or logs.
-- Added the missing `parse-discover-query` function block to `supabase/config.toml` with `verify_jwt = false`, matching the existing app-invoked Edge Function pattern where the function code requires an Authorization header and the iOS client sends authenticated headers.
-- Documented the Discover parser deploy path in `docs/setup.md`.
-- Deployed `parse-discover-query` with:
-  `npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
-- Deployed current `extraction-worker` with:
-  `npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
-- Hosted smoke test for `parse-discover-query` passed:
-  - no Authorization header returned `401 {"error":"missing_authorization"}`
-  - authorized smoke query `Joe favorite coffee spots in LA` returned `categories=["coffee"]`, `area="LA"`, `statuses=["been"]`, `ownerQuery="Joe"`
-- Hosted smoke test for `extraction-worker` reached the deployed function and returned `401 {"error":"missing_authorization"}` without Authorization.
-- `git diff --check` passed.
-- No iOS build/TestFlight bump needed because the shipped app already calls `parse-discover-query` when Supabase is configured and falls back locally on failure. Existing running app sessions may keep per-query in-memory deterministic parse cache until restart or a new query string is used.
+Checkpoint, 2026-06-28 11:21 PDT:
 
-## 2026-06-28 11:52 PDT - Codex - Scope Modular AI Provider Layer
+- Created planning branch `codex/profile-pictures` from latest `origin/main`.
+- Added initial plan at `docs/plans/2026-06-28-profile-pictures-plan.md`.
+- Read requested `plan-design-review` and `plan-eng-review` skill files from disk.
+- Inspected current Profile, Add-photo, avatar, auth session, local model, persistence, remote profile DTO/repository, `project.yml`, `DESIGN.md`, and `TODOS.md`.
+- Design setup result: `DESIGN_NOT_AVAILABLE`; review will proceed text-only unless designer tooling is installed later.
+- Initial design review rating: 8/10. Plan already covers avatar tap, native dialog actions, state table, and accessibility; remaining design risks are exact edit-badge treatment, delete placement, and how honestly the local-only avatar state is communicated.
+- Blocker: native `request_user_input` is unavailable in Default mode, so the `plan-design-review` Step 0 focus gate is waiting for Ryan's reply in chat.
+- Restart: answer the D1 design-focus question in chat, then continue with all seven design passes, update the plan, run `plan-eng-review`, implement, test, and finish this log.
+
+Checkpoint, 2026-06-28 11:37 PDT:
+
+- Ryan chose design focus A: run the full design review because this picker pattern will be reused for place photos later.
+- Completed text-only `plan-design-review` and `plan-eng-review`; both cleared after folding decisions into `docs/plans/2026-06-28-profile-pictures-plan.md`.
+- gstack task JSONL artifacts were written under `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/`.
+- `gstack-review-log` / `gstack-decision-log` could not run because `bun` is not installed in this shell; the plan file contains the durable `GSTACK REVIEW REPORT`.
+- Implemented owner profile avatar editing on the Profile page:
+  - Avatar tap opens a native confirmation dialog with library, camera when available, delete when a photo exists, and cancel.
+  - Library uses `PhotosPicker`; camera uses `UIImagePickerController` with editing enabled.
+  - Selected images are processed into bounded square JPEGs and written to Application Support via `ProfileAvatarStorage`.
+  - `WanderAvatar` now renders local `file://` and remote `http(s)` avatar URLs with initials fallback.
+  - Store avatar updates are local profile state only and intentionally do not affect `pendingSyncCount`.
+  - Camera privacy copy added through `project.yml`; ran `xcodegen generate`.
+- Tests:
+  - Documented iPhone 16 Plus / iOS 18.6 simulator is not installed in this Xcode environment, so tests ran on available `iPhone 17, iOS 26.5`.
+  - Focused tests passed:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCurrentUserAvatarURLUpdatesProfileShellWithoutPendingSync -only-testing:WanderTests/WanderStoreTests/testSignedInSessionPreservesExistingLocalAvatarURL -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresCurrentUserAvatarURLAfterRelaunch -only-testing:WanderTests/ProfileAvatarStorageTests`
+  - Full suite passed: 181 tests, 0 failures:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual sanity:
+  - Installed and launched the built app with `-WanderInitialTab profile -WanderUseDemoFixtures`.
+  - Screenshots reviewed: `/private/tmp/recme-profile-avatar-17pro.png` and `/private/tmp/recme-profile-avatar-17e.png`.
+  - Avatar edit badge, profile copy, settings button, stats, and bottom tab layout looked clean on both sizes.
+- Known gap: physical camera capture was not exercised because simulator camera availability is gated off; the action is hidden on simulator and should appear on device.
+
+Completion checkpoint, 2026-06-28 11:39 PDT:
+
+- Implementation commit: `9e3818a90` (`Add profile picture picker`).
+- PR opened: https://github.com/joelipshutz/wander/pull/45.
+- Final branch: `codex/profile-pictures`.
+- Known issues / follow-ups:
+  - Real-device camera capture still needs QA.
+  - Supabase Storage upload/cross-device avatar sync remains intentionally out of scope for this local-first slice.
+  - `gstack-review-log` / `gstack-decision-log` still need `bun` available if Ryan wants dashboard ingestion beyond the plan file's terminal review report.
+
+## 2026-06-28 11:53 PDT - Codex - Profile Avatar Propagation
 
 Agent: Codex
-Branch: `main`
-Worktree: `/private/tmp/recme-place-profile-release`
-Starting status: clean `main` at `origin/main`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used.
-Mission Control task: `ecb7852e-bb71-46cf-8bdd-1c29272594ee`
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` updated `origin/main` from `74bb5b157` to `cf5f3ef58`.
 
-Goal: scope whether the Discover natural-language parser and extraction-worker category classifier can be modularized so Rec.me can swap OpenAI for Anthropic or an OpenAI-compatible/open-source endpoint without changing app contracts.
-
-Planning outcome:
-
-- App-side contract is already mostly insulated: iOS calls Supabase Edge Functions and falls back to the deterministic parser when the remote parser fails.
-- Server-side provider logic is not yet modular: `parse-discover-query` and `extraction-worker` each own OpenAI-specific transport, key lookup, timeout, model selection, response parsing, and provider step names.
-- Recommended scope is a server-side shared structured-JSON provider layer under `supabase/functions/_shared/ai/`, with OpenAI as the first production adapter and Anthropic/OpenAI-compatible adapters behind the same interface.
-- Preserve current function APIs, current deterministic fallbacks, and current hosted behavior. No TestFlight bump is required unless the follow-up also adds app-side debouncing/request throttling.
-
-## 2026-06-28 12:02 PDT - Codex - Implement Modular AI Provider Layer
-
-Agent: Codex
-Branch: `codex/modular-ai-provider`
-Worktree: `/private/tmp/recme-place-profile-release`
-Starting status: branch created from current `main`; existing uncommitted planning log entry is Codex-owned and carried onto this branch. Mission Control local API is not reachable, so this log is the coordination source for this task.
-
-Goal: implement the scoped provider-neutral structured JSON layer for Supabase Edge Functions so Discover parsing and extraction category classification can switch away from OpenAI without changing iOS contracts.
+Goal: make the selected profile photo render everywhere that same profile avatar appears in the app, including place cards, Discover, Lists, Map, settings, and profile surfaces. If the current user changes the local profile photo, all local surfaces that derive from `currentUser` / `LocalProfile` / `ProfileShell` / `VisiblePlace.owner` should update.
 
 Expected files:
 
 - `docs/agent-log.md`
-- `docs/setup.md`
-- `supabase/functions/_shared/ai/*`
-- `supabase/functions/parse-discover-query/index.ts`
-- `supabase/functions/extraction-worker/index.ts`
-- Focused Deno tests for provider adapter behavior and current fallback semantics.
-
-Completion checkpoint, 2026-06-28 12:19 PDT:
-
-- Added `supabase/functions/_shared/ai/` with a provider-neutral `structuredJSON` entrypoint and OpenAI, Anthropic, and OpenAI-compatible adapters.
-- Refactored `parse-discover-query` to call the shared provider layer while preserving the existing authenticated function API, `model_unavailable` response for missing provider config, OpenAI default model, and deterministic iOS fallback behavior.
-- Refactored `extraction-worker` category enrichment to call the shared provider layer, record neutral `ai_*` provider steps, preserve deterministic fallback on provider failure, and use provider-neutral `category_source: "ai"` for newly applied model classifications.
-- Documented the new provider/env knobs in `docs/setup.md`, while keeping existing OpenAI secret/model/timeout env names as backwards-compatible fallbacks.
-- Validation passed:
-  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
-  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
-  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
-  `git diff --check`
-- No iOS build, archive, TestFlight upload, or hosted Supabase function deploy was run for this implementation pass.
-
-Handoff:
-
-- Commit: `535515b` (`feat: add modular ai provider layer`)
-- PR: `https://github.com/joelipshutz/wander/pull/48`
-- Restart instructions: review/merge PR #48, then deploy both `parse-discover-query` and `extraction-worker` Supabase functions when ready. Existing OpenAI secrets continue to work by default; set `WANDER_AI_PROVIDER`, provider key/model envs, and optional `WANDER_AI_BASE_URL` only when switching providers.
-
-Merge/deploy outcome, 2026-06-28 12:28 PDT:
-
-- PR #48 was squash-merged into `main` as `eb6746d` (`Add modular AI provider layer (#48)`).
-- Re-ran pre-merge validation on the PR head:
-  `npx --yes deno test supabase/functions/_shared/ai/structured-json.test.ts`
-  `npx --yes deno check --config supabase/functions/parse-discover-query/deno.json supabase/functions/parse-discover-query/index.ts`
-  `npx --yes deno check --config supabase/functions/extraction-worker/deno.json supabase/functions/extraction-worker/index.ts`
-  `git diff --check origin/main...HEAD`
-- Deployed merged `parse-discover-query` and `extraction-worker` to Supabase project `rugmtlgufrhlxwfkumhw` with `npx supabase functions deploy ... --use-api`.
-- Hosted smoke checks after deploy:
-  - `parse-discover-query` without Authorization returned `401 {"error":"missing_authorization"}`.
-  - `extraction-worker` with a dummy `job_id` and no Authorization returned `401 {"error":"missing_authorization"}`.
-  - Authorized Discover smoke initially exposed an existing sanitizer bug where `wanna_go` could become `wannago`; fixed the parser sanitizer to preserve underscores, re-ran `deno check`, redeployed `parse-discover-query`, and confirmed `places I want to try in LA` returns `statuses=["wanna_go"]`.
-- No TestFlight build was created because this was a backend Edge Function deploy only; build 51 remains the current TestFlight binary.
-## 2026-06-27 14:55 PDT - Codex - REC-42/REC-43 Settings Copy And Toggle Layout
-
-Agent: Codex
-Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin`; branch created from `origin/main` at `948d7bcbb`.
-
-Goal: implement REC-42 and REC-43 by clarifying the private profile and stealth mode settings copy, and fixing the clipped stealth-mode toggle in the Settings page.
-
-Coordination:
-
-- Root checkout `/Users/ryanlieblein/Developer/wander` is clean but currently on `codex/rec-40-lists-mockups`, so this work is isolated in a new worktree.
-- `git worktree list` also shows `/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search` pointing at the REC-40 branch; no overlapping files are expected there.
-
-Expected files:
-
-- `Wander/Features/Settings/SettingsScreen.swift`
-- Focused settings/navigation tests if existing coverage needs updating
-- `docs/agent-log.md`
-
-Checkpoint, 2026-06-27 15:16 PDT:
-
-- Rebased the branch onto latest `origin/main` at `80912a283` after REC-40 landed.
-- Implemented settings privacy copy updates:
-  - Renamed the settings section from `default stealth mode` to `privacy`.
-  - Changed the default-place privacy toggle label to `stealth mode for new saves`.
-  - Added state-specific helper copy so the setting explains what on/off means for newly saved places.
-  - Added a `Private profile` explanatory row that clarifies username search/suggestions and that per-place privacy still controls saved-place visibility.
-- Fixed the clipped settings toggle by updating `PlaceVisibilityStealthToggle` so embedded/no-container use no longer applies a zero-radius clipping mask, while retaining the existing contained style for Add/Map save flows.
-- Expanded expected touched files to include `Wander/DesignSystem/WanderTheme.swift` and `WanderTests/AuthSessionTests.swift`.
-- Verification:
-  - `git diff --check` passed.
-  - Initial documented simulator destination `iPhone 16 Plus, OS=18.6` is not installed here; available validation used `iPhone 17 Pro, OS=26.5`.
-  - Focused `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch` passed after fixing a local SwiftUI property-name collision.
-  - Rebased full suite passed: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec42-43-rebased-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
-  - Full-suite warnings were existing signed-binary stripping warnings plus the existing traditional headermap warning.
-- Final rebased Settings screenshots reviewed:
-  - `/private/tmp/rec42-43-settings-rebased-iphone17pro.png`
-  - `/private/tmp/rec42-43-settings-rebased-iphone17e.png`
-- Visual result: no clipped switch on either phone size; privacy copy wraps within the card and remains readable above the fold on the smaller phone.
-
-Blocked handoff, 2026-06-27 15:18 PDT:
-
-- Local implementation commit created: `208200cc9` (`Clarify settings privacy copy`).
-- Attempted `git push -u origin codex/rec-42-43-settings-copy`, but the Codex approval reviewer rejected the push because external transfer to the GitHub remote needs explicit user approval.
-- Branch has not been pushed and no PR has been opened yet.
-- Restart after approval: from `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`, run `git push -u origin codex/rec-42-43-settings-copy`, then open a PR against `main` with the validation notes above.
-
-## 2026-06-27 22:00 PDT - Codex - Private Profile Mode Behavior
-
-Agent: Codex
-Branch: `codex/rec-42-43-settings-copy` tracking `origin/main`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin` and rebase onto `origin/main` at `34dcd6f79`; branch has two local commits ahead of `origin/main` from the prior settings pass.
-
-Goal: implement Ryan's private profile behavior: show Private Profile above default stealth mode, lock stealth on when private profile is enabled, lock save/edit privacy to stealth when private, keep private profiles out of search and list collaboration, and show transition warnings for changing private profile state.
-
-Assumption:
-
-- Ryan's warning directions appear reversed relative to the behavior description. Implementation will follow the product model that Private Profile on means everything private/hidden, and Private Profile off means searchable/collaboration-capable with default stealth configurable.
-
-Expected files:
-
-- `Wander/Models/LocalModels.swift`
-- `Wander/Services/WanderLocalStore.swift`
-- `Wander/Services/WanderStorePersistence.swift`
-- `Wander/Features/Settings/SettingsScreen.swift`
-- `Wander/DesignSystem/WanderTheme.swift`
-- `Wander/Features/Add/AddScreen.swift`
-- `Wander/Features/Map/MapScreen.swift`
 - `Wander/Features/Discover/DiscoverScreen.swift`
 - `Wander/Features/Lists/ListsScreen.swift`
-- Focused model/store/UI-copy tests
-- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused tests if any propagation path needs model support beyond passing existing `avatarURL` values.
 
-Checkpoint, 2026-06-28 00:29 PDT:
+Constraint: cross-device visibility in another person's installed app still requires a backend upload/storage contract. This follow-up completes propagation for avatar URLs already present in local profile state or remote profile shells.
 
-- Implemented Private Profile as persisted local profile/store state.
-- Settings now shows `Private profile` above `stealth mode for new saves`.
-- Private Profile changes are confirmation-gated:
-  - Turning on warns that saved places/lists become private, username search is hidden, collaboration is unavailable, and stealth stays locked on.
-  - Turning off warns that username search and list collaboration return, and new saves can be visible by default unless stealth remains on.
-- Private Profile on now:
-  - Forces default visibility to `self`.
-  - Marks existing current-user saved places private.
-  - Forces future saves and edits through Add/Map/Discover/Profile save paths to `self`.
-  - Keeps local private profiles out of username search and contact matches.
-  - Locks the Add/Map save sheet stealth controls on and disabled.
-  - Locks list editor stealth on, disables collaborator entry points, and filters private profiles from collaborator candidates.
-- Added focused tests for Settings copy, persisted private profile mode, search exclusion, and forced save visibility.
-- Validation:
-  - `git diff --check` passed.
-  - Focused XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testUsernameSearchHidesPrivateProfiles -only-testing:WanderTests/WanderStoreTests/testPrivateProfileLocksDefaultVisibilityAndFutureSaves -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch`.
-  - Final full XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-final-full CODE_SIGNING_ALLOWED=NO -jobs 1`.
-  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
-- Visual QA screenshots reviewed:
-  - Default Settings off state:
-    `/private/tmp/private-profile-settings-iphone17pro.png`
-    `/private/tmp/private-profile-settings-iphone17e.png`
-  - Private Profile locked-on Settings state, using simulator-only persisted local store setup:
-    `/private/tmp/private-profile-settings-locked-iphone17pro.png`
-    `/private/tmp/private-profile-settings-locked-iphone17e.png`
-- Visual result: Private Profile appears above stealth mode, the stealth switch is visibly grayed/locked on when Private Profile is enabled, and copy wraps cleanly on iPhone 17 Pro and iPhone 17e.
-- Local implementation commit: `0792ba5cc` (`Implement private profile privacy lock`).
-- Known handoff issue: branch is still local because the earlier `git push` was rejected by the approval reviewer for external transfer without explicit user approval. Push and PR creation remain blocked until Ryan approves that transfer.
+Completion checkpoint, 2026-06-28 11:59 PDT:
 
-## 2026-06-28 00:44 PDT - Codex - Private Profile Copy And Stealth Icon Follow-Up
+- Propagated `avatarURL` through every `WanderAvatar` call site outside the shared component:
+  - Discover latest activity, owner disambiguation, member result tiles, and friend list rows now render `ProfileShell` / `VisiblePlace.owner` avatar URLs.
+  - Map search bar, save review cards, and facepiles now render current-user / owner avatar URLs.
+  - Place profile facepiles and save cards now render owner avatar URLs.
+  - Lists collaborator rows, staged collaborator rows, and facepiles now carry or resolve collaborator avatar URLs from `LocalProfile` / store profiles.
+- Broader profile-icon source scan found only generic navigation/auth/person-action symbols beyond `WanderAvatar`; those are not user photo surfaces.
+- `git diff --check` passed.
+- Full simulator suite passed on available iPhone 17 / iOS 26.5 runtime:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 181 tests, 0 failures.
+- Remaining product limitation: profiles on other people's devices still require the future Supabase Storage/profile avatar upload path; this pass ensures any available `avatarURL` renders everywhere locally and through remote profile shells.
+
+## 2026-06-28 12:11 PDT - Codex - Profile Avatar Backend Upload
 
 Agent: Codex
-Branch: `codex/rec-42-43-settings-copy`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin`; branch had four local commits ahead of `origin/main`.
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
 
-Goal: remove the redundant "Stealth mode below controls whether new saves start hidden" sentence from the Private Profile off-state copy, change the Private Profile warning to say stealth mode stays activated, and add an icon next to the shared stealth mode option.
+Goal: build the backend functionality behind profile pictures so changing a profile photo uploads the image to Supabase Storage, stores a durable avatar reference on the user's Supabase profile, and lets other installed apps see the changed avatar through existing profile/search/map/list/profile DTOs.
 
 Expected files:
 
-- `Wander/DesignSystem/WanderTheme.swift`
-- `Wander/Features/Settings/SettingsScreen.swift`
-- `WanderTests/AuthSessionTests.swift`
 - `docs/agent-log.md`
-
-Checkpoint:
-
-- Updated Private Profile off-state Settings body to only say the username can appear in search and list collaboration is available.
-- Updated the Private Profile on-warning copy from "Stealth mode will stay locked on" to "Stealth mode will stay activated."
-- Added an `eye.slash.fill` SF Symbol next to the shared `PlaceVisibilityStealthToggle` title so Settings, Add, and Map save/edit flows all show a stealth/privacy icon.
-- Validation:
-  - `git diff --check` passed.
-  - Focused XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-copy-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
-  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
-- Visual QA screenshots reviewed:
-  - `/private/tmp/private-profile-stealth-icon-iphone17pro.png`
-  - `/private/tmp/private-profile-stealth-icon-iphone17e.png`
-- Visual result: shorter Private Profile copy fits cleanly; the stealth icon appears beside the stealth mode title without clipping or crowding on iPhone 17 Pro and iPhone 17e.
-- Local follow-up commit: `cc225b568` (`Tighten private profile settings copy`).
-- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. After the required fetch, branch is four commits behind latest `origin/main`; rebase before opening a PR.
-
-## 2026-06-28 09:10 PDT - Codex - Stealth Row Alignment Follow-Up
-
-Agent: Codex
-Branch: `codex/rec-42-43-settings-copy`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin`; branch is local only and currently ahead 6, behind 4 versus `origin/main`.
-
-Goal: align the `stealth mode for new saves` row with the Private Profile row above it by giving the shared stealth toggle the same leading icon column treatment.
-
-Expected files:
-
-- `Wander/DesignSystem/WanderTheme.swift`
-- `docs/agent-log.md`
-
-Checkpoint:
-
-- Updated `PlaceVisibilityStealthToggle` so the stealth icon sits in the same 38pt leading icon column used by the Private Profile row, aligning the stealth title/helper text with the row above.
-- Validation:
-  - `git diff --check` passed.
-  - Focused XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-alignment-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch`.
-  - Existing warnings only: signed XCTest binary stripping warnings and traditional headermap warnings.
-- Visual QA screenshots reviewed:
-  - `/private/tmp/private-profile-stealth-aligned-iphone17pro.png`
-  - `/private/tmp/private-profile-stealth-aligned-iphone17e.png`
-- Visual result: the `stealth mode for new saves` title and helper copy now align with the Private Profile title/helper copy above on iPhone 17 Pro and iPhone 17e.
-
-## 2026-06-28 09:33 PDT - Codex - Existing Collaborative Lists Private Profile Rule
-
-Agent: Codex
-Branch: `codex/rec-42-43-settings-copy`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin`; branch is local only and currently ahead 7, behind 6 versus `origin/main`.
-
-Goal: update Private Profile behavior and disclaimer copy so existing collaborative lists remain unchanged, while Private Profile prevents creating new collaborative lists or adding new collaborators. Remove the warning sentence that says stealth mode will stay activated.
-
-Expected files:
-
-- `Wander/Features/Settings/SettingsScreen.swift`
-- `Wander/Features/Lists/ListsScreen.swift`
-- `WanderTests/AuthSessionTests.swift`
-- `docs/agent-log.md`
-
-Checkpoint:
-
-- Updated Private Profile settings copy so the enabled state says new collaborative lists are unavailable, and the enabling warning says saved places and solo lists become private while existing collaborative lists stay unchanged.
-- Removed the warning sentence that said "Stealth mode will stay activated."
-- Updated list collaboration UI behavior:
-  - Brand-new lists clear/disable staged collaborators while Private Profile is on.
-  - Existing collaborative lists keep their existing collaborators while Private Profile is on.
-  - Existing collaborative list invite surfaces show the current collaborators and explain that new invites are unavailable.
-  - Solo lists keep the collaborator controls disabled while Private Profile is on.
-- Added a `collabEdit` visual QA scenario for opening an existing collaborative list editor without the delete-confirmation alert.
-- Validation:
-  - `git diff --check` passed.
-  - Sandboxed `xcodebuild test` failed before app code ran because CoreSimulator/user cache access was blocked; reran the same focused tests with elevated permissions.
-  - Focused XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
-  - Existing warnings only: traditional headermap warnings.
-- Visual QA screenshots reviewed:
-  - `/private/tmp/private-profile-new-collab-blocked-list-editor-final.png`
-  - `/private/tmp/private-profile-existing-collab-list-editor-final.png`
-- Visual result: Private Profile blocks new collaborative lists without overlap, and existing collaborative lists show locked stealth plus a compact "existing collaborators" summary that stays clear of the save/delete action bar.
-- Local implementation commit: `bb2b1ed83` (`Preserve existing list collaborators in private profile`).
-- Known handoff issue: branch remains local and unpushed pending explicit approval for external transfer. Rebase or merge latest `origin/main` before opening a PR because the branch is behind.
-
-## 2026-06-28 12:08 PDT - Codex - Clarified Private Profile Visibility Rules
-
-Agent: Codex
-Branch: `codex/rec-42-43-settings-copy`
-Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-42-43-settings-copy`
-Starting status: clean after `git fetch origin`; branch is local only and currently ahead 9, behind 8 versus `origin/main`.
-
-Goal: update Private Profile behavior to match Ryan's clarified product rules: only places saved by the current user are forced stealth, future saves stay stealth while enabled, turning Private Profile off does not restore visibility, and existing collaborative lists remain editable for existing friend-network collaboration.
-
-Expected files:
-
-- `Wander/Features/Settings/SettingsScreen.swift`
-- `Wander/Features/Lists/ListsScreen.swift`
+- `docs/plans/2026-06-28-profile-pictures-plan.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `Wander/Services/ProfileAvatarStorage.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/Remote/SupabaseDTOs.swift`
+- `Wander/Services/Remote/SupabaseRepositories.swift`
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
 - `Wander/Services/WanderLocalStore.swift`
-- `WanderTests/AuthSessionTests.swift`
-- `WanderTests/WanderStoreTests.swift`
-- `docs/agent-log.md`
+- `Wander/App/WanderBackend.swift`
+- `supabase/migrations/`
+- `supabase/tests/`
+- Focused Swift and SQL tests for upload URL/path persistence and RLS/security posture.
 
-Checkpoint:
+Coordination note: this touches high-conflict backend/store/project-adjacent files already used by the current profile-picture branch. No overlapping local worktree changes were present in this checkout.
 
-- Updated `WanderLocalStore` so Private Profile no longer overwrites the stored `defaultVisibility`; it forces `.selfOnly` through `effectiveDefaultVisibility` and save-time visibility while enabled.
-- Strengthened store tests to verify:
-  - all current-user saved places switch to stealth when Private Profile turns on;
-  - other users' saved-place rows are not mutated;
-  - future saves are forced stealth while Private Profile is on;
-  - turning Private Profile off does not restore existing place visibility;
-  - the user's underlying default visibility preference survives the Private Profile round trip.
-- Updated Settings copy so enabling Private Profile says Been/Wanna Go places switch to stealth, future saves stay stealth, username is hidden, followers and existing collaborative lists stay unchanged, and new collaborative lists are unavailable.
-- Updated the turn-off warning to be informational only: existing places stay stealth, username can appear in search again, and future saves follow the `stealth mode for new saves` setting.
-- Updated list collaboration behavior:
-  - new/solo lists cannot become collaborative while Private Profile is on;
-  - owned existing collaborative lists can still add/remove friend-network collaborators while Private Profile is on;
-  - private profiles are hidden from global username search but remain available inside mutual-friend collaborator search;
-  - collaborator rows match by handle as well as id to avoid duplicate mock/profile entries.
-- Validation:
+Completion checkpoint, 2026-06-28 12:31 PDT:
+
+- Built the backend profile-avatar path on the same `codex/profile-pictures` branch:
+  - Added `ProfileAvatarRepository` and wired `WanderBackend` to upload/delete profile avatar JPEGs through Supabase Storage and `public.update_profile_avatar`.
+  - Added authenticated Storage REST helpers to `WanderSupabaseClient`.
+  - Profile photo saves now write the local file for instant preview, then upload signed-in avatars to `profile-avatars/<user-id>/avatar.jpg`, store a versioned remote URL, and show an inline sync error if the remote path fails.
+  - Profile photo delete now deletes the stable Storage object and clears `profiles.avatar_url` for signed-in users before clearing local state.
+  - Added `current_profile` hydration so a fresh install can fetch the signed-in user's existing remote avatar on app start.
+  - Added `owner_avatar_url` to remote visible-place/profile-place DTOs and Supabase RPC return shapes so other people's app installs receive owner profile photos for place cards/map/profile surfaces.
+  - Added `profiles.avatar_url_source` / `avatar_storage_path`; Clerk mirroring now preserves app-selected avatars instead of clobbering them on later Clerk profile updates.
+  - Explicitly revoked app-level Clerk mirror RPC execute from public/anon/authenticated and pinned the intended service-role-only grant in pgTAP coverage.
+- Added Supabase migration and pgTAP coverage:
+  - `supabase/migrations/20260628122000_profile_avatar_storage.sql`
+  - `supabase/tests/profile_avatars.sql`
+- Updated `docs/plans/2026-06-28-profile-pictures-plan.md` so the durable plan reflects the completed backend scope instead of the earlier local-only slice.
+- Verification:
   - `git diff --check` passed.
-  - Sandboxed focused `xcodebuild test` failed before app code ran because CoreSimulator/user cache access and package fetches were blocked; reran with elevated permissions and existing DerivedData.
-  - Focused XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests/testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch -only-testing:WanderTests/WanderStoreTests/testPrivateProfileForcesCurrentAndFutureSavesStealthWithoutRestoringOnDisable -only-testing:WanderTests/WanderStoreTests/testFilePersistenceRestoresPrivateProfileModeAfterRelaunch -only-testing:WanderTests/NavigationContractTests/testListsScreenCanResolveInteractiveVisualQAScenarios`.
-  - Full XCTest passed:
-    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-private-profile-collab-rule-copy-final CODE_SIGNING_ALLOWED=NO -jobs 1`.
-  - Existing warnings only: traditional headermap warnings.
-- Visual QA screenshots reviewed:
-  - `/private/tmp/private-profile-new-list-collab-blocked-clarified.png`
-  - `/private/tmp/private-profile-existing-collab-manage-clarified-final.png`
-- Visual result: new lists show collaboration blocked while Private Profile is on; existing collaborative lists show locked stealth, compact collaborator summary, and a visible add/manage control without bottom action-bar overlap.
-- Local implementation commit: `9a1ae13bc` (`Clarify private profile visibility rules`).
+  - Focused simulator tests passed on available iPhone 17 / iOS 26.5 runtime:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-avatar-backend CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests -only-testing:WanderTests/WanderStoreTests/testRemoteCurrentProfileHydratesAvatarURLWithoutPendingSync -only-testing:WanderTests/ProfileAvatarStorageTests`
+    Result: 20 tests, 0 failures.
+  - Full simulator suite passed:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-avatar-backend CODE_SIGNING_ALLOWED=NO -jobs 1`
+    Result: 185 tests, 0 failures.
+- SQL test gap:
+  - `supabase --version` and `which supabase` both failed because the Supabase CLI is not installed in this shell.
+  - The pgTAP test is authored but still needs execution in an environment with Supabase CLI/Docker or against the hosted project before applying the migration.
+- Known remaining QA:
+  - Physical camera capture still needs real-device testing.
+  - Hosted migration application and profile-avatar upload smoke test still need Supabase credentials/tooling.
+
+## 2026-06-28 12:49 PDT - Codex - Profile Avatar Hosted Backend Check
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`.
+
+Goal: answer whether the profile-avatar backend was part of the plan and why Xcode testing still shows `Saved on this phone. Could not sync profile photo yet.`
+
+Findings:
+
+- Plan/history distinction:
+  - The first profile-picture implementation commit was local-first and explicitly logged Supabase Storage cross-device sync as out of scope.
+  - After Ryan asked for avatars everywhere and then asked to build the backend functionality, the plan was updated to include backend avatar sync and remote propagation.
+  - The branch now implements the app/backend code path and includes the SQL migration/test files, but hosted Supabase migration application is still not complete.
+- Hosted Supabase probe:
+  - A safe unauthenticated PostgREST probe to `public.update_profile_avatar` returned `PGRST202`, meaning the function is not present in the hosted schema cache.
+  - This explains the app behavior: local file save succeeds, then remote profile avatar sync fails because the hosted RPC/bucket migration is not live.
+- Tooling/access state:
+  - `supabase` is not installed on PATH.
+  - Bundled Node/pnpm can run Supabase CLI via `pnpm dlx supabase`; version checked as `2.108.0`.
+  - `supabase migration list --linked` failed because the repo is not locally linked.
+  - `supabase projects list` failed because no `SUPABASE_ACCESS_TOKEN` is available in this shell.
+  - Environment checks found no `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD`; `/Users/ryanlieblein/.openclaw/workspace/.env.keys` did not contain Supabase credential variable names.
+
+Current blocker: to apply `supabase/migrations/20260628122000_profile_avatar_storage.sql` to the hosted project, the session needs either a Supabase access token/login plus DB password/linking, or another authenticated database migration path.
+
+## 2026-06-28 13:02 PDT - Codex - Supabase Access Setup For Profile Avatars
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: stop treating hosted Supabase as an external blocker, set up real Supabase CLI access for this checkout, link the hosted project if credentials permit, apply the profile-avatar migration, and verify the live RPC/storage contract.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Possibly Supabase local link metadata if the CLI writes project link state.
+
+Coordination note: this is backend/hosted migration work on the current profile-picture branch. No overlapping local changes were present.
+
+Checkpoint, 2026-06-28 13:10 PDT:
+
+- Supabase CLI access is now real in this shell:
+  - Logged in through `pnpm dlx supabase login --name wander-profile-avatar --no-browser`.
+  - Linked the local checkout to hosted project `rugmtlgufrhlxwfkumhw` (`wander`).
+- Hosted migration state before push showed only `20260628122000_profile_avatar_storage` missing remotely.
+- Ran `supabase db push --linked --dry-run`; it showed only `20260628122000_profile_avatar_storage.sql`.
+- Applied `20260628122000_profile_avatar_storage.sql` to hosted Supabase with `supabase db push --linked --yes`.
+- Verified hosted state:
+  - `supabase migration list --linked` now shows `20260628122000` present locally and remotely.
+  - Bucket metadata exists for `profile-avatars`: public, JPEG-only, 524288 byte limit.
+  - Function grants verified: authenticated can execute `public.update_profile_avatar` and `public.current_profile`; anon cannot; service_role can execute `app.mirror_clerk_profile`; authenticated cannot.
+  - Storage policies verified: public read plus authenticated owner insert/update/delete.
+- Follow-up bug found during hosted pgTAP verification:
+  - `app.update_profile_avatar` used a PL/pgSQL variable named `current_user`.
+  - PostgreSQL also exposes `current_user` as a special identifier, so the path check could compare against the role name `authenticated` rather than the Clerk profile id.
+  - Added follow-up migration `20260628201000_fix_profile_avatar_current_user_variable.sql` to rename the variable to `current_profile_id` while preserving security invoker/search_path/grants.
+
+Completion checkpoint, 2026-06-28 13:23 PDT:
+
+- Applied the follow-up function fix to hosted Supabase:
+  - `supabase db push --linked --dry-run` showed only `20260628201000_fix_profile_avatar_current_user_variable.sql`.
+  - `supabase db push --linked --yes` hung at the remote connection phase and was cancelled before application output.
+  - Applied the migration SQL with `supabase db query --linked --file supabase/migrations/20260628201000_fix_profile_avatar_current_user_variable.sql`.
+  - The official `supabase migration repair --linked --status applied 20260628201000` command also hung at the remote connection phase and was cancelled before application output.
+  - Recorded the applied migration version in `supabase_migrations.schema_migrations` through linked `supabase db query` so local and remote migration history match.
+- Hosted verification:
+  - `supabase migration list --linked` now shows `20260628122000` and `20260628201000` present locally and remotely.
+  - Hosted function body check confirms `app.update_profile_avatar` uses `current_profile_id text := app.current_user_id()` and no longer uses the bad `current_user text := app.current_user_id()` variable.
+  - Hosted profile-avatar pgTAP SQL file now runs through linked `supabase db query --linked --file supabase/tests/profile_avatars.sql` with the final assertion passing.
+- Test file maintenance:
+  - Updated `supabase/tests/profile_avatars.sql` to avoid switching simulated authenticated users mid-file under the hosted query runner and corrected the plan count to 27.
+- Known remaining QA:
+  - Ryan should retry profile photo upload in Xcode against the now-migrated hosted backend.
+  - Physical camera capture still needs real-device testing.
+
+## 2026-06-29 18:04 PDT - Codex - Profile Photo Action Popover Alignment
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: fix the profile photo edit options UI so tapping the avatar opens a smaller action popover anchored directly below the profile photo instead of an unaligned full-size native action sheet.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+
+Coordination note: this is a narrow Profile UI polish on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-29 18:58 PDT:
+
+- Replaced the unanchored profile photo confirmation dialog with a compact popover attached directly to the profile avatar button.
+- Kept the same actions: take photo when camera is available, choose from library, and delete photo when an avatar exists.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`
+  - Required pinned test destination was unavailable on this machine: `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should tap the avatar in Xcode/simulator to confirm the popover placement and size feel right on the target device.
+
+## 2026-06-30 00:39 PDT - Codex - Profile Photo Native Menu Iteration
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: restore the native iOS feel of the profile photo upload menu while preserving the improved avatar-anchored placement, then push the branch for Ryan to test.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+
+Coordination note: this is a narrow Profile UI iteration on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-30 00:43 PDT:
+
+- Replaced the hand-built `ProfilePhotoActionsPopover` with a native SwiftUI `Menu` attached directly to the profile avatar.
+- Preserved the profile photo actions: take photo when camera is available, choose from library, and delete photo when an avatar exists.
+- Kept the avatar label visually unchanged while letting iOS render the menu, separators, icons, and destructive action styling.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should tap the profile avatar in Xcode/simulator and confirm the native menu placement/feel is the right tradeoff.
+
+## 2026-06-30 00:44 PDT - Codex - Discover Members Avatar Retention
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: fix Discover > Members so profile photos carry through and stay updated there after a user changes their profile picture.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Discover/DiscoverScreen.swift` and/or `Wander/Services/WanderLocalStore.swift`
+- Focused tests if the data flow fix lands in store behavior.
+
+Coordination note: this is a narrow avatar propagation fix on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-30 00:56 PDT:
+
+- Fixed Discover > Members search result tiles so each `ProfileShell` resolves through the latest local store profile before rendering, allowing avatar changes to show even if `memberResults` held an older shell.
+- Fixed `WanderStore.mergeProfileShells` so duplicate local/remote member search shells keep fresh remote avatar and bio data while preserving the strongest local/remote relationship state.
+- Added regression coverage for a stale local member shell being merged with a remote shell that has the new avatar URL.
+- Verification:
+  - `git diff --check`
+  - Focused: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testDiscoverMembersKeepsRemoteAvatarWhenLocalShellIsStale`
+  - Full: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 186 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should search a member in Discover > Members after changing/uploading a profile photo and confirm the member tile/friend row now shows the photo.
 
 ## 2026-06-28 12:46 PDT - Codex - Private Profile TestFlight Release
 
@@ -7343,96 +7255,6 @@ Public TestFlight: https://testflight.apple.com/join/knEhRa6t
 Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
 ```
 
-## 2026-06-29 18:52 PDT - Codex - Category Schema Latest Page View Mockups
-
-Agent: Codex
-Branch: `codex/edit-category-schema-review`
-Worktree: `/private/tmp/recme-edit-category-schema`
-Starting status: fresh isolated worktree from `origin/codex/edit-category-schema`; root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated `codex/profile-pictures`.
-
-Goal: update/review the category schema SwiftUI design captures against the latest place page views, run practical plan-eng-review, plan-design-review, and ios-design-review lenses, and show refreshed inline SwiftUI mockups for saved been, saved wanna, unsaved place, edit sheets, save flow, and picker.
-
-Expected files:
-
-- `docs/agent-log.md`
-- `Wander/Features/Map/MapScreen.swift` merge resolution if latest page-view changes conflict with category controls.
-- Temporary screenshot harness edits in SwiftUI/test files, to be removed before handoff.
-
-Checkpoint:
-
-- Recreated `/private/tmp/recme-edit-category-schema` because the prior worktree was prunable/missing.
-- Merged latest `origin/main` into the isolated review branch so captures include the current page-view behavior through PR #49.
-- Resolved `MapScreen.swift` by preserving latest `selectSavedResult` page navigation/private-profile visibility handling while keeping the category branch's edited `submission.candidate` payload and place-type picker sheet.
-- Resolved `docs/agent-log.md` by preserving both the PR #39 category entry and later mainline release history.
-
-Completion checkpoint, 2026-06-29 19:14 PDT:
-
-- Merge commit created locally: `4b0b5c461` (`origin/main` into `codex/edit-category-schema-review`). Branch was not pushed.
-- Ran practical `/plan-eng-review`, `/plan-design-review`, and `/ios-design-review` lenses against the merged category schema UI. This was a screenshot/simulator-based iOS design review; no real-device `gstack-ios-qa-daemon` session was available or used.
-- Temporary SwiftUI screenshot harness was added, used, and removed before handoff. Final worktree after cleanup only contains this agent-log completion note.
-- Focused screenshot test passed:
-  `RECME_CATEGORY_SCREENSHOT_DIR=/private/tmp/recme-edit-category-latest-screenshots xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-edit-category-latest-screenshots CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/EditPlaceCategoryLatestScreenshotTests/testCaptureLatestPageViewScreenshots`
-- Captured screenshots for review:
-  - `/private/tmp/recme-edit-category-latest-screenshots/profile-saved-been.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/profile-saved-wanna.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/profile-unsaved.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/edit-saved-been.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/edit-saved-wanna.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/save-unsaved-confirm.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/save-unsaved-details.png`
-  - `/private/tmp/recme-edit-category-latest-screenshots/choose-place-type.png`
-- Review outcome: no blocking engineering/design issue found in the category schema UI after aligning with latest place-page chrome. Main follow-up for implementation is to keep regression coverage around `MapPlaceSaveSubmission.candidate`, edited category persistence, personal labels, private-profile forced stealth visibility, and the category picker taxonomy.
-
-## 2026-06-30 00:51 PDT - Codex - Category Schema Plan Engineering Gap Review
-
-Agent: Codex
-Branch: `codex/edit-category-schema-review`
-Worktree: `/private/tmp/recme-edit-category-schema`
-Starting status: branch clean and ahead of `origin/codex/edit-category-schema` by 29; fetched `origin` before final review. Root checkout `/Users/ryanlieblein/Developer/wander` remains on unrelated dirty `codex/profile-pictures` work and was not edited.
-
-Goal: run a focused `/plan-eng-review` lens on the edit-place category schema plan/current branch and identify implementation gaps before this becomes the durable category metadata contract.
-
-Review checkpoint:
-
-- Inspected app taxonomy, edit/save flow, local store filtering, profile filters, Discover parser schema, Supabase save RPC contract, and extraction-worker AI category classifier.
-- Confirmed `git diff --check origin/main...HEAD` passes.
-- Main gaps found:
-  - Category/subcategory/source/confidence are not yet persisted as first-class app or Supabase fields; the app still derives broad category/subcategory from one `category` string.
-  - Local, remote, Discover, and Profile filters still compare exact raw `place.category`, so provider subcategories like `thai restaurant` can miss `restaurant` filters.
-  - Swift editable taxonomy and extraction-worker AI enum can drift; the worker currently classifies only `spiritual`, `coffee`, `park`, `hike`, `restaurant`, `bar`, and `place`.
-  - Supabase `save_own_place` overwrites shared `places.category` on provider-id conflict, so a user's category correction could rewrite the canonical place for everyone unless user override/source semantics are added.
-  - No regression coverage yet for filter normalization, AI taxonomy parity, server persistence of subcategory metadata, or conflict/override behavior.
-
-No code changes were made in this checkpoint beyond this log entry.
-
-## 2026-06-30 01:13 PDT - Codex - Durable Category Metadata Framework
-
-Agent: Codex
-Branch: `codex/edit-category-schema-review`
-Worktree: `/private/tmp/recme-edit-category-schema`
-Starting status: clean branch, ahead of `origin/codex/edit-category-schema` by 30; `git fetch origin` completed. Root checkout `/Users/ryanlieblein/Developer/wander` remains on unrelated `codex/profile-pictures` work and is not being edited.
-
-Goal: build the durable category metadata framework requested by Ryan: explicit primary category, subcategory, source, confidence, raw provider type, migration/backfill for existing database places, normalized filters that survive provider subcategories, one shared taxonomy, safe user-edit semantics, and personal/custom subcategory support in the edit/save PR.
-
-Expected files:
-
-- `docs/agent-log.md`
-- `docs/mockups/edit-place-category-schema.md`
-- `project.yml` if bundled taxonomy resources are needed
-- `Wander/Models/LocalModels.swift`
-- `Wander/Services/RepositoryProtocols.swift`
-- `Wander/Services/WanderPlaceCategory.swift`
-- `Wander/Services/WanderLocalStore.swift`
-- `Wander/Services/WanderStorePersistence.swift`
-- `Wander/Services/Remote/SupabaseDTOs.swift`
-- `Wander/Services/Remote/SupabaseRepositories.swift`
-- `Wander/Services/DiscoverModels.swift`
-- `Wander/Features/Map/MapScreen.swift`
-- Supabase migrations/functions/tests for category metadata persistence and extraction taxonomy alignment
-- Focused Swift/XCTest and Supabase function tests for taxonomy/filter migration behavior
-
-Coordination note: this intentionally continues the existing category-schema PR worktree. High-conflict files include `MapScreen.swift`, `WanderLocalStore.swift`, `project.yml`, Supabase migrations, and this log; no overlapping local changes are present in this worktree.
-
 ## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
 
 Agent: Codex
@@ -7465,6 +7287,236 @@ Completion checkpoint, 2026-06-28 12:20 PDT:
   - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
   - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
   - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`
+
+## 2026-06-29 18:56 PDT - Codex - Remove Map Search Profile Icon
+
+Agent: Codex
+Branch: `codex/rec-64-remove-map-search-avatar`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-64-remove-map-search-avatar`
+Linear: `REC-64` - Remove profile icon from map search bar
+Starting status: clean branch tracking `origin/main`; root checkout has unrelated uncommitted `codex/profile-pictures` work, so this isolated worktree was created from `origin/main`.
+
+Goal: remove the small profile/avatar icon from the trailing side of the Map view search bar while preserving the search icon, placeholder, clear action, and submit behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+
+Coordination note: `MapScreen.swift` is a high-conflict file, but no overlapping uncommitted edits exist in this isolated worktree. The root checkout's unrelated profile work is not touched.
+
+Completion checkpoint, 2026-06-29 19:08 PDT:
+
+- Created Linear issue `REC-64` and moved it to In Progress for tracking.
+- Removed the empty-query trailing `WanderAvatar` from the Map search bar and removed the now-unused `userInitials` parameter.
+- Preserved the leading search icon, placeholder text, submit behavior, and trailing clear button when text is present.
+- Implementation commit: `6c6649a57` (`fix: remove map search avatar`).
+- Opened ready PR #50: `https://github.com/joelipshutz/wander/pull/50`.
+- Updated Linear `REC-64` to In Review and attached PR #50.
+- Verification:
+  - `git diff --check` passed.
+  - Sandboxed `xcodebuild build` failed before app compilation because CoreSimulator and SwiftPM network access were blocked, then the same build passed with elevated permissions:
+    `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec64-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - The configured full-test destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed in this Xcode environment.
+  - Full simulator suite passed on available iPhone 17 / iOS 26.5:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec64-tests-iphone17 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Known gap: simulator screenshots were not captured; this branch is prepared for build/test validation, and visual confirmation of the removed icon should happen during the requested build testing pass.
+
+## 2026-06-30 00:46 PDT - Codex - TestFlight Build 53 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main` at `ba5fbbed6` tracking `origin/main`; root checkout remains on `codex/profile-pictures` and is not used for release edits.
+
+Goal: package the latest `main` into a new TestFlight build so Ryan can test the merged Map search avatar removal.
+
+Included app-code changes since completed TestFlight build 52:
+
+- PR #49 / `cbb88cf20`: align Map search/filter chrome and Place Profile safe-area header controls.
+- PR #50 / `ba5fbbed6`: remove the trailing profile/avatar icon from the Map search bar.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+
+Plan:
+
+- Bump `CURRENT_PROJECT_VERSION` from 52 to 53.
+- Regenerate the Xcode project with XcodeGen.
+- Build/test, archive, upload, run the TestFlight helper, update Linear, and post the required Slack tester note if Slack tooling is available.
+
+Outcome, 2026-06-30 01:09 PDT:
+
+- PR #50 merged to `main` as `ba5fbbed6` (`Remove map search bar avatar`).
+- Bumped `CURRENT_PROJECT_VERSION` from 52 to 53 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `16d7307f3` (`chore: bump testflight build 53`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build53-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build53-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Test result: 180 tests, 0 failures.
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build53.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=53` verified.
+- Export options: `/private/tmp/WanderExportUpload53.plist`, with `manageAppVersionAndBuildNumber=false`.
+- First `xcodebuild -exportArchive` upload attempt with API key `BU88FB5ZG4` failed before upload with `exportArchive Cloud signing permission error` and missing local `iOS Distribution` certificate; this matches the known Ryan-side key limitation from build 33.
+- Retried export/upload with replacement API key `P4ZR59AXMD`; upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 53 --archive-path /private/tmp/Wander-0.1-build53.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build53-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (53)` id `9c74002d-cd13-447f-bbe9-08a3f29c3f23` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Updated Linear `REC-64` to `Done`, attached PR #50 and TestFlight links, and added a completion comment with build 53 details.
+- Tester-facing Slack note posted to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782806986332249`.
+
+Known issues:
+
+- No backend/data behavior changed in this build.
+- Visual confirmation should focus on iPhone sizes; iPad-specific layout remains deferred.
+
+## 2026-06-30 01:20 PDT - Codex - Profile Photos TestFlight Release
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent agent log review completed before release work.
+
+Goal: land PR #45, package the latest `main` into a new TestFlight build, attach it to the public TestFlight group, and post the tester-facing Slack update.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
+
+Coordination note: the implementation branch was clean. `/private/tmp/recme-testflight-build53` already exists as a `main` worktree and is clean, so it can be reused for the post-merge build-number and archive flow if it remains clean after pulling latest `main`.
+
+Merge/update checkpoint, 2026-06-30 01:30 PDT:
+
+- Merged latest `origin/main` into `codex/profile-pictures` because GitHub reported PR #45 as dirty against `main` after build 53 landed.
+- Resolved conflicts:
+  - `Wander/Features/Map/MapScreen.swift`: preserved latest `main` behavior from PR #50, so the removed Map search-bar avatar stays removed.
+  - `Wander/Services/WanderLocalStore.swift`: combined private-profile filtering from `main` with profile-avatar preservation/remote shell merging from this branch.
+  - `docs/agent-log.md`: restored recent `main` entries, including build 52, layout chrome, map search avatar removal, and build 53 release history, while keeping the profile-photo branch log.
+- Ran `xcodegen generate` after the merge so `Wander.xcodeproj` matches the merged `project.yml`.
+- First merged full test attempt failed at compile time because `ListEditorSheet` had a duplicated `@EnvironmentObject private var store` declaration from the merge. Removed the duplicate and amended the merge commit.
+- Verification after the fix:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Result: 191 tests, 0 failures.
+
+Resume checkpoint, 2026-06-30 09:18 PDT:
+
+- Resumed after the previous Codex run was blocked by approval/usage limits before staging the final list-avatar propagation fix.
+- Current branch `codex/profile-pictures` is clean against `origin/codex/profile-pictures` except for the intended `Wander/Features/Lists/ListsScreen.swift` change.
+- Final local fix: selected collaborators in the list collaborator picker now resolve `avatarURL` from the collaborator or latest store profile, matching friend rows, facepiles, and list editor collaborator rows.
+- Next: run `git diff --check`, rerun full simulator tests, commit/push the final fix, merge PR #45, then package build 54 to TestFlight and post Slack.
+
+Validation checkpoint, 2026-06-30 09:24 PDT:
+
+- `git diff --check` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Release checkpoint, 2026-06-30 09:28 PDT:
+
+- PR #45 merged to `main` as `5908f1fa6` (`Add profile picture picker`).
+- Reusing clean release worktree `/private/tmp/recme-testflight-build53`, now fast-forwarded to latest `origin/main`.
+- Bumping `CURRENT_PROJECT_VERSION` from 53 to 54 for the requested TestFlight release.
+
+Outcome, 2026-06-30 09:48 PDT:
+
+- Pushed build-number commit `b40d869ef` (`chore: bump testflight build 54`) to `main`; `CURRENT_PROJECT_VERSION` is `54` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Deleted merged remote branch `codex/profile-pictures`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build54-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build54-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build54.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=54` verified.
+- Export options: `/private/tmp/WanderExportUpload54.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 54 --archive-path /private/tmp/Wander-0.1-build54.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build54-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (54)` id `191c3d1c-45bc-49d5-9ec2-d441e59b2305` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: attempted to post the required tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`), but the Codex Slack connector returned `token_expired` / HTTP 401. No `slack` CLI or `SLACK_*` credential was available locally, and Chrome fallback requires explicit user approval/re-auth because the connector auth failure alone does not permit using the user's browser session.
+- Required Slack message to post after Slack re-auth:
+
+```text
+**rec.me TestFlight build 54 is live/approved**
+
+Public TestFlight link: [https://testflight.apple.com/join/knEhRa6t](https://testflight.apple.com/join/knEhRa6t)
+
+**What changed**
+- Profile photos are now testable end to end: add, change, and delete from Profile.
+- Signed-in profile photos sync through Supabase Storage and update across the app.
+- Avatars now pull through on profile/settings surfaces, Discover member results, place cards, lists/collaborators, and map/place profile surfaces wherever that profile icon appears.
+- The profile photo edit menu has been repositioned to drop from the avatar while keeping the native iOS action feel.
+
+**Please test**
+- Tap your avatar on Profile, choose library or camera, and confirm the menu/actions feel right.
+- Delete the photo and confirm the placeholder comes back everywhere.
+- Relaunch the app and confirm your avatar persists.
+- Use another account/device to confirm the changed avatar appears on place cards, Discover > Members, profiles, lists/collaborators, and map/place profile surfaces.
+- Try a weak/offline connection if you can: local avatar should remain, with a clear sync warning if remote upload fails.
+
+**Known/deferred**
+- Camera capture still needs real-device QA; simulator may hide camera when unavailable.
+- The Map search bar intentionally has no trailing profile icon after build 53.
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps for anything weird.
+```
+
+Known issues:
+
+- Slack release note still needs posting after the Slack connector is re-authenticated or Ryan explicitly approves a browser-session fallback.
+- Camera capture should be verified on a real device.
+- Map search bar intentionally has no trailing profile icon after build 53.
+
+Slack auth follow-up, 2026-06-30 10:18 PDT:
+
+- Investigated why Slack posting was blocked after build 54.
+- Confirmed all Slack MCP calls failed before reaching Slack with the same connector-layer `HTTP 401 token_expired` error:
+  - `slack_send_message`
+  - `slack_search_channels`
+  - `slack_list_workspaces`
+- Local Slack app metadata showed `isEnabled=true` but `isAccessible=false`, consistent with an installed connector whose OAuth/session was stale.
+- Opened `https://chatgpt.com/apps/slack/asdk_app_69a1d78e929881919bba0dbda1f6436d` in Chrome with elevated Launch Services access because sandboxed `open` failed and the short Chrome/Safari app names did not resolve.
+- In ChatGPT's Slack app settings, the app showed as connected since Jun 9, 2026. Clicking `Manage` refreshed the browser UI to `Slack is now connected`.
+- After that UI reconnect, the active Codex MCP connector session still returned `HTTP 401 token_expired` for `slack_list_workspaces`; tool re-discovery did not refresh the already-running connector session.
+- Current conclusion: Slack OAuth was refreshed in the ChatGPT UI, but the active Codex tool session is still holding a stale token. A new Codex tool session/restart/new turn may be required before MCP Slack tools pick up the refreshed grant.
+- Left the ChatGPT Slack settings tab open as a browser handoff.
+- Next: on the next turn or after restarting Codex, rerun `slack_list_workspaces`. If it succeeds, post the build 54 tester-facing Slack note from the previous log entry.
+
+## 2026-06-30 14:20 PDT - Codex - Profile Photo Menu Placement Polish
+
+Agent: Codex
+Branch: `main` (direct per Ryan request)
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main...origin/main` after `git fetch origin`
+
+Goal:
+
+- Commit the approved SwiftUI profile-photo menu placement to `main`.
+- Replace the profile avatar `Menu` with an anchored native-style action bubble that sits directly below the profile circle, keeps the photo visible, and includes a small caret touching the avatar bottom.
+
+Expected files:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `docs/agent-log.md`
+
+Outcome checkpoint, 2026-06-30 14:42 PDT:
+
+- Replaced the profile avatar `Menu` with a custom anchored SwiftUI action bubble using an avatar bounds anchor preference.
+- Preserved the existing camera, photo-library, and delete flows; destructive delete still appears only when a profile photo exists.
+- Live simulator verification passed:
+  - `iPhone 17, OS 26.5`: tapped Profile avatar and saved `/private/tmp/profile-photo-menu-iphone17.png`.
+  - `iPhone 17e, OS 26.5`: tapped Profile avatar and saved `/private/tmp/profile-photo-menu-iphone17e.png`.
+- Validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-profile-menu-polish-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-menu-polish-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The first build caught a Swift 6 concurrency issue with mutable `PreferenceKey.defaultValue`; fixed by using an immutable `static let` in the final anchor preference key.
+- Direct commit to `main` is next, per Ryan's explicit request.
 
 ## 2026-06-30 09:32 PDT - Codex - Category Metadata Framework Implementation Checkpoint
 
@@ -7507,7 +7559,7 @@ Final update, 2026-06-30 09:35 PDT:
 - Committed implementation as `c41a874d4` (`feat: add durable place category metadata framework`).
 - Pushed to `origin/codex/edit-category-schema`, updating PR #39: https://github.com/joelipshutz/wander/pull/39
 - Added PR testing/context comment: https://github.com/joelipshutz/wander/pull/39#issuecomment-4845798441
-- Working tree was clean after the feature commit. No merge to `main` was performed; Ryan still needs to test and sign off before main landing.
+- Working tree was clean after the feature commit. No merge to `main` was performed; Ryan still needed to test and sign off before main landing.
 
 Follow-up verification, 2026-06-30 10:25 PDT:
 
@@ -7551,12 +7603,13 @@ Checkpoint, 2026-06-30 14:25 PDT:
   - `/private/tmp/recme-category-taxonomy-categories.png`
   - `/private/tmp/recme-category-taxonomy-subcategories.png`
   - `/private/tmp/recme-category-taxonomy-labels.png`
-- These mockups are pending Ryan approval and have not been committed yet.
+- Ryan approved the SwiftUI taxonomy mockups before this merge pass.
 
 Landing checkpoint, 2026-06-30 14:45 PDT:
 
 - Ryan approved the SwiftUI taxonomy mockups and asked to commit the work to `main`.
 - No TestFlight release was requested, so this landing should not bump the App Store build number, archive, upload, or post tester-facing release notes.
 - Starting merge workflow from `/private/tmp/recme-edit-category-schema` on `codex/edit-category-schema-review`; `git fetch origin` completed first.
-- Current dirty files are the approved DEBUG-only mockup hook/source, regenerated `Wander.xcodeproj/project.pbxproj`, and this log entry.
-- PR #39 is currently open against `main` but GitHub reports it as conflicting, so the branch needs to be updated from latest `origin/main` before squash merge.
+- Committed the approved DEBUG-only mockup hook/source as `033bcfcc8` (`docs: add approved category taxonomy mockups`).
+- PR #39 was open against `main` but GitHub reported it as conflicting, so the branch was updated from latest `origin/main`.
+- During merge conflict resolution, `docs/agent-log.md` was based on latest `origin/main` and these category PR entries were re-added so build 54/profile-photo history was preserved.

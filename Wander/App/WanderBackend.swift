@@ -4,6 +4,7 @@ import Foundation
 final class WanderBackend: ObservableObject {
     let configuration: WanderBackendConfiguration
     let profileRepository: (any ProfileRepository)?
+    let profileAvatarRepository: (any ProfileAvatarRepository)?
     let followRepository: (any FollowRepository)?
     let blockRepository: (any BlockRepository)?
     let placeRepository: (any PlaceRepository)?
@@ -17,6 +18,7 @@ final class WanderBackend: ObservableObject {
         if configuration.isSupabaseConfigured {
             let client = WanderSupabaseClient(configuration: configuration, authSession: authSession)
             self.profileRepository = SupabaseProfileRepository(rpc: client)
+            self.profileAvatarRepository = SupabaseProfileAvatarRepository(rpc: client, storage: client)
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
@@ -26,6 +28,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
         } else {
             self.profileRepository = nil
+            self.profileAvatarRepository = nil
             self.followRepository = nil
             self.blockRepository = nil
             self.placeRepository = nil
@@ -43,6 +46,7 @@ final class WanderBackend: ObservableObject {
             supabasePublishableKey: nil
         ),
         profileRepository: (any ProfileRepository)? = nil,
+        profileAvatarRepository: (any ProfileAvatarRepository)? = nil,
         followRepository: (any FollowRepository)? = nil,
         blockRepository: (any BlockRepository)? = nil,
         placeRepository: (any PlaceRepository)? = nil,
@@ -52,6 +56,7 @@ final class WanderBackend: ObservableObject {
     ) {
         self.configuration = configuration
         self.profileRepository = profileRepository
+        self.profileAvatarRepository = profileAvatarRepository
         self.followRepository = followRepository
         self.blockRepository = blockRepository
         self.placeRepository = placeRepository
@@ -62,6 +67,7 @@ final class WanderBackend: ObservableObject {
 
     var canUseRemoteData: Bool {
         profileRepository != nil
+            || profileAvatarRepository != nil
             || followRepository != nil
             || blockRepository != nil
             || placeRepository != nil
@@ -70,12 +76,40 @@ final class WanderBackend: ObservableObject {
             || extractionRepository != nil
     }
 
+    var canSyncProfileAvatars: Bool {
+        profileAvatarRepository != nil
+    }
+
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
         guard let profileRepository else {
             throw WanderRemoteError.notConfigured
         }
 
         return try await profileRepository.searchProfiles(handleQuery: handleQuery)
+    }
+
+    func currentProfile() async throws -> LocalProfile? {
+        guard let profileRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await profileRepository.currentProfile()
+    }
+
+    func uploadProfileAvatar(jpegData: Data, userID: String) async throws -> ProfileAvatarResult {
+        guard let profileAvatarRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await profileAvatarRepository.uploadAvatar(jpegData: jpegData, userID: userID)
+    }
+
+    func deleteProfileAvatar(userID: String) async throws {
+        guard let profileAvatarRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await profileAvatarRepository.deleteAvatar(userID: userID)
     }
 
     func visiblePlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {

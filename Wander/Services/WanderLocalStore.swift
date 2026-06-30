@@ -204,6 +204,26 @@ final class WanderStore: ObservableObject {
             + unresolvedDrafts.count
     }
 
+    func updateCurrentUserAvatarURL(_ avatarURL: String?) {
+        objectWillChange.send()
+
+        let now = Date()
+        let currentLocalID = currentUser.localID
+        let currentProfileID = currentUser.id
+
+        currentUser.avatarURL = avatarURL
+        currentUser.updatedAt = now
+        currentUser.localUpdatedAt = now
+
+        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+            profile.avatarURL = avatarURL
+            profile.updatedAt = now
+            profile.localUpdatedAt = now
+        }
+
+        persist()
+    }
+
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
     }
@@ -1157,6 +1177,21 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func refreshRemoteCurrentProfile(backend: WanderBackend?) async {
+        guard let backend else {
+            return
+        }
+
+        do {
+            if let profile = try await backend.currentProfile() {
+                applyRemoteCurrentProfile(profile)
+            }
+            lastRemoteError = nil
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
     func refreshRemoteVisiblePlaces(backend: WanderBackend?) async {
         await refreshRemoteVisiblePlaces(in: Self.defaultRemoteViewport, backend: backend)
     }
@@ -1282,6 +1317,7 @@ final class WanderStore: ObservableObject {
             serverID: session.userID,
             handle: handle,
             displayName: displayName,
+            avatarURL: previousCurrentUser.avatarURL,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .synced
         )
@@ -1317,6 +1353,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func applySignedOutProfile() {
+        let previousCurrentUser = currentUser
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile
@@ -1324,6 +1361,7 @@ final class WanderStore: ObservableObject {
             localID: localID,
             handle: "you",
             displayName: "You",
+            avatarURL: previousCurrentUser.avatarURL,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly
         )
@@ -1555,6 +1593,43 @@ final class WanderStore: ObservableObject {
         upsertRemoteAttributes(from: visiblePlaces)
     }
 
+    private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {
+        objectWillChange.send()
+
+        let now = Date()
+        let currentLocalID = currentUser.localID
+        let currentProfileID = remoteProfile.id
+
+        currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
+        currentUser.handle = remoteProfile.handle
+        currentUser.searchHandle = remoteProfile.handle.lowercased()
+        currentUser.displayName = remoteProfile.displayName
+        currentUser.avatarURL = remoteProfile.avatarURL
+        currentUser.bio = remoteProfile.bio
+        currentUser.homeArea = remoteProfile.homeArea
+        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+        currentUser.syncStateRaw = SyncState.synced.rawValue
+        currentUser.serverUpdatedAt = now
+        currentUser.updatedAt = now
+
+        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+            profile.serverID = currentUser.serverID
+            profile.handle = currentUser.handle
+            profile.searchHandle = currentUser.searchHandle
+            profile.displayName = currentUser.displayName
+            profile.avatarURL = currentUser.avatarURL
+            profile.bio = currentUser.bio
+            profile.homeArea = currentUser.homeArea
+            profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
+            profile.syncStateRaw = SyncState.synced.rawValue
+            profile.serverUpdatedAt = now
+            profile.updatedAt = now
+        }
+
+        defaultVisibility = remoteProfile.defaultVisibility
+        persist()
+    }
+
     private func upsertRemoteAttributes(from visiblePlaces: [VisiblePlace]) {
         let userPlaceIDsWithAttributes = Set(visiblePlaces.filter { !$0.attributes.isEmpty }.map(\.userPlace.id))
         guard !userPlaceIDsWithAttributes.isEmpty else { return }
@@ -1667,15 +1742,53 @@ final class WanderStore: ObservableObject {
     }
 
     private func mergeProfileShells(_ shells: [ProfileShell]) -> [ProfileShell] {
-        var seen = Set<String>()
         var merged: [ProfileShell] = []
 
-        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) && !isProfilePrivate(shell.id) && !seen.contains(shell.id) {
-            seen.insert(shell.id)
-            merged.append(shell)
+        for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) && !isProfilePrivate(shell.id) {
+            if let existingIndex = merged.firstIndex(where: { $0.id == shell.id }) {
+                merged[existingIndex] = mergedProfileShell(merged[existingIndex], with: shell)
+            } else {
+                merged.append(shell)
+            }
         }
 
         return merged
+    }
+
+    private func mergedProfileShell(_ existing: ProfileShell, with incoming: ProfileShell) -> ProfileShell {
+        ProfileShell(
+            id: existing.id,
+            handle: incoming.handle,
+            displayName: incoming.displayName,
+            avatarURL: nonEmpty(incoming.avatarURL) ?? existing.avatarURL,
+            bio: nonEmpty(incoming.bio) ?? existing.bio,
+            relationship: strongestRelationship(existing.relationship, incoming.relationship)
+        )
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+
+        return value
+    }
+
+    private func strongestRelationship(_ lhs: ViewerRelationship, _ rhs: ViewerRelationship) -> ViewerRelationship {
+        relationshipRank(lhs) >= relationshipRank(rhs) ? lhs : rhs
+    }
+
+    private func relationshipRank(_ relationship: ViewerRelationship) -> Int {
+        switch relationship {
+        case .owner:
+            return 3
+        case .mutual:
+            return 2
+        case .follower:
+            return 1
+        case .nonFollower:
+            return 0
+        }
     }
 
     private func normalizedHandleQuery(_ query: String) -> String {

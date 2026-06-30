@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct WanderColorToken: Equatable {
     let name: String
@@ -285,17 +286,62 @@ struct WanderPrimaryButton: View {
 
 struct WanderAvatar: View {
     let initials: String
+    var avatarURL: String?
     var size: CGFloat = 44
     var color = WanderTheme.terracotta.color
 
     var body: some View {
-        Text(initials)
-            .font(.system(size: max(12, size * 0.34), weight: .black))
-            .foregroundStyle(WanderTheme.textOnAction.color)
+        avatarContent
             .frame(width: size, height: size)
             .background(color)
             .clipShape(Circle())
             .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+    }
+
+    @ViewBuilder
+    private var avatarContent: some View {
+        if let fileImage {
+            Image(uiImage: fileImage)
+                .resizable()
+                .scaledToFill()
+        } else if let remoteURL {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .empty, .failure:
+                    initialsFallback
+                @unknown default:
+                    initialsFallback
+                }
+            }
+        } else {
+            initialsFallback
+        }
+    }
+
+    private var initialsFallback: some View {
+        Text(initials)
+            .font(.system(size: max(12, size * 0.34), weight: .black))
+            .foregroundStyle(WanderTheme.textOnAction.color)
+            .frame(width: size, height: size)
+    }
+
+    private var fileImage: UIImage? {
+        guard let url = avatarURL.flatMap(URL.init(string:)),
+              url.isFileURL
+        else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
+
+    private var remoteURL: URL? {
+        guard let url = avatarURL.flatMap(URL.init(string:)),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return nil }
+        return url
     }
 }
 

@@ -62,6 +62,7 @@ struct SettingsScreen: View {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     WanderAvatar(
                         initials: initials(for: session),
+                        avatarURL: store.currentUser.avatarURL,
                         size: 40,
                         color: WanderTheme.pinSocial.color
                     )
@@ -243,7 +244,12 @@ struct SettingsScreen: View {
             } else {
                 ForEach(blocked) { profile in
                     HStack {
-                        WanderAvatar(initials: String(profile.displayName.prefix(2)).uppercased(), size: 34, color: WanderTheme.stateError.color)
+                        WanderAvatar(
+                            initials: String(profile.displayName.prefix(2)).uppercased(),
+                            avatarURL: profile.avatarURL,
+                            size: 34,
+                            color: WanderTheme.stateError.color
+                        )
                         VStack(alignment: .leading) {
                             Text(profile.displayName)
                                 .font(.system(size: 14, weight: .bold))

@@ -31,12 +31,47 @@ struct RemoteProfileShellDTO: Codable, Equatable {
     }
 }
 
+struct RemoteCurrentProfileDTO: Codable, Equatable {
+    let id: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+    let bio: String?
+    let homeArea: String?
+    let defaultVisibility: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case handle
+        case displayName = "display_name"
+        case avatarURL = "avatar_url"
+        case bio
+        case homeArea = "home_area"
+        case defaultVisibility = "default_visibility"
+    }
+
+    func localProfile() -> LocalProfile {
+        LocalProfile(
+            localID: "local_profile_current",
+            serverID: id,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL,
+            bio: bio,
+            homeArea: homeArea,
+            defaultVisibility: PlaceVisibility(rawValue: defaultVisibility) ?? .followers,
+            syncState: .synced
+        )
+    }
+}
+
 struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let userPlaceID: String
     let placeID: String
     let ownerUserID: String
     let ownerHandle: String
     let ownerDisplayName: String
+    let ownerAvatarURL: String?
     let canonicalName: String
     let category: String
     let primaryCategory: String?
@@ -66,6 +101,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case ownerUserID = "owner_user_id"
         case ownerHandle = "owner_handle"
         case ownerDisplayName = "owner_display_name"
+        case ownerAvatarURL = "owner_avatar_url"
         case canonicalName = "canonical_name"
         case category
         case primaryCategory = "primary_category"
@@ -103,6 +139,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             serverID: ownerUserID,
             handle: ownerHandle,
             displayName: ownerDisplayName,
+            avatarURL: ownerAvatarURL,
             syncState: .synced
         )
         let place = LocalPlace(
