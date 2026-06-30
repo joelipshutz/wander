@@ -7356,6 +7356,9 @@ Completion checkpoint, 2026-06-29 19:08 PDT:
 - Created Linear issue `REC-64` and moved it to In Progress for tracking.
 - Removed the empty-query trailing `WanderAvatar` from the Map search bar and removed the now-unused `userInitials` parameter.
 - Preserved the leading search icon, placeholder text, submit behavior, and trailing clear button when text is present.
+- Implementation commit: `6c6649a57` (`fix: remove map search avatar`).
+- Opened ready PR #50: `https://github.com/joelipshutz/wander/pull/50`.
+- Updated Linear `REC-64` to In Review and attached PR #50.
 - Verification:
   - `git diff --check` passed.
   - Sandboxed `xcodebuild build` failed before app compilation because CoreSimulator and SwiftPM network access were blocked, then the same build passed with elevated permissions:
