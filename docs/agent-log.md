@@ -7501,3 +7501,10 @@ Next steps:
 
 - Commit and push this branch as a PR update for Ryan to install/test.
 - Before merging to `main`, run hosted Supabase migration verification or local Supabase SQL tests in an environment with Supabase/psql tooling.
+
+Final update, 2026-06-30 09:35 PDT:
+
+- Committed implementation as `c41a874d4` (`feat: add durable place category metadata framework`).
+- Pushed to `origin/codex/edit-category-schema`, updating PR #39: https://github.com/joelipshutz/wander/pull/39
+- Added PR testing/context comment: https://github.com/joelipshutz/wander/pull/39#issuecomment-4845798441
+- Working tree was clean after the feature commit. No merge to `main` was performed; Ryan still needs to test and sign off before main landing.
