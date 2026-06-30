@@ -7770,3 +7770,9 @@ Implementation checkpoint, 2026-06-30 16:08 PDT:
     `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` -> 2 passed, 0 failed.
   - Local `supabase test db` could not run because Docker/local Postgres is unavailable (`Cannot connect to the Docker daemon` / local PgClient connection failed).
   - Hosted rollback verification succeeded against the linked project by applying `20260630081500_category_metadata_framework.sql` and `20260630154000_broad_category_taxonomy.sql` plus `supabase/tests/category_metadata.sql` inside one transaction, then rolling back. Returned pgTAP row: `ok 10 - profile filters match effective user override category`.
+
+PR checkpoint, 2026-06-30 16:14 PDT:
+
+- Committed implementation as `66c95cbf4` (`Implement production category taxonomy UI`) and pushed branch `codex/category-production-ui`.
+- Opened ready PR #51: `https://github.com/joelipshutz/wander/pull/51`.
+- No build-number bump, `main` merge, TestFlight upload, or Slack tester note was performed. This is ready for Ryan to test before sign-off.
