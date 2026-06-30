@@ -7390,3 +7390,17 @@ Expected files:
 - Temporary release notes/export artifacts outside the repo as needed.
 
 Coordination note: the implementation branch was clean. `/private/tmp/recme-testflight-build53` already exists as a `main` worktree and is clean, so it can be reused for the post-merge build-number and archive flow if it remains clean after pulling latest `main`.
+
+Merge/update checkpoint, 2026-06-30 01:30 PDT:
+
+- Merged latest `origin/main` into `codex/profile-pictures` because GitHub reported PR #45 as dirty against `main` after build 53 landed.
+- Resolved conflicts:
+  - `Wander/Features/Map/MapScreen.swift`: preserved latest `main` behavior from PR #50, so the removed Map search-bar avatar stays removed.
+  - `Wander/Services/WanderLocalStore.swift`: combined private-profile filtering from `main` with profile-avatar preservation/remote shell merging from this branch.
+  - `docs/agent-log.md`: restored recent `main` entries, including build 52, layout chrome, map search avatar removal, and build 53 release history, while keeping the profile-photo branch log.
+- Ran `xcodegen generate` after the merge so `Wander.xcodeproj` matches the merged `project.yml`.
+- First merged full test attempt failed at compile time because `ListEditorSheet` had a duplicated `@EnvironmentObject private var store` declaration from the merge. Removed the duplicate and amended the merge commit.
+- Verification after the fix:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Result: 191 tests, 0 failures.
