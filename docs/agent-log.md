@@ -7508,3 +7508,15 @@ Final update, 2026-06-30 09:35 PDT:
 - Pushed to `origin/codex/edit-category-schema`, updating PR #39: https://github.com/joelipshutz/wander/pull/39
 - Added PR testing/context comment: https://github.com/joelipshutz/wander/pull/39#issuecomment-4845798441
 - Working tree was clean after the feature commit. No merge to `main` was performed; Ryan still needs to test and sign off before main landing.
+
+Follow-up verification, 2026-06-30 10:25 PDT:
+
+- Rechecked the missing-tool gap after Ryan asked whether Deno/Supabase tests could be run.
+- Direct shell commands for `deno`, `supabase`, `psql`, `node`, `npm`, `npx`, and `docker` were not on `PATH`.
+- Loaded Codex bundled workspace dependencies and used bundled Node/pnpm from `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/`.
+- `env PATH=... pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+- `env PATH=... pnpm dlx supabase test db supabase/tests/category_metadata.sql` failed because no local Supabase Postgres was running.
+- `env PATH=... pnpm dlx supabase start` failed because Docker Desktop is unavailable/not running.
+- `env PATH=... pnpm dlx supabase test db --linked ...` also failed because Supabase's pgTAP runner requires Docker even in linked mode.
+- Used `supabase db query --linked --workdir /Users/ryanlieblein/Developer/wander` against the linked hosted project with a temporary rollback-wrapped SQL harness at `/private/tmp/category_metadata_tap_capture.sql`; the harness applied the PR migration and ran `supabase/tests/category_metadata.sql` inside one outer transaction, captured all pgTAP rows, and rolled back.
+- Hosted rollback SQL result passed: `1..10`, all 10 assertions ok. No hosted schema/data changes were intentionally persisted.
