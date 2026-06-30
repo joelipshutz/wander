@@ -223,7 +223,6 @@ struct MapScreen: View {
                     VStack(spacing: WanderTheme.spacing2) {
                         SearchBar(
                             query: $mapQuery,
-                            userInitials: store.currentUser.initials,
                             onSubmit: submitMapSearch
                         )
                         if shouldShowTypeahead {
@@ -1407,7 +1406,6 @@ private struct MapSocialOwnerOption: Identifiable, Equatable {
 
 private struct SearchBar: View {
     @Binding var query: String
-    let userInitials: String
     let onSubmit: () -> Void
 
     var body: some View {
@@ -1423,9 +1421,7 @@ private struct SearchBar: View {
                 .submitLabel(.search)
                 .onSubmit(onSubmit)
             Spacer()
-            if query.isEmpty {
-                WanderAvatar(initials: userInitials, size: 28, color: WanderTheme.terracotta.color)
-            } else {
+            if !query.isEmpty {
                 Button {
                     query = ""
                 } label: {
