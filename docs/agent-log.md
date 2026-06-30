@@ -7333,3 +7333,37 @@ Completion checkpoint, 2026-06-28 12:20 PDT:
   - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
   - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
   - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`
+
+## 2026-06-29 18:56 PDT - Codex - Remove Map Search Profile Icon
+
+Agent: Codex
+Branch: `codex/rec-64-remove-map-search-avatar`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-64-remove-map-search-avatar`
+Linear: `REC-64` - Remove profile icon from map search bar
+Starting status: clean branch tracking `origin/main`; root checkout has unrelated uncommitted `codex/profile-pictures` work, so this isolated worktree was created from `origin/main`.
+
+Goal: remove the small profile/avatar icon from the trailing side of the Map view search bar while preserving the search icon, placeholder, clear action, and submit behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+
+Coordination note: `MapScreen.swift` is a high-conflict file, but no overlapping uncommitted edits exist in this isolated worktree. The root checkout's unrelated profile work is not touched.
+
+Completion checkpoint, 2026-06-29 19:08 PDT:
+
+- Created Linear issue `REC-64` and moved it to In Progress for tracking.
+- Removed the empty-query trailing `WanderAvatar` from the Map search bar and removed the now-unused `userInitials` parameter.
+- Preserved the leading search icon, placeholder text, submit behavior, and trailing clear button when text is present.
+- Implementation commit: `6c6649a57` (`fix: remove map search avatar`).
+- Opened ready PR #50: `https://github.com/joelipshutz/wander/pull/50`.
+- Updated Linear `REC-64` to In Review and attached PR #50.
+- Verification:
+  - `git diff --check` passed.
+  - Sandboxed `xcodebuild build` failed before app compilation because CoreSimulator and SwiftPM network access were blocked, then the same build passed with elevated permissions:
+    `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec64-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - The configured full-test destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed in this Xcode environment.
+  - Full simulator suite passed on available iPhone 17 / iOS 26.5:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec64-tests-iphone17 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Known gap: simulator screenshots were not captured; this branch is prepared for build/test validation, and visual confirmation of the removed icon should happen during the requested build testing pass.
