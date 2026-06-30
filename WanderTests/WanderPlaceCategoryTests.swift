@@ -17,6 +17,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let restaurant = WanderPlaceCategory.display(for: "restaurant")
         XCTAssertEqual(restaurant.category, "Food & drink")
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
+        XCTAssertEqual(restaurant.primaryCategory, "restaurant")
         XCTAssertEqual(restaurant.compactTitle, "Restaurant · Food & drink")
 
         let transit = WanderPlaceCategory.display(for: "transportation")
@@ -24,6 +25,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(transit.subcategory, "Transit stop")
 
         let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
+        XCTAssertEqual(providerRestaurant.primaryCategory, "restaurant")
         XCTAssertEqual(providerRestaurant.category, "Food & drink")
         XCTAssertEqual(providerRestaurant.subcategory, "Thai restaurant")
 
@@ -92,7 +94,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · restaurant"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -108,7 +110,27 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · restaurant"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
         )
+    }
+
+    func testSwiftTaxonomyMatchesSharedTaxonomyIDs() throws {
+        struct SharedTaxonomy: Decodable {
+            struct Category: Decodable {
+                let id: String
+            }
+
+            let categories: [Category]
+        }
+
+        let testFile = URL(fileURLWithPath: #filePath)
+        let repoRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let taxonomyURL = repoRoot.appendingPathComponent("shared/place-taxonomy.json")
+        let data = try Data(contentsOf: taxonomyURL)
+        let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
+
+        XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.map(\.id))
     }
 }

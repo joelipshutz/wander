@@ -180,6 +180,11 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let serverID: String?
         let canonicalName: String
         let category: String
+        let primaryCategory: String?
+        let subcategory: String?
+        let categorySource: String?
+        let categoryConfidence: Double?
+        let rawProviderType: String?
         let address: String?
         let locality: String?
         let region: String?
@@ -205,6 +210,11 @@ struct WanderStoreSnapshot: Codable, Equatable {
             serverID = place.serverID
             canonicalName = place.canonicalName
             category = place.category
+            primaryCategory = place.primaryCategory
+            subcategory = place.subcategory
+            categorySource = place.categorySource
+            categoryConfidence = place.categoryConfidence
+            rawProviderType = place.rawProviderType
             address = place.address
             locality = place.locality
             region = place.region
@@ -232,6 +242,11 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 serverID: serverID,
                 canonicalName: canonicalName,
                 category: category,
+                primaryCategory: primaryCategory,
+                subcategory: subcategory,
+                categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
+                categoryConfidence: categoryConfidence,
+                rawProviderType: rawProviderType ?? category,
                 address: address,
                 locality: locality,
                 region: region,
@@ -266,6 +281,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let ratingScore: Int?
         let recommendedScore: Double?
         let recommendedCount: Int?
+        let categoryOverride: String?
+        let subcategoryOverride: String?
+        let categoryOverrideSource: String?
+        let categoryOverrideConfidence: Double?
         let visibilityRaw: String
         let nearbyConfirmed: Bool
         let visitedAt: Date?
@@ -293,6 +312,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
             ratingScore = userPlace.ratingScore
             recommendedScore = userPlace.recommendedScore
             recommendedCount = userPlace.recommendedCount
+            categoryOverride = userPlace.categoryOverride
+            subcategoryOverride = userPlace.subcategoryOverride
+            categoryOverrideSource = userPlace.categoryOverrideSource
+            categoryOverrideConfidence = userPlace.categoryOverrideConfidence
             visibilityRaw = userPlace.visibilityRaw
             nearbyConfirmed = userPlace.nearbyConfirmed
             visitedAt = userPlace.visitedAt
@@ -323,6 +346,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 ratingScore: ratingScore,
                 recommendedScore: recommendedScore,
                 recommendedCount: recommendedCount ?? 0,
+                categoryOverride: categoryOverride,
+                subcategoryOverride: subcategoryOverride,
+                categoryOverrideSource: categoryOverrideSource,
+                categoryOverrideConfidence: categoryOverrideConfidence,
                 nearbyConfirmed: nearbyConfirmed,
                 visitedAt: visitedAt,
                 savedAt: savedAt,

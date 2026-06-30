@@ -188,6 +188,9 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
                     id: sourceID,
                     name: name,
                     category: category(for: item, fallbackCategory: fallbackCategory),
+                    categorySource: PlaceCategorySource.provider.rawValue,
+                    categoryConfidence: confidence(for: item, fallbackCategory: fallbackCategory, origin: origin),
+                    rawProviderType: rawProviderType(for: item) ?? fallbackCategory,
                     address: address(for: item.placemark),
                     locality: item.placemark.locality,
                     region: item.placemark.administrativeArea,
@@ -269,6 +272,10 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         }
 
         return fallback?.isEmpty == false ? fallback ?? "place" : "place"
+    }
+
+    private func rawProviderType(for item: MKMapItem) -> String? {
+        item.pointOfInterestCategory?.rawValue
     }
 
     private func confidence(for item: MKMapItem, fallbackCategory: String?, origin: CLLocation?) -> Double {

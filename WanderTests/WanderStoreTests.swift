@@ -497,9 +497,70 @@ final class WanderStoreTests: XCTestCase {
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
         let attributes = store.attributes(for: result.userPlaceID)
 
-        XCTAssertEqual(saved?.place.category, "coffee shop")
+        XCTAssertEqual(saved?.place.category, "coffee")
+        XCTAssertEqual(saved?.place.subcategory, "Coffee shop")
+        XCTAssertEqual(saved?.effectiveCategory, "coffee")
         XCTAssertEqual(attributes.map(\.questionKey), [PlaceMemoryAttributeKeys.personalLabels, "work_setup"])
         XCTAssertEqual(attributes.first { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }?.valueJSON, "[\"work-friendly\",\"joe rec\"]")
+    }
+
+    func testProviderSubcategoryFiltersByPrimaryCategory() {
+        let store = makeStore()
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "place_jitlada",
+                name: "Jitlada",
+                category: "thai restaurant",
+                rawProviderType: "thai restaurant",
+                latitude: 34.098,
+                longitude: -118.306,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        XCTAssertEqual(saved?.place.category, "restaurant")
+        XCTAssertEqual(saved?.place.subcategory, "Thai restaurant")
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["restaurant"])).contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["thai restaurant"])).isEmpty)
+    }
+
+    func testUserCategoryOverrideFiltersWithoutRewritingSharedPlace() {
+        let store = makeStore()
+        let original = PlaceCandidate(
+            id: "place_bodega",
+            name: "Corner Bodega",
+            category: "coffee shop",
+            rawProviderType: "coffee shop",
+            latitude: 34.08,
+            longitude: -118.28,
+            confidence: 1
+        )
+        _ = store.saveCandidate(original, status: .wannaGo, visibility: .followers, note: nil, sourceType: .manual)
+
+        let edited = original.recategorized(
+            as: PlaceCategoryAssignment(
+                primaryCategory: "shop",
+                subcategory: "Corner store",
+                source: PlaceCategorySource.user.rawValue,
+                confidence: 1,
+                rawProviderType: original.rawProviderType
+            )
+        )
+        let result = store.saveCandidate(edited, status: .been, visibility: .followers, note: nil, sourceType: .manual)
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+
+        XCTAssertEqual(saved?.place.category, "coffee")
+        XCTAssertEqual(saved?.place.subcategory, "Coffee shop")
+        XCTAssertEqual(saved?.userPlace.categoryOverride, "shop")
+        XCTAssertEqual(saved?.userPlace.subcategoryOverride, "Corner store")
+        XCTAssertEqual(saved?.effectiveCategory, "shop")
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["shop"])).contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertFalse(store.visiblePlaces(filters: PlaceFilters(categories: ["coffee"])).contains { $0.userPlace.id == result.userPlaceID })
     }
 
     func testPlaceRatingsNormalizeForBeenSavesOnly() {

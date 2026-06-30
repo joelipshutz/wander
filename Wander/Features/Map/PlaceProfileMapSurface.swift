@@ -13,7 +13,7 @@ struct PlaceProfileMapSurface: View {
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
             placeID: place.id,
-            category: place.category,
+            category: place.primaryCategory,
             saves: saves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
@@ -55,7 +55,7 @@ struct PlaceProfileFullScreen: View {
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
             placeID: place.id,
-            category: place.category,
+            category: place.primaryCategory,
             saves: saves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID
@@ -114,7 +114,7 @@ private struct PlaceProfilePreviewCard: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                PlaceProfileCategoryThumb(category: place.category, size: 82)
+                PlaceProfileCategoryThumb(category: place.primaryCategory, size: 82)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     if let previewSignal {
@@ -603,7 +603,7 @@ private struct PlaceProfileMapHeader: View {
             if let latitude = place.latitude, let longitude = place.longitude {
                 Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
                     Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                        PlaceProfileCategoryThumb(category: place.category, size: 54)
+                        PlaceProfileCategoryThumb(category: place.primaryCategory, size: 54)
                             .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
                     }
                 }
@@ -1131,9 +1131,9 @@ private enum PlaceProfileCopy {
     }
 
     static func categoryDisplay(for place: PlaceSheetPlace) -> String? {
-        let category = trimmed(place.category)
-        guard let category, category.lowercased() != "place" else { return nil }
-        return category.replacingOccurrences(of: "_", with: " ")
+        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
+        guard let display = trimmed(display), place.primaryCategory != "place" else { return nil }
+        return display
     }
 
     static func fitSentence(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> String? {

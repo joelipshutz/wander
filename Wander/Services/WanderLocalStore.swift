@@ -243,8 +243,9 @@ final class WanderStore: ObservableObject {
                 isBlocked: blocked
             ) else { return nil }
 
+            let visiblePlace = VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
-            guard filters.categories.isEmpty || filters.categories.contains(place.category) else { return nil }
+            guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.effectiveCategory) else { return nil }
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
 
             if !filters.ownerScopes.isEmpty {
@@ -258,7 +259,7 @@ final class WanderStore: ObservableObject {
                 guard allowed else { return nil }
             }
 
-            return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+            return visiblePlace
         }
     }
 
@@ -266,7 +267,7 @@ final class WanderStore: ObservableObject {
         remoteVisiblePlaceCache.filter { visiblePlace in
             guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
             guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
-            guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.place.category) else { return false }
+            guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.effectiveCategory) else { return false }
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
             guard !filters.ownerScopes.isEmpty else { return true }
@@ -532,6 +533,7 @@ final class WanderStore: ObservableObject {
         let resolvedVisibility = visibilityForSave(visibility)
         let place = upsertPlace(from: candidate, sourceType: sourceType)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
+        let categoryOverride = categoryOverrideAssignment(from: candidate)
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
             existing.statusRaw = status.rawValue
@@ -540,6 +542,7 @@ final class WanderStore: ObservableObject {
             existing.ratingScore = savedRatingScore
             existing.recommendedScore = savedRatingScore.map(Double.init)
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
+            applyCategoryOverride(categoryOverride, to: existing)
             if let attributes {
                 existing.ratingSignal = ratingSignal(from: attributes)
                 replaceAttributes(for: existing.id, with: attributes, syncState: .pendingUpdate)
@@ -563,6 +566,10 @@ final class WanderStore: ObservableObject {
             ratingScore: savedRatingScore,
             recommendedScore: savedRatingScore.map(Double.init),
             recommendedCount: savedRatingScore == nil ? 0 : 1,
+            categoryOverride: categoryOverride?.primaryCategory,
+            subcategoryOverride: categoryOverride?.subcategory,
+            categoryOverrideSource: categoryOverride?.source,
+            categoryOverrideConfidence: categoryOverride?.confidence,
             nearbyConfirmed: sourceType == .currentLocation,
             sourceType: sourceType.rawValue,
             syncState: .pendingCreate
@@ -913,7 +920,12 @@ final class WanderStore: ObservableObject {
             PlaceCandidate(
                 id: visiblePlace.place.id,
                 name: visiblePlace.place.canonicalName,
-                category: visiblePlace.place.category,
+                category: visiblePlace.effectiveCategory,
+                primaryCategory: visiblePlace.effectiveCategory,
+                subcategory: visiblePlace.effectiveSubcategory,
+                categorySource: visiblePlace.categoryAssignment.source,
+                categoryConfidence: visiblePlace.categoryAssignment.confidence,
+                rawProviderType: visiblePlace.place.rawProviderType,
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude,
                 sourceProvider: visiblePlace.place.sourceProvider,
@@ -1405,6 +1417,11 @@ final class WanderStore: ObservableObject {
             serverID: place.serverID,
             canonicalName: place.canonicalName,
             category: place.category,
+            primaryCategory: place.primaryCategory,
+            subcategory: place.subcategory,
+            categorySource: place.categorySource,
+            categoryConfidence: place.categoryConfidence,
+            rawProviderType: place.rawProviderType,
             address: place.address,
             locality: place.locality,
             region: place.region,
@@ -1435,6 +1452,10 @@ final class WanderStore: ObservableObject {
             note: userPlace.note,
             ratingSignal: userPlace.ratingSignal,
             ratingScore: userPlace.ratingScore,
+            categoryOverride: userPlace.categoryOverride,
+            subcategoryOverride: userPlace.subcategoryOverride,
+            categoryOverrideSource: userPlace.categoryOverrideSource,
+            categoryOverrideConfidence: userPlace.categoryOverrideConfidence,
             nearbyConfirmed: userPlace.nearbyConfirmed,
             sourceType: userPlace.sourceType,
             attributes: attributeDrafts
@@ -1814,19 +1835,25 @@ final class WanderStore: ObservableObject {
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {
         let providerPlaceID = candidate.sourceProviderPlaceID ?? candidate.id
+        let sharedAssignment = sharedPlaceAssignment(from: candidate)
         if let existing = places.first(where: {
             $0.id == candidate.id
                 || ($0.sourceProvider == candidate.sourceProvider && $0.sourceProviderPlaceID == providerPlaceID)
                 || $0.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
         }) {
-            mergeBusinessMetadata(from: candidate, into: existing)
+            mergeBusinessMetadata(from: candidate, sharedAssignment: sharedAssignment, into: existing)
             return existing
         }
 
         let place = LocalPlace(
             localID: "local_place_\(slug(candidate.name))",
             canonicalName: candidate.name,
-            category: candidate.category,
+            category: sharedAssignment.legacyCategory,
+            primaryCategory: sharedAssignment.primaryCategory,
+            subcategory: sharedAssignment.subcategory,
+            categorySource: sharedAssignment.source,
+            categoryConfidence: sharedAssignment.confidence,
+            rawProviderType: sharedAssignment.rawProviderType,
             address: candidate.address,
             locality: candidate.locality,
             region: candidate.region,
@@ -1846,11 +1873,24 @@ final class WanderStore: ObservableObject {
         return place
     }
 
-    private func mergeBusinessMetadata(from candidate: PlaceCandidate, into place: LocalPlace) {
+    private func mergeBusinessMetadata(from candidate: PlaceCandidate, sharedAssignment: PlaceCategoryAssignment, into place: LocalPlace) {
         var didChange = false
 
-        if shouldUpdateCategory(from: candidate.category, existing: place.category) {
-            place.category = candidate.category
+        if shouldUpdateCategory(from: sharedAssignment.primaryCategory, existing: place.primaryCategory) {
+            place.category = sharedAssignment.legacyCategory
+            place.primaryCategory = sharedAssignment.primaryCategory
+            place.subcategory = sharedAssignment.subcategory
+            place.categorySource = sharedAssignment.source
+            place.categoryConfidence = sharedAssignment.confidence
+            place.rawProviderType = sharedAssignment.rawProviderType
+            didChange = true
+        } else if sharedAssignment.source != PlaceCategorySource.user.rawValue,
+                  sharedAssignment.primaryCategory == place.primaryCategory,
+                  place.subcategory != sharedAssignment.subcategory {
+            place.subcategory = sharedAssignment.subcategory
+            place.categorySource = sharedAssignment.source
+            place.categoryConfidence = sharedAssignment.confidence
+            place.rawProviderType = sharedAssignment.rawProviderType ?? place.rawProviderType
             didChange = true
         }
         didChange = mergeMetadataValue(normalizedMetadata(candidate.websiteURLString), into: &place.websiteURLString) || didChange
@@ -1876,6 +1916,32 @@ final class WanderStore: ObservableObject {
         }
 
         return true
+    }
+
+    private func sharedPlaceAssignment(from candidate: PlaceCandidate) -> PlaceCategoryAssignment {
+        if candidate.categorySource == PlaceCategorySource.user.rawValue {
+            let rawProviderType = candidate.rawProviderType ?? PlaceCategorySource.unknown.rawValue
+            return WanderPlaceCategory.assignment(
+                forRawCategory: rawProviderType,
+                source: candidate.rawProviderType == nil ? PlaceCategorySource.unknown.rawValue : PlaceCategorySource.provider.rawValue,
+                confidence: candidate.categoryConfidence,
+                rawProviderType: rawProviderType
+            )
+        }
+
+        return candidate.categoryAssignment
+    }
+
+    private func categoryOverrideAssignment(from candidate: PlaceCandidate) -> PlaceCategoryAssignment? {
+        guard candidate.categorySource == PlaceCategorySource.user.rawValue else { return nil }
+        return candidate.categoryAssignment
+    }
+
+    private func applyCategoryOverride(_ assignment: PlaceCategoryAssignment?, to userPlace: LocalUserPlace) {
+        userPlace.categoryOverride = assignment?.primaryCategory
+        userPlace.subcategoryOverride = assignment?.subcategory
+        userPlace.categoryOverrideSource = assignment?.source
+        userPlace.categoryOverrideConfidence = assignment?.confidence
     }
 
     private func mergeMetadataValue(_ candidateValue: String?, into storedValue: inout String?) -> Bool {
@@ -2239,7 +2305,7 @@ final class WanderStore: ObservableObject {
             .joined(separator: " ")
         let haystack = [
             visiblePlace.place.canonicalName,
-            visiblePlace.place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.userPlace.note,
             attributeText
         ]

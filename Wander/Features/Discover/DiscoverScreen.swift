@@ -706,7 +706,7 @@ private struct DiscoverPlaceResultCard: View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Button(action: openPlace) {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                    DiscoverCategoryThumb(category: visiblePlace.place.category, size: 62, iconSize: 24)
+                    DiscoverCategoryThumb(category: visiblePlace.effectiveCategory, size: 62, iconSize: 24)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         HStack(spacing: WanderTheme.spacing2) {
@@ -772,7 +772,7 @@ private struct DiscoverPlaceResultCard: View {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.place.category
+            visiblePlace.effectiveCategoryDisplay.compactTitle
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -793,7 +793,7 @@ private struct DiscoverPlaceResultCard: View {
     private var matchLine: String {
         [
             matchedOwnerName,
-            visiblePlace.place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.userPlace.status.displayTitle,
             visiblePlace.place.locality
         ]
@@ -843,7 +843,7 @@ private struct LatestActivityRow: View {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.place.category
+            visiblePlace.effectiveCategoryDisplay.compactTitle
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)

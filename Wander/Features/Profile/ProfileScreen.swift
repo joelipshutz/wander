@@ -436,7 +436,7 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var categories: [String] {
-        Array(Set(allModePlaces.map(\.place.category))).sorted()
+        Array(Set(allModePlaces.map(\.effectiveCategory))).sorted()
     }
 
     private var metadataTags: [String] {
@@ -677,7 +677,7 @@ private struct SavedPlacesListScreen: View {
 
     private func matchesSelectedCategory(_ visiblePlace: VisiblePlace) -> Bool {
         guard let selectedCategory else { return true }
-        return visiblePlace.place.category == selectedCategory
+        return visiblePlace.effectiveCategory == selectedCategory
     }
 
     private func matchesSelectedMetadataTag(_ visiblePlace: VisiblePlace) -> Bool {
@@ -691,7 +691,7 @@ private struct SavedPlacesListScreen: View {
 
         let searchable = [
             visiblePlace.place.canonicalName,
-            visiblePlace.place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.place.locality,
             visiblePlace.userPlace.note,
             visiblePlace.userPlace.ratingSignal,
@@ -1021,7 +1021,7 @@ private struct ProfilePlaceRow: View {
     }
 
     private var icon: String {
-        WanderPlaceCategory.symbolName(for: visiblePlace.place.category)
+        WanderPlaceCategory.symbolName(for: visiblePlace.categoryAssignment)
     }
 
     private var subtitle: String {

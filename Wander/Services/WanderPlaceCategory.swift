@@ -1,7 +1,64 @@
 import MapKit
 
+enum PlaceCategorySource: String, Codable {
+    case provider
+    case deterministic
+    case ai
+    case user
+    case legacy
+    case unknown
+}
+
+struct PlaceCategoryAssignment: Equatable, Codable {
+    var primaryCategory: String
+    var subcategory: String?
+    var source: String
+    var confidence: Double?
+    var rawProviderType: String?
+
+    init(
+        primaryCategory: String,
+        subcategory: String? = nil,
+        source: String = PlaceCategorySource.provider.rawValue,
+        confidence: Double? = nil,
+        rawProviderType: String? = nil
+    ) {
+        self.primaryCategory = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
+        self.subcategory = WanderPlaceCategory.normalizedSubcategory(subcategory)
+        self.source = PlaceCategorySource(rawValue: source)?.rawValue ?? PlaceCategorySource.unknown.rawValue
+        self.confidence = confidence.map { max(0, min(1, $0)) }
+        self.rawProviderType = WanderPlaceCategory.normalizedProviderType(rawProviderType)
+    }
+
+    var legacyCategory: String {
+        primaryCategory
+    }
+
+    var isUserEdited: Bool {
+        source == PlaceCategorySource.user.rawValue
+    }
+
+    var comparableKey: String {
+        [
+            primaryCategory,
+            subcategory?.lowercased() ?? ""
+        ].joined(separator: "|")
+    }
+
+    func withSource(_ source: PlaceCategorySource, confidence: Double? = nil) -> PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: source.rawValue,
+            confidence: confidence ?? self.confidence,
+            rawProviderType: rawProviderType
+        )
+    }
+}
+
 struct PlaceCategoryDisplay: Equatable {
     let rawCategory: String
+    let primaryCategory: String
     let category: String
     let subcategory: String?
     let sourceLabel: String
@@ -60,25 +117,36 @@ enum PlacePersonalLabelSuggestions {
     }
 }
 
+struct PlaceCategoryTaxonomyEntry: Equatable {
+    let id: String
+    let group: String
+    let defaultSubcategory: String?
+    let symbolName: String
+    let aliases: [String]
+    let subcategories: [String]
+}
+
 enum WanderPlaceCategory {
-    static let editableCategories = [
-        "coffee",
-        "restaurant",
-        "bar",
-        "hike",
-        "park",
-        "gym",
-        "fitness studio",
-        "pilates studio",
-        "spiritual",
-        "hospital",
-        "pharmacy",
-        "veterinarian",
-        "hotel",
-        "shop",
-        "transportation",
-        "place"
+    static let taxonomy: [PlaceCategoryTaxonomyEntry] = [
+        PlaceCategoryTaxonomyEntry(id: "coffee", group: "Food & drink", defaultSubcategory: "Coffee shop", symbolName: "cup.and.saucer.fill", aliases: ["coffee", "coffee shop", "cafe", "espresso", "roaster", "bakery"], subcategories: ["Coffee shop", "Cafe", "Bakery", "Roaster", "Tea shop"]),
+        PlaceCategoryTaxonomyEntry(id: "restaurant", group: "Food & drink", defaultSubcategory: "Restaurant", symbolName: "fork.knife", aliases: ["restaurant", "thai restaurant", "fast food restaurant", "food", "food market", "taqueria", "ramen", "sushi", "pizza", "diner", "kitchen"], subcategories: ["Restaurant", "Thai restaurant", "Fast food restaurant", "Sushi restaurant", "Pizza restaurant", "Ramen restaurant", "Taqueria", "Diner"]),
+        PlaceCategoryTaxonomyEntry(id: "bar", group: "Food & drink", defaultSubcategory: "Bar", symbolName: "wineglass.fill", aliases: ["bar", "brewery", "winery", "nightlife", "cocktail", "pub"], subcategories: ["Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Nightlife"]),
+        PlaceCategoryTaxonomyEntry(id: "hike", group: "Outdoors & nature", defaultSubcategory: "Hike or trail", symbolName: "figure.hiking", aliases: ["hike", "trail", "waterfall", "hot spring", "canyon", "mountain", "observatory"], subcategories: ["Hike or trail", "Trail", "Waterfall", "Hot spring", "Canyon", "Scenic overlook"]),
+        PlaceCategoryTaxonomyEntry(id: "park", group: "Outdoors & nature", defaultSubcategory: "Park", symbolName: "tree.fill", aliases: ["park", "national park", "playground", "garden", "plaza", "beach", "lake"], subcategories: ["Park", "National park", "Garden", "Beach", "Playground", "Dog park"]),
+        PlaceCategoryTaxonomyEntry(id: "gym", group: "Health & wellness", defaultSubcategory: "Gym", symbolName: "dumbbell.fill", aliases: ["gym", "fitness center", "training", "strength", "workout"], subcategories: ["Gym", "Fitness center", "Climbing gym", "Boxing gym", "Training studio"]),
+        PlaceCategoryTaxonomyEntry(id: "fitness studio", group: "Health & wellness", defaultSubcategory: "Fitness studio", symbolName: "figure.strengthtraining.traditional", aliases: ["fitness studio", "yoga studio", "barre", "wellness studio", "stretch", "studio"], subcategories: ["Fitness studio", "Yoga studio", "Barre studio", "Wellness studio", "Stretch studio"]),
+        PlaceCategoryTaxonomyEntry(id: "pilates studio", group: "Health & wellness", defaultSubcategory: "Pilates studio", symbolName: "figure.mind.and.body", aliases: ["pilates studio", "pilates", "reformer", "lagree"], subcategories: ["Pilates studio", "Reformer pilates", "Lagree studio"]),
+        PlaceCategoryTaxonomyEntry(id: "spiritual", group: "Arts, culture & faith", defaultSubcategory: "Spiritual place", symbolName: "sparkles", aliases: ["spiritual", "church", "temple", "shrine", "mosque", "synagogue", "chapel", "cathedral", "meditation"], subcategories: ["Spiritual place", "Temple", "Shrine", "Church", "Mosque", "Synagogue", "Meditation center"]),
+        PlaceCategoryTaxonomyEntry(id: "hospital", group: "Health & wellness", defaultSubcategory: "Hospital", symbolName: "cross.case.fill", aliases: ["hospital", "urgent care", "medical center", "health center"], subcategories: ["Hospital", "Urgent care", "Medical center", "Clinic"]),
+        PlaceCategoryTaxonomyEntry(id: "pharmacy", group: "Health & wellness", defaultSubcategory: "Pharmacy", symbolName: "pills.fill", aliases: ["pharmacy", "drugstore"], subcategories: ["Pharmacy", "Drugstore"]),
+        PlaceCategoryTaxonomyEntry(id: "veterinarian", group: "Services", defaultSubcategory: "Veterinarian", symbolName: "pawprint.fill", aliases: ["veterinarian", "veterinary clinic", "animal hospital", "animal service", "pet clinic", "pet hospital"], subcategories: ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic"]),
+        PlaceCategoryTaxonomyEntry(id: "hotel", group: "Lodging", defaultSubcategory: "Hotel", symbolName: "bed.double.fill", aliases: ["hotel", "motel", "resort", "3 star hotel", "4 star hotel", "5 star hotel", "lodging"], subcategories: ["Hotel", "Motel", "Resort", "Boutique hotel", "3-star hotel", "4-star hotel", "5-star hotel"]),
+        PlaceCategoryTaxonomyEntry(id: "shop", group: "Shopping", defaultSubcategory: "Shop", symbolName: "bag.fill", aliases: ["shop", "store", "art supply store", "mall", "boutique", "market"], subcategories: ["Shop", "Store", "Art supply store", "Boutique", "Market", "Mall"]),
+        PlaceCategoryTaxonomyEntry(id: "transportation", group: "Transportation & transit", defaultSubcategory: "Transit stop", symbolName: "tram.fill", aliases: ["transportation", "transit", "transit station", "airport", "train station", "bus station", "ferry", "subway"], subcategories: ["Transit stop", "Airport", "Train station", "Bus station", "Ferry terminal", "Subway station"]),
+        PlaceCategoryTaxonomyEntry(id: "place", group: "Place", defaultSubcategory: nil, symbolName: "mappin", aliases: ["place", "point of interest", "tourist attraction"], subcategories: [])
     ]
+
+    static let editableCategories = taxonomy.map(\.id)
 
     static func primary(for pointCategory: MKPointOfInterestCategory?, name: String? = nil) -> String? {
         if let nameCategory = primaryFromName(name, pointCategory: pointCategory) {
@@ -116,211 +184,172 @@ enum WanderPlaceCategory {
         }
     }
 
-    static func display(for category: String, sourceLabel: String = "suggested") -> PlaceCategoryDisplay {
-        let normalizedCategory = normalizedCategory(category)
-        let canonicalCategory = questionCategory(for: normalizedCategory)
+    static func assignment(
+        forRawCategory rawCategory: String,
+        source: String = PlaceCategorySource.provider.rawValue,
+        confidence: Double? = nil,
+        rawProviderType: String? = nil
+    ) -> PlaceCategoryAssignment {
+        let raw = normalizedSubcategory(rawProviderType) ?? normalizedSubcategory(rawCategory)
+        let primary = primaryCategory(for: rawCategory)
+        let defaultSubcategory = defaultSubcategory(for: primary)
         let subcategory: String?
 
-        if normalizedCategory == "place" {
+        if primary == "place" {
             subcategory = nil
-        } else if normalizedCategory == canonicalCategory {
-            subcategory = defaultSubcategory(for: canonicalCategory) ?? sentenceTitleized(normalizedCategory)
+        } else if normalizedCategoryText(raw) == primary {
+            subcategory = defaultSubcategory
         } else {
-            subcategory = sentenceTitleized(normalizedCategory)
+            subcategory = raw ?? defaultSubcategory
         }
 
-        return PlaceCategoryDisplay(
-            rawCategory: normalizedCategory,
-            category: broadCategory(for: canonicalCategory),
+        return PlaceCategoryAssignment(
+            primaryCategory: primary,
             subcategory: subcategory,
-            sourceLabel: sourceLabel
+            source: source,
+            confidence: confidence,
+            rawProviderType: rawProviderType ?? rawCategory
         )
     }
 
-    static func questionCategory(for category: String) -> String {
-        let normalized = normalizedCategory(category)
+    static func assignment(
+        primaryCategory: String,
+        subcategory: String?,
+        source: String = PlaceCategorySource.user.rawValue,
+        confidence: Double? = nil,
+        rawProviderType: String? = nil
+    ) -> PlaceCategoryAssignment {
+        let primary = normalizedPrimaryCategory(primaryCategory)
+        return PlaceCategoryAssignment(
+            primaryCategory: primary,
+            subcategory: normalizedSubcategory(subcategory) ?? defaultSubcategory(for: primary),
+            source: source,
+            confidence: confidence,
+            rawProviderType: rawProviderType
+        )
+    }
 
-        switch normalized {
-        case "coffee", "coffee shop", "cafe", "bakery":
-            return "coffee"
-        case "restaurant", "thai restaurant", "fast food restaurant", "food", "food market":
-            return "restaurant"
-        case "bar", "brewery", "winery", "nightlife":
-            return "bar"
-        case "hike", "trail", "waterfall", "hot spring":
-            return "hike"
-        case "park", "national park":
-            return "park"
-        case "gym":
-            return "gym"
-        case "fitness studio", "yoga studio":
-            return "fitness studio"
-        case "pilates studio":
-            return "pilates studio"
-        case "spiritual", "church", "temple", "shrine":
-            return "spiritual"
-        case "hospital", "urgent care":
-            return "hospital"
-        case "pharmacy":
-            return "pharmacy"
-        case "veterinarian", "veterinary clinic", "animal hospital":
-            return "veterinarian"
-        case "hotel", "motel", "resort":
-            return "hotel"
-        case "shop", "store", "art supply store":
-            return "shop"
-        case "transportation", "transit", "transit station", "airport", "train station", "bus station":
-            return "transportation"
-        default:
-            let padded = " \(normalized) "
-            if containsAny(padded, [" restaurant ", " taqueria ", " ramen ", " sushi ", " pizza ", " diner "]) {
-                return "restaurant"
-            }
-            if containsAny(padded, [" coffee ", " cafe ", " bakery "]) {
-                return "coffee"
-            }
-            if containsAny(padded, [" bar ", " brewery ", " winery ", " cocktail "]) {
-                return "bar"
-            }
-            if containsAny(padded, [" hike ", " trail ", " waterfall ", " hot spring "]) {
-                return "hike"
-            }
-            if containsAny(padded, [" park "]) {
-                return "park"
-            }
-            if containsAny(padded, [" gym "]) {
-                return "gym"
-            }
-            if containsAny(padded, [" pilates ", " reformer "]) {
-                return "pilates studio"
-            }
-            if containsAny(padded, [" fitness ", " yoga ", " barre ", " wellness studio "]) {
-                return "fitness studio"
-            }
-            if containsAny(padded, [" church ", " temple ", " shrine ", " mosque ", " synagogue "]) {
-                return "spiritual"
-            }
-            if containsAny(padded, [" hospital ", " urgent care ", " medical center "]) {
-                return "hospital"
-            }
-            if containsAny(padded, [" pharmacy "]) {
-                return "pharmacy"
-            }
-            if containsAny(padded, [" veterinarian ", " veterinary ", " animal hospital "]) {
-                return "veterinarian"
-            }
-            if containsAny(padded, [" hotel ", " motel ", " resort "]) {
-                return "hotel"
-            }
-            if containsAny(padded, [" airport ", " transit ", " station ", " train ", " bus ", " ferry ", " subway "]) {
-                return "transportation"
-            }
-            if containsAny(padded, [" shop ", " store ", " mall ", " boutique "]) {
-                return "shop"
-            }
+    static func display(for assignment: PlaceCategoryAssignment, sourceLabel: String? = nil) -> PlaceCategoryDisplay {
+        let primary = normalizedPrimaryCategory(assignment.primaryCategory)
+        let subcategory = normalizedSubcategory(assignment.subcategory) ?? defaultSubcategory(for: primary)
+        let label = sourceLabel ?? sourceDisplayLabel(assignment.source)
+        return PlaceCategoryDisplay(
+            rawCategory: assignment.rawProviderType ?? assignment.legacyCategory,
+            primaryCategory: primary,
+            category: broadCategory(for: primary),
+            subcategory: primary == "place" ? nil : subcategory,
+            sourceLabel: label
+        )
+    }
+
+    static func display(for category: String, sourceLabel: String = "suggested") -> PlaceCategoryDisplay {
+        display(for: assignment(forRawCategory: category), sourceLabel: sourceLabel)
+    }
+
+    static func questionCategory(for category: String) -> String {
+        primaryCategory(for: category)
+    }
+
+    static func primaryCategory(for category: String) -> String {
+        let normalized = normalizedCategoryText(category)
+        guard !normalized.isEmpty else { return "place" }
+        if taxonomy.contains(where: { $0.id == normalized }) {
             return normalized
         }
+
+        for entry in taxonomy where entry.id != "place" {
+            if entry.aliases.contains(where: { normalizedCategoryText($0) == normalized }) {
+                return entry.id
+            }
+        }
+
+        let padded = " \(normalized) "
+        for entry in taxonomy where entry.id != "place" {
+            if entry.aliases.contains(where: { alias in
+                let normalizedAlias = normalizedCategoryText(alias)
+                return !normalizedAlias.isEmpty && padded.contains(" \(normalizedAlias) ")
+            }) {
+                return entry.id
+            }
+        }
+
+        return "place"
+    }
+
+    static func normalizedPrimaryCategory(_ value: String) -> String {
+        let normalized = normalizedCategoryText(value)
+        if taxonomy.contains(where: { $0.id == normalized }) {
+            return normalized
+        }
+        return primaryCategory(for: normalized)
+    }
+
+    static func normalizedSubcategory(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        guard !trimmed.isEmpty else { return nil }
+        return sentenceTitleized(trimmed)
+    }
+
+    static func normalizedProviderType(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed.lowercased()
+    }
+
+    static func subcategorySuggestions(for primaryCategory: String) -> [String] {
+        entry(for: primaryCategory)?.subcategories ?? []
     }
 
     static func symbolName(for category: String) -> String {
-        switch questionCategory(for: category) {
-        case "coffee":
-            "cup.and.saucer.fill"
-        case "hike":
-            "figure.hiking"
-        case "restaurant":
-            "fork.knife"
-        case "bar":
-            "wineglass.fill"
-        case "park":
-            "tree.fill"
-        case "hospital":
-            "cross.case.fill"
-        case "gym":
-            "dumbbell.fill"
-        case "fitness studio":
-            "figure.strengthtraining.traditional"
-        case "pilates studio":
-            "figure.mind.and.body"
-        case "spiritual":
-            "sparkles"
-        case "veterinarian":
-            "pawprint.fill"
-        case "pharmacy":
-            "pills.fill"
-        case "hotel":
-            "bed.double.fill"
-        case "shop":
-            "bag.fill"
-        case "transportation":
-            "tram.fill"
-        default:
-            "mappin"
-        }
+        entry(for: primaryCategory(for: category))?.symbolName ?? "mappin"
     }
 
-    private static func broadCategory(for category: String) -> String {
-        switch category {
-        case "coffee", "restaurant", "bar":
-            "Food & drink"
-        case "hike", "park":
-            "Outdoors & nature"
-        case "gym", "fitness studio", "pilates studio", "hospital", "pharmacy":
-            "Health & wellness"
-        case "spiritual":
-            "Arts, culture & faith"
-        case "veterinarian":
-            "Services"
-        case "hotel":
-            "Lodging"
-        case "shop":
-            "Shopping"
-        case "transportation":
-            "Transportation & transit"
-        default:
-            "Place"
-        }
+    static func symbolName(for assignment: PlaceCategoryAssignment) -> String {
+        entry(for: assignment.primaryCategory)?.symbolName ?? "mappin"
     }
 
-    private static func defaultSubcategory(for category: String) -> String? {
-        switch category {
-        case "coffee":
-            "Coffee shop"
-        case "restaurant":
-            "Restaurant"
-        case "bar":
-            "Bar"
-        case "hike":
-            "Hike or trail"
-        case "park":
-            "Park"
-        case "gym":
-            "Gym"
-        case "fitness studio":
-            "Fitness studio"
-        case "pilates studio":
-            "Pilates studio"
-        case "spiritual":
-            "Spiritual place"
-        case "hospital":
-            "Hospital"
-        case "pharmacy":
-            "Pharmacy"
-        case "veterinarian":
-            "Veterinarian"
-        case "hotel":
-            "Hotel"
-        case "shop":
-            "Shop"
-        case "transportation":
-            "Transit stop"
+    static func broadCategory(for category: String) -> String {
+        entry(for: category)?.group ?? "Place"
+    }
+
+    static func defaultSubcategory(for category: String) -> String? {
+        entry(for: category)?.defaultSubcategory
+    }
+
+    static func normalizedCategoryText(_ value: String?) -> String {
+        guard let value else { return "" }
+        return value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "&/ -")).inverted)
+            .joined(separator: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func entry(for category: String) -> PlaceCategoryTaxonomyEntry? {
+        let primary = normalizedCategoryText(category)
+        return taxonomy.first { $0.id == primary }
+    }
+
+    private static func sourceDisplayLabel(_ source: String) -> String {
+        switch PlaceCategorySource(rawValue: source) {
+        case .user:
+            "edited"
+        case .ai:
+            "smart guess"
+        case .legacy:
+            "migrated"
         default:
-            nil
+            "suggested"
         }
     }
 
     private static func primaryFromName(_ name: String?, pointCategory: MKPointOfInterestCategory?) -> String? {
-        guard let normalizedName = normalized(name), !normalizedName.isEmpty else { return nil }
+        guard let normalizedName = normalizedSearchText(name), !normalizedName.isEmpty else { return nil }
 
         if containsAny(normalizedName, ["veterinary", "veterinarian", " vet ", "animal hospital", "pet hospital", "pet clinic", "dog dental", "cat clinic"]) {
             return "veterinarian"
@@ -356,7 +385,7 @@ enum WanderPlaceCategory {
         }
     }
 
-    private static func normalized(_ value: String?) -> String? {
+    private static func normalizedSearchText(_ value: String?) -> String? {
         guard let value else { return nil }
         let normalized = " "
             + value
@@ -366,15 +395,6 @@ enum WanderPlaceCategory {
                 .joined(separator: " ")
             + " "
         return normalized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : normalized
-    }
-
-    private static func normalizedCategory(_ category: String) -> String {
-        let normalized = category
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        return normalized.isEmpty ? "place" : normalized
     }
 
     private static func sentenceTitleized(_ value: String) -> String {

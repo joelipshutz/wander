@@ -39,6 +39,11 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let ownerDisplayName: String
     let canonicalName: String
     let category: String
+    let primaryCategory: String?
+    let subcategory: String?
+    let categorySource: String?
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     let latitude: Double
     let longitude: Double
     let status: String
@@ -48,6 +53,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let ratingScore: Int?
     let recommendedScore: Double?
     let recommendedCount: Int?
+    let categoryOverride: String?
+    let subcategoryOverride: String?
+    let categoryOverrideSource: String?
+    let categoryOverrideConfidence: Double?
     let sourceType: String
     let attributes: [RemotePlaceAttributeDTO]
 
@@ -59,6 +68,11 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case ownerDisplayName = "owner_display_name"
         case canonicalName = "canonical_name"
         case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
         case latitude
         case longitude
         case status
@@ -68,6 +82,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case ratingScore = "rating_score"
         case recommendedScore = "recommended_score"
         case recommendedCount = "recommended_count"
+        case categoryOverride = "category_override"
+        case subcategoryOverride = "subcategory_override"
+        case categoryOverrideSource = "category_override_source"
+        case categoryOverrideConfidence = "category_override_confidence"
         case sourceType = "source_type"
         case attributes
     }
@@ -92,6 +110,11 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             serverID: placeID,
             canonicalName: canonicalName,
             category: category,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
+            categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType ?? category,
             latitude: latitude,
             longitude: longitude,
             syncState: .synced
@@ -108,6 +131,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             ratingScore: ratingScore,
             recommendedScore: recommendedScore,
             recommendedCount: recommendedCount ?? 0,
+            categoryOverride: categoryOverride,
+            subcategoryOverride: subcategoryOverride,
+            categoryOverrideSource: categoryOverrideSource,
+            categoryOverrideConfidence: categoryOverrideConfidence,
             sourceType: sourceType,
             syncState: .synced
         )

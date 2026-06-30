@@ -476,6 +476,11 @@ private struct ExtractionCandidateResponse: Decodable {
     let id: String
     let name: String
     let category: String
+    let primaryCategory: String?
+    let subcategory: String?
+    let categorySource: String?
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     let address: String?
     let locality: String?
     let region: String?
@@ -490,6 +495,11 @@ private struct ExtractionCandidateResponse: Decodable {
         case id
         case name
         case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
         case address
         case locality
         case region
@@ -506,6 +516,11 @@ private struct ExtractionCandidateResponse: Decodable {
             id: id,
             name: name,
             category: category,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: categorySource ?? PlaceCategorySource.provider.rawValue,
+            categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType ?? category,
             address: address,
             locality: locality,
             region: region,
@@ -540,6 +555,11 @@ private struct SaveOwnPlaceParams: Encodable {
 private struct SaveOwnPlacePlaceParams: Encodable {
     let canonicalName: String
     let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let categorySource: String
+    let categoryConfidence: Double?
+    let rawProviderType: String?
     let address: String?
     let locality: String?
     let region: String?
@@ -553,6 +573,11 @@ private struct SaveOwnPlacePlaceParams: Encodable {
     init(place: PlaceDraft) {
         self.canonicalName = place.canonicalName
         self.category = place.category
+        self.primaryCategory = place.primaryCategory
+        self.subcategory = place.subcategory
+        self.categorySource = place.categorySource
+        self.categoryConfidence = place.categoryConfidence
+        self.rawProviderType = place.rawProviderType
         self.address = place.address
         self.locality = place.locality
         self.region = place.region
@@ -567,6 +592,11 @@ private struct SaveOwnPlacePlaceParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case canonicalName = "canonical_name"
         case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
         case address
         case locality
         case region
@@ -585,6 +615,10 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let note: String?
     let ratingSignal: String?
     let ratingScore: Int?
+    let categoryOverride: String?
+    let subcategoryOverride: String?
+    let categoryOverrideSource: String?
+    let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
     let sourceType: String
 
@@ -594,6 +628,10 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         self.note = draft.note
         self.ratingSignal = nil
         self.ratingScore = draft.ratingScore
+        self.categoryOverride = draft.categoryOverride
+        self.subcategoryOverride = draft.subcategoryOverride
+        self.categoryOverrideSource = draft.categoryOverrideSource
+        self.categoryOverrideConfidence = draft.categoryOverrideConfidence
         self.nearbyConfirmed = draft.nearbyConfirmed
         self.sourceType = draft.sourceType
     }
@@ -604,6 +642,10 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         case note
         case ratingSignal = "rating_signal"
         case ratingScore = "rating_score"
+        case categoryOverride = "category_override"
+        case subcategoryOverride = "subcategory_override"
+        case categoryOverrideSource = "category_override_source"
+        case categoryOverrideConfidence = "category_override_confidence"
         case nearbyConfirmed = "nearby_confirmed"
         case sourceType = "source_type"
     }

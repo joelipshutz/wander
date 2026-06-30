@@ -7405,6 +7405,34 @@ Review checkpoint:
 
 No code changes were made in this checkpoint beyond this log entry.
 
+## 2026-06-30 01:13 PDT - Codex - Durable Category Metadata Framework
+
+Agent: Codex
+Branch: `codex/edit-category-schema-review`
+Worktree: `/private/tmp/recme-edit-category-schema`
+Starting status: clean branch, ahead of `origin/codex/edit-category-schema` by 30; `git fetch origin` completed. Root checkout `/Users/ryanlieblein/Developer/wander` remains on unrelated `codex/profile-pictures` work and is not being edited.
+
+Goal: build the durable category metadata framework requested by Ryan: explicit primary category, subcategory, source, confidence, raw provider type, migration/backfill for existing database places, normalized filters that survive provider subcategories, one shared taxonomy, safe user-edit semantics, and personal/custom subcategory support in the edit/save PR.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/mockups/edit-place-category-schema.md`
+- `project.yml` if bundled taxonomy resources are needed
+- `Wander/Models/LocalModels.swift`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/WanderStorePersistence.swift`
+- `Wander/Services/Remote/SupabaseDTOs.swift`
+- `Wander/Services/Remote/SupabaseRepositories.swift`
+- `Wander/Services/DiscoverModels.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- Supabase migrations/functions/tests for category metadata persistence and extraction taxonomy alignment
+- Focused Swift/XCTest and Supabase function tests for taxonomy/filter migration behavior
+
+Coordination note: this intentionally continues the existing category-schema PR worktree. High-conflict files include `MapScreen.swift`, `WanderLocalStore.swift`, `project.yml`, Supabase migrations, and this log; no overlapping local changes are present in this worktree.
+
 ## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
 
 Agent: Codex
@@ -7437,3 +7465,39 @@ Completion checkpoint, 2026-06-28 12:20 PDT:
   - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
   - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
   - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`
+
+## 2026-06-30 09:32 PDT - Codex - Category Metadata Framework Implementation Checkpoint
+
+Agent: Codex
+Branch: `codex/edit-category-schema-review`
+Worktree: `/private/tmp/recme-edit-category-schema`
+Status: implementation complete locally, pending commit/PR update for Ryan to test before any main merge.
+
+What changed:
+
+- Added a shared category taxonomy source at `shared/place-taxonomy.json` and mirrored it in Swift and Supabase Edge function code.
+- Added explicit place category metadata through the app model: primary category, subcategory, category source, category confidence, and raw provider type.
+- Added per-user category override metadata on saved places so user edits/custom subcategories are personal and do not rewrite the shared place row.
+- Updated Map save/edit UI with a place type editor, been/wanna toggle on edit, subcategory suggestions, and custom subcategory input.
+- Updated local store, persistence, remote DTO/RPC encoding, profile/discover/map filters, and display code to use effective primary category instead of raw provider subtype strings.
+- Added Supabase migration `20260630081500_category_metadata_framework.sql` to backfill existing rows, constrain category/source/confidence fields, update `save_own_place`, and return/filter effective categories from visible-place RPCs.
+- Added Supabase SQL and Edge taxonomy tests for provider subtype normalization, category overrides, and taxonomy drift.
+
+Verification:
+
+- `git fetch origin` completed before continuing work.
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-category-metadata-build CODE_SIGNING_ALLOWED=NO` passed.
+- A direct focused `xcodebuild test` run was interrupted after CoreSimulator/XCTest blocked waiting for workers to materialize; switched to the repo's reliable build-for-testing/test-without-building flow.
+- `xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-category-metadata-tests CODE_SIGNING_ALLOWED=NO -jobs 1 ...` passed for selected category/store/remote tests.
+- `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-category-metadata-tests CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testUpdatingCandidateCanPersistCategoryCorrectionAndPersonalLabels -only-testing:WanderTests/WanderStoreTests/testProviderSubcategoryFiltersByPrimaryCategory -only-testing:WanderTests/WanderStoreTests/testUserCategoryOverrideFiltersWithoutRewritingSharedPlace -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceSaveCallsExpectedRPCWithPlaceAndAttributes -only-testing:WanderTests/RemoteRepositoryTests/testExtractionProcessInvokesWorkerFunctionAndMapsCandidates` passed.
+- `git diff --check` passed.
+
+Known local tooling gaps:
+
+- `deno` is not installed locally, so `supabase/functions/_shared/place-taxonomy.test.ts` was added but not executed here.
+- `supabase` and `psql` are not installed locally, so `supabase/tests/category_metadata.sql` was added but not executed here.
+
+Next steps:
+
+- Commit and push this branch as a PR update for Ryan to install/test.
+- Before merging to `main`, run hosted Supabase migration verification or local Supabase SQL tests in an environment with Supabase/psql tooling.

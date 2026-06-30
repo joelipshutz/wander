@@ -2022,9 +2022,15 @@ private extension PlaceListMock {
 
 private extension PlaceSheetPlace {
     init(listPlace: ListPlaceMock) {
+        let assignment = WanderPlaceCategory.assignment(forRawCategory: listPlace.category)
         self.id = listPlace.id
         self.name = listPlace.name
-        self.category = listPlace.category
+        self.category = assignment.legacyCategory
+        self.primaryCategory = assignment.primaryCategory
+        self.subcategory = assignment.subcategory
+        self.categorySource = assignment.source
+        self.categoryConfidence = assignment.confidence
+        self.rawProviderType = assignment.rawProviderType
         self.address = nil
         self.locality = "Los Angeles"
         self.region = "CA"

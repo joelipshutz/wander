@@ -129,6 +129,11 @@ final class LocalPlace {
     var serverID: String?
     var canonicalName: String
     var category: String
+    var primaryCategory: String
+    var subcategory: String?
+    var categorySource: String
+    var categoryConfidence: Double?
+    var rawProviderType: String?
     var address: String?
     var locality: String?
     var region: String?
@@ -149,11 +154,31 @@ final class LocalPlace {
     var createdAt: Date
     var updatedAt: Date
 
-    init(localID: String, serverID: String? = nil, canonicalName: String, category: String, address: String? = nil, locality: String? = nil, region: String? = nil, country: String? = nil, latitude: Double, longitude: Double, sourceProvider: String = "mapkit", sourceProviderPlaceID: String? = nil, confidence: Double? = nil, websiteURLString: String? = nil, phoneNumber: String? = nil, timeZoneIdentifier: String? = nil, actionLinksJSON: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now) {
+    init(localID: String, serverID: String? = nil, canonicalName: String, category: String, primaryCategory: String? = nil, subcategory: String? = nil, categorySource: String = PlaceCategorySource.provider.rawValue, categoryConfidence: Double? = nil, rawProviderType: String? = nil, address: String? = nil, locality: String? = nil, region: String? = nil, country: String? = nil, latitude: Double, longitude: Double, sourceProvider: String = "mapkit", sourceProviderPlaceID: String? = nil, confidence: Double? = nil, websiteURLString: String? = nil, phoneNumber: String? = nil, timeZoneIdentifier: String? = nil, actionLinksJSON: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now) {
+        let assignment = primaryCategory.map {
+            WanderPlaceCategory.assignment(
+                primaryCategory: $0,
+                subcategory: subcategory,
+                source: categorySource,
+                confidence: categoryConfidence,
+                rawProviderType: rawProviderType ?? category
+            )
+        } ?? WanderPlaceCategory.assignment(
+            forRawCategory: rawProviderType ?? category,
+            source: categorySource,
+            confidence: categoryConfidence,
+            rawProviderType: rawProviderType ?? category
+        )
+
         self.localID = localID
         self.serverID = serverID
         self.canonicalName = canonicalName
-        self.category = category
+        self.category = assignment.legacyCategory
+        self.primaryCategory = assignment.primaryCategory
+        self.subcategory = assignment.subcategory
+        self.categorySource = assignment.source
+        self.categoryConfidence = assignment.confidence ?? categoryConfidence ?? confidence
+        self.rawProviderType = assignment.rawProviderType
         self.address = address
         self.locality = locality
         self.region = region
@@ -191,6 +216,10 @@ final class LocalUserPlace {
     var ratingScore: Int?
     var recommendedScore: Double?
     var recommendedCount: Int
+    var categoryOverride: String?
+    var subcategoryOverride: String?
+    var categoryOverrideSource: String?
+    var categoryOverrideConfidence: Double?
     var visibilityRaw: String
     var nearbyConfirmed: Bool
     var visitedAt: Date?
@@ -207,7 +236,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Int? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Int? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -218,6 +247,10 @@ final class LocalUserPlace {
         self.ratingScore = PlaceRating.normalized(ratingScore)
         self.recommendedScore = recommendedScore
         self.recommendedCount = recommendedCount
+        self.categoryOverride = categoryOverride.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        self.subcategoryOverride = WanderPlaceCategory.normalizedSubcategory(subcategoryOverride)
+        self.categoryOverrideSource = categoryOverrideSource
+        self.categoryOverrideConfidence = categoryOverrideConfidence
         self.visibilityRaw = visibility.rawValue
         self.nearbyConfirmed = nearbyConfirmed
         self.visitedAt = visitedAt

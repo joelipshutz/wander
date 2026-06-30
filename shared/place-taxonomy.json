@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "coffee",
+      "group": "Food & drink",
+      "default_subcategory": "Coffee shop",
+      "symbol": "cup.and.saucer.fill",
+      "aliases": ["coffee", "coffee shop", "cafe", "espresso", "roaster", "bakery"],
+      "subcategories": ["Coffee shop", "Cafe", "Bakery", "Roaster", "Tea shop"]
+    },
+    {
+      "id": "restaurant",
+      "group": "Food & drink",
+      "default_subcategory": "Restaurant",
+      "symbol": "fork.knife",
+      "aliases": ["restaurant", "thai restaurant", "fast food restaurant", "food", "food market", "taqueria", "ramen", "sushi", "pizza", "diner", "kitchen"],
+      "subcategories": ["Restaurant", "Thai restaurant", "Fast food restaurant", "Sushi restaurant", "Pizza restaurant", "Ramen restaurant", "Taqueria", "Diner"]
+    },
+    {
+      "id": "bar",
+      "group": "Food & drink",
+      "default_subcategory": "Bar",
+      "symbol": "wineglass.fill",
+      "aliases": ["bar", "brewery", "winery", "nightlife", "cocktail", "pub"],
+      "subcategories": ["Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Nightlife"]
+    },
+    {
+      "id": "hike",
+      "group": "Outdoors & nature",
+      "default_subcategory": "Hike or trail",
+      "symbol": "figure.hiking",
+      "aliases": ["hike", "trail", "waterfall", "hot spring", "canyon", "mountain", "observatory"],
+      "subcategories": ["Hike or trail", "Trail", "Waterfall", "Hot spring", "Canyon", "Scenic overlook"]
+    },
+    {
+      "id": "park",
+      "group": "Outdoors & nature",
+      "default_subcategory": "Park",
+      "symbol": "tree.fill",
+      "aliases": ["park", "national park", "playground", "garden", "plaza", "beach", "lake"],
+      "subcategories": ["Park", "National park", "Garden", "Beach", "Playground", "Dog park"]
+    },
+    {
+      "id": "gym",
+      "group": "Health & wellness",
+      "default_subcategory": "Gym",
+      "symbol": "dumbbell.fill",
+      "aliases": ["gym", "fitness center", "training", "strength", "workout"],
+      "subcategories": ["Gym", "Fitness center", "Climbing gym", "Boxing gym", "Training studio"]
+    },
+    {
+      "id": "fitness studio",
+      "group": "Health & wellness",
+      "default_subcategory": "Fitness studio",
+      "symbol": "figure.strengthtraining.traditional",
+      "aliases": ["fitness studio", "yoga studio", "barre", "wellness studio", "stretch", "studio"],
+      "subcategories": ["Fitness studio", "Yoga studio", "Barre studio", "Wellness studio", "Stretch studio"]
+    },
+    {
+      "id": "pilates studio",
+      "group": "Health & wellness",
+      "default_subcategory": "Pilates studio",
+      "symbol": "figure.mind.and.body",
+      "aliases": ["pilates studio", "pilates", "reformer", "lagree"],
+      "subcategories": ["Pilates studio", "Reformer pilates", "Lagree studio"]
+    },
+    {
+      "id": "spiritual",
+      "group": "Arts, culture & faith",
+      "default_subcategory": "Spiritual place",
+      "symbol": "sparkles",
+      "aliases": ["spiritual", "church", "temple", "shrine", "mosque", "synagogue", "chapel", "cathedral", "meditation"],
+      "subcategories": ["Spiritual place", "Temple", "Shrine", "Church", "Mosque", "Synagogue", "Meditation center"]
+    },
+    {
+      "id": "hospital",
+      "group": "Health & wellness",
+      "default_subcategory": "Hospital",
+      "symbol": "cross.case.fill",
+      "aliases": ["hospital", "urgent care", "medical center", "health center"],
+      "subcategories": ["Hospital", "Urgent care", "Medical center", "Clinic"]
+    },
+    {
+      "id": "pharmacy",
+      "group": "Health & wellness",
+      "default_subcategory": "Pharmacy",
+      "symbol": "pills.fill",
+      "aliases": ["pharmacy", "drugstore"],
+      "subcategories": ["Pharmacy", "Drugstore"]
+    },
+    {
+      "id": "veterinarian",
+      "group": "Services",
+      "default_subcategory": "Veterinarian",
+      "symbol": "pawprint.fill",
+      "aliases": ["veterinarian", "veterinary clinic", "animal hospital", "animal service", "pet clinic", "pet hospital"],
+      "subcategories": ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic"]
+    },
+    {
+      "id": "hotel",
+      "group": "Lodging",
+      "default_subcategory": "Hotel",
+      "symbol": "bed.double.fill",
+      "aliases": ["hotel", "motel", "resort", "3 star hotel", "4 star hotel", "5 star hotel", "lodging"],
+      "subcategories": ["Hotel", "Motel", "Resort", "Boutique hotel", "3-star hotel", "4-star hotel", "5-star hotel"]
+    },
+    {
+      "id": "shop",
+      "group": "Shopping",
+      "default_subcategory": "Shop",
+      "symbol": "bag.fill",
+      "aliases": ["shop", "store", "art supply store", "mall", "boutique", "market"],
+      "subcategories": ["Shop", "Store", "Art supply store", "Boutique", "Market", "Mall"]
+    },
+    {
+      "id": "transportation",
+      "group": "Transportation & transit",
+      "default_subcategory": "Transit stop",
+      "symbol": "tram.fill",
+      "aliases": ["transportation", "transit", "transit station", "airport", "train station", "bus station", "ferry", "subway"],
+      "subcategories": ["Transit stop", "Airport", "Train station", "Bus station", "Ferry terminal", "Subway station"]
+    },
+    {
+      "id": "place",
+      "group": "Place",
+      "default_subcategory": null,
+      "symbol": "mappin",
+      "aliases": ["place", "point of interest", "tourist attraction"],
+      "subcategories": []
+    }
+  ]
+}
