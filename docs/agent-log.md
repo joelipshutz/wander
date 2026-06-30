@@ -7196,3 +7196,21 @@ Completion checkpoint, 2026-06-30 00:56 PDT:
   - Full: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 186 tests, 0 failures.
 - Known remaining QA:
   - Ryan should search a member in Discover > Members after changing/uploading a profile photo and confirm the member tile/friend row now shows the photo.
+
+## 2026-06-30 01:20 PDT - Codex - Profile Photos TestFlight Release
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent agent log review completed before release work.
+
+Goal: land PR #45, package the latest `main` into a new TestFlight build, attach it to the public TestFlight group, and post the tester-facing Slack update.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
+
+Coordination note: the implementation branch was clean. `/private/tmp/recme-testflight-build53` already exists as a `main` worktree and is clean, so it can be reused for the post-merge build-number and archive flow if it remains clean after pulling latest `main`.
