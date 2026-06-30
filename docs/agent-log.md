@@ -7638,3 +7638,15 @@ Pre-merge verification, 2026-06-30 14:55 PDT:
 - Pre-landing review found no blocking SQL/data safety, enum completeness, LLM trust-boundary, shell-injection, or race/concurrency issue in the PR diff.
 - Product caveat: the approved 14-primary-category taxonomy screens are committed as DEBUG SwiftUI mockups. The live production picker in this PR still uses the earlier canonical taxonomy IDs such as `coffee`, `restaurant`, `bar`, `hike`, and `hotel`, displayed under broad groups like `Food & drink`; converting the live schema/picker fully to 14 broad primary categories remains follow-up implementation.
 - No TestFlight release was requested, so no build-number bump, archive/upload, TestFlight attachment, or tester-facing Slack release note should happen in this landing.
+
+Final landing outcome, 2026-06-30 14:59 PDT:
+
+- PR #39 was squash-merged to `main` as `8aff31def` (`Add edit-place category metadata controls`): https://github.com/joelipshutz/wander/pull/39
+- Deleted remote branch `codex/edit-category-schema` after merge.
+- Local main worktree `/private/tmp/recme-testflight-build53` was fast-forwarded to `8aff31def` before this final docs-only note.
+- Validation used for merge:
+  - `git diff --check`
+  - Full iOS simulator tests on installed iPhone 17 / iOS 26.5
+  - Deno shared taxonomy test: 2 passed, 0 failed
+  - Hosted Supabase rollback pgTAP category metadata verification: 10 assertions, 0 failures
+- No TestFlight release was requested or performed. Build number remains unchanged after this merge.
