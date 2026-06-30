@@ -7650,3 +7650,31 @@ Final landing outcome, 2026-06-30 14:59 PDT:
   - Deno shared taxonomy test: 2 passed, 0 failed
   - Hosted Supabase rollback pgTAP category metadata verification: 10 assertions, 0 failures
 - No TestFlight release was requested or performed. Build number remains unchanged after this merge.
+
+## 2026-06-30 15:03 PDT - Codex - TestFlight Build 55 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main...origin/main` at `183871810` after `git fetch origin`; root checkout remains on unrelated `codex/profile-pictures` work and is not used.
+
+Goal: push everything currently on `main` to TestFlight per Ryan's explicit request.
+
+Included app-code changes since completed TestFlight build 54:
+
+- `e1197ec16` - profile photo menu placement polish.
+- `8aff31def` / PR #39 - edit-place category metadata controls, category persistence/filtering, Supabase category migration/tests, and DEBUG SwiftUI taxonomy mockups.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release note/export/archive artifacts outside the repo.
+
+Plan:
+
+- Bump `CURRENT_PROJECT_VERSION` from 54 to 55.
+- Regenerate the Xcode project with XcodeGen.
+- Commit and push the build-number bump to `main`.
+- Run build/test validation, archive, upload, run `scripts/testflight-release.mjs`, and post the tester-facing Slack note to `#testflight-feedback` if the Slack connector is available.
