@@ -7111,3 +7111,31 @@ Completion checkpoint, 2026-06-28 13:23 PDT:
 - Known remaining QA:
   - Ryan should retry profile photo upload in Xcode against the now-migrated hosted backend.
   - Physical camera capture still needs real-device testing.
+
+## 2026-06-29 18:04 PDT - Codex - Profile Photo Action Popover Alignment
+
+Agent: Codex
+Branch: `codex/profile-pictures`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Starting status: clean branch tracking `origin/codex/profile-pictures`; `git fetch origin` completed before work.
+
+Goal: fix the profile photo edit options UI so tapping the avatar opens a smaller action popover anchored directly below the profile photo instead of an unaligned full-size native action sheet.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+
+Coordination note: this is a narrow Profile UI polish on the existing profile-picture branch. No overlapping local changes were present.
+
+Completion checkpoint, 2026-06-29 18:58 PDT:
+
+- Replaced the unanchored profile photo confirmation dialog with a compact popover attached directly to the profile avatar button.
+- Kept the same actions: take photo when camera is available, choose from library, and delete photo when an avatar exists.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`
+  - Required pinned test destination was unavailable on this machine: `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6`.
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` passed, 185 tests, 0 failures.
+- Known remaining QA:
+  - Ryan should tap the avatar in Xcode/simulator to confirm the popover placement and size feel right on the target device.
