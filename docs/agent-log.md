@@ -7520,3 +7520,43 @@ Follow-up verification, 2026-06-30 10:25 PDT:
 - `env PATH=... pnpm dlx supabase test db --linked ...` also failed because Supabase's pgTAP runner requires Docker even in linked mode.
 - Used `supabase db query --linked --workdir /Users/ryanlieblein/Developer/wander` against the linked hosted project with a temporary rollback-wrapped SQL harness at `/private/tmp/category_metadata_tap_capture.sql`; the harness applied the PR migration and ran `supabase/tests/category_metadata.sql` inside one outer transaction, captured all pgTAP rows, and rolled back.
 - Hosted rollback SQL result passed: `1..10`, all 10 assertions ok. No hosted schema/data changes were intentionally persisted.
+
+## 2026-06-30 14:11 PDT - Codex - Category Taxonomy UX Mockups
+
+Agent: Codex
+Branch: `codex/edit-category-schema-review`
+Worktree: `/private/tmp/recme-edit-category-schema`
+Starting status: clean and tracking `origin/codex/edit-category-schema`; fetched origin before continuing.
+
+Goal: create SwiftUI-rendered approval mockups, not production behavior changes, for Ryan's clarified taxonomy UX: category list should show only high-level primary categories, subcategory list should hold the exhaustive child taxonomy, and tags/my labels need distinct option sets.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/App/WanderApp.swift`
+- A DEBUG-only SwiftUI mockup view under `Wander/Features/Map/` or a nearby feature folder
+
+Notes:
+
+- Keep this as a DEBUG launch-argument mockup path so it can be rendered in simulator screenshots without changing normal app behavior.
+- Do not merge to `main`; this is for approval before implementation.
+
+Checkpoint, 2026-06-30 14:25 PDT:
+
+- Added DEBUG-only launch argument `-WanderCategoryTaxonomyMockup <page>` and SwiftUI mockup pages for edit overview, primary category picker, Food & drink subcategory picker, and tags/my labels.
+- Ran `xcodegen generate` after adding the Swift file so `Wander.xcodeproj` includes the mockup source.
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-category-taxonomy-mockups-build CODE_SIGNING_ALLOWED=NO` passed.
+- Installed the debug build to iPhone 17 simulator and captured screenshots:
+  - `/private/tmp/recme-category-taxonomy-edit.png`
+  - `/private/tmp/recme-category-taxonomy-categories.png`
+  - `/private/tmp/recme-category-taxonomy-subcategories.png`
+  - `/private/tmp/recme-category-taxonomy-labels.png`
+- These mockups are pending Ryan approval and have not been committed yet.
+
+Landing checkpoint, 2026-06-30 14:45 PDT:
+
+- Ryan approved the SwiftUI taxonomy mockups and asked to commit the work to `main`.
+- No TestFlight release was requested, so this landing should not bump the App Store build number, archive, upload, or post tester-facing release notes.
+- Starting merge workflow from `/private/tmp/recme-edit-category-schema` on `codex/edit-category-schema-review`; `git fetch origin` completed first.
+- Current dirty files are the approved DEBUG-only mockup hook/source, regenerated `Wander.xcodeproj/project.pbxproj`, and this log entry.
+- PR #39 is currently open against `main` but GitHub reports it as conflicting, so the branch needs to be updated from latest `origin/main` before squash merge.
