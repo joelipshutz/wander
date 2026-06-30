@@ -7416,3 +7416,9 @@ Validation checkpoint, 2026-06-30 09:24 PDT:
 
 - `git diff --check` passed.
 - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Release checkpoint, 2026-06-30 09:28 PDT:
+
+- PR #45 merged to `main` as `5908f1fa6` (`Add profile picture picker`).
+- Reusing clean release worktree `/private/tmp/recme-testflight-build53`, now fast-forwarded to latest `origin/main`.
+- Bumping `CURRENT_PROJECT_VERSION` from 53 to 54 for the requested TestFlight release.
