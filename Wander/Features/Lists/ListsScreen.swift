@@ -1053,7 +1053,12 @@ private struct FriendCollaboratorSearchContent: View {
 
             ForEach(selectedCollaborators) { collaborator in
                 HStack(spacing: WanderTheme.spacing2) {
-                    WanderAvatar(initials: collaborator.initials, size: 32, color: collaborator.color)
+                    WanderAvatar(
+                        initials: collaborator.initials,
+                        avatarURL: avatarURL(for: collaborator),
+                        size: 32,
+                        color: collaborator.color
+                    )
                     Text("@\(collaborator.handle)")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
@@ -1118,6 +1123,16 @@ private struct FriendCollaboratorSearchContent: View {
 
     private func isSameCollaborator(_ lhs: ListCollaboratorMock, _ rhs: ListCollaboratorMock) -> Bool {
         lhs.id == rhs.id || lhs.handle == rhs.handle
+    }
+
+    private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
+        if let avatarURL = collaborator.avatarURL {
+            return avatarURL
+        }
+
+        return store.profiles.first { profile in
+            profile.id == collaborator.id || profile.handle == collaborator.handle
+        }?.avatarURL
     }
 }
 

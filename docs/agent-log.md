@@ -7404,3 +7404,15 @@ Merge/update checkpoint, 2026-06-30 01:30 PDT:
   - `git diff --check`
   - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-merged CODE_SIGNING_ALLOWED=NO -jobs 1`
   - Result: 191 tests, 0 failures.
+
+Resume checkpoint, 2026-06-30 09:18 PDT:
+
+- Resumed after the previous Codex run was blocked by approval/usage limits before staging the final list-avatar propagation fix.
+- Current branch `codex/profile-pictures` is clean against `origin/codex/profile-pictures` except for the intended `Wander/Features/Lists/ListsScreen.swift` change.
+- Final local fix: selected collaborators in the list collaborator picker now resolve `avatarURL` from the collaborator or latest store profile, matching friend rows, facepiles, and list editor collaborator rows.
+- Next: run `git diff --check`, rerun full simulator tests, commit/push the final fix, merge PR #45, then package build 54 to TestFlight and post Slack.
+
+Validation checkpoint, 2026-06-30 09:24 PDT:
+
+- `git diff --check` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-profile-pictures-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
