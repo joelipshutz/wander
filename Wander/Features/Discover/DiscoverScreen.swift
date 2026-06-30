@@ -396,7 +396,7 @@ struct DiscoverScreen: View {
         auth.requireSignIn(for: .socialSave) {
             presentPlaceSaveFlow(MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
-                defaultVisibility: store.defaultVisibility,
+                defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: attributes(for: visiblePlace)
             ))
         }

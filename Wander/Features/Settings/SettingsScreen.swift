@@ -5,6 +5,8 @@ struct SettingsScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var activeDetail: SettingsDetail?
+    @State private var pendingPrivateProfileValue: Bool?
+    @State private var showsPrivateProfileWarning = false
 
     var body: some View {
         NavigationStack {
@@ -26,6 +28,22 @@ struct SettingsScreen: View {
             case .trust:
                 TrustAndPrivacySheet()
             }
+        }
+        .alert(
+            SettingsProfilePrivacySurface.warningTitle(enabling: pendingPrivateProfileValue ?? false),
+            isPresented: $showsPrivateProfileWarning
+        ) {
+            Button("Cancel", role: .cancel) {
+                pendingPrivateProfileValue = nil
+            }
+            Button(SettingsProfilePrivacySurface.warningConfirmTitle(enabling: pendingPrivateProfileValue ?? false)) {
+                if let pendingPrivateProfileValue {
+                    store.setPrivateProfile(pendingPrivateProfileValue)
+                }
+                pendingPrivateProfileValue = nil
+            }
+        } message: {
+            Text(SettingsProfilePrivacySurface.warningBody(enabling: pendingPrivateProfileValue ?? false))
         }
     }
 
@@ -143,22 +161,76 @@ struct SettingsScreen: View {
 
     private var visibilitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SettingsSectionTitle("default stealth mode")
+            SettingsSectionTitle("privacy")
+
+            privateProfileToggle
+
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+
             PlaceVisibilityStealthToggle(
+                title: SettingsDefaultPlacePrivacySurface.toggleTitle,
                 visibility: Binding(
-                    get: { store.defaultVisibility.normalizedForStealthMode },
-                    set: { store.defaultVisibility = $0 }
+                    get: { store.isPrivateProfile ? .selfOnly : store.defaultVisibility.normalizedForStealthMode },
+                    set: { newVisibility in
+                        guard !store.isPrivateProfile else { return }
+                        store.defaultVisibility = newVisibility
+                    }
                 ),
-                showsContainer: false
+                showsContainer: false,
+                helperCopy: { visibility in
+                    SettingsDefaultPlacePrivacySurface.helperCopy(
+                        for: visibility,
+                        isLockedByPrivateProfile: store.isPrivateProfile
+                    )
+                }
             )
+            .disabled(store.isPrivateProfile)
+            .opacity(store.isPrivateProfile ? 0.56 : 1)
         }
         .onAppear {
-            store.defaultVisibility = store.defaultVisibility.normalizedForStealthMode
+            if !store.isPrivateProfile {
+                store.defaultVisibility = store.defaultVisibility.normalizedForStealthMode
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var privateProfileToggle: some View {
+        Toggle(
+            isOn: Binding(
+                get: { store.isPrivateProfile },
+                set: { nextValue in
+                    guard nextValue != store.isPrivateProfile else { return }
+                    pendingPrivateProfileValue = nextValue
+                    showsPrivateProfileWarning = true
+                }
+            )
+        ) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                Image(systemName: store.isPrivateProfile ? "lock.shield.fill" : "person.crop.circle.badge.questionmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 38, height: 38)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(SettingsProfilePrivacySurface.title)
+                        .font(.system(size: 14, weight: .bold))
+                    Text(SettingsProfilePrivacySurface.body(isEnabled: store.isPrivateProfile))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(WanderTheme.textInk.color)
+        .accessibilityIdentifier(SettingsProfilePrivacySurface.accessibilityID)
     }
 
     private var blockedSection: some View {
@@ -359,11 +431,87 @@ struct SettingsTrustSurface {
     ]
 }
 
+struct SettingsDefaultPlacePrivacySurface {
+    static let toggleTitle = "stealth mode for new saves"
+
+    static func helperCopy(for visibility: PlaceVisibility, isLockedByPrivateProfile: Bool = false) -> String {
+        if isLockedByPrivateProfile {
+            return "Locked on by Private Profile. New places stay hidden while Private Profile is on."
+        }
+
+        if visibility.isStealthModeEnabled {
+            return "On: new places start private. Only you can see them unless you turn stealth off before saving."
+        }
+
+        return "Off: new places are visible to people who follow you. You can still turn stealth on before saving."
+    }
+}
+
+struct SettingsProfilePrivacySurface {
+    static let title = "Private profile"
+    static let accessibilityID = "settings.profilePrivacy.explainer"
+
+    static func body(isEnabled: Bool) -> String {
+        if isEnabled {
+            return "Your saved places are in stealth mode, new places stay stealth, and your username stays out of search. Existing friends and collaborative lists stay unchanged; new collaborative lists are unavailable."
+        }
+
+        return "Your username can appear in search and you can collaborate on lists."
+    }
+
+    static func warningTitle(enabling: Bool) -> String {
+        enabling ? "Turn on Private Profile?" : "Turn off Private Profile?"
+    }
+
+    static func warningBody(enabling: Bool) -> String {
+        if enabling {
+            return "Places saved by you will switch to stealth mode, including your Been and Wanna Go places. Future saves stay stealth and your username will be hidden while Private Profile is on. Your followers and existing collaborative lists stay unchanged, but new collaborative lists are unavailable."
+        }
+
+        return "Your existing places will stay in stealth mode. Your username can appear in search again, and future saves will follow your stealth mode for new saves setting."
+    }
+
+    static func warningConfirmTitle(enabling: Bool) -> String {
+        enabling ? "Turn On" : "Turn Off"
+    }
+}
+
 struct TrustFact: Identifiable, Equatable {
     let id: String
     let icon: String
     let title: String
     let body: String
+}
+
+private struct SettingsInlineInfo: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    let accessibilityIdentifier: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(width: 38, height: 38)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                Text(message)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
 }
 
 private struct SettingsRow: View {

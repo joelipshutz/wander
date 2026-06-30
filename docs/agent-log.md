@@ -7197,6 +7197,182 @@ Completion checkpoint, 2026-06-30 00:56 PDT:
 - Known remaining QA:
   - Ryan should search a member in Discover > Members after changing/uploading a profile photo and confirm the member tile/friend row now shows the photo.
 
+## 2026-06-28 12:46 PDT - Codex - Private Profile TestFlight Release
+
+Agent: Codex
+Branch: `codex/private-profile-testflight-release`
+Worktree: `/private/tmp/recme-private-profile-release`
+Starting status: clean branch from latest `origin/main` (`65b196319`) after `git fetch origin`; source feature branch `codex/rec-42-43-settings-copy` is local-only at `8b93092e0` and is ahead 11, behind 10 versus `origin/main`.
+
+Goal: squash-merge the local Private Profile/settings/list-collaboration branch to `main`, increment the TestFlight build from 51 to 52, run build/tests, archive/upload to TestFlight, run the TestFlight helper, and post tester-facing Slack notes to `#testflight-feedback`.
+
+Expected files:
+
+- `Wander/**`
+- `WanderTests/**`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Outcome, 2026-06-28 13:08 PDT:
+
+- Squash-merged the local Private Profile branch into the release worktree as `84ea0b5b0` (`Implement private profile controls`).
+- Bumped `CURRENT_PROJECT_VERSION` from build 51 to build 52 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `5e01d887b` (`chore: bump testflight build 52`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build52-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build52-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Archive path: `/private/tmp/Wander-0.1-build52.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=52` verified.
+- Export options: `/private/tmp/WanderExportUpload52.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect accepted the uploaded package and reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 52 --archive-path /private/tmp/Wander-0.1-build52.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build52-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (52)` id `7240093e-4c5e-4395-956c-50bb629cbc62` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: this Codex runtime did not expose a callable Slack send/draft tool, and no `SLACK_*` credential variable was available in the local env file. Post this required tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`):
+
+```text
+rec.me build 52 is live/approved in TestFlight.
+
+What changed:
+- Private Profile is now wired across settings, saves, and local list collaboration.
+- Turning Private Profile on puts your saved Been/Wanna Go places into stealth mode and keeps future saves stealth while it is on.
+- Turning Private Profile off does not bulk-restore visibility; existing places stay stealth, and future saves follow the stealth mode for new saves setting.
+- New collaborative lists are blocked while Private Profile is on, but owned existing collaborative lists can still add/remove friend-network collaborators.
+
+Please test:
+- Settings > Private profile on/off warnings and locked stealth-mode behavior.
+- Save a new place while Private Profile is on and confirm stealth stays locked on.
+- Turn Private Profile off and confirm existing places remain stealth while the default new-save setting is configurable again.
+- Try new list creation while Private Profile is on and confirm collaboration is blocked.
+- Edit an existing collaborative list you own and confirm collaborators remain and friend-network add/remove still works.
+
+Known/deferred:
+- List creation/editing is still local/mock-functional; backend list persistence and invite links remain follow-up scope.
+- Private Profile does not bulk-restore place visibility when turned off.
+
+Public TestFlight: https://testflight.apple.com/join/knEhRa6t
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+```
+
+## 2026-06-28 11:55 PDT - Codex - Layout Chrome Regression Fix
+
+Agent: Codex
+Branch: `codex/layout-chrome-fix`
+Worktree: `/private/tmp/recme-layout-chrome-fix`
+Starting status: fresh worktree from `origin/main` at `cf5f3ef`; root checkout remains on stale `codex/rating-score-reset` and is intentionally not used for edits.
+Mission Control task: unavailable; `curl http://localhost:4000/api/tasks` failed with connection refused.
+
+Goal: fix Joe-reported TestFlight build 51 layout regression focused on the Map search/filter chrome and Place Profile back/header controls from screenshots `IMG_2908.png` and `IMG_2907.png`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- Focused layout/navigation tests if there is a stable unit-level seam.
+
+Completion checkpoint, 2026-06-28 12:20 PDT:
+
+- Fixed Map search/filter chrome by giving the overlay a full-screen top-aligned frame, adding safe-area top padding, and hiding the empty `NavigationStack` navigation bar so the map stays full-bleed instead of leaving a blank header region.
+- Fixed Place Profile full-bleed header controls by restoring a minimum top inset when `GeometryProxy.safeAreaInsets.top` resolves to `0` under `.ignoresSafeArea`, keeping back/edit/share controls below the status/Dynamic Island/TestFlight chrome.
+- Added focused `NavigationContractTests` coverage for the full-bleed header inset fallback.
+- `git diff --check` passed.
+- First focused `xcodebuild test` attempt hung while waiting for XCTest workers and was interrupted; after `build-for-testing`, focused `NavigationContractTests` passed with:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=2AA54510-9701-425A-9E60-42C20BB8F8E7' -derivedDataPath /private/tmp/DerivedData-layout-chrome-test CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+- Simulator build passed with:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-layout-chrome-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Visual QA screenshots captured and reviewed:
+  - iPhone 16 Plus map: `/private/tmp/recme-layout-chrome-map-final.png`
+  - iPhone 16 Plus profile: `/private/tmp/recme-layout-chrome-profile-final.png`
+  - iPhone 16e map: `/private/tmp/recme-layout-chrome-map-16e.png`
+  - iPhone 16e profile: `/private/tmp/recme-layout-chrome-profile-16e.png`
+
+## 2026-06-29 18:56 PDT - Codex - Remove Map Search Profile Icon
+
+Agent: Codex
+Branch: `codex/rec-64-remove-map-search-avatar`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-64-remove-map-search-avatar`
+Linear: `REC-64` - Remove profile icon from map search bar
+Starting status: clean branch tracking `origin/main`; root checkout has unrelated uncommitted `codex/profile-pictures` work, so this isolated worktree was created from `origin/main`.
+
+Goal: remove the small profile/avatar icon from the trailing side of the Map view search bar while preserving the search icon, placeholder, clear action, and submit behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+
+Coordination note: `MapScreen.swift` is a high-conflict file, but no overlapping uncommitted edits exist in this isolated worktree. The root checkout's unrelated profile work is not touched.
+
+Completion checkpoint, 2026-06-29 19:08 PDT:
+
+- Created Linear issue `REC-64` and moved it to In Progress for tracking.
+- Removed the empty-query trailing `WanderAvatar` from the Map search bar and removed the now-unused `userInitials` parameter.
+- Preserved the leading search icon, placeholder text, submit behavior, and trailing clear button when text is present.
+- Implementation commit: `6c6649a57` (`fix: remove map search avatar`).
+- Opened ready PR #50: `https://github.com/joelipshutz/wander/pull/50`.
+- Updated Linear `REC-64` to In Review and attached PR #50.
+- Verification:
+  - `git diff --check` passed.
+  - Sandboxed `xcodebuild build` failed before app compilation because CoreSimulator and SwiftPM network access were blocked, then the same build passed with elevated permissions:
+    `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec64-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - The configured full-test destination `platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6` is not installed in this Xcode environment.
+  - Full simulator suite passed on available iPhone 17 / iOS 26.5:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec64-tests-iphone17 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Known gap: simulator screenshots were not captured; this branch is prepared for build/test validation, and visual confirmation of the removed icon should happen during the requested build testing pass.
+
+## 2026-06-30 00:46 PDT - Codex - TestFlight Build 53 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Starting status: clean `main` at `ba5fbbed6` tracking `origin/main`; root checkout remains on `codex/profile-pictures` and is not used for release edits.
+
+Goal: package the latest `main` into a new TestFlight build so Ryan can test the merged Map search avatar removal.
+
+Included app-code changes since completed TestFlight build 52:
+
+- PR #49 / `cbb88cf20`: align Map search/filter chrome and Place Profile safe-area header controls.
+- PR #50 / `ba5fbbed6`: remove the trailing profile/avatar icon from the Map search bar.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+
+Plan:
+
+- Bump `CURRENT_PROJECT_VERSION` from 52 to 53.
+- Regenerate the Xcode project with XcodeGen.
+- Build/test, archive, upload, run the TestFlight helper, update Linear, and post the required Slack tester note if Slack tooling is available.
+
+Outcome, 2026-06-30 01:09 PDT:
+
+- PR #50 merged to `main` as `ba5fbbed6` (`Remove map search bar avatar`).
+- Bumped `CURRENT_PROJECT_VERSION` from 52 to 53 in `project.yml` and `Wander.xcodeproj/project.pbxproj`; pushed build-number commit `16d7307f3` (`chore: bump testflight build 53`) to `main`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build53-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build53-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Test result: 180 tests, 0 failures.
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build53.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=53` verified.
+- Export options: `/private/tmp/WanderExportUpload53.plist`, with `manageAppVersionAndBuildNumber=false`.
+- First `xcodebuild -exportArchive` upload attempt with API key `BU88FB5ZG4` failed before upload with `exportArchive Cloud signing permission error` and missing local `iOS Distribution` certificate; this matches the known Ryan-side key limitation from build 33.
+- Retried export/upload with replacement API key `P4ZR59AXMD`; upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 53 --archive-path /private/tmp/Wander-0.1-build53.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build53-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (53)` id `9c74002d-cd13-447f-bbe9-08a3f29c3f23` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Updated Linear `REC-64` to `Done`, attached PR #50 and TestFlight links, and added a completion comment with build 53 details.
+- Tester-facing Slack note posted to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782806986332249`.
+
+Known issues:
+
+- No backend/data behavior changed in this build.
+- Visual confirmation should focus on iPhone sizes; iPad-specific layout remains deferred.
+
 ## 2026-06-30 01:20 PDT - Codex - Profile Photos TestFlight Release
 
 Agent: Codex

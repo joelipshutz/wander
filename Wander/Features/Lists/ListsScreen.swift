@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct ListsScreen: View {
+    @EnvironmentObject private var store: WanderStore
     private let scenario: ListsScreenScenario
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
@@ -22,7 +23,7 @@ struct ListsScreen: View {
             .create
         case .edit, .editDeleteConfirm:
             .edit(featuredList)
-        case .collabEditDeleteConfirm:
+        case .collabEdit, .collabEditDeleteConfirm:
             .edit(PlaceListMock.collabs[0])
         default:
             nil
@@ -79,13 +80,20 @@ struct ListsScreen: View {
                 editorPresentation = .edit(list)
             },
             onCollaborators: {
-                collaboratorList = list
+                if canOpenCollaborators(for: list) {
+                    collaboratorList = list
+                }
             },
             onOpenMap: {
                 mapList = list
             },
             initialSelectedPlace: initialSelectedPlace
         )
+    }
+
+    private func canOpenCollaborators(for list: PlaceListMock) -> Bool {
+        guard list.isOwnedByCurrentUser else { return false }
+        return !store.isPrivateProfile || list.isCollaborative
     }
 
     private func deleteList(_ list: PlaceListMock) {
@@ -294,6 +302,7 @@ enum ListsScreenScenario: String {
     case create
     case createCollaboratorsSearch
     case edit
+    case collabEdit
     case editDeleteConfirm
     case collabEditDeleteConfirm
     case collaboratorsSheet
@@ -470,7 +479,10 @@ private struct ListDetailScreen: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                         .clipShape(Circle())
                 }
+                .disabled(!canManageCollaborators)
+                .opacity(canManageCollaborators ? 1 : 0.48)
                 .accessibilityLabel("Manage collaborators")
+                .accessibilityHint(collaboratorAccessibilityHint)
             }
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
@@ -596,6 +608,25 @@ private struct ListDetailScreen: View {
             .map(ListPlaceMock.init(visiblePlace:))
             .filter { !existingKeys.contains($0.dedupeKey) }
             .sorted { $0.name < $1.name }
+    }
+
+    private var canManageCollaborators: Bool {
+        guard list.isOwnedByCurrentUser else { return false }
+        return !store.isPrivateProfile || list.isCollaborative
+    }
+
+    private var collaboratorAccessibilityHint: String {
+        if !list.isOwnedByCurrentUser {
+            return "Only the list owner can manage collaborators"
+        }
+
+        guard store.isPrivateProfile else { return "" }
+
+        if !list.isCollaborative {
+            return "New collaborative lists are unavailable while Private Profile is on"
+        }
+
+        return "Add or remove friends on this existing collaborative list"
     }
 }
 
@@ -825,6 +856,7 @@ private struct ListPlaceRow: View {
 }
 
 private struct CollaboratorInviteSheet: View {
+    @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     @State private var selectedCollaborators: [ListCollaboratorMock]
@@ -846,7 +878,18 @@ private struct CollaboratorInviteSheet: View {
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
 
-                    FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                    if store.isPrivateProfile && !canInviteWhilePrivate {
+                        if !selectedCollaborators.isEmpty {
+                            ExistingCollaboratorsSummary(collaborators: selectedCollaborators)
+                        }
+                        PrivateProfileCollaborationUnavailable(
+                            message: selectedCollaborators.isEmpty
+                                ? "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
+                                : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
+                        )
+                    } else {
+                        FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                    }
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
@@ -863,11 +906,22 @@ private struct CollaboratorInviteSheet: View {
             }
         }
     }
+
+    private var canInviteWhilePrivate: Bool {
+        list.isOwnedByCurrentUser && list.isCollaborative
+    }
 }
 
 private struct FriendCollaboratorSearchSheet: View {
+    @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedCollaborators: [ListCollaboratorMock]
+    let allowsInvitesWhilePrivate: Bool
+
+    init(selectedCollaborators: Binding<[ListCollaboratorMock]>, allowsInvitesWhilePrivate: Bool = false) {
+        _selectedCollaborators = selectedCollaborators
+        self.allowsInvitesWhilePrivate = allowsInvitesWhilePrivate
+    }
 
     var body: some View {
         NavigationStack {
@@ -882,7 +936,18 @@ private struct FriendCollaboratorSearchSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                    if store.isPrivateProfile && !allowsInvitesWhilePrivate {
+                        if !selectedCollaborators.isEmpty {
+                            ExistingCollaboratorsSummary(collaborators: selectedCollaborators)
+                        }
+                        PrivateProfileCollaborationUnavailable(
+                            message: selectedCollaborators.isEmpty
+                                ? "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
+                                : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
+                        )
+                    } else {
+                        FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                    }
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing8)
@@ -943,14 +1008,7 @@ private struct FriendCollaboratorSearchContent: View {
             )
 
             if !selectedCollaborators.isEmpty {
-                HStack(spacing: WanderTheme.spacing2) {
-                    FacePileView(collaborators: selectedCollaborators, size: 28)
-                    Text("\(selectedCollaborators.count) selected")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                    Spacer()
-                }
-                .padding(.horizontal, WanderTheme.spacing1)
+                selectedCollaboratorsSection
             }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -983,12 +1041,46 @@ private struct FriendCollaboratorSearchContent: View {
         }
     }
 
+    private var selectedCollaboratorsSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                FacePileView(collaborators: selectedCollaborators, size: 28)
+                Text("\(selectedCollaborators.count) selected")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+            }
+
+            ForEach(selectedCollaborators) { collaborator in
+                HStack(spacing: WanderTheme.spacing2) {
+                    WanderAvatar(initials: collaborator.initials, size: 32, color: collaborator.color)
+                    Text("@\(collaborator.handle)")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Spacer()
+                    Button {
+                        selectedCollaborators.removeAll { isSameCollaborator($0, collaborator) }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(WanderTheme.stateError.color)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove @\(collaborator.handle)")
+                }
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            }
+        }
+    }
+
     private func friendRow(_ friend: ListCollaboratorMock) -> some View {
-        let isSelected = selectedCollaborators.contains { $0.id == friend.id }
+        let isSelected = selectedCollaborators.contains { isSameCollaborator($0, friend) }
 
         return Button {
             if isSelected {
-                selectedCollaborators.removeAll { $0.id == friend.id }
+                selectedCollaborators.removeAll { isSameCollaborator($0, friend) }
             } else {
                 selectedCollaborators.append(friend)
             }
@@ -1022,6 +1114,92 @@ private struct FriendCollaboratorSearchContent: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isSelected ? "Remove \(friend.name)" : "Add \(friend.name)")
+    }
+
+    private func isSameCollaborator(_ lhs: ListCollaboratorMock, _ rhs: ListCollaboratorMock) -> Bool {
+        lhs.id == rhs.id || lhs.handle == rhs.handle
+    }
+}
+
+private struct ExistingCollaboratorsSummary: View {
+    let collaborators: [ListCollaboratorMock]
+    var showsContainer = true
+
+    var body: some View {
+        if showsContainer {
+            row
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            FacePileView(collaborators: collaborators, size: 30)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(collaborators.count) existing collaborator\(collaborators.count == 1 ? "" : "s")")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("This collaboration stays unchanged.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct PrivateProfileCollaborationUnavailable: View {
+    var showsContainer = true
+    var title = "new collaboration is off"
+    var message = "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
+
+    var body: some View {
+        if showsContainer {
+            content
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+        } else {
+            content
+                .padding(.vertical, WanderTheme.spacing1)
+        }
+    }
+
+    private var content: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 18, weight: .black))
+                .frame(width: 42, height: 42)
+                .background(WanderTheme.terracottaTint.color)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(message)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -1262,10 +1440,12 @@ private enum ListEditorPresentation: Identifiable, Hashable {
 }
 
 private struct ListEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
+    @Environment(\.dismiss) private var dismiss
     private let presentation: ListEditorPresentation
     private let onDelete: (PlaceListMock) -> Void
+    private let isOwnedByCurrentUser: Bool
+    private let startedAsCollaborative: Bool
     @State private var title: String
     @State private var description: String
     @State private var isStealth: Bool
@@ -1284,11 +1464,15 @@ private struct ListEditorSheet: View {
 
         switch presentation {
         case .create:
+            isOwnedByCurrentUser = true
+            startedAsCollaborative = false
             _title = State(initialValue: "")
             _description = State(initialValue: "")
             _isStealth = State(initialValue: false)
             _stagedCollaborators = State(initialValue: [])
         case .edit(let list):
+            isOwnedByCurrentUser = list.isOwnedByCurrentUser
+            startedAsCollaborative = list.isCollaborative
             _title = State(initialValue: list.name)
             _description = State(initialValue: list.description)
             _isStealth = State(initialValue: list.isStealth)
@@ -1327,7 +1511,7 @@ private struct ListEditorSheet: View {
                     collaboratorsBlock
                 }
                 .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing8)
+                .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)
             }
             .wanderScreen()
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -1343,9 +1527,18 @@ private struct ListEditorSheet: View {
                 }
             }
             .sheet(isPresented: $isShowingFriendSearch) {
-                FriendCollaboratorSearchSheet(selectedCollaborators: $stagedCollaborators)
+                FriendCollaboratorSearchSheet(
+                    selectedCollaborators: $stagedCollaborators,
+                    allowsInvitesWhilePrivate: canEditCollaborators
+                )
                     .presentationDetents([.large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
+            }
+            .onAppear {
+                enforcePrivateProfileRules()
+            }
+            .onChange(of: store.isPrivateProfile) { _, _ in
+                enforcePrivateProfileRules()
             }
             .alert("Delete List", isPresented: $isShowingDeleteConfirmation) {
                 Button("Delete List", role: .destructive) {
@@ -1396,6 +1589,63 @@ private struct ListEditorSheet: View {
         return "Are you sure you want to delete this list? You will be deleting it for everybody."
     }
 
+    private var listStealthBinding: Binding<Bool> {
+        Binding(
+            get: { store.isPrivateProfile ? true : isStealth },
+            set: { newValue in
+                guard !store.isPrivateProfile else {
+                    isStealth = true
+                    return
+                }
+                isStealth = newValue
+            }
+        )
+    }
+
+    private func enforcePrivateProfileRules() {
+        guard store.isPrivateProfile else { return }
+        isStealth = true
+        if !canEditCollaborators {
+            isShowingFriendSearch = false
+        }
+        if !startedAsCollaborative {
+            stagedCollaborators = []
+        }
+    }
+
+    private var stealthHelperCopy: String {
+        if store.isPrivateProfile {
+            if !stagedCollaborators.isEmpty {
+                return "Locked on by Private Profile. Existing collaborators can still see this list."
+            }
+
+            return "Locked on by Private Profile. Only you can see this list."
+        }
+
+        return isStealth ? "Only you and invited collaborators can see it." : "People who follow you can see this list."
+    }
+
+    private var collaboratorsHelperCopy: String {
+        guard isOwnedByCurrentUser else {
+            return "Only the owner can manage collaborators."
+        }
+
+        guard store.isPrivateProfile else {
+            return "Invite people before they can add places."
+        }
+
+        if !startedAsCollaborative {
+            return "New collaborative lists are unavailable while Private Profile is on."
+        }
+
+        return "Existing collaborators stay on this list. You can add or remove friends."
+    }
+
+    private var canEditCollaborators: Bool {
+        guard isOwnedByCurrentUser else { return false }
+        return !store.isPrivateProfile || startedAsCollaborative
+    }
+
     private func fieldBlock<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
@@ -1415,12 +1665,12 @@ private struct ListEditorSheet: View {
     }
 
     private var stealthToggle: some View {
-        Toggle(isOn: $isStealth) {
+        Toggle(isOn: listStealthBinding) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("stealth mode")
                     .font(.system(size: 14, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(isStealth ? "Only you and invited collaborators can see it." : "People who follow you can see this list.")
+                Text(stealthHelperCopy)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1428,6 +1678,8 @@ private struct ListEditorSheet: View {
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
+        .disabled(store.isPrivateProfile)
+        .opacity(store.isPrivateProfile ? 0.56 : 1)
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -1439,27 +1691,35 @@ private struct ListEditorSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("collaborators")
                         .font(.system(size: 14, weight: .black))
-                    Text("Invite people before they can add places.")
+                    Text(collaboratorsHelperCopy)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
 
                 Spacer()
 
-                Button {
-                    isShowingFriendSearch = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .background(WanderTheme.terracottaTint.color)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                        .clipShape(Circle())
+                if canEditCollaborators {
+                    Button {
+                        isShowingFriendSearch = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .black))
+                            .frame(width: 44, height: 44)
+                            .background(WanderTheme.terracottaTint.color)
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Invite collaborator")
                 }
-                .accessibilityLabel("Invite collaborator")
             }
 
-            if stagedCollaborators.isEmpty {
+            if store.isPrivateProfile && !canEditCollaborators && stagedCollaborators.isEmpty {
+                PrivateProfileCollaborationUnavailable(
+                    showsContainer: false,
+                    title: "existing lists stay",
+                    message: "Collaborators already on existing lists are not removed."
+                )
+            } else if stagedCollaborators.isEmpty {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 18, weight: .black))
@@ -1470,6 +1730,8 @@ private struct ListEditorSheet: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                     Spacer()
                 }
+            } else if store.isPrivateProfile && canEditCollaborators {
+                ExistingCollaboratorsSummary(collaborators: stagedCollaborators, showsContainer: false)
             } else {
                 ForEach(stagedCollaborators) { collaborator in
                     HStack(spacing: WanderTheme.spacing2) {
@@ -1486,6 +1748,17 @@ private struct ListEditorSheet: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                         Spacer()
+                        if canEditCollaborators {
+                            Button {
+                                stagedCollaborators.removeAll { $0.id == collaborator.id }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.system(size: 22, weight: .black))
+                                    .foregroundStyle(WanderTheme.stateError.color)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove @\(collaborator.handle)")
+                        }
                     }
                 }
             }
@@ -1566,6 +1839,8 @@ private struct PlaceListMock: Identifiable, Hashable {
     let places: [ListPlaceMock]
 
     var previewPlaces: [ListPlaceMock] { places }
+    var isOwnedByCurrentUser: Bool { ownerName == "You" }
+    var isCollaborative: Bool { !collaborators.isEmpty }
 
     var mapRegion: MKCoordinateRegion {
         MapRegionFitter.region(fitting: places.map(\.coordinate)) ?? MKCoordinateRegion(

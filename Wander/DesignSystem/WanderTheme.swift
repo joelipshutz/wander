@@ -156,34 +156,59 @@ struct PlaceVisibilityStealthToggle: View {
     let title: String
     @Binding var visibility: PlaceVisibility
     var showsContainer = true
+    var helperCopy: (PlaceVisibility) -> String
 
     init(
         title: String = "stealth mode",
         visibility: Binding<PlaceVisibility>,
-        showsContainer: Bool = true
+        showsContainer: Bool = true,
+        helperCopy: @escaping (PlaceVisibility) -> String = { $0.stealthModeHelperCopy }
     ) {
         self.title = title
         _visibility = visibility
         self.showsContainer = showsContainer
+        self.helperCopy = helperCopy
     }
 
     var body: some View {
+        if showsContainer {
+            toggleContent
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        } else {
+            toggleContent
+                .padding(.vertical, WanderTheme.spacing1)
+                .padding(.trailing, WanderTheme.spacing1)
+        }
+    }
+
+    private var toggleContent: some View {
         Toggle(isOn: isPrivate) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Text(visibility.stealthModeHelperCopy)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                ZStack {
+                    Circle()
+                        .fill(WanderTheme.terracottaTint.color)
+                    Image(systemName: "eye.slash.fill")
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+                .frame(width: 38, height: 38)
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text(helperCopy(visibility))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
-        .padding(showsContainer ? WanderTheme.spacing3 : 0)
-        .background(showsContainer ? WanderTheme.surfaceBone.color : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: showsContainer ? WanderTheme.radiusLarge : 0))
         .accessibilityValue(visibility.isStealthModeEnabled ? "Private" : "Not private")
     }
 

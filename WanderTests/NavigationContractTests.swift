@@ -52,6 +52,10 @@ final class NavigationContractTests: XCTestCase {
             .editDeleteConfirm
         )
         XCTAssertEqual(
+            ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collabEdit"]),
+            .collabEdit
+        )
+        XCTAssertEqual(
             ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collabEditDeleteConfirm"]),
             .collabEditDeleteConfirm
         )
@@ -107,6 +111,19 @@ final class NavigationContractTests: XCTestCase {
                 startX: 12,
                 translation: CGSize(width: 110, height: 110)
             )
+        )
+    }
+
+    @MainActor
+    func testPlaceProfileFullBleedHeaderKeepsMinimumTopInset() {
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: 0),
+            54
+        )
+
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: 62),
+            62
         )
     }
 }
