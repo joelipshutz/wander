@@ -8318,3 +8318,33 @@ Expected release files:
 - `docs/agent-log.md`
 - `project.yml`
 - `Wander.xcodeproj/project.pbxproj`
+
+Release completion, 2026-07-01 16:07 PDT:
+
+- Squash-merged PR #59 into `main` as `5de466a3a` and fast-forwarded the release worktree.
+- Bumped `CURRENT_PROJECT_VERSION` from 58 to 59 in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Build-number commit pushed to `main`: `2f4da4636` (`chore: bump testflight build 59`).
+- Ran `xcodegen generate`; it produced broad project-file churn unrelated to the build number, so the generated pbxproj churn was discarded and only the required `CURRENT_PROJECT_VERSION = 59` lines were kept.
+- Supabase hosted migrations applied and verified:
+  - `20260701164000_revised_place_taxonomy.sql`
+  - `20260701185500_harden_blocked_social_graph.sql`
+  - Verified `app.viewer_relationship`, `app.profile_following`, `app.profile_followers`, `public.profile_relationship`, `public.profile_following`, and `public.profile_followers` metadata, search paths, grants, and invoker posture.
+  - Ran hosted REC-62 rollback smoke harness successfully for blocked relationship/search/following behavior.
+- Release validation passed:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build59-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build59-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - XCTest result: 212 tests, 0 failures, 0 skipped.
+- Archived build 59 at `/private/tmp/Wander-0.1-build59.xcarchive`; archive plist confirmed version `0.1` and build `59`.
+- Exported/uploaded with `/private/tmp/WanderExportUpload59.plist` using `manageAppVersionAndBuildNumber=false`; upload succeeded.
+- Ran `node scripts/testflight-release.mjs --build-number 59 --archive-path /private/tmp/Wander-0.1-build59.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build59-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- TestFlight helper result: build `0.1 (59)` id `b9ae7b81-b38b-4da0-be6d-55da01877699`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782947222482509
+- Linear `REC-44` and `REC-62` are `Done`; added release comments linking build 59, validation, and Slack tester note.
+
+Known issues:
+
+- Camera capture still needs real-device QA.
+
+Next:
+
+- Test build 59 from TestFlight for REC-44 and REC-62 flows: profile graph row taps/unfollow confirmation, Discover member blocking search clear, blocked users list/unblock, and two-account blocked visibility.
