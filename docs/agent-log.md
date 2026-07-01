@@ -7933,3 +7933,44 @@ PR checkpoint, 2026-06-30 22:09 PDT:
 - Opened ready PR #55: `https://github.com/joelipshutz/wander/pull/55`.
 - Added Linear comment on `REC-66` with PR link, validation status, screenshots, and the taxonomy-count gap.
 - No `main` merge, build-number bump, TestFlight upload, or Slack tester note was performed. This PR is ready for Ryan to test before sign-off.
+
+Follow-up checkpoint, 2026-07-01 09:16 PDT:
+
+- Ryan asked to update the PR branch with the revised 14 primary categories and exhaustive subcategory lists:
+  `Restaurants & Food`, `Coffee, Tea, & Sweets`, `Bars & Nightlife`, `Outdoors & Nature`, `Things To Do`, `Shopping`, `Wellness & Fitness`, `Stays`, `Services & Errands`, `Travel & Transit`, `Work & Education`, `Civic & Faith`, `Areas & Addresses`, and `Facilities & Other`.
+- Additional behavior requests:
+  - Keep long subcategory lists grouped and searchable.
+  - Make first-time MapKit nightlife/provider-category saves default into `Bars & Nightlife` instead of generic/old food grouping. The local deterministic fallback must handle this in Xcode; the server-side OpenAI classifier remains the hosted extraction-worker path and should never place the key in iOS.
+  - Tapping the `category` row should always open the category grid, even when an auto-default category is selected.
+  - For `Restaurants & Food`, support optional cuisine selection plus a separate food/restaurant type selection.
+  - Remove `migrated` and `edited` disclaimers next to place type.
+- Expected additional files now include `shared/place-taxonomy.json`, `supabase/functions/_shared/place-taxonomy.ts`, and a Supabase migration/test update if category IDs change.
+
+Implementation checkpoint, 2026-07-01 00:44 PDT:
+
+- Updated the shared taxonomy to version 3 with the requested 14 primary categories and exhaustive subcategory lists. Validation counted 14 editable categories with no duplicate subcategories:
+  `restaurants_food` 132, `coffee_tea_sweets` 23, `bars_nightlife` 26, `outdoors_nature` 41, `things_to_do` 52, `shopping` 46, `wellness_fitness` 38, `stays` 18, `services_errands` 48, `travel_transit` 38, `work_education` 17, `civic_faith` 16, `areas_addresses` 15, `facilities_other` 7.
+- Updated Swift taxonomy IDs, aliases, MapKit/provider normalization, grouped subcategory sections, DEBUG SwiftUI mockups, Discover parser categories, Edge Function taxonomy helpers, and Supabase category metadata tests to the new framework.
+- Added restaurant-specific metadata behavior: `Restaurants & Food` keeps a required type subcategory and optional cuisine saved as `restaurant_cuisine`; cuisine guessing now prefers specific cuisines such as `South American` and `Japanese BBQ` over shorter parent matches.
+- Updated the real save/edit place UI so the `category` row opens the primary category tile grid, the subcategory sheet remains grouped/searchable/exhaustive, MapKit nightlife strings such as `MKPOICategoryNightlife` normalize to `Bars & Nightlife` / `Bar`, and visible `migrated` / `edited` source pills are no longer shown next to place type.
+- Added Supabase migration `20260701164000_revised_place_taxonomy.sql` to normalize existing `places.primary_category`, `places.subcategory`, and `user_places.category_override` into the new category framework while preserving raw provider type/source/confidence metadata.
+
+Validation:
+
+- `git diff --check` passed.
+- `python3 -m json.tool shared/place-taxonomy.json` passed.
+- Custom taxonomy validation script passed: 14 editable categories, no duplicate subcategories.
+- `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+- Focused Swift suite passed on `iPhone 17 Pro, OS 26.5`: `WanderTests/WanderPlaceCategoryTests`, 10 tests, 0 failures.
+- Full Swift suite passed on `iPhone 17 Pro, OS 26.5`: 208 tests, 0 failures.
+- Supabase SQL tests did not run to completion in this worktree:
+  - sandboxed `supabase test db ...` first failed before database access because the CLI could not write `~/.supabase/telemetry.json`.
+  - elevated local run reached Supabase CLI but failed with `LegacyDbConnectError` / `PgClient: Failed to connect`.
+  - elevated linked run failed with `LegacyProjectNotLinkedError` because this worktree has no linked project ref.
+
+Review notes:
+
+- Plan engineering review: no blocking architecture issue found after implementation. The main data risk was taxonomy drift across Swift, shared JSON, Edge Functions, and SQL; this PR updates all four surfaces and adds tests for the cross-surface IDs, provider-subcategory filters, MapKit nightlife normalization, restaurant type/cuisine split, and specificity in cuisine guessing.
+- Plan design review: no blocking design issue found in code review. The picker keeps the approved warm full-screen sheet direction, category tile grid, grouped chips, search-first flow, selected state, and change affordance. Live simulator visual QA screenshots were not recaptured after this revision, so Ryan should still do an Xcode visual pass before merge.
+- Intentional boundary: the iOS app does not send OpenAI requests or embed the OpenAI key. First-time local/default behavior uses provider metadata and deterministic taxonomy fallbacks; server-side extraction/classification remains the place where the approved OpenAI key should be used.
+- Known gap: historical cuisine attributes are not globally backfilled by the SQL migration. Existing provider rows like `thai restaurant` migrate shared subcategory to `Restaurant`; the app derives/saves optional cuisine when a user edits/saves through the new flow.

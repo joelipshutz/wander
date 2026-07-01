@@ -5,20 +5,20 @@ import {
 
 Deno.test("place taxonomy includes the app category framework", () => {
   const expected = [
-    "food_drink",
+    "restaurants_food",
+    "coffee_tea_sweets",
+    "bars_nightlife",
     "outdoors_nature",
-    "arts_culture_faith",
-    "entertainment",
-    "health_wellness",
-    "sports_fitness",
+    "things_to_do",
     "shopping",
-    "services",
-    "lodging",
-    "transportation_transit",
-    "education",
-    "work_venues",
-    "home_neighborhood",
-    "public_services",
+    "wellness_fitness",
+    "stays",
+    "services_errands",
+    "travel_transit",
+    "work_education",
+    "civic_faith",
+    "areas_addresses",
+    "facilities_other",
     "place",
   ];
 
@@ -29,13 +29,15 @@ Deno.test("place taxonomy includes the app category framework", () => {
 
 Deno.test("place taxonomy normalizes provider subcategories to primary categories", () => {
   const cases: Array<[string, string]> = [
-    ["thai restaurant", "food_drink"],
-    ["4-star hotel", "lodging"],
+    ["thai restaurant", "restaurants_food"],
+    ["MKPOICategoryNightlife", "bars_nightlife"],
+    ["coffee shop", "coffee_tea_sweets"],
+    ["4-star hotel", "stays"],
     ["art supply store", "shopping"],
     ["waterfall trail", "outdoors_nature"],
-    ["train station", "transportation_transit"],
-    ["wellness studio", "health_wellness"],
-    ["gym", "sports_fitness"],
+    ["train station", "travel_transit"],
+    ["wellness studio", "wellness_fitness"],
+    ["gym", "wellness_fitness"],
   ];
 
   for (const [input, expected] of cases) {

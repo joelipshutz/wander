@@ -25,7 +25,7 @@ struct PlaceCategoryAssignment: Equatable, Codable {
     ) {
         let normalizedPrimary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
         self.primaryCategory = normalizedPrimary
-        self.subcategory = WanderPlaceCategory.normalizedSubcategory(subcategory)
+        self.subcategory = WanderPlaceCategory.canonicalSubcategory(subcategory, primaryCategory: normalizedPrimary)
             ?? WanderPlaceCategory.defaultSubcategory(forRawCategory: primaryCategory, normalizedPrimary: normalizedPrimary)
         self.source = PlaceCategorySource(rawValue: source)?.rawValue ?? PlaceCategorySource.unknown.rawValue
         self.confidence = confidence.map { max(0, min(1, $0)) }
@@ -79,6 +79,7 @@ struct PlaceCategoryDisplay: Equatable {
 
 enum PlaceMemoryAttributeKeys {
     static let personalLabels = "personal_labels"
+    static let restaurantCuisine = "restaurant_cuisine"
 }
 
 enum PlacePersonalLabelSuggestions {
@@ -132,288 +133,361 @@ struct PlaceCategoryTaxonomyEntry: Equatable {
     let isEditable: Bool
 }
 
+enum PlaceCategorySubcategoryRole: String, Equatable {
+    case type
+    case cuisine
+}
+
 struct PlaceCategorySubcategoryGroup: Equatable {
     let title: String
     let subcategories: [String]
+    let role: PlaceCategorySubcategoryRole
+
+    init(
+        title: String,
+        subcategories: [String],
+        role: PlaceCategorySubcategoryRole = .type
+    ) {
+        self.title = title
+        self.subcategories = subcategories
+        self.role = role
+    }
 }
 
 enum WanderPlaceCategory {
-    static let foodDrink = "food_drink"
+    static let restaurantsFood = "restaurants_food"
+    static let coffeeTeaSweets = "coffee_tea_sweets"
+    static let barsNightlife = "bars_nightlife"
     static let outdoorsNature = "outdoors_nature"
-    static let artsCultureFaith = "arts_culture_faith"
-    static let entertainment = "entertainment"
-    static let healthWellness = "health_wellness"
-    static let sportsFitness = "sports_fitness"
+    static let thingsToDo = "things_to_do"
     static let shopping = "shopping"
-    static let services = "services"
-    static let lodging = "lodging"
-    static let transportationTransit = "transportation_transit"
-    static let education = "education"
-    static let workVenues = "work_venues"
-    static let homeNeighborhood = "home_neighborhood"
-    static let publicServices = "public_services"
+    static let wellnessFitness = "wellness_fitness"
+    static let stays = "stays"
+    static let servicesErrands = "services_errands"
+    static let travelTransit = "travel_transit"
+    static let workEducation = "work_education"
+    static let civicFaith = "civic_faith"
+    static let areasAddresses = "areas_addresses"
+    static let facilitiesOther = "facilities_other"
     static let fallbackPlace = "place"
+
+    // Legacy constants retained so older saved filters and call sites normalize into the new taxonomy.
+    static let foodDrink = restaurantsFood
+    static let artsCultureFaith = thingsToDo
+    static let entertainment = thingsToDo
+    static let healthWellness = wellnessFitness
+    static let sportsFitness = wellnessFitness
+    static let services = servicesErrands
+    static let lodging = stays
+    static let transportationTransit = travelTransit
+    static let education = workEducation
+    static let workVenues = workEducation
+    static let homeNeighborhood = areasAddresses
+    static let publicServices = civicFaith
 
     static let taxonomy: [PlaceCategoryTaxonomyEntry] = [
         PlaceCategoryTaxonomyEntry(
-            id: foodDrink,
-            group: "Food & drink",
-            detail: "Restaurants, coffee, bars, markets",
+            id: restaurantsFood,
+            group: "Restaurants & Food",
+            detail: "Restaurants, cuisines, quick bites",
             defaultSubcategory: "Restaurant",
             symbolName: "fork.knife",
             aliases: [
-                foodDrink, "food and drink", "food & drink", "food", "drink",
-                "coffee", "coffee shop", "cafe", "espresso", "roaster", "bakery", "tea shop",
-                "restaurant", "thai restaurant", "fast food restaurant", "taqueria", "ramen",
-                "sushi", "pizza", "diner", "kitchen", "grill", "noodle", "taco", "food market",
-                "bar", "brewery", "winery", "cocktail", "pub", "nightlife"
-            ],
+            "restaurants_food", "restaurants food", "restaurants and food", "food_drink", "food drink",
+            "food and drink", "restaurant", "restaurants", "fast food", "fine dining", "casual family", "diner",
+            "bistro", "buffet", "food court", "takeout", "cafeteria", "breakfast", "brunch", "sandwich", "deli",
+            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "dim sum", "hot pot", "taco", "taqueria",
+            "thai restaurant", "sushi restaurant", "korean bbq"
+        ],
             subcategories: [
-                "Restaurant", "Coffee shop", "Cafe", "Bakery", "Tea shop", "Juice bar",
-                "Ice cream shop", "Dessert shop", "Donut shop", "Bagel shop", "Sandwich shop",
-                "Fast food restaurant", "Food truck", "Food court", "Food market", "Farmers market",
-                "Thai restaurant", "Mexican restaurant", "Japanese restaurant", "Sushi restaurant",
-                "Ramen restaurant", "Chinese restaurant", "Korean restaurant", "Vietnamese restaurant",
-                "Indian restaurant", "Italian restaurant", "Pizza restaurant", "Mediterranean restaurant",
-                "Seafood restaurant", "Steakhouse", "Diner", "Brunch spot", "Bar", "Cocktail bar",
-                "Wine bar", "Brewery", "Pub", "Dive bar", "Rooftop bar", "Nightlife"
-            ],
+            "Restaurant", "Fast food", "Fine dining", "Casual/family", "Diner", "Bistro", "Buffet", "Food court",
+            "Takeout", "Cafeteria", "Breakfast", "Brunch", "Sandwich", "Bagel", "Deli", "Salad", "Soup", "Pizza",
+            "Burgers", "Hot dogs", "Barbecue", "Chicken", "Wings", "Seafood", "Oyster bar", "Fish & chips",
+            "Taco stand", "Taco truck", "Steakhouse", "Vegetarian", "Vegan", "Halal", "Ramen", "Noodles",
+            "Dumplings", "Dim sum", "Hot pot", "Fondue", "Burrito", "Taco", "Falafel", "Gyro", "Kebab", "Shawarma",
+            "Bar & grill", "Snack bar", "Gastropub", "American", "Mexican", "Thai", "Vietnamese", "Chinese",
+            "Cantonese", "Taiwanese", "Korean", "Japanese", "Sushi", "Izakaya", "Yakitori", "Yakiniku", "Indian",
+            "North Indian", "South Indian", "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern",
+            "Lebanese", "Persian", "Turkish", "Israeli", "Moroccan", "Mediterranean", "Greek", "Italian", "French",
+            "Spanish", "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss", "Dutch",
+            "Belgian", "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech", "Hungarian",
+            "Romanian", "Croatian", "Ethiopian", "African", "Caribbean", "Jamaican", "Panamanian", "Cuban",
+            "Brazilian", "Argentinian", "Colombian", "Chilean", "Peruvian", "South American", "Latin American",
+            "Tex-Mex", "Southwestern", "Cajun", "Californian", "Hawaiian", "Australian", "Malaysian", "Indonesian",
+            "Filipino", "Burmese", "Cambodian", "Asian", "Asian fusion", "European", "Eastern European", "Danish",
+            "Tibetan", "Mongolian BBQ", "Korean BBQ", "Japanese BBQ", "Japanese curry", "Tonkatsu"
+        ],
+            isEditable: true
+        ),
+        PlaceCategoryTaxonomyEntry(
+            id: coffeeTeaSweets,
+            group: "Coffee, Tea, & Sweets",
+            detail: "Coffee, tea, bakeries",
+            defaultSubcategory: "Coffee shop",
+            symbolName: "cup.and.saucer.fill",
+            aliases: [
+            "coffee_tea_sweets", "coffee tea sweets", "coffee tea and sweets", "coffee", "coffee shop", "cafe",
+            "espresso", "roaster", "roastery", "tea", "tea house", "tea store", "bakery", "dessert", "sweets",
+            "juice", "smoothie", "acai", "ice cream", "candy", "chocolate", "cat cafe", "dog cafe"
+        ],
+            subcategories: [
+            "Coffee shop", "Cafe", "Coffee stand", "Roastery", "Tea house", "Tea store", "Juice shop",
+            "Smoothie shop", "Acai", "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop",
+            "Dessert shop", "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop",
+            "Chocolate factory", "Confectionery", "Cat cafe", "Dog cafe"
+        ],
+            isEditable: true
+        ),
+        PlaceCategoryTaxonomyEntry(
+            id: barsNightlife,
+            group: "Bars & Nightlife",
+            detail: "Bars, lounges, clubs",
+            defaultSubcategory: "Bar",
+            symbolName: "wineglass.fill",
+            aliases: [
+            "bars_nightlife", "bars nightlife", "bars and nightlife", "bar", "bars", "nightlife",
+            "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "lounge", "club", "disco",
+            "brewery", "brewpub", "winery", "vineyard", "nightclub", "karaoke", "live music", "comedy club",
+            "casino"
+        ],
+            subcategories: [
+            "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Gastropub",
+            "Bar & grill", "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Beer garden", "Jazz club",
+            "Hi-fi lounge", "Brewery", "Brewpub", "Winery", "Vineyard", "Nightclub", "Karaoke", "Live music",
+            "Comedy club", "Casino"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
             id: outdoorsNature,
-            group: "Outdoors & nature",
-            detail: "Parks, trails, beaches, overlooks",
+            group: "Outdoors & Nature",
+            detail: "Parks, trails, water",
             defaultSubcategory: "Park",
             symbolName: "tree.fill",
             aliases: [
-                outdoorsNature, "outdoors", "nature", "hike", "hiking", "trail", "waterfall",
-                "hot spring", "canyon", "mountain", "observatory", "park", "national park",
-                "playground", "garden", "plaza", "beach", "lake", "campground"
-            ],
+            "outdoors_nature", "outdoors nature", "outdoors and nature", "outdoors", "nature", "hike", "hiking",
+            "trail", "trailhead", "waterfall", "hot spring", "canyon", "mountain", "park", "national park",
+            "playground", "garden", "beach", "lake", "campground", "rv park", "marina", "ski resort", "skate park"
+        ],
             subcategories: [
-                "Park", "National park", "State park", "Garden", "Botanical garden", "Beach",
-                "Lake", "River", "Waterfall", "Hot spring", "Hike or trail", "Trailhead",
-                "Scenic overlook", "Canyon", "Mountain", "Campground", "Picnic area",
-                "Dog park", "Playground", "Pier", "Marina", "Nature preserve", "Observatory"
-            ],
+            "Park", "City park", "State park", "National park", "Hiking area", "Trail", "Hike", "Beach", "Lake",
+            "River", "Island", "Woods/forest", "Mountain peak", "Scenic spot", "Viewpoint", "Overlook",
+            "Waterfall", "Hot spring", "Cave", "Nature preserve", "Wildlife refuge", "Wildlife park",
+            "Botanical garden", "Garden", "Picnic area", "Dog park", "Playground", "Campground", "RV park",
+            "Dispersed camping", "Cabin", "Cottage", "Marina", "Fishing pier", "Fishing pond", "Fishing charter",
+            "Ski resort", "Cycling park", "Skate park", "Off-roading area", "Adventure sports"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: artsCultureFaith,
-            group: "Arts, culture & faith",
-            detail: "Museums, galleries, temples, landmarks",
-            defaultSubcategory: "Museum",
-            symbolName: "sparkles",
-            aliases: [
-                artsCultureFaith, "arts", "culture", "faith", "museum", "gallery", "art gallery",
-                "theater", "theatre", "historic", "landmark", "monument", "library", "church",
-                "temple", "shrine", "mosque", "synagogue", "chapel", "cathedral", "meditation"
-            ],
-            subcategories: [
-                "Museum", "Art museum", "Gallery", "Art gallery", "Public art", "Theater",
-                "Historic site", "Landmark", "Monument", "Cultural center", "Library",
-                "Bookstore", "Temple", "Shrine", "Church", "Cathedral", "Mosque",
-                "Synagogue", "Chapel", "Meditation center", "Spiritual place"
-            ],
-            isEditable: true
-        ),
-        PlaceCategoryTaxonomyEntry(
-            id: entertainment,
-            group: "Entertainment",
-            detail: "Venues, movies, games, attractions",
-            defaultSubcategory: "Entertainment venue",
+            id: thingsToDo,
+            group: "Things To Do",
+            detail: "Attractions, arts, venues",
+            defaultSubcategory: "Tourist attraction",
             symbolName: "ticket.fill",
             aliases: [
-                entertainment, "entertainment", "tourist attraction", "attraction", "venue",
-                "movie", "cinema", "concert", "music venue", "arena", "stadium", "arcade",
-                "bowling", "zoo", "aquarium", "amusement", "theme park", "comedy"
-            ],
+            "things_to_do", "things to do", "arts_culture_faith", "arts culture faith", "entertainment",
+            "tourist attraction", "attraction", "landmark", "museum", "gallery", "art gallery", "theater",
+            "theatre", "historic", "monument", "movie", "cinema", "concert", "music venue", "arcade", "bowling",
+            "zoo", "aquarium", "amusement", "theme park", "event venue"
+        ],
             subcategories: [
-                "Entertainment venue", "Tourist attraction", "Movie theater", "Music venue",
-                "Concert hall", "Comedy club", "Theater", "Arena", "Stadium", "Arcade",
-                "Bowling alley", "Karaoke", "Pool hall", "Casino", "Zoo", "Aquarium",
-                "Amusement park", "Theme park", "Escape room", "Event venue"
-            ],
-            isEditable: true
-        ),
-        PlaceCategoryTaxonomyEntry(
-            id: healthWellness,
-            group: "Health & wellness",
-            detail: "Care, spas, pharmacies, recovery",
-            defaultSubcategory: "Wellness studio",
-            symbolName: "cross.case.fill",
-            aliases: [
-                healthWellness, "health", "wellness", "wellness studio", "spa", "massage",
-                "meditation", "hospital", "urgent care", "medical center", "health center",
-                "clinic", "doctor", "dentist", "pharmacy", "drugstore", "therapy", "salon"
-            ],
-            subcategories: [
-                "Wellness studio", "Spa", "Massage", "Sauna", "Bathhouse", "Meditation center",
-                "Therapy office", "Hospital", "Urgent care", "Medical center", "Clinic",
-                "Doctor", "Dentist", "Optometrist", "Pharmacy", "Drugstore", "Chiropractor",
-                "Acupuncture", "Physical therapy", "Recovery studio"
-            ],
-            isEditable: true
-        ),
-        PlaceCategoryTaxonomyEntry(
-            id: sportsFitness,
-            group: "Sports & fitness",
-            detail: "Gyms, courts, studios, fields",
-            defaultSubcategory: "Gym",
-            symbolName: "dumbbell.fill",
-            aliases: [
-                sportsFitness, "sports", "fitness", "gym", "fitness center", "training",
-                "strength", "workout", "pilates", "reformer", "lagree", "yoga", "barre",
-                "climbing gym", "boxing gym", "court", "field", "skate", "swim", "surf"
-            ],
-            subcategories: [
-                "Gym", "Fitness center", "Training studio", "Pilates studio", "Reformer pilates",
-                "Lagree studio", "Yoga studio", "Barre studio", "Boxing gym", "Martial arts gym",
-                "Climbing gym", "Dance studio", "Spin studio", "Tennis court", "Basketball court",
-                "Soccer field", "Baseball field", "Golf course", "Pool", "Skate park",
-                "Ski area", "Surf spot"
-            ],
+            "Tourist attraction", "Landmark", "Historical place", "Historical landmark", "Monument", "Sculpture",
+            "Fountain", "Castle", "Plaza", "Town square", "Visitor center", "Museum", "Art museum",
+            "History museum", "Art gallery", "Art studio", "Cultural landmark", "Cultural center", "Theater",
+            "Performing arts theater", "Concert hall", "Opera house", "Philharmonic hall", "Amphitheater",
+            "Auditorium", "Movie theater", "Planetarium", "Observation deck", "Aquarium", "Zoo", "Amusement park",
+            "Water park", "Ferris wheel", "Roller coaster", "Arcade", "Bowling", "Mini golf", "Billiards", "Darts",
+            "Axe throwing", "Board game lounge", "Go-karting", "Paintball", "Indoor playground", "Event venue",
+            "Convention center", "Banquet hall", "Wedding venue", "Community center", "Internet cafe",
+            "Dance hall", "Barbecue area"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
             id: shopping,
             group: "Shopping",
-            detail: "Stores, markets, supplies, malls",
-            defaultSubcategory: "Shop",
+            detail: "Stores, markets, supplies",
+            defaultSubcategory: "Store",
             symbolName: "bag.fill",
             aliases: [
-                shopping, "shopping", "shop", "store", "retail", "art supply store", "mall",
-                "boutique", "market", "grocery", "bookstore", "flower", "hardware", "furniture"
-            ],
+            "shopping", "shop", "store", "retail", "market", "mall", "grocery", "supermarket", "book store",
+            "bookstore", "art supply store", "craft store", "gift shop", "clothing", "shoe store", "jewelry",
+            "cosmetics", "hardware", "furniture", "pet store", "thrift"
+        ],
             subcategories: [
-                "Shop", "Store", "Boutique", "Market", "Mall", "Grocery store", "Convenience store",
-                "Art supply store", "Bookstore", "Record store", "Clothing store", "Shoe store",
-                "Jewelry store", "Gift shop", "Flower shop", "Home goods store", "Furniture store",
-                "Hardware store", "Electronics store", "Vintage store", "Thrift store", "Pet store"
-            ],
+            "Store", "Market", "Shopping mall", "Department store", "General store", "Convenience store",
+            "Discount store", "Warehouse store", "Wholesaler", "Grocery store", "Supermarket", "Hypermarket",
+            "Food store", "Farmers market", "Flea market", "Asian grocery", "Butcher", "Health food store",
+            "Liquor store", "Book store", "Art supply store", "Craft store", "Gift shop", "Toy store",
+            "Clothing store", "Women's clothing", "Shoe store", "Jewelry store", "Cosmetics store",
+            "Beauty supply", "Sporting goods", "Sportswear", "Bicycle store", "Electronics", "Cell phone store",
+            "Home goods", "Home improvement", "Hardware", "Building materials", "Furniture", "Garden center",
+            "Pet store", "Auto parts", "Thrift store", "Discount supermarket", "Cosmetics"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: services,
-            group: "Services",
-            detail: "Salons, repairs, pet care, errands",
-            defaultSubcategory: "Service business",
-            symbolName: "scissors",
+            id: wellnessFitness,
+            group: "Wellness & Fitness",
+            detail: "Health, beauty, fitness",
+            defaultSubcategory: "Gym",
+            symbolName: "heart.fill",
             aliases: [
-                services, "service", "services", "salon", "barber", "nail", "laundry",
-                "dry cleaner", "tailor", "repair", "bank", "atm", "post office", "shipping",
-                "veterinarian", "veterinary", "animal hospital", "animal service", "pet clinic"
-            ],
+            "wellness_fitness", "wellness fitness", "wellness and fitness", "health_wellness", "health wellness",
+            "sports_fitness", "sports fitness", "health", "wellness", "fitness", "gym", "fitness center", "yoga",
+            "sports club", "sports complex", "hospital", "medical", "clinic", "doctor", "dentist", "pharmacy",
+            "drugstore", "spa", "massage", "sauna", "therapy", "veterinary care", "veterinarian"
+        ],
             subcategories: [
-                "Service business", "Hair salon", "Barber", "Nail salon", "Beauty salon",
-                "Laundry", "Dry cleaner", "Tailor", "Shoe repair", "Phone repair", "Auto repair",
-                "Car wash", "Bank", "ATM", "Post office", "Shipping center", "Veterinarian",
-                "Veterinary clinic", "Animal hospital", "Pet clinic", "Pet groomer"
-            ],
+            "Gym", "Fitness center", "Yoga studio", "Wellness studio", "Wellness center", "Sports club",
+            "Sports complex", "Sports coaching", "Sports school", "Athletic field", "Swimming pool",
+            "Tennis court", "Golf course", "Indoor golf", "Ice skating rink", "Volleyball court", "Soccer field",
+            "Basketball court", "Pickleball court", "Spa", "Massage", "Massage spa", "Sauna", "Chiropractor",
+            "Dentist", "Dental clinic", "Doctor", "Medical clinic", "Medical center", "Hospital", "Medical lab",
+            "Pharmacy", "Drugstore", "Physiotherapist", "Foot care", "Veterinary care", "Mental health/therapy",
+            "Retreat"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: lodging,
-            group: "Lodging",
-            detail: "Hotels, resorts, stays",
+            id: stays,
+            group: "Stays",
+            detail: "Hotels, rentals, camping",
             defaultSubcategory: "Hotel",
             symbolName: "bed.double.fill",
             aliases: [
-                lodging, "lodging", "hotel", "motel", "resort", "inn", "hostel", "bnb",
-                "bed and breakfast", "boutique hotel", "3 star hotel", "4 star hotel", "5 star hotel"
-            ],
+            "stays", "stay", "lodging", "hotel", "motel", "resort", "inn", "hostel", "bnb", "bed and breakfast",
+            "guest house", "airbnb", "vrbo", "extended stay", "cottage", "cabin", "campground", "rv park",
+            "2 star hotel", "3 star hotel", "4 star hotel", "5 star hotel"
+        ],
             subcategories: [
-                "Hotel", "Motel", "Resort", "Boutique hotel", "Inn", "Hostel", "Bed and breakfast",
-                "Vacation rental", "Cabin", "Camp stay", "3-star hotel", "4-star hotel", "5-star hotel"
-            ],
+            "Hotel", "Resort", "Motel", "Hostel", "Inn", "Bed & breakfast", "Guest house", "Private guest room",
+            "Airbnb", "Vrbo", "Extended stay", "Cottage", "Cabin", "Campground", "RV park", "Farm-stay",
+            "Japanese inn", "Mobile home park"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: transportationTransit,
-            group: "Transportation & transit",
-            detail: "Airports, stations, parking, rides",
+            id: servicesErrands,
+            group: "Services & Errands",
+            detail: "Errands, repairs, pet care",
+            defaultSubcategory: "Consultant",
+            symbolName: "scissors",
+            aliases: [
+            "services_errands", "services errands", "services and errands", "services", "service", "bank", "atm",
+            "accounting", "insurance", "real estate", "lawyer", "consultant", "florist", "catering", "child care",
+            "laundry", "tailor", "courier", "shipping", "storage", "moving", "electrician", "plumber", "locksmith",
+            "contractor", "pet care", "pet boarding", "salon", "barber", "nail salon", "tattoo"
+        ],
+            subcategories: [
+            "Bank", "ATM", "Accounting", "Insurance", "Real estate", "Lawyer", "Consultant",
+            "Marketing consultant", "Employment agency", "Nonprofit", "Association", "Florist", "Catering",
+            "Food delivery", "Child care", "Summer camp", "Laundry", "Tailor", "Courier", "Shipping", "Storage",
+            "Moving", "Electrician", "Plumber", "Locksmith", "Painter", "Roofing contractor", "General contractor",
+            "Pet care", "Pet boarding", "Funeral home", "Cemetery", "Astrologer", "Psychic", "Tour agency",
+            "Travel agency", "Tourist information", "Chauffeur", "Aircraft rental", "Telecommunications",
+            "Skin care clinic", "Tanning studio", "Hair salon", "Barber", "Nail salon", "Makeup artist",
+            "Body art", "Tattoo/piercing"
+        ],
+            isEditable: true
+        ),
+        PlaceCategoryTaxonomyEntry(
+            id: travelTransit,
+            group: "Travel & Transit",
+            detail: "Airports, stations, parking",
             defaultSubcategory: "Transit stop",
             symbolName: "tram.fill",
             aliases: [
-                transportationTransit, "transportation", "transportation and transit", "transit",
-                "transit station", "airport", "train station", "bus station", "ferry", "subway",
-                "station", "parking", "garage", "rental car", "gas station", "ev charging"
-            ],
+            "travel_transit", "travel transit", "travel and transit", "transportation_transit",
+            "transportation transit", "transportation and transit", "transportation", "transit", "airport",
+            "train station", "subway station", "light rail", "tram stop", "bus stop", "bus station", "ferry",
+            "station", "parking", "garage", "taxi", "bike share", "gas station", "ev charging", "car rental",
+            "car repair", "car wash"
+        ],
             subcategories: [
-                "Transit stop", "Airport", "Train station", "Bus station", "Subway station",
-                "Light rail station", "Ferry terminal", "Taxi stand", "Ride pickup", "Parking lot",
-                "Parking garage", "Rental car", "Gas station", "EV charging station", "Bike share",
-                "Car share", "Rest stop"
-            ],
+            "Airport", "International airport", "Airstrip", "Heliport", "Train station", "Subway station",
+            "Light rail", "Tram stop", "Bus stop", "Bus station", "Ferry terminal", "Ferry service",
+            "Transit station", "Transit stop", "Transit depot", "Taxi stand", "Taxi service", "Bike share station",
+            "Parking", "Parking lot", "Parking garage", "Park & ride", "Gas station", "EV charging",
+            "E-bike charging", "Rest stop", "Truck stop", "Toll station", "Bridge", "Car dealer", "Car rental",
+            "Car repair", "Car wash", "Tire shop", "Truck dealer", "Transportation service", "Dump station",
+            "RV water refill"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: education,
-            group: "Education",
-            detail: "Schools, campuses, classes, learning",
-            defaultSubcategory: "School",
+            id: workEducation,
+            group: "Work & Education",
+            detail: "Offices, schools, libraries",
+            defaultSubcategory: "Co-working space",
             symbolName: "graduationcap.fill",
             aliases: [
-                education, "education", "school", "university", "college", "campus", "class",
-                "learning", "tutor", "academy", "library"
-            ],
+            "work_education", "work education", "work and education", "education", "work_venues", "work venues",
+            "work and venues", "work", "school", "university", "college", "campus", "preschool", "library",
+            "research institute", "coworking", "co working", "office", "business center", "corporate office",
+            "manufacturer", "supplier", "farm", "ranch", "television studio"
+        ],
             subcategories: [
-                "School", "Elementary school", "High school", "College", "University", "Campus",
-                "Preschool", "Daycare", "Tutoring center", "Language school", "Music school",
-                "Art class", "Cooking class", "Workshop", "Library", "Study spot"
-            ],
+            "Co-working space", "Business center", "Corporate office", "Manufacturer", "Supplier", "Farm", "Ranch",
+            "Television studio", "Library", "University", "School", "Preschool", "Primary school",
+            "Secondary school", "Academic department", "Educational institution", "Research institute"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
-            id: workVenues,
-            group: "Work & venues",
-            detail: "Offices, coworking, meetings, events",
-            defaultSubcategory: "Coworking space",
-            symbolName: "building.2.fill",
-            aliases: [
-                workVenues, "work", "venue", "office", "coworking", "co working", "conference",
-                "meeting", "event space", "studio", "warehouse", "production"
-            ],
-            subcategories: [
-                "Coworking space", "Office", "Meeting room", "Conference center", "Event space",
-                "Studio", "Production studio", "Photo studio", "Warehouse", "Workshop space",
-                "Convention center", "Business center", "Rooftop venue", "Private event room"
-            ],
-            isEditable: true
-        ),
-        PlaceCategoryTaxonomyEntry(
-            id: homeNeighborhood,
-            group: "Home & neighborhood",
-            detail: "Homes, buildings, blocks, local anchors",
-            defaultSubcategory: "Neighborhood spot",
-            symbolName: "house.fill",
-            aliases: [
-                homeNeighborhood, "home", "neighborhood", "apartment", "condo", "house",
-                "building", "block", "local spot", "landmark"
-            ],
-            subcategories: [
-                "Neighborhood spot", "Home", "Apartment building", "Condo", "House", "Block",
-                "Courtyard", "Community garden", "Neighborhood landmark", "Local shortcut",
-                "Viewpoint", "Meetup spot", "Building", "Lobby"
-            ],
-            isEditable: true
-        ),
-        PlaceCategoryTaxonomyEntry(
-            id: publicServices,
-            group: "Public services",
-            detail: "Civic, safety, government, utilities",
-            defaultSubcategory: "Public service",
+            id: civicFaith,
+            group: "Civic & Faith",
+            detail: "Government, worship, safety",
+            defaultSubcategory: "Government office",
             symbolName: "building.columns.fill",
             aliases: [
-                publicServices, "public service", "public services", "government", "city hall",
-                "courthouse", "police", "fire station", "embassy", "dmv", "utility"
-            ],
+            "civic_faith", "civic faith", "civic and faith", "public_services", "public service",
+            "public services", "government", "city hall", "courthouse", "embassy", "post office", "police",
+            "fire station", "faith", "worship", "spiritual", "church", "mosque", "synagogue", "hindu temple",
+            "buddhist temple", "shinto shrine", "temple", "shrine", "place of worship"
+        ],
             subcategories: [
-                "Public service", "Government office", "City hall", "Courthouse", "Police station",
-                "Fire station", "Embassy", "Consulate", "DMV", "Public restroom", "Recycling center",
-                "Utility office", "Community center", "Civic building"
-            ],
+            "City hall", "Government office", "Local government office", "Courthouse", "Embassy", "Post office",
+            "Police", "Neighborhood police station", "Fire station", "Church", "Mosque", "Synagogue",
+            "Hindu temple", "Buddhist temple", "Shinto shrine", "Place of worship"
+        ],
+            isEditable: true
+        ),
+        PlaceCategoryTaxonomyEntry(
+            id: areasAddresses,
+            group: "Areas & Addresses",
+            detail: "Cities, addresses, regions",
+            defaultSubcategory: "Address",
+            symbolName: "map.fill",
+            aliases: [
+            "areas_addresses", "areas addresses", "areas and addresses", "home_neighborhood", "home neighborhood",
+            "home and neighborhood", "area", "address", "neighborhood", "locality", "city", "postal area", "town",
+            "region", "country", "route", "street", "intersection", "plus code", "apartment building",
+            "condominium complex", "housing complex"
+        ],
+            subcategories: [
+            "Apartment building", "Apartment complex", "Condominium complex", "Housing complex", "Neighborhood",
+            "Locality/city", "Postal area", "Town", "Region", "Country", "Route/street", "Address", "Intersection",
+            "Landmark", "Plus code"
+        ],
+            isEditable: true
+        ),
+        PlaceCategoryTaxonomyEntry(
+            id: facilitiesOther,
+            group: "Facilities & Other",
+            detail: "Restrooms, facilities, unknown",
+            defaultSubcategory: "Point of interest",
+            symbolName: "mappin",
+            aliases: [
+            "facilities_other", "facilities other", "facilities and other", "facility", "facilities", "other",
+            "public bathroom", "public bath", "public restroom", "restroom", "stable", "generic establishment",
+            "establishment", "point of interest", "poi", "unknown"
+        ],
+            subcategories: [
+            "Public bathroom", "Public bath", "Restroom", "Stable", "Generic establishment", "Point of interest",
+            "Unknown"
+        ],
             isEditable: true
         ),
         PlaceCategoryTaxonomyEntry(
@@ -422,7 +496,9 @@ enum WanderPlaceCategory {
             detail: "Internal fallback for weak provider data",
             defaultSubcategory: nil,
             symbolName: "mappin",
-            aliases: [fallbackPlace, "point of interest", "unknown"],
+            aliases: [
+            "place"
+        ],
             subcategories: [],
             isEditable: false
         )
@@ -437,115 +513,314 @@ enum WanderPlaceCategory {
         "cafe": "Cafe",
         "bakery": "Bakery",
         "restaurant": "Restaurant",
+        "thai restaurant": "Restaurant",
+        "sushi restaurant": "Restaurant",
+        "fast food restaurant": "Fast food",
         "bar": "Bar",
-        "hike": "Hike or trail",
+        "nightlife": "Bar",
+        "mkpoicategorynightlife": "Bar",
+        "brewery": "Brewery",
+        "winery": "Winery",
+        "hike": "Hike",
         "trail": "Trail",
         "park": "Park",
         "gym": "Gym",
-        "fitness studio": "Fitness studio",
-        "pilates studio": "Pilates studio",
-        "spiritual": "Spiritual place",
+        "fitness studio": "Fitness center",
+        "pilates studio": "Fitness center",
+        "spiritual": "Place of worship",
         "hospital": "Hospital",
         "pharmacy": "Pharmacy",
-        "veterinarian": "Veterinarian",
+        "veterinarian": "Veterinary care",
         "hotel": "Hotel",
-        "shop": "Shop",
-        "transportation": "Transit stop"
+        "2 star hotel": "Hotel",
+        "3 star hotel": "Hotel",
+        "4 star hotel": "Hotel",
+        "5 star hotel": "Hotel",
+        "shop": "Store",
+        "transportation": "Transit stop",
+        "public restroom": "Restroom",
+        "unknown": "Unknown"
     ]
 
     private static let legacyPrimaryCategories: [String: String] = [
-        "coffee": foodDrink,
-        "coffee shop": foodDrink,
-        "cafe": foodDrink,
-        "bakery": foodDrink,
-        "restaurant": foodDrink,
-        "bar": foodDrink,
+        "food_drink": restaurantsFood,
+        "food drink": restaurantsFood,
+        "food and drink": restaurantsFood,
+        "coffee": coffeeTeaSweets,
+        "coffee shop": coffeeTeaSweets,
+        "cafe": coffeeTeaSweets,
+        "bakery": coffeeTeaSweets,
+        "restaurant": restaurantsFood,
+        "thai restaurant": restaurantsFood,
+        "fast food restaurant": restaurantsFood,
+        "bar": barsNightlife,
+        "nightlife": barsNightlife,
+        "mkpoicategorynightlife": barsNightlife,
+        "brewery": barsNightlife,
+        "winery": barsNightlife,
         "hike": outdoorsNature,
         "trail": outdoorsNature,
         "park": outdoorsNature,
-        "gym": sportsFitness,
-        "fitness studio": sportsFitness,
-        "pilates studio": sportsFitness,
-        "spiritual": artsCultureFaith,
-        "hospital": healthWellness,
-        "pharmacy": healthWellness,
-        "veterinarian": services,
-        "hotel": lodging,
+        "arts_culture_faith": thingsToDo,
+        "arts culture faith": thingsToDo,
+        "entertainment": thingsToDo,
+        "spiritual": civicFaith,
+        "church": civicFaith,
+        "temple": civicFaith,
+        "shrine": civicFaith,
+        "mosque": civicFaith,
+        "synagogue": civicFaith,
+        "health_wellness": wellnessFitness,
+        "sports_fitness": wellnessFitness,
+        "gym": wellnessFitness,
+        "fitness studio": wellnessFitness,
+        "pilates studio": wellnessFitness,
+        "hospital": wellnessFitness,
+        "pharmacy": wellnessFitness,
+        "veterinarian": wellnessFitness,
+        "services": servicesErrands,
+        "hotel": stays,
+        "lodging": stays,
         "shop": shopping,
-        "transportation": transportationTransit
+        "transportation": travelTransit,
+        "transportation_transit": travelTransit,
+        "education": workEducation,
+        "work_venues": workEducation,
+        "home_neighborhood": areasAddresses,
+        "public_services": civicFaith,
+        "public service": civicFaith,
+        "point of interest": facilitiesOther,
+        "unknown": facilitiesOther
     ]
 
     private static let curatedSubcategoryGroups: [String: [PlaceCategorySubcategoryGroup]] = [
-        foodDrink: [
-            PlaceCategorySubcategoryGroup(title: "Coffee & tea", subcategories: ["Coffee shop", "Cafe", "Tea shop"]),
-            PlaceCategorySubcategoryGroup(title: "Restaurants", subcategories: ["Restaurant", "Thai restaurant", "Mexican restaurant", "Japanese restaurant", "Sushi restaurant", "Ramen restaurant", "Chinese restaurant", "Korean restaurant", "Vietnamese restaurant", "Indian restaurant", "Italian restaurant", "Pizza restaurant", "Mediterranean restaurant", "Seafood restaurant", "Steakhouse", "Diner", "Brunch spot"]),
-            PlaceCategorySubcategoryGroup(title: "Bars & drinks", subcategories: ["Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Dive bar", "Rooftop bar", "Nightlife"]),
-            PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: ["Bakery", "Dessert shop", "Ice cream shop", "Donut shop", "Bagel shop"]),
-            PlaceCategorySubcategoryGroup(title: "Markets & quick bites", subcategories: ["Juice bar", "Sandwich shop", "Fast food restaurant", "Food truck", "Food court", "Food market", "Farmers market"])
+        restaurantsFood: [
+            PlaceCategorySubcategoryGroup(title: "Restaurant type", subcategories: [
+                "Restaurant", "Fast food", "Fine dining", "Casual/family", "Diner", "Bistro", "Buffet",
+                "Food court", "Takeout", "Cafeteria", "Breakfast", "Brunch", "Sandwich", "Bagel", "Deli", "Salad",
+                "Soup", "Pizza", "Burgers", "Hot dogs", "Barbecue", "Chicken", "Wings", "Seafood", "Oyster bar",
+                "Fish & chips", "Taco stand", "Taco truck", "Steakhouse", "Vegetarian", "Vegan", "Halal", "Ramen",
+                "Noodles", "Dumplings", "Dim sum", "Hot pot", "Fondue", "Burrito", "Taco", "Falafel", "Gyro",
+                "Kebab", "Shawarma", "Bar & grill", "Snack bar", "Gastropub"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Popular cuisines", subcategories: [
+                "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Sushi", "Indian",
+                "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
+            ], role: .cuisine),
+            PlaceCategorySubcategoryGroup(title: "Asian cuisines", subcategories: [
+                "Cantonese", "Taiwanese", "Izakaya", "Yakitori", "Yakiniku", "North Indian", "South Indian",
+                "Malaysian", "Indonesian", "Filipino", "Burmese", "Cambodian", "Asian", "Tibetan", "Mongolian BBQ",
+                "Korean BBQ", "Japanese BBQ", "Japanese curry", "Tonkatsu"
+            ], role: .cuisine),
+            PlaceCategorySubcategoryGroup(title: "Middle East & Africa", subcategories: [
+                "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern", "Lebanese", "Persian",
+                "Turkish", "Israeli", "Moroccan", "Ethiopian", "African"
+            ], role: .cuisine),
+            PlaceCategorySubcategoryGroup(title: "European cuisines", subcategories: [
+                "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss", "Dutch", "Belgian",
+                "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech", "Hungarian",
+                "Romanian", "Croatian", "European", "Eastern European", "Danish"
+            ], role: .cuisine),
+            PlaceCategorySubcategoryGroup(title: "Americas & Pacific", subcategories: [
+                "Caribbean", "Jamaican", "Panamanian", "Cuban", "Brazilian", "Argentinian", "Colombian", "Chilean",
+                "Peruvian", "South American", "Latin American", "Southwestern", "Cajun", "Californian", "Hawaiian",
+                "Australian"
+            ], role: .cuisine)
+        ],
+        coffeeTeaSweets: [
+            PlaceCategorySubcategoryGroup(title: "Coffee & tea", subcategories: [
+                "Coffee shop", "Cafe", "Coffee stand", "Roastery", "Tea house", "Tea store"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Juice & light treats", subcategories: [
+                "Juice shop", "Smoothie shop", "Acai", "Cat cafe", "Dog cafe"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: [
+                "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop", "Dessert shop",
+                "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop", "Chocolate factory",
+                "Confectionery"
+            ])
+        ],
+        barsNightlife: [
+            PlaceCategorySubcategoryGroup(title: "Bars & pubs", subcategories: [
+                "Bar", "Cocktail bar", "Pub", "Irish pub", "Sports bar", "Wine bar", "Gastropub", "Bar & grill",
+                "Beer garden", "Brewery", "Brewpub"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Lounges & clubs", subcategories: [
+                "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Jazz club", "Hi-fi lounge", "Nightclub",
+                "Karaoke", "Live music", "Comedy club"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Wine & gaming", subcategories: [
+                "Winery", "Vineyard", "Billiards", "Casino"
+            ])
         ],
         outdoorsNature: [
-            PlaceCategorySubcategoryGroup(title: "Parks & gardens", subcategories: ["Park", "National park", "State park", "Garden", "Botanical garden", "Dog park", "Playground", "Picnic area"]),
-            PlaceCategorySubcategoryGroup(title: "Trails & scenery", subcategories: ["Hike or trail", "Trailhead", "Scenic overlook", "Canyon", "Mountain", "Nature preserve", "Observatory"]),
-            PlaceCategorySubcategoryGroup(title: "Water & stays", subcategories: ["Beach", "Lake", "River", "Waterfall", "Hot spring", "Pier", "Marina", "Campground"])
+            PlaceCategorySubcategoryGroup(title: "Parks & gardens", subcategories: [
+                "Park", "City park", "State park", "National park", "Botanical garden", "Garden", "Picnic area",
+                "Dog park", "Playground"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Trails & scenery", subcategories: [
+                "Hiking area", "Trail", "Hike", "Island", "Woods/forest", "Mountain peak", "Scenic spot",
+                "Viewpoint", "Overlook", "Waterfall", "Cave", "Nature preserve", "Wildlife refuge", "Wildlife park"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Water & camping", subcategories: [
+                "Beach", "Lake", "River", "Hot spring", "Campground", "RV park", "Dispersed camping", "Cabin",
+                "Cottage", "Marina", "Fishing pier", "Fishing pond", "Fishing charter"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Outdoor sports", subcategories: [
+                "Ski resort", "Cycling park", "Skate park", "Off-roading area", "Adventure sports"
+            ])
         ],
-        artsCultureFaith: [
-            PlaceCategorySubcategoryGroup(title: "Museums & arts", subcategories: ["Museum", "Art museum", "Gallery", "Art gallery", "Public art", "Cultural center"]),
-            PlaceCategorySubcategoryGroup(title: "History & landmarks", subcategories: ["Historic site", "Landmark", "Monument", "Library", "Bookstore"]),
-            PlaceCategorySubcategoryGroup(title: "Faith & reflection", subcategories: ["Temple", "Shrine", "Church", "Cathedral", "Mosque", "Synagogue", "Chapel", "Meditation center", "Spiritual place"])
-        ],
-        entertainment: [
-            PlaceCategorySubcategoryGroup(title: "Shows & venues", subcategories: ["Entertainment venue", "Movie theater", "Music venue", "Concert hall", "Comedy club", "Theater", "Event venue"]),
-            PlaceCategorySubcategoryGroup(title: "Games & nights out", subcategories: ["Arcade", "Bowling alley", "Karaoke", "Pool hall", "Casino", "Escape room"]),
-            PlaceCategorySubcategoryGroup(title: "Attractions", subcategories: ["Tourist attraction", "Arena", "Stadium", "Zoo", "Aquarium", "Amusement park", "Theme park"])
-        ],
-        healthWellness: [
-            PlaceCategorySubcategoryGroup(title: "Wellness & recovery", subcategories: ["Wellness studio", "Spa", "Massage", "Sauna", "Bathhouse", "Meditation center", "Therapy office", "Chiropractor", "Acupuncture", "Physical therapy", "Recovery studio"]),
-            PlaceCategorySubcategoryGroup(title: "Medical care", subcategories: ["Hospital", "Urgent care", "Medical center", "Clinic", "Doctor", "Dentist", "Optometrist"]),
-            PlaceCategorySubcategoryGroup(title: "Pharmacy", subcategories: ["Pharmacy", "Drugstore"])
-        ],
-        sportsFitness: [
-            PlaceCategorySubcategoryGroup(title: "Gyms & studios", subcategories: ["Gym", "Fitness center", "Training studio", "Pilates studio", "Reformer pilates", "Lagree studio", "Yoga studio", "Barre studio", "Boxing gym", "Martial arts gym", "Climbing gym", "Dance studio", "Spin studio"]),
-            PlaceCategorySubcategoryGroup(title: "Courts & fields", subcategories: ["Tennis court", "Basketball court", "Soccer field", "Baseball field", "Golf course", "Pool"]),
-            PlaceCategorySubcategoryGroup(title: "Action sports", subcategories: ["Skate park", "Ski area", "Surf spot"])
+        thingsToDo: [
+            PlaceCategorySubcategoryGroup(title: "Landmarks & culture", subcategories: [
+                "Tourist attraction", "Landmark", "Historical place", "Historical landmark", "Monument",
+                "Sculpture", "Fountain", "Castle", "Plaza", "Town square", "Visitor center", "Cultural landmark",
+                "Cultural center"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Museums & arts", subcategories: [
+                "Museum", "Art museum", "History museum", "Art gallery", "Art studio"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Shows & venues", subcategories: [
+                "Theater", "Performing arts theater", "Concert hall", "Opera house", "Philharmonic hall",
+                "Amphitheater", "Auditorium", "Movie theater", "Planetarium", "Observation deck"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Attractions & games", subcategories: [
+                "Aquarium", "Zoo", "Amusement park", "Water park", "Ferris wheel", "Roller coaster", "Arcade",
+                "Bowling", "Mini golf", "Billiards", "Darts", "Axe throwing", "Board game lounge", "Go-karting",
+                "Paintball", "Indoor playground", "Internet cafe", "Dance hall", "Barbecue area"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Events", subcategories: [
+                "Event venue", "Convention center", "Banquet hall", "Wedding venue", "Community center"
+            ])
         ],
         shopping: [
-            PlaceCategorySubcategoryGroup(title: "Stores & boutiques", subcategories: ["Shop", "Store", "Boutique", "Market", "Mall", "Gift shop"]),
-            PlaceCategorySubcategoryGroup(title: "Food & essentials", subcategories: ["Grocery store", "Convenience store", "Flower shop", "Pet store"]),
-            PlaceCategorySubcategoryGroup(title: "Specialty retail", subcategories: ["Art supply store", "Bookstore", "Record store", "Clothing store", "Shoe store", "Jewelry store", "Home goods store", "Furniture store", "Hardware store", "Electronics store", "Vintage store", "Thrift store"])
+            PlaceCategorySubcategoryGroup(title: "General retail", subcategories: [
+                "Store", "Market", "Shopping mall", "Department store", "General store", "Convenience store",
+                "Discount store", "Warehouse store", "Wholesaler"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Food shopping", subcategories: [
+                "Grocery store", "Supermarket", "Hypermarket", "Food store", "Farmers market", "Flea market",
+                "Asian grocery", "Butcher", "Health food store", "Liquor store", "Discount supermarket"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Specialty shops", subcategories: [
+                "Book store", "Art supply store", "Craft store", "Gift shop", "Toy store", "Sporting goods",
+                "Sportswear", "Bicycle store", "Electronics", "Cell phone store", "Pet store", "Auto parts",
+                "Thrift store"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Fashion & home", subcategories: [
+                "Clothing store", "Women's clothing", "Shoe store", "Jewelry store", "Cosmetics store",
+                "Beauty supply", "Cosmetics", "Home goods", "Home improvement", "Hardware", "Building materials",
+                "Furniture", "Garden center"
+            ])
         ],
-        services: [
-            PlaceCategorySubcategoryGroup(title: "Beauty & care", subcategories: ["Service business", "Hair salon", "Barber", "Nail salon", "Beauty salon"]),
-            PlaceCategorySubcategoryGroup(title: "Repairs & errands", subcategories: ["Laundry", "Dry cleaner", "Tailor", "Shoe repair", "Phone repair", "Auto repair", "Car wash", "Bank", "ATM", "Post office", "Shipping center"]),
-            PlaceCategorySubcategoryGroup(title: "Pet care", subcategories: ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic", "Pet groomer"])
+        wellnessFitness: [
+            PlaceCategorySubcategoryGroup(title: "Fitness & sports", subcategories: [
+                "Gym", "Fitness center", "Yoga studio", "Wellness studio", "Wellness center", "Sports club",
+                "Sports complex", "Sports coaching", "Sports school", "Athletic field", "Swimming pool",
+                "Tennis court", "Golf course", "Indoor golf", "Ice skating rink", "Volleyball court",
+                "Soccer field", "Basketball court", "Pickleball court"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Wellness & recovery", subcategories: [
+                "Spa", "Massage", "Massage spa", "Sauna", "Chiropractor", "Physiotherapist", "Foot care",
+                "Mental health/therapy", "Retreat"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Medical care", subcategories: [
+                "Dentist", "Dental clinic", "Doctor", "Medical clinic", "Medical center", "Hospital",
+                "Medical lab", "Pharmacy", "Drugstore", "Veterinary care"
+            ])
         ],
-        lodging: [
-            PlaceCategorySubcategoryGroup(title: "Hotels", subcategories: ["Hotel", "Motel", "Resort", "Boutique hotel", "Inn", "Hostel", "Bed and breakfast", "3-star hotel", "4-star hotel", "5-star hotel"]),
-            PlaceCategorySubcategoryGroup(title: "Alternative stays", subcategories: ["Vacation rental", "Cabin", "Camp stay"])
+        stays: [
+            PlaceCategorySubcategoryGroup(title: "Hotels & inns", subcategories: [
+                "Hotel", "Resort", "Motel", "Hostel", "Inn", "Bed & breakfast", "Guest house", "Japanese inn"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Rentals & longer stays", subcategories: [
+                "Private guest room", "Airbnb", "Vrbo", "Extended stay", "Farm-stay", "Mobile home park"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Cabins & camping", subcategories: [
+                "Cottage", "Cabin", "Campground", "RV park"
+            ])
         ],
-        transportationTransit: [
-            PlaceCategorySubcategoryGroup(title: "Stations & terminals", subcategories: ["Transit stop", "Airport", "Train station", "Bus station", "Subway station", "Light rail station", "Ferry terminal"]),
-            PlaceCategorySubcategoryGroup(title: "Parking & pickup", subcategories: ["Taxi stand", "Ride pickup", "Parking lot", "Parking garage"]),
-            PlaceCategorySubcategoryGroup(title: "Vehicles & fuel", subcategories: ["Rental car", "Gas station", "EV charging station", "Bike share", "Car share", "Rest stop"])
+        servicesErrands: [
+            PlaceCategorySubcategoryGroup(title: "Money & professional", subcategories: [
+                "Bank", "ATM", "Accounting", "Insurance", "Real estate", "Lawyer", "Consultant",
+                "Marketing consultant", "Employment agency", "Nonprofit", "Association"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Errands & family", subcategories: [
+                "Florist", "Catering", "Food delivery", "Child care", "Summer camp", "Laundry", "Tailor",
+                "Courier", "Shipping", "Storage", "Moving"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Home & repairs", subcategories: [
+                "Electrician", "Plumber", "Locksmith", "Painter", "Roofing contractor", "General contractor",
+                "Telecommunications"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Pet & sensitive services", subcategories: [
+                "Pet care", "Pet boarding", "Funeral home", "Cemetery", "Astrologer", "Psychic"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Travel & concierge", subcategories: [
+                "Tour agency", "Travel agency", "Tourist information", "Chauffeur", "Aircraft rental"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Beauty & body", subcategories: [
+                "Skin care clinic", "Tanning studio", "Hair salon", "Barber", "Nail salon", "Makeup artist",
+                "Body art", "Tattoo/piercing"
+            ])
         ],
-        education: [
-            PlaceCategorySubcategoryGroup(title: "Schools & campuses", subcategories: ["School", "Elementary school", "High school", "College", "University", "Campus", "Preschool", "Daycare"]),
-            PlaceCategorySubcategoryGroup(title: "Classes & study", subcategories: ["Tutoring center", "Language school", "Music school", "Art class", "Cooking class", "Workshop", "Library", "Study spot"])
+        travelTransit: [
+            PlaceCategorySubcategoryGroup(title: "Air & rail", subcategories: [
+                "Airport", "International airport", "Airstrip", "Heliport", "Train station", "Subway station",
+                "Light rail", "Tram stop"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Bus, ferry & taxi", subcategories: [
+                "Bus stop", "Bus station", "Ferry terminal", "Ferry service", "Transit station", "Transit stop",
+                "Transit depot", "Taxi stand", "Taxi service", "Transportation service"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Parking & charging", subcategories: [
+                "Bike share station", "Parking", "Parking lot", "Parking garage", "Park & ride", "Gas station",
+                "EV charging", "E-bike charging"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Road & vehicle", subcategories: [
+                "Rest stop", "Truck stop", "Toll station", "Bridge", "Car dealer", "Car rental", "Car repair",
+                "Car wash", "Tire shop", "Truck dealer", "Dump station", "RV water refill"
+            ])
         ],
-        workVenues: [
-            PlaceCategorySubcategoryGroup(title: "Work", subcategories: ["Coworking space", "Office", "Meeting room", "Conference center", "Business center"]),
-            PlaceCategorySubcategoryGroup(title: "Production", subcategories: ["Studio", "Production studio", "Photo studio", "Warehouse", "Workshop space"]),
-            PlaceCategorySubcategoryGroup(title: "Events", subcategories: ["Event space", "Convention center", "Rooftop venue", "Private event room"])
+        workEducation: [
+            PlaceCategorySubcategoryGroup(title: "Work", subcategories: [
+                "Co-working space", "Business center", "Corporate office", "Manufacturer", "Supplier", "Farm",
+                "Ranch", "Television studio"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Education", subcategories: [
+                "Library", "University", "School", "Preschool", "Primary school", "Secondary school",
+                "Academic department", "Educational institution", "Research institute"
+            ])
         ],
-        homeNeighborhood: [
-            PlaceCategorySubcategoryGroup(title: "Homes & buildings", subcategories: ["Home", "Apartment building", "Condo", "House", "Building", "Lobby"]),
-            PlaceCategorySubcategoryGroup(title: "Neighborhood anchors", subcategories: ["Neighborhood spot", "Block", "Courtyard", "Community garden", "Neighborhood landmark", "Local shortcut", "Viewpoint", "Meetup spot"])
+        civicFaith: [
+            PlaceCategorySubcategoryGroup(title: "Government & safety", subcategories: [
+                "City hall", "Government office", "Local government office", "Courthouse", "Embassy",
+                "Post office", "Police", "Neighborhood police station", "Fire station"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Faith", subcategories: [
+                "Church", "Mosque", "Synagogue", "Hindu temple", "Buddhist temple", "Shinto shrine",
+                "Place of worship"
+            ])
         ],
-        publicServices: [
-            PlaceCategorySubcategoryGroup(title: "Government & civic", subcategories: ["Public service", "Government office", "City hall", "Courthouse", "Embassy", "Consulate", "DMV", "Civic building"]),
-            PlaceCategorySubcategoryGroup(title: "Safety & utilities", subcategories: ["Police station", "Fire station", "Public restroom", "Recycling center", "Utility office", "Community center"])
+        areasAddresses: [
+            PlaceCategorySubcategoryGroup(title: "Buildings & housing", subcategories: [
+                "Apartment building", "Apartment complex", "Condominium complex", "Housing complex"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Areas", subcategories: [
+                "Neighborhood", "Locality/city", "Postal area", "Town", "Region", "Country"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Addresses", subcategories: [
+                "Route/street", "Address", "Intersection", "Landmark", "Plus code"
+            ])
+        ],
+        facilitiesOther: [
+            PlaceCategorySubcategoryGroup(title: "Facilities", subcategories: [
+                "Public bathroom", "Public bath", "Restroom", "Stable"
+            ]),
+            PlaceCategorySubcategoryGroup(title: "Fallbacks", subcategories: [
+                "Generic establishment", "Point of interest", "Unknown"
+            ])
         ]
     ]
-
     static func primary(for pointCategory: MKPointOfInterestCategory?, name: String? = nil) -> String? {
         if let nameCategory = primaryFromName(name, pointCategory: pointCategory) {
             return nameCategory
@@ -554,25 +829,31 @@ enum WanderPlaceCategory {
         if #available(iOS 18.0, *) {
             switch pointCategory {
             case .animalService:
-                return services
+                return servicesErrands
             case .hiking:
                 return outdoorsNature
-            case .rockClimbing, .skatePark, .skating, .skiing, .surfing, .swimming:
-                return sportsFitness
+            case .rockClimbing, .skatePark, .skiing, .surfing:
+                return outdoorsNature
+            case .skating, .swimming:
+                return wellnessFitness
             default:
                 break
             }
         }
 
         switch pointCategory {
-        case .cafe, .bakery, .restaurant, .foodMarket, .brewery, .winery, .nightlife:
-            return foodDrink
+        case .cafe, .bakery:
+            return coffeeTeaSweets
+        case .restaurant, .foodMarket:
+            return restaurantsFood
+        case .brewery, .winery, .nightlife:
+            return barsNightlife
         case .park, .nationalPark:
             return outdoorsNature
         case .hospital:
-            return healthWellness
+            return wellnessFitness
         case .fitnessCenter:
-            return sportsFitness
+            return wellnessFitness
         default:
             return nil
         }
@@ -607,7 +888,7 @@ enum WanderPlaceCategory {
         let primary = normalizedPrimaryCategory(primaryCategory)
         return PlaceCategoryAssignment(
             primaryCategory: primary,
-            subcategory: normalizedSubcategory(subcategory) ?? Self.subcategory(forRawValue: primaryCategory, primaryCategory: primary),
+            subcategory: subcategory ?? Self.subcategory(forRawValue: primaryCategory, primaryCategory: primary),
             source: source,
             confidence: confidence,
             rawProviderType: rawProviderType
@@ -616,7 +897,7 @@ enum WanderPlaceCategory {
 
     static func display(for assignment: PlaceCategoryAssignment, sourceLabel: String? = nil) -> PlaceCategoryDisplay {
         let primary = normalizedPrimaryCategory(assignment.primaryCategory)
-        let subcategory = normalizedSubcategory(assignment.subcategory) ?? defaultSubcategory(for: primary)
+        let subcategory = canonicalSubcategory(assignment.subcategory, primaryCategory: primary) ?? defaultSubcategory(for: primary)
         let label = sourceLabel ?? sourceDisplayLabel(assignment.source)
         return PlaceCategoryDisplay(
             rawCategory: assignment.rawProviderType ?? assignment.legacyCategory,
@@ -656,11 +937,15 @@ enum WanderPlaceCategory {
         }
 
         switch primaryCategory(for: category) {
-        case foodDrink:
+        case restaurantsFood:
             return "restaurant"
+        case coffeeTeaSweets:
+            return "coffee"
+        case barsNightlife:
+            return "bar"
         case outdoorsNature:
             return "park"
-        case sportsFitness:
+        case wellnessFitness:
             return "gym"
         default:
             return primaryCategory(for: category)
@@ -712,6 +997,16 @@ enum WanderPlaceCategory {
         return sentenceTitleized(trimmed)
     }
 
+    static func canonicalSubcategory(_ value: String?, primaryCategory: String) -> String? {
+        guard let normalized = normalizedSubcategory(value) else { return nil }
+        let key = normalizedCategoryText(normalized)
+        let primary = normalizedPrimaryCategory(primaryCategory)
+
+        return entry(for: primary)?.subcategories.first { subcategory in
+            normalizedCategoryText(subcategory) == key
+        } ?? normalized
+    }
+
     static func normalizedProviderType(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -740,7 +1035,7 @@ enum WanderPlaceCategory {
             }
 
             if !values.isEmpty {
-                groups.append(PlaceCategorySubcategoryGroup(title: group.title, subcategories: values))
+                groups.append(PlaceCategorySubcategoryGroup(title: group.title, subcategories: values, role: group.role))
             }
         }
 
@@ -753,6 +1048,36 @@ enum WanderPlaceCategory {
         }
 
         return groups
+    }
+
+    static func restaurantTypeGroups() -> [PlaceCategorySubcategoryGroup] {
+        subcategoryGroups(for: restaurantsFood).filter { $0.role == .type }
+    }
+
+    static func restaurantCuisineGroups() -> [PlaceCategorySubcategoryGroup] {
+        subcategoryGroups(for: restaurantsFood).filter { $0.role == .cuisine }
+    }
+
+    static var restaurantCuisineOptions: [String] {
+        restaurantCuisineGroups().flatMap(\.subcategories)
+    }
+
+    static func isRestaurantCuisine(_ value: String?) -> Bool {
+        cuisineGuess(forRawValue: value) != nil
+    }
+
+    static func cuisineGuess(forRawValue rawValue: String?) -> String? {
+        let normalized = normalizedCategoryText(rawValue)
+        guard !normalized.isEmpty else { return nil }
+
+        return restaurantCuisineOptions
+            .sorted { normalizedCategoryText($0).count > normalizedCategoryText($1).count }
+            .first { cuisine in
+                let normalizedCuisine = normalizedCategoryText(cuisine)
+                return normalized == normalizedCuisine
+                    || normalized.contains(normalizedCuisine)
+                    || normalized.replacingOccurrences(of: " cuisine", with: "") == normalizedCuisine
+            }
     }
 
     static func symbolName(for category: String) -> String {
@@ -798,6 +1123,7 @@ enum WanderPlaceCategory {
         guard let value else { return "" }
         return value
             .lowercased()
+            .replacingOccurrences(of: "mkpoicategory", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "&", with: " and ")
             .replacingOccurrences(of: "-", with: " ")
@@ -822,8 +1148,23 @@ enum WanderPlaceCategory {
             return legacyDefault
         }
 
+        if primaryCategory == restaurantsFood,
+           cuisineGuess(forRawValue: rawValue) != nil {
+            return defaultSubcategory(for: restaurantsFood)
+        }
+
+        if let entry = entry(for: primaryCategory) {
+            if let exactSuggestion = entry.subcategories.first(where: { normalizedCategoryText($0) == normalized }) {
+                return exactSuggestion
+            }
+
+            if normalized == normalizedCategoryText(entry.id) || normalized == normalizedCategoryText(entry.group) {
+                return entry.defaultSubcategory
+            }
+        }
+
         if let entry = entry(for: primaryCategory),
-           normalized == normalizedCategoryText(entry.id) || normalized == normalizedCategoryText(entry.group) {
+           entry.aliases.contains(where: { normalizedCategoryText($0) == normalized }) {
             return entry.defaultSubcategory
         }
 
@@ -856,24 +1197,24 @@ enum WanderPlaceCategory {
         guard let normalizedName = normalizedSearchText(name), !normalizedName.isEmpty else { return nil }
 
         if containsAny(normalizedName, ["veterinary", "veterinarian", " vet ", "animal hospital", "pet hospital", "pet clinic", "dog dental", "cat clinic"]) {
-            return services
+            return wellnessFitness
         }
 
         if containsAny(normalizedName, ["temple", "shrine", "spiritual", "church", "chapel", "cathedral", "mosque", "synagogue"]) {
-            return artsCultureFaith
+            return civicFaith
         }
 
         if containsAny(normalizedName, ["hospital", "medical center", "health center", "urgent care", "pharmacy", "drugstore", "wellness studio", "spa"]) {
-            return healthWellness
+            return wellnessFitness
         }
 
         if containsAny(normalizedName, ["pilates", "plankhaus", "lagree", "reformer", " gym ", "fitness", "training", "strength", "workout"]) {
-            return sportsFitness
+            return wellnessFitness
         }
 
         let isFitnessCategory = pointCategory == .fitnessCenter
         if isFitnessCategory, containsAny(normalizedName, ["studio", "barre", "yoga", "stretch"]) {
-            return sportsFitness
+            return wellnessFitness
         }
 
         return nil

@@ -2,12 +2,18 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(10);
+select plan(11);
 
 select is(
   app.place_primary_category('4-star hotel'),
-  'lodging',
-  'hotel provider subtypes normalize to lodging'
+  'stays',
+  'hotel provider subtypes normalize to stays'
+);
+
+select is(
+  app.place_primary_category('MKPOICategoryNightlife'),
+  'bars_nightlife',
+  'MapKit nightlife raw values normalize to Bars & Nightlife'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -44,20 +50,20 @@ select isnt_empty(
 
 select is(
   (select category from public.places where source_provider_place_id = 'category-jitlada'),
-  'food_drink',
+  'restaurants_food',
   'legacy places.category is backfilled to broad primary category'
 );
 
 select is(
   (select primary_category from public.places where source_provider_place_id = 'category-jitlada'),
-  'food_drink',
+  'restaurants_food',
   'primary_category stores the filterable broad category'
 );
 
 select is(
   (select subcategory from public.places where source_provider_place_id = 'category-jitlada'),
-  'Thai Restaurant',
-  'subcategory stores the provider subtype'
+  'Restaurant',
+  'restaurant cuisine provider subtype maps to a filter-safe food type'
 );
 
 select isnt_empty(
@@ -67,7 +73,7 @@ select isnt_empty(
       '{
         "canonical_name": "Corner Bodega Category Test",
         "category": "coffee",
-        "primary_category": "food_drink",
+        "primary_category": "coffee_tea_sweets",
         "subcategory": "Coffee shop",
         "category_source": "user",
         "raw_provider_type": "coffee shop",
@@ -95,7 +101,7 @@ select isnt_empty(
 
 select is(
   (select category from public.places where source_provider_place_id = 'category-bodega'),
-  'food_drink',
+  'coffee_tea_sweets',
   'user override does not rewrite shared place category'
 );
 

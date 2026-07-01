@@ -1,19 +1,19 @@
 // Mirrors shared/place-taxonomy.json. Keep changes in sync with the Swift tests.
 export const allowedPlaceCategories = [
-  "food_drink",
+  "restaurants_food",
+  "coffee_tea_sweets",
+  "bars_nightlife",
   "outdoors_nature",
-  "arts_culture_faith",
-  "entertainment",
-  "health_wellness",
-  "sports_fitness",
+  "things_to_do",
   "shopping",
-  "services",
-  "lodging",
-  "transportation_transit",
-  "education",
-  "work_venues",
-  "home_neighborhood",
-  "public_services",
+  "wellness_fitness",
+  "stays",
+  "services_errands",
+  "travel_transit",
+  "work_education",
+  "civic_faith",
+  "areas_addresses",
+  "facilities_other",
   "place",
 ] as const;
 
@@ -21,94 +21,87 @@ export type PlaceCategory = typeof allowedPlaceCategories[number];
 
 const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
-    category: "food_drink",
+    category: "restaurants_food",
     patterns: [
-      /\b(coffee|cafe|espresso|roaster|bakery|tea shop)\b/,
-      /\b(restaurant|taqueria|ramen|sushi|pizza|diner|kitchen|grill|noodle|taco|food market|fast food|food truck|brunch)\b/,
-      /\b(bar|brewery|winery|cocktail|pub|nightlife)\b/,
+      /\b(restaurants\s+food|food\s+drink|restaurant|fast\s+food|fine\s+dining|diner|bistro|food\s+court|takeout|cafeteria|brunch|sandwich|deli|pizza|burger|barbecue|ramen|noodle|dumpling|dim\s+sum|hot\s+pot|taco|taqueria|thai\s+restaurant|sushi\s+restaurant|korean\s+bbq|japanese\s+curry)\b/,
+    ],
+  },
+  {
+    category: "coffee_tea_sweets",
+    patterns: [
+      /\b(coffee|cafe|espresso|roaster|roastery|tea\s+house|tea\s+store|bakery|dessert|ice\s+cream|juice|smoothie|acai|candy|chocolate|cat\s+cafe|dog\s+cafe)\b/,
+    ],
+  },
+  {
+    category: "bars_nightlife",
+    patterns: [
+      /\b(bar|nightlife|cocktail|pub|sports\s+bar|wine\s+bar|gastropub|bar\s+and\s+grill|dance\s+hall|club|disco|lounge|hookah|beer\s+garden|jazz\s+club|brewery|brewpub|winery|vineyard|nightclub|karaoke|live\s+music|comedy\s+club|casino)\b/,
     ],
   },
   {
     category: "outdoors_nature",
     patterns: [
-      /\b(hike|hiking|trail|trailhead|waterfall|hot spring|canyon|mountain|observatory)\b/,
-      /\b(park|playground|garden|plaza|beach|lake|national park|campground|picnic area|marina)\b/,
+      /\b(hike|hiking|trail|waterfall|hot\s+spring|canyon|mountain|park|playground|garden|beach|lake|campground|rv\s+park|marina|ski\s+resort|skate\s+park|wildlife)\b/,
     ],
   },
   {
-    category: "arts_culture_faith",
+    category: "things_to_do",
     patterns: [
-      /\b(museum|gallery|art gallery|public art|historic|landmark|monument|cultural center)\b/,
-      /\b(spiritual|church|temple|shrine|mosque|synagogue|chapel|cathedral|meditation)\b/,
-    ],
-  },
-  {
-    category: "entertainment",
-    patterns: [
-      /\b(tourist attraction|attraction|movie|cinema|concert|music venue|arena|stadium|arcade|bowling|zoo|aquarium|amusement|theme park|comedy|escape room)\b/,
-    ],
-  },
-  {
-    category: "health_wellness",
-    patterns: [
-      /\b(hospital|urgent care|medical center|health center|clinic|doctor|dentist|pharmacy|drugstore)\b/,
-      /\b(wellness studio|spa|massage|sauna|bathhouse|therapy|chiropractor|acupuncture|physical therapy|recovery studio)\b/,
-    ],
-  },
-  {
-    category: "sports_fitness",
-    patterns: [
-      /\b(gym|fitness center|training|strength|workout|climbing gym|boxing gym)\b/,
-      /\b(pilates|reformer|lagree|yoga|barre|spin studio|dance studio|tennis court|basketball court|soccer field|golf course|pool|skate park|ski|surf)\b/,
+      /\b(tourist\s+attraction|attraction|landmark|museum|gallery|theater|theatre|historic|monument|movie|cinema|concert|arena|arcade|bowling|zoo|aquarium|amusement|theme\s+park|event\s+venue|convention\s+center)\b/,
     ],
   },
   {
     category: "shopping",
     patterns: [
-      /\b(shop|store|retail|art supply store|mall|boutique|market|grocery|bookstore|flower shop|hardware|furniture|electronics|vintage|thrift)\b/,
+      /\b(shop|store|retail|mall|market|grocery|supermarket|book\s+store|bookstore|art\s+supply|craft\s+store|gift\s+shop|clothing|shoe\s+store|jewelry|cosmetics|hardware|furniture|thrift)\b/,
     ],
   },
   {
-    category: "services",
+    category: "wellness_fitness",
     patterns: [
-      /\b(salon|barber|nail salon|laundry|dry cleaner|tailor|repair|bank|atm|post office|shipping center|car wash)\b/,
-      /\b(veterinarian|veterinary|animal hospital|animal service|pet clinic|pet hospital|pet groomer)\b/,
+      /\b(health|wellness|fitness|gym|yoga|sports\s+club|sports\s+complex|hospital|medical|clinic|doctor|dentist|pharmacy|drugstore|spa|massage|sauna|therapy|veterinary)\b/,
     ],
   },
   {
-    category: "lodging",
+    category: "stays",
     patterns: [
-      /\b(hotel|motel|resort|lodging|inn|hostel|bed and breakfast|boutique hotel|[345][ -]?star hotel|vacation rental|cabin)\b/,
+      /\b(stay|stays|lodging|hotel|motel|resort|inn|hostel|bed\s+and\s+breakfast|guest\s+house|airbnb|vrbo|extended\s+stay|cottage|cabin|campground|rv\s+park|star\s+hotel)\b/,
     ],
   },
   {
-    category: "transportation_transit",
+    category: "services_errands",
     patterns: [
-      /\b(transportation|transit|airport|train station|bus station|ferry|subway|station|parking|garage|rental car|gas station|ev charging|bike share|car share|rest stop)\b/,
+      /\b(service|bank|atm|accounting|insurance|real\s+estate|lawyer|consultant|florist|catering|child\s+care|laundry|tailor|courier|shipping|storage|moving|electrician|plumber|locksmith|contractor|pet\s+care|salon|barber|nail\s+salon|tattoo)\b/,
     ],
   },
   {
-    category: "education",
+    category: "travel_transit",
     patterns: [
-      /\b(school|university|college|campus|preschool|daycare|tutor|academy|class|workshop|library|study spot)\b/,
+      /\b(travel|transportation|transit|airport|train\s+station|subway|light\s+rail|tram|bus\s+stop|bus\s+station|ferry|taxi|bike\s+share|parking|garage|gas\s+station|ev\s+charging|car\s+rental|car\s+repair|car\s+wash|truck\s+stop)\b/,
     ],
   },
   {
-    category: "work_venues",
+    category: "work_education",
     patterns: [
-      /\b(coworking|co working|office|meeting room|conference|event space|production studio|photo studio|warehouse|convention center|business center)\b/,
+      /\b(work|education|school|university|college|campus|preschool|library|research\s+institute|coworking|co\s+working|office|business\s+center|corporate\s+office|manufacturer|supplier|farm|ranch|television\s+studio)\b/,
     ],
   },
   {
-    category: "home_neighborhood",
+    category: "civic_faith",
     patterns: [
-      /\b(home|apartment|condo|house|neighborhood|block|courtyard|community garden|local spot|meetup spot|lobby)\b/,
+      /\b(civic|faith|public\s+service|government|city\s+hall|courthouse|embassy|post\s+office|police|fire\s+station|worship|spiritual|church|mosque|synagogue|hindu\s+temple|buddhist\s+temple|shinto\s+shrine|place\s+of\s+worship)\b/,
     ],
   },
   {
-    category: "public_services",
+    category: "areas_addresses",
     patterns: [
-      /\b(public service|government|city hall|courthouse|police|fire station|embassy|consulate|dmv|public restroom|recycling center|utility|civic building)\b/,
+      /\b(area|address|home\s+neighborhood|apartment|condo|housing\s+complex|neighborhood|locality|city|postal\s+area|town|region|country|route|street|intersection|plus\s+code)\b/,
+    ],
+  },
+  {
+    category: "facilities_other",
+    patterns: [
+      /\b(facility|facilities|other|public\s+bathroom|public\s+bath|public\s+restroom|restroom|stable|generic\s+establishment|establishment|point\s+of\s+interest|unknown)\b/,
     ],
   },
 ];
@@ -138,6 +131,7 @@ export function inferPlaceCategory(value: string | null | undefined): PlaceCateg
 export function normalizeCategoryText(value: string | null | undefined): string {
   return (value ?? "")
     .toLowerCase()
+    .replace(/mkpoicategory/g, " ")
     .replace(/[_&/-]+/g, " ")
     .replace(/[^a-z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")

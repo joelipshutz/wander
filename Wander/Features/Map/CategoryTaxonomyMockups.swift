@@ -52,20 +52,20 @@ private struct PrimaryCategoryMock: Identifiable {
 
 private enum CategoryTaxonomyMockData {
     static let primaryCategories: [PrimaryCategoryMock] = [
-        PrimaryCategoryMock(id: "food_drink", title: "Food & drink", detail: "Restaurants, coffee, bars", symbol: "fork.knife", color: WanderTheme.terracotta.color, count: 40),
-        PrimaryCategoryMock(id: "outdoors", title: "Outdoors & nature", detail: "Parks, trails, water", symbol: "tree.fill", color: WanderTheme.categoryMoss.color, count: 32),
-        PrimaryCategoryMock(id: "arts", title: "Arts, culture & faith", detail: "Museums, temples, galleries", symbol: "sparkles", color: WanderTheme.avatarSofia.color, count: 30),
-        PrimaryCategoryMock(id: "entertainment", title: "Entertainment", detail: "Venues, movies, games", symbol: "ticket.fill", color: WanderTheme.categorySun.color, count: 24),
-        PrimaryCategoryMock(id: "health", title: "Health & wellness", detail: "Care, spas, pharmacies", symbol: "cross.case.fill", color: WanderTheme.stateSuccess.color, count: 26),
-        PrimaryCategoryMock(id: "fitness", title: "Sports & fitness", detail: "Gyms, courts, studios", symbol: "dumbbell.fill", color: WanderTheme.categorySage.color, count: 28),
-        PrimaryCategoryMock(id: "shopping", title: "Shopping", detail: "Stores, markets, supplies", symbol: "bag.fill", color: WanderTheme.terracottaDark.color, count: 36),
-        PrimaryCategoryMock(id: "services", title: "Services", detail: "Salons, repairs, pet care", symbol: "scissors", color: WanderTheme.stateInfo.color, count: 34),
-        PrimaryCategoryMock(id: "lodging", title: "Lodging", detail: "Hotels, resorts, stays", symbol: "bed.double.fill", color: WanderTheme.textMuted.color, count: 14),
-        PrimaryCategoryMock(id: "transportation", title: "Transportation & transit", detail: "Airports, stations, parking", symbol: "tram.fill", color: WanderTheme.pinSocial.color, count: 22),
-        PrimaryCategoryMock(id: "education", title: "Education", detail: "Schools, libraries, classes", symbol: "graduationcap.fill", color: WanderTheme.avatarAndrew.color, count: 16),
-        PrimaryCategoryMock(id: "work", title: "Work & venues", detail: "Offices, coworking, events", symbol: "building.2.fill", color: WanderTheme.textInk.color, count: 18),
-        PrimaryCategoryMock(id: "home", title: "Home & neighborhood", detail: "Apartments, landmarks, blocks", symbol: "house.fill", color: WanderTheme.stateWarning.color, count: 20),
-        PrimaryCategoryMock(id: "public", title: "Public services", detail: "Civic, safety, government", symbol: "building.columns.fill", color: WanderTheme.borderStrong.color, count: 18)
+        PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, cuisines, quick bites", symbol: "fork.knife", color: WanderTheme.terracotta.color, count: 132),
+        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", symbol: "cup.and.saucer.fill", color: WanderTheme.categorySun.color, count: 23),
+        PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", symbol: "wineglass.fill", color: WanderTheme.terracottaDark.color, count: 26),
+        PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", symbol: "tree.fill", color: WanderTheme.categoryMoss.color, count: 41),
+        PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", symbol: "ticket.fill", color: WanderTheme.avatarSofia.color, count: 52),
+        PrimaryCategoryMock(id: "shopping", title: "Shopping", detail: "Stores, markets, supplies", symbol: "bag.fill", color: WanderTheme.terracottaDark.color, count: 46),
+        PrimaryCategoryMock(id: "wellness_fitness", title: "Wellness & Fitness", detail: "Health, beauty, fitness", symbol: "heart.fill", color: WanderTheme.stateSuccess.color, count: 38),
+        PrimaryCategoryMock(id: "stays", title: "Stays", detail: "Hotels, rentals, camping", symbol: "bed.double.fill", color: WanderTheme.textMuted.color, count: 18),
+        PrimaryCategoryMock(id: "services_errands", title: "Services & Errands", detail: "Errands, repairs, pet care", symbol: "scissors", color: WanderTheme.stateInfo.color, count: 48),
+        PrimaryCategoryMock(id: "travel_transit", title: "Travel & Transit", detail: "Airports, stations, parking", symbol: "tram.fill", color: WanderTheme.pinSocial.color, count: 38),
+        PrimaryCategoryMock(id: "work_education", title: "Work & Education", detail: "Offices, schools, libraries", symbol: "graduationcap.fill", color: WanderTheme.avatarAndrew.color, count: 17),
+        PrimaryCategoryMock(id: "civic_faith", title: "Civic & Faith", detail: "Government, worship, safety", symbol: "building.columns.fill", color: WanderTheme.borderStrong.color, count: 16),
+        PrimaryCategoryMock(id: "areas_addresses", title: "Areas & Addresses", detail: "Cities, addresses, regions", symbol: "map.fill", color: WanderTheme.stateWarning.color, count: 15),
+        PrimaryCategoryMock(id: "facilities_other", title: "Facilities & Other", detail: "Restrooms, facilities, unknown", symbol: "mappin", color: WanderTheme.textFaint.color, count: 7)
     ]
 
     static let foodDrinkGroups: [(title: String, values: [String])] = [
@@ -120,9 +120,11 @@ private struct CategoryTaxonomyEditMockup: View {
             placeHeader
 
             MockupSection(title: "place type") {
-                MockupDetailRow(title: "category", value: "Food & drink", systemImage: "square.grid.2x2.fill")
+                MockupDetailRow(title: "category", value: "Restaurants & Food", systemImage: "square.grid.2x2.fill")
                 Divider().background(WanderTheme.borderHairline.color)
-                MockupDetailRow(title: "subcategory", value: "Thai restaurant", systemImage: "line.3.horizontal.decrease.circle.fill")
+                MockupDetailRow(title: "subcategory", value: "Restaurant", systemImage: "line.3.horizontal.decrease.circle.fill")
+                Divider().background(WanderTheme.borderHairline.color)
+                MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
             }
 
             MockupSection(title: "save as") {
@@ -168,7 +170,7 @@ private struct CategoryTaxonomyEditMockup: View {
                 Text("5233 Sunset Blvd")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                Text("Food & drink - Thai restaurant")
+                Text("Thai - Restaurant - Restaurants & Food")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
             }
@@ -191,7 +193,7 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
                 spacing: WanderTheme.spacing2
             ) {
                 ForEach(WanderPlaceCategory.editableCategories, id: \.self) { category in
-                    PrimaryCategoryPickerTile(category: category, isSelected: category == WanderPlaceCategory.foodDrink) {}
+                    PrimaryCategoryPickerTile(category: category, isSelected: category == WanderPlaceCategory.restaurantsFood) {}
                 }
             }
         }
@@ -200,17 +202,17 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
 
 private struct CategoryTaxonomySubcategoryPickerMockup: View {
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "choose subcategory", subtitle: "Food & drink - 40 types") {
-            MockupSearchField(text: "Search food & drink types")
+        CategoryTaxonomyMockupScreen(title: "choose subcategory", subtitle: "Restaurants & Food - 47 types, 85 cuisines") {
+            MockupSearchField(text: "Search restaurants & food types")
 
             HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(title: "Food & drink", systemImage: "fork.knife", isSelected: true)
+                CategoryPickerModePill(title: "Restaurants & Food", systemImage: "fork.knife", isSelected: true)
                 CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
                 Spacer(minLength: 0)
             }
 
-            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.foodDrink), id: \.title) { group in
-                SubcategoryGroupSection(group: group, selectedSubcategory: "Thai restaurant") { _ in }
+            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood), id: \.title) { group in
+                SubcategoryGroupSection(group: group, selectedSubcategory: group.role == .cuisine ? "Thai" : "Restaurant") { _ in }
             }
         }
     }
@@ -231,7 +233,8 @@ private struct CategoryTaxonomyLabelsMockup: View {
 
             MockupSection(title: "saved summary") {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    MockupSummaryLine(label: "type", value: "Food & drink / Thai restaurant")
+                    MockupSummaryLine(label: "type", value: "Restaurants & Food / Restaurant")
+                    MockupSummaryLine(label: "cuisine", value: "Thai")
                     MockupSummaryLine(label: "tags", value: "spicy, good for groups, date-night room")
                     MockupSummaryLine(label: "my labels", value: "LA favorite, Joe rec, birthday list")
                 }
@@ -253,7 +256,7 @@ private struct CategoryTaxonomyLabelsMockup: View {
                     .foregroundStyle(WanderTheme.terracotta.color)
                     .clipShape(Capsule())
             }
-            Text("Food & drink - Thai restaurant - Los Angeles")
+            Text("Thai - Restaurant - Los Angeles")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }

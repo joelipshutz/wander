@@ -1211,6 +1211,8 @@ private enum PlaceProfileCopy {
     }
 
     static func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
+        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
+
         if attribute.valueType == "multi_tag" {
             return decodedStringArray(from: attribute.valueJSON).map { value in
                 PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
