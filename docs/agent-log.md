@@ -8314,4 +8314,5 @@ Handoff checkpoint, 2026-07-01 15:29 PDT:
 - Mockup commit: `3091fba86` (`design: mock remove save flow`).
 - Opened draft PR #61 for design review: `https://github.com/joelipshutz/wander/pull/61`.
 - Branch pushed to `origin/codex/rec-30-swiftui-mockup`.
+- Added a Linear REC-30 comment with the draft PR link and mockup-only scope.
 - REC-30 remains `In Progress`; wiring should wait until Ryan/Joe review the mockup direction.
