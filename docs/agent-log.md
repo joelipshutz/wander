@@ -7815,3 +7815,30 @@ Rebase validation, 2026-06-30 17:50 PDT:
 - Full simulator test attempt on `iPhone 17, OS=26.5` failed before app code because that simulator is unavailable on this machine.
 - Full simulator suite passed on available `iPhone 17, OS=26.2`:
   `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+## 2026-06-30 18:02 PDT - Codex - TestFlight Build 57 Lists Release
+
+Agent: Codex
+Branch: `codex/lists-testflight-release`
+Worktree: `/private/tmp/recme-lists-testflight-release`
+Linear: `REC-63` (`Ship Lists core add flow and QA cleanup`)
+
+Goal: package latest `main` after PR #47 into TestFlight so Joe can test the Lists core changes on device.
+
+Starting status:
+
+- PR #47 was squash-merged to `main` as `45c516486` (`feat: make lists add flow locally testable (#47)`).
+- Build 55 is the last release with a completed TestFlight upload/approval log. `main` already contained a build 56 bump before Lists landed, but no build 56 upload/approval completion was logged; this release bumps to build 57 to avoid reusing a build number and to include Lists.
+- Expected release files: `project.yml`, `Wander.xcodeproj/project.pbxproj`, and `docs/agent-log.md`.
+
+Included app-code changes since completed TestFlight build 55:
+
+- Production category taxonomy UI/data behavior from PR #51.
+- Lists core local models and persistence.
+- List detail map-first layout with owner-only top-nav add flow.
+- Discover-style add-to-list search and relevant suggestions.
+- Owner-only collaborator management beside the face pile.
+- One-tap place opening from the list map rail.
+- Unsaved-place auto-save to Want list with a short bottom confirmation.
+- My Lists tile sizing cleanup.
+- Supabase list migration and `suggest-list-places` Edge Function source.
