@@ -8231,3 +8231,17 @@ Follow-up validation, 2026-07-01 15:02 PDT:
   - `git diff --check`
   - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Landing checkpoint, 2026-07-01 15:14 PDT:
+
+- Ryan requested squash-merge of PR #58 to `main`; no TestFlight build/release was requested, so no build number bump, archive, upload, or Slack release note will run.
+- PR #58 merge gate:
+  - GitHub reported PR #58 as ready, not draft, no labels, `mergeStateStatus=CLEAN`, and no failing status checks listed.
+  - Branch is current with `origin/main` (`0` behind, `5` ahead).
+  - Greptile bot comment scan found no active line-level or top-level Greptile comments.
+  - Pre-landing review found no blocking issues; diff is scoped to REC-44 profile/follow interaction changes plus this agent log.
+- Landing verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: push this landing log update to PR #58, squash-merge PR #58, update local `main`, and move REC-44 to `Done` after the merge succeeds.
