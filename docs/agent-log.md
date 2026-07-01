@@ -7868,3 +7868,43 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 21:50 PDT - Codex - Linear Auto-Assignment Policy
+
+Agent: Codex
+Branch: `codex/linear-auto-assignee`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/linear-auto-assignee`
+Linear: `REC-67` (`Add Linear auto-assignment policy for Ryan and Joe`)
+
+Goal: add durable repo guidance so Linear issues created by agents assign to the human requester/creator, using Ryan and Joe's Linear emails instead of leaving chat-started issues unassigned.
+
+Starting status:
+
+- Fetched `origin`.
+- Root checkout was clean but on stale branch `codex/profile-pictures`; created this isolated worktree from latest `origin/main`.
+- Current worktree status clean on `codex/linear-auto-assignee` tracking `origin/main`.
+- Existing auxiliary worktrees are active, but this change only touches docs/process files plus the shared agent log.
+
+Expected files:
+
+- `AGENTS.md`
+- `docs/decisions.md`
+- `docs/agent-log.md`
+
+Outcome, 2026-06-30 21:58 PDT:
+
+- Added `AGENTS.md` Linear issue assignment guidance requiring agent-created issues to assign Ryan or Joe at creation time.
+- Added `docs/decisions.md` process decision `Linear requester assignment`.
+- Created Linear `REC-67`, assigned to `ryan.lieblein@gmail.com`, and moved it to `In Progress` before editing.
+- Opened ready PR #54: `https://github.com/joelipshutz/wander/pull/54`.
+- Moved Linear `REC-67` to `In Review` with the PR attached and a validation comment.
+- Validation: `git diff --check` passed.
+- No app code changed, so no Xcode build/test or TestFlight work was run.
+- Next step: review and merge PR #54 when ready; no TestFlight release is needed for this docs/process-only change.
+
+Slack caveat checkpoint, 2026-06-30 23:29 PDT:
+
+- Ryan reported Slack `@Linear` issue creation did not auto-assign issues to him.
+- Confirmed the repo rule applies only to repo-aware agents; Slack `@Linear` issue creation is governed by Linear Slack integration settings.
+- Assigned recent Ryan-created unassigned Linear issues `REC-66`, `REC-68`, `REC-69`, `REC-70`, and `REC-71` to `ryan.lieblein@gmail.com`.
+- Updated `AGENTS.md` and `docs/decisions.md` to call out that Slack-created issues need Linear Slack Agent guidance or webhook/API automation using the same Ryan/Joe mapping.
