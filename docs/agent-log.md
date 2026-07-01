@@ -7868,3 +7868,41 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 23:58 PDT - Codex - Profile Avatar Persistence Investigation
+
+Agent: Codex
+Branch: `codex/profile-avatar-persistence`
+Worktree: `/private/tmp/recme-profile-avatar-persistence`
+Linear: `REC-73` (`Fix profile avatars missing from Discover places, members, and place cards`)
+
+Starting status:
+
+- Created fresh worktree from latest `origin/main` at `328401a30`.
+- Root checkout remains on stale `codex/profile-pictures` and is not used.
+- Current branch is clean before implementation.
+
+Goal:
+
+- Find why profile photos appear in the Profile page people section but not in Discover members, Discover place rows/cards, or actual place card surfaces.
+- Fix avatar URL propagation so profile photo changes render consistently everywhere the profile icon appears.
+- Add focused regression coverage for the data/view-model gaps found.
+
+Expected files:
+
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift` or shared place card surfaces if needed
+- `WanderTests/WanderStoreTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-01 00:19 PDT:
+
+- Root cause: Profile page people rows read the latest `store.profiles`, but Discover places/place cards used `remoteVisiblePlaceCache` owner snapshots. Those snapshots can omit or lag `avatarURL`, and remote member/place hydration could overwrite an existing cached avatar with `nil` from lower-fidelity search or visible-place payloads.
+- Fix: `remoteVisiblePlaces(filters:)` now resolves each cached visible place through the latest local profile before filtering, lower-fidelity remote profile upserts preserve existing avatar/bio values when the incoming shell omits them, Discover refreshes place results when owner avatar URLs change, Discover place result cards render the matched owner's avatar, and Discover place-card save summaries prefer fresh store visible places before stale search results.
+- Tests passed:
+  - `git diff --check`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-avatar-persistence-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testDiscoverMembersKeepsLocalAvatarWhenRemoteSearchOmitsAvatar -only-testing:WanderTests/WanderStoreTests/testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-avatar-persistence-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Simulator check: installed the Debug build from `/private/tmp/DerivedData-avatar-persistence-tests/Build/Products/Debug-iphonesimulator/Wander.app` on iPhone 17 and iPhone 17e. The iPhone 17e Discover Members tab rendered correctly but this local session returned no `ry` member results and no Discover place results, so avatar rows could not be visually verified with populated live data. Screenshot: `/private/tmp/discover-avatar-member-empty-iphone17e.png`.
+- Known issue: visual verification still needs a seeded or signed-in test account with remote members/places containing avatar URLs. The regression tests cover the data-path bug directly.
