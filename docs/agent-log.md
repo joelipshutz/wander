@@ -8184,3 +8184,21 @@ Completion checkpoint, 2026-07-01 11:44 PDT:
 - Implementation commit: `448c12fb6` (`fix: confirm graph list unfollow`).
 - Opened ready PR #58: `https://github.com/joelipshutz/wander/pull/58`.
 - Next: review/squash-merge PR #58, then release only if explicitly requested.
+
+Follow-up checkpoint, 2026-07-01 11:54 PDT:
+
+- Ryan tested PR #58 in Xcode and found three remaining interaction issues:
+  - Followers/following graph list unfollow confirmation should be a centered popup without the bottom action-sheet caret, and should show both `Yes, unfollow` and `No, cancel`.
+  - Discover member profile three-dot menu can still unfollow without warning.
+  - Profile detail for existing friends/following shows a redundant full-width `friend`/`following` status button under the header.
+- Plan: switch graph-list unfollow confirmation from `confirmationDialog` to `alert`, add the same alert to `ProfileDetailView` for the shared Discover/Profile path, and remove the redundant non-action status button while keeping follow for non-followers and the three-dot menu for block/unfollow.
+
+Follow-up validation, 2026-07-01 12:12 PDT:
+
+- Replaced graph-list unfollow `confirmationDialog` with centered SwiftUI `alert` and title-cased actions: `Yes, unfollow` and `No, cancel`.
+- Added the same centered unfollow alert to `ProfileDetailView`, so Discover member profile and Profile graph-list profile sheets share the warning before unfollowing from the three-dot menu.
+- Removed the redundant full-width `friend` / `following` status pill from already-followed profile detail headers; the three-dot menu remains the place for block/unfollow.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`

@@ -678,6 +678,7 @@ struct ProfileDetailView: View {
     @EnvironmentObject private var backend: WanderBackend
     let profileID: String
     @State private var showBlockConfirm = false
+    @State private var showUnfollowConfirm = false
 
     private var state: ProfileViewState? {
         store.profileState(for: profileID)
@@ -718,6 +719,12 @@ struct ProfileDetailView: View {
             } message: {
                 Text("You won't see each other's profiles, places, or search results.")
             }
+            .alert(unfollowConfirmationTitle, isPresented: $showUnfollowConfirm) {
+                Button("Yes, unfollow", role: .destructive) {
+                    confirmUnfollow()
+                }
+                Button("No, cancel", role: .cancel) {}
+            }
             .task(id: profileID) {
                 await refreshRemoteProfile()
             }
@@ -748,12 +755,7 @@ struct ProfileDetailView: View {
                 Menu {
                     if state.shell.relationship != .owner && state.shell.relationship != .nonFollower && !state.isBlocked {
                         Button("Unfollow", role: .destructive) {
-                            auth.requireSignIn(for: .followPeople) {
-                                Task {
-                                    await store.unfollow(userID: state.shell.id, backend: backend)
-                                    await refreshRemoteProfile()
-                                }
-                            }
+                            showUnfollowConfirm = true
                         }
                     }
                     Button("Block", role: .destructive) {
@@ -775,8 +777,8 @@ struct ProfileDetailView: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            HStack {
-                if state.shell.relationship == .nonFollower && !state.isBlocked {
+            if state.shell.relationship == .nonFollower && !state.isBlocked {
+                HStack {
                     WanderPrimaryButton(title: "follow", systemImage: "person.badge.plus") {
                         auth.requireSignIn(for: .followPeople) {
                             Task {
@@ -785,13 +787,6 @@ struct ProfileDetailView: View {
                             }
                         }
                     }
-                } else if state.shell.relationship != .owner && !state.isBlocked {
-                    Text(state.shell.relationship == .mutual ? "friend" : "following")
-                        .font(.system(size: 15, weight: .bold))
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Capsule())
                 }
             }
         }
@@ -802,6 +797,22 @@ struct ProfileDetailView: View {
 
     private func refreshRemoteProfile() async {
         await store.refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+    }
+
+    private var unfollowConfirmationTitle: String {
+        guard let state else {
+            return "are you sure you want to unfollow this person"
+        }
+        return "are you sure you want to unfollow \(state.shell.displayName)"
+    }
+
+    private func confirmUnfollow() {
+        auth.requireSignIn(for: .followPeople) {
+            Task {
+                await store.unfollow(userID: profileID, backend: backend)
+                await refreshRemoteProfile()
+            }
+        }
     }
 
     private func initials(for name: String) -> String {
@@ -1318,15 +1329,11 @@ private struct GraphListScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .confirmationDialog(
-                pendingUnfollowTitle,
-                isPresented: $showsUnfollowConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("yes, unfollow", role: .destructive) {
+            .alert(pendingUnfollowTitle, isPresented: $showsUnfollowConfirm) {
+                Button("Yes, unfollow", role: .destructive) {
                     confirmPendingUnfollow()
                 }
-                Button("no, cancel", role: .cancel) {
+                Button("No, cancel", role: .cancel) {
                     pendingUnfollowProfile = nil
                 }
             }
