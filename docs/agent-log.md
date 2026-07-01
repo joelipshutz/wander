@@ -8283,3 +8283,24 @@ Follow-up implementation, 2026-07-01 15:25 PDT:
   - Full suite passed:
     `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_15-24-04--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
+
+Follow-up checkpoint, 2026-07-01 15:30 PDT:
+
+- Ryan clarified the block prompt should not use any floating caret/popover presentation; it should be centered like the REC-44 unfollow prompt now on `main`.
+- Required button copy: `Block` and `Cancel`.
+- Current branch: `codex/rec-62-blocking-privacy`.
+- Current git status before edits: clean and tracking `origin/codex/rec-62-blocking-privacy`.
+- Search showed the blocking confirmation is centralized in `ProfileDetailView`, which is shared by the blocking entry points.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Profile/ProfileScreen.swift`
+
+Follow-up implementation, 2026-07-01 15:32 PDT:
+
+- Confirmed all block confirmations route through `ProfileDetailView`; there are no remaining block-specific `confirmationDialog` presentations or `Yes, block` / `No, cancel` labels.
+- Updated the shared block confirmation alert to use the requested `Block` and `Cancel` button copy while keeping the centered `.alert` presentation that matches the REC-44 unfollow design on `main`.
+- Validation:
+  - `git diff --check` passed.
+  - Full suite passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_15-31-09--0700.xcresult`: 212 tests, 0 failures, 0 skipped.

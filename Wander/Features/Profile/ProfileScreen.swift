@@ -713,10 +713,10 @@ struct ProfileDetailView: View {
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Block this person?", isPresented: $showBlockConfirm) {
-                Button("Yes, block", role: .destructive) {
+                Button("Block", role: .destructive) {
                     confirmBlock()
                 }
-                Button("No, cancel", role: .cancel) {
+                Button("Cancel", role: .cancel) {
                     showBlockConfirm = false
                 }
             } message: {
