@@ -31,6 +31,20 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.activeGate?.intent, .socialSave)
     }
 
+    func testDataSyncRouteSyncsPendingItemsWhenAlreadySignedIn() {
+        let route = SettingsDataSyncPolicy.route(
+            for: .signedIn(AuthSession(userID: "user_123", displayName: "Joe", handle: "joe"))
+        )
+
+        XCTAssertEqual(route, .syncPendingItems)
+    }
+
+    func testDataSyncRouteRequiresSignInWhenNotSignedIn() {
+        XCTAssertEqual(SettingsDataSyncPolicy.route(for: .signedOut), .requireSignIn(.syncPending))
+        XCTAssertEqual(SettingsDataSyncPolicy.route(for: .loading), .requireSignIn(.syncPending))
+        XCTAssertEqual(SettingsDataSyncPolicy.route(for: .unavailable("Missing Clerk publishable key.")), .requireSignIn(.syncPending))
+    }
+
     func testBeginSignInPresentsNativeAuthWithRuntimeFallbackConfiguration() {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"

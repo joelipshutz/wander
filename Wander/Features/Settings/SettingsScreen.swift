@@ -7,6 +7,7 @@ struct SettingsScreen: View {
     @State private var activeDetail: SettingsDetail?
     @State private var pendingPrivateProfileValue: Bool?
     @State private var showsPrivateProfileWarning = false
+    @State private var isSyncingPendingItems = false
 
     var body: some View {
         NavigationStack {
@@ -289,15 +290,53 @@ struct SettingsScreen: View {
             }
             SettingsRow(title: "Contacts", subtitle: "planned native permission later", systemImage: "person.crop.rectangle.stack")
             SettingsRow(title: "Notifications", subtitle: "after first save", systemImage: "bell")
-            SettingsRow(title: "Data and sync", subtitle: "\(store.pendingSyncCount) pending local item\(store.pendingSyncCount == 1 ? "" : "s")", systemImage: "arrow.triangle.2.circlepath") {
-                auth.presentGate(for: .syncPending)
+            SettingsRow(title: "Data and sync", subtitle: dataSyncSubtitle, systemImage: "arrow.triangle.2.circlepath") {
+                handleDataSyncTap()
             }
+        }
+    }
+
+    private var dataSyncSubtitle: String {
+        if isSyncingPendingItems {
+            return "syncing pending items"
+        }
+
+        return "\(store.pendingSyncCount) pending local item\(store.pendingSyncCount == 1 ? "" : "s")"
+    }
+
+    private func handleDataSyncTap() {
+        switch SettingsDataSyncPolicy.route(for: auth.state) {
+        case .requireSignIn(let intent):
+            auth.presentGate(for: intent)
+        case .syncPendingItems:
+            syncPendingItems()
+        }
+    }
+
+    private func syncPendingItems() {
+        guard !isSyncingPendingItems else { return }
+
+        isSyncingPendingItems = true
+        Task { @MainActor in
+            _ = await store.syncUnsyncedOwnPlaces(backend: backend)
+            isSyncingPendingItems = false
         }
     }
 
     private func initials(for session: AuthSession) -> String {
         let source = session.displayName ?? session.handle ?? session.userID
         return String(source.prefix(2)).uppercased()
+    }
+}
+
+enum SettingsDataSyncRoute: Equatable {
+    case requireSignIn(AuthGateIntent)
+    case syncPendingItems
+}
+
+struct SettingsDataSyncPolicy {
+    static func route(for authState: AuthState) -> SettingsDataSyncRoute {
+        authState.isSignedIn ? .syncPendingItems : .requireSignIn(.syncPending)
     }
 }
 
