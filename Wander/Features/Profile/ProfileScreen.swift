@@ -719,15 +719,12 @@ struct ProfileDetailView: View {
             } message: {
                 Text("You won't see each other's profiles, places, or search results.")
             }
-            .overlay {
-                if showUnfollowConfirm {
-                    UnfollowConfirmationPopup(
-                        title: unfollowConfirmationTitle,
-                        confirmAction: confirmUnfollow,
-                        cancelAction: {
-                            showUnfollowConfirm = false
-                        }
-                    )
+            .alert(unfollowConfirmationTitle, isPresented: $showUnfollowConfirm) {
+                Button("Yes, unfollow", role: .destructive) {
+                    confirmUnfollow()
+                }
+                Button("No, cancel", role: .cancel) {
+                    showUnfollowConfirm = false
                 }
             }
             .task(id: profileID) {
@@ -1336,16 +1333,13 @@ private struct GraphListScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .overlay {
-                if showsUnfollowConfirm {
-                    UnfollowConfirmationPopup(
-                        title: pendingUnfollowTitle,
-                        confirmAction: confirmPendingUnfollow,
-                        cancelAction: {
-                            pendingUnfollowProfile = nil
-                            showsUnfollowConfirm = false
-                        }
-                    )
+            .alert(pendingUnfollowTitle, isPresented: $showsUnfollowConfirm) {
+                Button("Yes, unfollow", role: .destructive) {
+                    confirmPendingUnfollow()
+                }
+                Button("No, cancel", role: .cancel) {
+                    pendingUnfollowProfile = nil
+                    showsUnfollowConfirm = false
                 }
             }
             .task {
@@ -1384,60 +1378,6 @@ private struct GraphListScreen: View {
                 await store.unfollow(userID: profile.id, backend: backend)
             }
         }
-    }
-}
-
-private struct UnfollowConfirmationPopup: View {
-    let title: String
-    let confirmAction: () -> Void
-    let cancelAction: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.28)
-                .ignoresSafeArea()
-                .onTapGesture(perform: cancelAction)
-
-            VStack(spacing: WanderTheme.spacing4) {
-                Text(title)
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: WanderTheme.spacing2) {
-                    Button(action: confirmAction) {
-                        Text("Yes, unfollow")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .foregroundStyle(.white)
-                    .background(WanderTheme.stateError.color)
-                    .clipShape(Capsule())
-
-                    Button(action: cancelAction) {
-                        Text("No, cancel")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .background(WanderTheme.surfaceSand.color)
-                    .overlay(
-                        Capsule()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
-                    .clipShape(Capsule())
-                }
-            }
-            .padding(WanderTheme.spacing4)
-            .frame(maxWidth: 330)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .shadow(color: .black.opacity(0.18), radius: 22, x: 0, y: 12)
-            .padding(.horizontal, WanderTheme.spacing4)
-        }
-        .transition(.opacity)
-        .zIndex(20)
     }
 }
 

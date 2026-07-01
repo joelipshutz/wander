@@ -8218,3 +8218,16 @@ Follow-up validation, 2026-07-01 12:53 PDT:
   - `git diff --check`
   - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 14:56 PDT:
+
+- Ryan requested the unfollow confirmation use the native iOS popup window design while keeping the centered alert placement and the two warning buttons.
+- Plan: replace the custom `UnfollowConfirmationPopup` overlay with native SwiftUI `alert` modifiers in both existing unfollow warning entry points, preserving capitalized `Are` copy and the `Yes, unfollow` / `No, cancel` labels.
+
+Follow-up validation, 2026-07-01 15:02 PDT:
+
+- Removed the custom unfollow confirmation overlay and restored native SwiftUI/iOS `alert` presentation for both `ProfileDetailView` and `GraphListScreen`.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
