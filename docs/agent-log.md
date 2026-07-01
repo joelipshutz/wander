@@ -8148,3 +8148,33 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+## 2026-07-01 11:29 PDT - Codex - REC-44 Unfollow Confirmation
+
+Agent: Codex
+Branch: `codex/rec-44-unfollow-confirmation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-44-unfollow-confirmation`
+Starting status: clean branch from `origin/main` at `7d709ceb2`; root checkout is on stale `codex/profile-pictures` and is intentionally not used for edits. `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` review completed before implementation.
+
+Goal: fix Linear `REC-44` so tapping a person in followers/following opens the profile instead of accidentally unfollowing, and make unfollow require tapping the explicit unfollow control plus confirming in a warning dialog.
+
+Linear: `REC-44` moved to `In Progress` and commented with branch/worktree.
+
+Engineering review gate: not needed; this is an isolated SwiftUI interaction guard on an existing profile/follow surface, with no new persisted state, backend contract, visibility semantics, or cross-screen data behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Related focused tests if an existing test target can cover the interaction helper cleanly.
+
+Implementation checkpoint, 2026-07-01 11:42 PDT:
+
+- Updated the followers/following/friends graph list rows so tapping the person row opens `ProfileDetailView` instead of mutating follow state.
+- Kept follow/unfollow as an explicit trailing pill action.
+- Added an unfollow confirmation dialog with requested copy: `are you sure you want to unfollow <name>`, `yes, unfollow`, and `no, cancel`.
+- Added existing-store metadata to graph rows: saved-place count per person.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator destination is not installed in this environment, so validation used the available `iPhone 17, OS=26.5` simulator.

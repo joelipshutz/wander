@@ -1276,6 +1276,9 @@ private struct GraphListScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let mode: GraphListMode
+    @State private var selectedProfile: GraphProfileSelection?
+    @State private var pendingUnfollowProfile: LocalProfile?
+    @State private var showsUnfollowConfirm = false
 
     private var profiles: [LocalProfile] {
         switch mode {
@@ -1292,43 +1295,150 @@ private struct GraphListScreen: View {
         NavigationStack {
             List {
                 ForEach(profiles, id: \.id) { profile in
-                    HStack {
-                        WanderAvatar(
-                            initials: profile.initials,
-                            avatarURL: profile.avatarURL,
-                            size: 40,
-                            color: WanderTheme.pinSocial.color
-                        )
-                        VStack(alignment: .leading) {
-                            Text(profile.displayName)
-                                .font(.system(size: 15, weight: .bold))
-                            Text("@\(profile.handle) · \(store.relationship(to: profile.id).displayTitle)")
-                                .font(.system(size: 13))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                    GraphPersonListRow(
+                        profile: profile,
+                        relationship: store.relationship(to: profile.id),
+                        savedPlaceCount: store.visiblePlaces(for: profile.id).count,
+                        onOpenProfile: {
+                            selectedProfile = GraphProfileSelection(id: profile.id)
+                        },
+                        onFollowAction: {
+                            handleFollowAction(for: profile)
                         }
-                        Spacer()
-                        Button(store.relationship(to: profile.id) == .nonFollower ? "follow" : "unfollow") {
-                            auth.requireSignIn(for: .followPeople) {
-                                Task {
-                                    if store.relationship(to: profile.id) == .nonFollower {
-                                        await store.follow(userID: profile.id, backend: backend)
-                                    } else {
-                                        await store.unfollow(userID: profile.id, backend: backend)
-                                    }
-                                }
-                            }
-                        }
-                        .font(.system(size: 13, weight: .bold))
-                    }
+                    )
                     .listRowBackground(WanderTheme.surfaceBone.color)
                 }
             }
             .scrollContentBackground(.hidden)
             .wanderScreen()
             .navigationTitle(mode.rawValue.capitalized)
+            .sheet(item: $selectedProfile) { selection in
+                ProfileDetailView(profileID: selection.id)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
+            .confirmationDialog(
+                pendingUnfollowTitle,
+                isPresented: $showsUnfollowConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("yes, unfollow", role: .destructive) {
+                    confirmPendingUnfollow()
+                }
+                Button("no, cancel", role: .cancel) {
+                    pendingUnfollowProfile = nil
+                }
+            }
             .task {
                 await store.refreshRemoteSocialGraph(backend: backend)
             }
+        }
+    }
+
+    private var pendingUnfollowTitle: String {
+        guard let pendingUnfollowProfile else {
+            return "are you sure you want to unfollow this person"
+        }
+        return "are you sure you want to unfollow \(pendingUnfollowProfile.displayName)"
+    }
+
+    private func handleFollowAction(for profile: LocalProfile) {
+        auth.requireSignIn(for: .followPeople) {
+            if store.relationship(to: profile.id) == .nonFollower {
+                Task {
+                    await store.follow(userID: profile.id, backend: backend)
+                }
+            } else {
+                pendingUnfollowProfile = profile
+                showsUnfollowConfirm = true
+            }
+        }
+    }
+
+    private func confirmPendingUnfollow() {
+        guard let profile = pendingUnfollowProfile else { return }
+        pendingUnfollowProfile = nil
+
+        auth.requireSignIn(for: .followPeople) {
+            Task {
+                await store.unfollow(userID: profile.id, backend: backend)
+            }
+        }
+    }
+}
+
+private struct GraphProfileSelection: Identifiable {
+    let id: String
+}
+
+private struct GraphPersonListRow: View {
+    let profile: LocalProfile
+    let relationship: ViewerRelationship
+    let savedPlaceCount: Int
+    let onOpenProfile: () -> Void
+    let onFollowAction: () -> Void
+
+    private var actionTitle: String {
+        relationship == .nonFollower ? "follow" : "unfollow"
+    }
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Button(action: onOpenProfile) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    WanderAvatar(
+                        initials: profile.initials,
+                        avatarURL: profile.avatarURL,
+                        size: 40,
+                        color: WanderTheme.pinSocial.color
+                    )
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text(profile.displayName)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("@\(profile.handle) · \(relationship.displayTitle)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                        Text(savedPlaceCountLabel)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textFaint.color)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing2)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(actionTitle, action: onFollowAction)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(actionTitle == "unfollow" ? WanderTheme.stateError.color : WanderTheme.terracotta.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: 34)
+                .background(
+                    Capsule()
+                        .fill(actionTitle == "unfollow" ? WanderTheme.surfaceRaised.color : WanderTheme.terracottaTint.color)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            actionTitle == "unfollow" ? WanderTheme.borderHairline.color : WanderTheme.terracotta.color.opacity(0.35),
+                            lineWidth: 1
+                        )
+                )
+        }
+    }
+
+    private var savedPlaceCountLabel: String {
+        switch savedPlaceCount {
+        case 0:
+            return "no saved places yet"
+        case 1:
+            return "1 saved place"
+        default:
+            return "\(savedPlaceCount) saved places"
         }
     }
 }
