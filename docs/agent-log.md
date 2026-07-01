@@ -7816,24 +7816,103 @@ Rebase validation, 2026-06-30 17:50 PDT:
 - Full simulator suite passed on available `iPhone 17, OS=26.2`:
   `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO -jobs 1`
 
+## 2026-06-30 17:40 PDT - Codex - Category Taxonomy TestFlight Build 56
+
+Main/TestFlight release checkpoint, 2026-06-30 17:40 PDT:
+
+- PR #51 was squash-merged to `main` as `c3c0bf2b7` (`Ship production category taxonomy UI`).
+- Ryan explicitly asked to push to TestFlight, so this release will package latest `main`.
+- Included app-code/schema change since completed TestFlight build 55:
+  - PR #51: live 14-primary-category taxonomy UI, exhaustive subcategory picker, provider subcategory filter normalization, personal-label distinction, shared Swift/JSON/Edge taxonomy updates, and Supabase broad-category migration.
+- Planned release steps:
+  - Apply/verify pending hosted Supabase migrations `20260630081500_category_metadata_framework.sql` and `20260630154000_broad_category_taxonomy.sql` so TestFlight saves/filtering match the binary.
+  - Bump `CURRENT_PROJECT_VERSION` from 55 to 56, regenerate Xcode project, commit/push the bump to `main`.
+  - Run build/test validation, archive, upload, run `scripts/testflight-release.mjs`, and post the tester-facing Slack note to `#testflight-feedback` if Slack tooling is available.
+
+Hosted Supabase checkpoint, 2026-06-30 17:48 PDT:
+
+- `supabase migration list --linked` showed both category migrations pending remotely before release:
+  - `20260630081500_category_metadata_framework.sql`
+  - `20260630154000_broad_category_taxonomy.sql`
+- Ran `supabase db push --linked --yes`; both migrations applied successfully to the hosted project.
+- Post-push `supabase migration list --linked` showed both migrations present locally and remotely.
+- Hosted verification:
+  - `app.place_primary_category('thai restaurant') = food_drink`
+  - `app.place_primary_category('4-star hotel') = lodging`
+  - `app.place_primary_category('art supply store') = shopping`
+  - `app.place_primary_category('train station') = transportation_transit`
+  - `app.save_own_place(jsonb, jsonb, jsonb)` remains `security definer` with `search_path=public, app`.
+  - Grants remain limited to `authenticated` plus owner/postgres execute.
+  - `supabase/tests/category_metadata.sql` passed in hosted rollback mode, returning `ok 10 - profile filters match effective user override category`.
+
+Build 56 outcome, 2026-06-30 18:00 PDT:
+
+- Pushed build-number commit `6d57733a0` (`chore: bump testflight build 56`) to `main`; `CURRENT_PROJECT_VERSION` is `56` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build56-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build56-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` -> 2 passed, 0 failed
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator runtime is not installed in this Xcode environment, so the full suite ran on available `iPhone 17, OS=26.5`.
+- Archive path: `/private/tmp/Wander-0.1-build56.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=56` verified.
+- Export options: `/private/tmp/WanderExportUpload56.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 56 --archive-path /private/tmp/Wander-0.1-build56.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build56-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (56)` id `bde3220e-a6f3-4b35-8e3c-3deaa8da2c45` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Slack blocked: this Codex runtime exposes no `slack_send_message`/workspace/channel Slack MCP tools, no `slack` CLI, and no `SLACK_*` env credentials. Slack.app is installed locally, but posting through UI automation was not attempted because it could post in the wrong workspace/channel without a safe API or connector.
+- Required tester-facing Slack note for `#testflight-feedback` (`C0BAA7DG2AC`):
+
+```text
+**rec.me TestFlight build 56 is live/approved**
+
+Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+
+**What changed**
+- The approved category taxonomy is now live in the app, not just in DEBUG mockups.
+- Save/edit place now shows 14 broad primary categories first, then detailed subcategories under the selected category.
+- Provider place types like Thai restaurant, coffee shop, 4-star hotel, art supply store, train station, trail, waterfall, and hot spring now filter under the right broad category.
+- Category metadata now runs on the hosted Supabase schema: primary category, subcategory, source, confidence, and raw provider type.
+- Personal labels are distinct from place tags, with locality-aware suggestions like LA favorite.
+
+**Please test**
+- Save or edit a place and confirm the category picker shows broad categories only.
+- Pick a subcategory, including a custom subcategory, and confirm it sticks after save.
+- Toggle Been/Wanna Go on an existing saved place from the edit page.
+- Try provider-style place types and confirm Map, Discover, and Profile filters still group them correctly.
+- Edit your saved place category/subcategory and confirm it changes your save without unexpectedly changing shared/social place data.
+- Browse place profiles for odd category text, broken rows, or smart questions that feel mismatched.
+
+**Known/deferred**
+- The Add tab's older quick manual chips still normalize into the new framework, but that specific manual-entry picker is not yet redesigned.
+- Camera capture still needs real-device QA; simulator may hide camera when unavailable.
+
+Please reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+```
+
+Known issues:
+
+- Slack release note still needs posting after Slack tooling is exposed/restored or Ryan explicitly approves a browser/app-session fallback.
+- Camera capture should be verified on a real device.
+- The Add tab manual-entry category chip UI still uses the older quick choices, though those values normalize into the new broad taxonomy.
+
 ## 2026-06-30 18:02 PDT - Codex - TestFlight Build 57 Lists Release
 
 Agent: Codex
-Branch: `codex/lists-testflight-release`
-Worktree: `/private/tmp/recme-lists-testflight-release`
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
 Linear: `REC-63` (`Ship Lists core add flow and QA cleanup`)
 
-Goal: package latest `main` after PR #47 into TestFlight so Joe can test the Lists core changes on device.
+Goal: package latest `main` after PR #47 into TestFlight so Joe and Ryan can test the Lists core changes on device. Build 56 was uploaded and approved, but `main` advanced with Lists while that upload was in flight; build 57 is the release that should represent the current `main`.
 
 Starting status:
 
 - PR #47 was squash-merged to `main` as `45c516486` (`feat: make lists add flow locally testable (#47)`).
-- Build 55 is the last release with a completed TestFlight upload/approval log. `main` already contained a build 56 bump before Lists landed, but no build 56 upload/approval completion was logged; this release bumps to build 57 to avoid reusing a build number and to include Lists.
-- Expected release files: `project.yml`, `Wander.xcodeproj/project.pbxproj`, and `docs/agent-log.md`.
+- Remote `main` already contains build-number commit `105a51572` (`chore: bump testflight build 57`) with `CURRENT_PROJECT_VERSION=57`.
+- Expected release files from here: `docs/agent-log.md` only, unless validation requires a fix.
 
-Included app-code changes since completed TestFlight build 55:
+Included app-code changes since completed TestFlight build 56:
 
-- Production category taxonomy UI/data behavior from PR #51.
 - Lists core local models and persistence.
 - List detail map-first layout with owner-only top-nav add flow.
 - Discover-style add-to-list search and relevant suggestions.
