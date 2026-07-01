@@ -148,7 +148,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertNil(presentation.ownRating)
         XCTAssertGreaterThanOrEqual(fit.score, 8)
         XCTAssertEqual(presentation.commonTags.map(\.title), ["quiet"])
-        XCTAssertTrue(fit.reasons.contains { $0.contains("food & drink") })
+        XCTAssertTrue(fit.reasons.contains { $0.contains("coffee, tea, & sweets") })
         XCTAssertTrue(fit.reasons.contains { $0.contains("quiet") })
     }
 

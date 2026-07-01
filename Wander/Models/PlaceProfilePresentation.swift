@@ -284,7 +284,7 @@ enum PlaceProfileTagParser {
 
     private static func shouldSurface(_ questionKey: String) -> Bool {
         switch questionKey {
-        case "interest_signal", "rating_signal":
+        case "interest_signal", "rating_signal", PlaceMemoryAttributeKeys.restaurantCuisine:
             return false
         default:
             return true

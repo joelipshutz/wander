@@ -15,19 +15,27 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
     func testDisplayTaxonomySeparatesBroadCategoryAndSubcategory() {
         let restaurant = WanderPlaceCategory.display(for: "restaurant")
-        XCTAssertEqual(restaurant.category, "Food & drink")
+        XCTAssertEqual(restaurant.category, "Restaurants & Food")
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
-        XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.foodDrink)
-        XCTAssertEqual(restaurant.compactTitle, "Restaurant · Food & drink")
+        XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(restaurant.compactTitle, "Restaurant · Restaurants & Food")
 
         let transit = WanderPlaceCategory.display(for: "transportation")
-        XCTAssertEqual(transit.category, "Transportation & transit")
+        XCTAssertEqual(transit.category, "Travel & Transit")
         XCTAssertEqual(transit.subcategory, "Transit stop")
 
         let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
-        XCTAssertEqual(providerRestaurant.primaryCategory, WanderPlaceCategory.foodDrink)
-        XCTAssertEqual(providerRestaurant.category, "Food & drink")
-        XCTAssertEqual(providerRestaurant.subcategory, "Thai restaurant")
+        XCTAssertEqual(providerRestaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(providerRestaurant.category, "Restaurants & Food")
+        XCTAssertEqual(providerRestaurant.subcategory, "Restaurant")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "thai restaurant"), "Thai")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "south american restaurant"), "South American")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "japanese bbq"), "Japanese BBQ")
+
+        let providerNightlife = WanderPlaceCategory.display(for: "MKPOICategoryNightlife")
+        XCTAssertEqual(providerNightlife.primaryCategory, WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(providerNightlife.category, "Bars & Nightlife")
+        XCTAssertEqual(providerNightlife.subcategory, "Bar")
 
         let providerStore = WanderPlaceCategory.display(for: "art supply store")
         XCTAssertEqual(providerStore.category, "Shopping")
@@ -38,7 +46,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "thai restaurant"), "restaurant")
         XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "coffee shop"), "coffee")
         XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "waterfall"), "hike")
-        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "4-star hotel"), WanderPlaceCategory.lodging)
+        XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "4-star hotel"), WanderPlaceCategory.stays)
         XCTAssertEqual(WanderPlaceCategory.questionCategory(for: "art supply store"), WanderPlaceCategory.shopping)
 
         let restaurantBlocks = AddQuestionTemplates.blocks(category: "thai restaurant", status: .been)
@@ -47,11 +55,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     func testMapKitHealthAndFitnessCategories() {
-        XCTAssertEqual(WanderPlaceCategory.primary(for: .hospital), WanderPlaceCategory.healthWellness)
-        XCTAssertEqual(WanderPlaceCategory.primary(for: .fitnessCenter), WanderPlaceCategory.sportsFitness)
+        XCTAssertEqual(WanderPlaceCategory.primary(for: .hospital), WanderPlaceCategory.wellnessFitness)
+        XCTAssertEqual(WanderPlaceCategory.primary(for: .fitnessCenter), WanderPlaceCategory.wellnessFitness)
 
         if #available(iOS 18.0, *) {
-            XCTAssertEqual(WanderPlaceCategory.primary(for: .animalService), WanderPlaceCategory.services)
+            XCTAssertEqual(WanderPlaceCategory.primary(for: .animalService), WanderPlaceCategory.servicesErrands)
             XCTAssertEqual(WanderPlaceCategory.primary(for: .hiking), WanderPlaceCategory.outdoorsNature)
         }
     }
@@ -59,25 +67,25 @@ final class WanderPlaceCategoryTests: XCTestCase {
     func testPlaceNameOverridesTuneBroadMapKitCategories() {
         XCTAssertEqual(
             WanderPlaceCategory.primary(for: nil as MKPointOfInterestCategory?, name: "Providence St. John's Health Center"),
-            WanderPlaceCategory.healthWellness
+            WanderPlaceCategory.wellnessFitness
         )
         XCTAssertEqual(
             WanderPlaceCategory.primary(for: nil as MKPointOfInterestCategory?, name: "Green Dog Dental"),
-            WanderPlaceCategory.services
+            WanderPlaceCategory.wellnessFitness
         )
         XCTAssertEqual(
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Iron Fitness"),
-            WanderPlaceCategory.sportsFitness
+            WanderPlaceCategory.wellnessFitness
         )
         XCTAssertEqual(
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Plankhaus"),
-            WanderPlaceCategory.sportsFitness
+            WanderPlaceCategory.wellnessFitness
         )
         XCTAssertEqual(
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Lake Shrine"),
-            WanderPlaceCategory.artsCultureFaith
+            WanderPlaceCategory.civicFaith
         )
-        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "spiritual"), "sparkles")
+        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "spiritual"), "building.columns.fill")
     }
 
     func testCandidatePreviewSubtitleDoesNotRepeatLocality() {
@@ -94,7 +102,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -110,7 +118,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Food & drink"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
         )
     }
 
@@ -136,5 +144,66 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
         XCTAssertFalse(WanderPlaceCategory.editableCategories.contains(WanderPlaceCategory.fallbackPlace))
+    }
+
+    func testSubcategoryGroupsAreExhaustiveForEveryEditableCategory() {
+        for category in WanderPlaceCategory.editableCategories {
+            let suggestions = WanderPlaceCategory.subcategorySuggestions(for: category)
+            let grouped = WanderPlaceCategory.subcategoryGroups(for: category).flatMap(\.subcategories)
+
+            XCTAssertEqual(grouped.count, suggestions.count, "\(category) should group every taxonomy subcategory")
+            XCTAssertEqual(Set(grouped), Set(suggestions), "\(category) grouped subcategories must match the taxonomy")
+            XCTAssertEqual(Set(grouped).count, grouped.count, "\(category) should not duplicate grouped subcategories")
+        }
+    }
+
+    func testRestaurantsFoodSubcategoriesSeparateTypeAndCuisineGroups() {
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood)
+
+        XCTAssertEqual(groups.map(\.title), [
+            "Restaurant type",
+            "Popular cuisines",
+            "Asian cuisines",
+            "Middle East & Africa",
+            "European cuisines",
+            "Americas & Pacific"
+        ])
+        XCTAssertEqual(groups[0].role, .type)
+        XCTAssertTrue(groups[0].subcategories.contains("Restaurant"))
+        XCTAssertTrue(groups[0].subcategories.contains("Taco truck"))
+        XCTAssertEqual(groups[1].role, .cuisine)
+        XCTAssertTrue(groups.flatMap(\.subcategories).contains("Thai"))
+        XCTAssertEqual(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count, 47)
+        XCTAssertEqual(WanderPlaceCategory.restaurantCuisineOptions.count, 85)
+
+        let restaurantTypes = Set(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories))
+        let cuisines = Set(WanderPlaceCategory.restaurantCuisineOptions)
+        XCTAssertTrue(restaurantTypes.contains("Food court"))
+        XCTAssertTrue(restaurantTypes.contains("Breakfast"))
+        XCTAssertTrue(restaurantTypes.contains("Bagel"))
+        XCTAssertTrue(restaurantTypes.contains("Oyster bar"))
+        XCTAssertTrue(restaurantTypes.contains("Taco truck"))
+        XCTAssertFalse(restaurantTypes.contains("Thai"))
+        XCTAssertFalse(cuisines.contains("Food court"))
+        XCTAssertTrue(cuisines.contains("Thai"))
+    }
+
+    func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
+        let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(suggestions.count, 25)
+        XCTAssertTrue(suggestions.contains("Coffee lounge"))
+        XCTAssertTrue(suggestions.contains("Chocolate lounge"))
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("coffee lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Coffee lounge"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("chocolate lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Chocolate lounge"
+        )
+
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertTrue(groups.first { $0.title == "Coffee & tea" }?.subcategories.contains("Coffee lounge") == true)
+        XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Chocolate lounge") == true)
     }
 }

@@ -5,7 +5,7 @@ final class DiscoverParserTests: XCTestCase {
     func testDeterministicParserMapsQueryToAllowedFiltersOnly() async throws {
         let parser = DeterministicFilterParser()
         let schema = DiscoverFilterSchema(
-            allowedCategories: [WanderPlaceCategory.foodDrink, WanderPlaceCategory.outdoorsNature],
+            allowedCategories: [WanderPlaceCategory.restaurantsFood, WanderPlaceCategory.outdoorsNature],
             allowedStatuses: [.been, .wannaGo],
             allowedRelationships: [.follower, .mutual]
         )
@@ -21,7 +21,7 @@ final class DiscoverParserTests: XCTestCase {
     func testDeterministicParserMapsPossessiveNaturalLanguageSearch() async throws {
         let parser = DeterministicFilterParser()
         let schema = DiscoverFilterSchema(
-            allowedCategories: [WanderPlaceCategory.foodDrink, WanderPlaceCategory.outdoorsNature],
+            allowedCategories: [WanderPlaceCategory.coffeeTeaSweets, WanderPlaceCategory.outdoorsNature],
             allowedStatuses: [.been, .wannaGo],
             allowedRelationships: [.owner, .follower, .mutual],
             allowedTags: ["quiet", "wifi"]
@@ -29,10 +29,10 @@ final class DiscoverParserTests: XCTestCase {
 
         let filters = try await parser.parse(query: "Joe's favorite coffee spots in LA", schema: schema)
 
-        XCTAssertEqual(filters.categories, [WanderPlaceCategory.foodDrink])
+        XCTAssertEqual(filters.categories, [WanderPlaceCategory.coffeeTeaSweets])
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
         XCTAssertEqual(filters.area, "LA")
-        XCTAssertEqual(filters.chips.map(\.title), ["Food & drink", "been", "LA", "joe"])
+        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "been", "LA", "joe"])
     }
 }

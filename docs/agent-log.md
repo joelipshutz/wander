@@ -7868,3 +7868,154 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 21:38 PDT - Codex - Category Tile Picker Production UI
+
+Agent: Codex
+Branch: `codex/category-picker-tiles`
+Worktree: `/private/tmp/recme-category-picker-tiles`
+Linear: `REC-66` (`Implement production category tile picker and exhaustive subcategory picker`)
+
+Goal: implement the latest approved SwiftUI mockups as production UI, not DEBUG-only mockups: a 14-primary-category tile picker and a grouped, searchable, exhaustive subcategory picker wired into the real save/edit place flow.
+
+Starting status:
+
+- Created isolated worktree from latest `origin/main` at `328401a30` after `git fetch origin`.
+- Root checkout remains on unrelated `codex/profile-pictures`; this work uses the isolated branch to avoid overlap.
+- Linear issue `REC-66` was created and moved to `In Progress`.
+- Current branch status: clean `codex/category-picker-tiles...origin/main`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- category-related Swift tests in `WanderTests/`
+- preview/mockup or screenshot artifacts outside the repo if needed for review
+
+Design target:
+
+- Primary picker: two-column square-ish tiles for all 14 primary categories, with icon at top, primary category name, short descriptor, type count, search bar, and selected check state.
+- Subcategory picker: title/subtitle, search bar, selected primary chip plus change action, grouped exhaustive chips, selected chip state, and no loss of custom subcategory support.
+- Preserve current metadata logic: primary category, subcategory, source/confidence/raw provider type, provider normalization, user overrides, and personal labels/tags distinction.
+
+Implementation checkpoint, 2026-06-30 22:04 PDT:
+
+- Replaced the production place-type picker with two explicit modes:
+  - category mode: searchable 14-primary-category tile grid with icons, descriptions, type counts, and selected check state.
+  - subcategory mode: searchable grouped chip sections under the selected primary category, selected primary/change pills, selected chip state, and search-as-custom subcategory support.
+- Split the save/edit sheet place type control into separate `category` and `subcategory` rows so users land directly in the right picker.
+- Added `PlaceCategorySubcategoryGroup` and taxonomy-backed grouping for every editable category. The grouping helper filters curated groups against `WanderPlaceCategory.subcategorySuggestions` and appends a `More types` group for any missed taxonomy value, so the UI cannot silently drop subcategories.
+- Updated DEBUG taxonomy mockups to render from the same production category/subcategory sources instead of stale hard-coded mockup arrays.
+- Added Swift taxonomy tests proving every editable category's grouped subcategories exactly match the shared taxonomy suggestions without duplicates, plus a Food & drink group-shape regression.
+
+Validation, 2026-06-30 22:04 PDT:
+
+- `git diff --check` passed.
+- `xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused taxonomy suite passed:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests`
+- Full simulator suite passed:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Captured simulator screenshots from the DEBUG mockup route, now shared-taxonomy backed:
+  - `/private/tmp/recme-category-primary.png`
+  - `/private/tmp/recme-subcategory-picker.png`
+
+Review notes:
+
+- Plan design review: no blocking visual issue for the requested branch. The picker matches the approved direction: warm full-screen sheet, big search, two-column primary tiles, grouped chips, visible selected state, and direct change affordance.
+- Plan engineering review: no blocking architecture issue. The change is isolated to the SwiftUI picker plus a taxonomy grouping helper and tests; it preserves existing category metadata source/confidence/raw provider type wiring and effective user overrides.
+- Known product/data gap: tile counts and visible subcategory options are the counts/values from the current shared taxonomy. Some numbers in the pasted mockup, such as `Outdoors & nature - 32 types`, are larger than the current live taxonomy (`23` today). This branch keeps UI truthful instead of faking counts; expanding the shared taxonomy would be a separate data/framework update touching Swift, shared JSON, Supabase Edge taxonomy, and possibly SQL normalization tests.
+
+PR checkpoint, 2026-06-30 22:09 PDT:
+
+- Committed implementation as `f03773aa6` (`Implement category tile picker`) and pushed branch `codex/category-picker-tiles`.
+- Opened ready PR #55: `https://github.com/joelipshutz/wander/pull/55`.
+- Added Linear comment on `REC-66` with PR link, validation status, screenshots, and the taxonomy-count gap.
+- No `main` merge, build-number bump, TestFlight upload, or Slack tester note was performed. This PR is ready for Ryan to test before sign-off.
+
+Follow-up checkpoint, 2026-07-01 09:16 PDT:
+
+- Ryan asked to update the PR branch with the revised 14 primary categories and exhaustive subcategory lists:
+  `Restaurants & Food`, `Coffee, Tea, & Sweets`, `Bars & Nightlife`, `Outdoors & Nature`, `Things To Do`, `Shopping`, `Wellness & Fitness`, `Stays`, `Services & Errands`, `Travel & Transit`, `Work & Education`, `Civic & Faith`, `Areas & Addresses`, and `Facilities & Other`.
+- Additional behavior requests:
+  - Keep long subcategory lists grouped and searchable.
+  - Make first-time MapKit nightlife/provider-category saves default into `Bars & Nightlife` instead of generic/old food grouping. The local deterministic fallback must handle this in Xcode; the server-side OpenAI classifier remains the hosted extraction-worker path and should never place the key in iOS.
+  - Tapping the `category` row should always open the category grid, even when an auto-default category is selected.
+  - For `Restaurants & Food`, support optional cuisine selection plus a separate food/restaurant type selection.
+  - Remove `migrated` and `edited` disclaimers next to place type.
+- Expected additional files now include `shared/place-taxonomy.json`, `supabase/functions/_shared/place-taxonomy.ts`, and a Supabase migration/test update if category IDs change.
+
+Implementation checkpoint, 2026-07-01 00:44 PDT:
+
+- Updated the shared taxonomy to version 3 with the requested 14 primary categories and exhaustive subcategory lists. Validation counted 14 editable categories with no duplicate subcategories:
+  `restaurants_food` 132, `coffee_tea_sweets` 23, `bars_nightlife` 26, `outdoors_nature` 41, `things_to_do` 52, `shopping` 46, `wellness_fitness` 38, `stays` 18, `services_errands` 48, `travel_transit` 38, `work_education` 17, `civic_faith` 16, `areas_addresses` 15, `facilities_other` 7.
+- Updated Swift taxonomy IDs, aliases, MapKit/provider normalization, grouped subcategory sections, DEBUG SwiftUI mockups, Discover parser categories, Edge Function taxonomy helpers, and Supabase category metadata tests to the new framework.
+- Added restaurant-specific metadata behavior: `Restaurants & Food` keeps a required type subcategory and optional cuisine saved as `restaurant_cuisine`; cuisine guessing now prefers specific cuisines such as `South American` and `Japanese BBQ` over shorter parent matches.
+- Updated the real save/edit place UI so the `category` row opens the primary category tile grid, the subcategory sheet remains grouped/searchable/exhaustive, MapKit nightlife strings such as `MKPOICategoryNightlife` normalize to `Bars & Nightlife` / `Bar`, and visible `migrated` / `edited` source pills are no longer shown next to place type.
+- Added Supabase migration `20260701164000_revised_place_taxonomy.sql` to normalize existing `places.primary_category`, `places.subcategory`, and `user_places.category_override` into the new category framework while preserving raw provider type/source/confidence metadata.
+
+Validation:
+
+- `git diff --check` passed.
+- `python3 -m json.tool shared/place-taxonomy.json` passed.
+- Custom taxonomy validation script passed: 14 editable categories, no duplicate subcategories.
+- `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+- Focused Swift suite passed on `iPhone 17 Pro, OS 26.5`: `WanderTests/WanderPlaceCategoryTests`, 10 tests, 0 failures.
+- Full Swift suite passed on `iPhone 17 Pro, OS 26.5`: 208 tests, 0 failures.
+- Supabase SQL tests did not run to completion in this worktree:
+  - sandboxed `supabase test db ...` first failed before database access because the CLI could not write `~/.supabase/telemetry.json`.
+  - elevated local run reached Supabase CLI but failed with `LegacyDbConnectError` / `PgClient: Failed to connect`.
+  - elevated linked run failed with `LegacyProjectNotLinkedError` because this worktree has no linked project ref.
+
+Review notes:
+
+- Plan engineering review: no blocking architecture issue found after implementation. The main data risk was taxonomy drift across Swift, shared JSON, Edge Functions, and SQL; this PR updates all four surfaces and adds tests for the cross-surface IDs, provider-subcategory filters, MapKit nightlife normalization, restaurant type/cuisine split, and specificity in cuisine guessing.
+- Plan design review: no blocking design issue found in code review. The picker keeps the approved warm full-screen sheet direction, category tile grid, grouped chips, search-first flow, selected state, and change affordance. Live simulator visual QA screenshots were not recaptured after this revision, so Ryan should still do an Xcode visual pass before merge.
+- Intentional boundary: the iOS app does not send OpenAI requests or embed the OpenAI key. First-time local/default behavior uses provider metadata and deterministic taxonomy fallbacks; server-side extraction/classification remains the place where the approved OpenAI key should be used.
+- Known gap: historical cuisine attributes are not globally backfilled by the SQL migration. Existing provider rows like `thai restaurant` migrate shared subcategory to `Restaurant`; the app derives/saves optional cuisine when a user edits/saves through the new flow.
+
+Follow-up checkpoint, 2026-07-01 09:50 PDT:
+
+- Ryan asked to refine the `Restaurants & Food` place type UI:
+  - Move `cuisine` above `subcategory` on the place type card.
+  - Make `subcategory` open only restaurant/food type options such as Food court, breakfast, sandwich, bagel, oyster bar, and taco truck.
+  - Make `cuisine` open a separate picker containing only cuisine options.
+- Worktree status before edits: clean `codex/category-picker-tiles...origin/codex/category-picker-tiles`.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/CategoryTaxonomyMockups.swift`, `docs/agent-log.md`, and possibly focused Swift tests if the private picker behavior needs coverage through taxonomy helpers.
+
+Follow-up completion, 2026-07-01 09:59 PDT:
+
+- Updated the live save/edit place type card so `Restaurants & Food` places show `category`, then `cuisine`, then `subcategory`.
+- Split the picker modes:
+  - tapping `subcategory` opens only restaurant/food type groups such as `Food court`, `Breakfast`, `Sandwich`, `Bagel`, `Oyster bar`, and `Taco truck`.
+  - tapping `cuisine` opens a separate grouped/searchable cuisine picker containing only cuisine values such as `Thai`, `Mexican`, `Korean BBQ`, and `South American`, with a `No cuisine` clear action when applicable.
+- Updated DEBUG SwiftUI taxonomy mockups to include a separate `cuisine` page and to show the revised place type ordering.
+- Added a taxonomy regression test proving restaurant type options and cuisine options stay separate.
+- Validation passed:
+  - `git diff --check`
+  - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 10 tests, 0 failures.
+  - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 208 tests, 0 failures.
+- Known gaps: no new simulator screenshots were captured for this follow-up; Ryan should verify the visual flow in Xcode before merge.
+
+Release checkpoint, 2026-07-01 10:08 PDT:
+
+- Ryan requested two final PR changes, then squash-merge to `main` and create a new TestFlight build:
+  - Make the `optional` Cuisine value light gray so it reads as placeholder text.
+  - Add `Chocolate lounge` and `Coffee lounge` to the `Coffee, Tea, & Sweets` subcategory taxonomy.
+- Loaded repo release workflow skill `agent-skills/recme-pr-review-merge-release/SKILL.md`.
+- Ran `git fetch origin`; current category worktree status before edits: clean `codex/category-picker-tiles...origin/codex/category-picker-tiles`.
+- Inspected worktrees and recent agent log. The category PR work remains isolated in `/private/tmp/recme-category-picker-tiles`; unrelated worktrees exist on other branches and should not be touched.
+- Expected files before merge/release: `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderPlaceCategory.swift`, `shared/place-taxonomy.json`, `WanderTests/WanderPlaceCategoryTests.swift`, `docs/agent-log.md`, and later `project.yml` / `Wander.xcodeproj/project.pbxproj` for the TestFlight build bump after merge.
+
+Release follow-up, 2026-07-01 10:16 PDT:
+
+- Updated the cuisine placeholder styling so `optional` renders in the faint text color while selected cuisine values still render as normal ink.
+- Added `Coffee lounge` and `Chocolate lounge` to the shared taxonomy, Swift taxonomy, grouped picker sections, DEBUG mockup counts, and focused taxonomy tests.
+- Validation passed before commit:
+  - `git diff --check`
+  - `python3 -m json.tool shared/place-taxonomy.json`
+  - Node taxonomy validation using the bundled runtime: 15 total categories including the internal fallback, and `coffee_tea_sweets` now has 25 subcategories.
+  - `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+  - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 11 tests, 0 failures.
+  - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed per `xcresulttool`: build and test action succeeded with 209 tests.

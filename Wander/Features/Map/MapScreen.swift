@@ -1992,6 +1992,7 @@ struct MapPlaceSaveContext: Identifiable {
     let initialNote: String
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
+    let initialCuisine: String?
 
     var isEditing: Bool {
         if case .edit = mode {
@@ -2040,7 +2041,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialRatingScore: PlaceRating.defaultScore,
             initialNote: "",
             initialAnswers: [:],
-            initialPersonalLabels: []
+            initialPersonalLabels: [],
+            initialCuisine: nil
         )
     }
 
@@ -2057,7 +2059,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: "",
             initialAnswers: initialAnswers(from: attributes),
-            initialPersonalLabels: initialPersonalLabels(from: attributes)
+            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialCuisine: initialCuisine(from: attributes)
         )
     }
 
@@ -2073,7 +2076,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
             initialNote: visiblePlace.userPlace.note ?? "",
             initialAnswers: initialAnswers(from: attributes),
-            initialPersonalLabels: initialPersonalLabels(from: attributes)
+            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialCuisine: initialCuisine(from: attributes)
         )
     }
 
@@ -2108,7 +2112,9 @@ struct MapPlaceSaveContext: Identifiable {
         let decoder = JSONDecoder()
 
         for attribute in attributes {
-            guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels else { continue }
+            guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels,
+                  attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine
+            else { continue }
             guard let data = attribute.valueJSON.data(using: .utf8) else { continue }
             if let values = try? decoder.decode([String].self, from: data) {
                 answers[attribute.questionKey] = Set(values)
@@ -2130,6 +2136,27 @@ struct MapPlaceSaveContext: Identifiable {
 
         return Set(values)
     }
+
+    private static func initialCuisine(from attributes: [LocalPlaceAttribute]) -> String? {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine }),
+              let data = attribute.valueJSON.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        if let value = try? JSONDecoder().decode(String.self, from: data) {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        if let values = try? JSONDecoder().decode([String].self, from: data),
+           let value = values.first {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        return nil
+    }
 }
 
 struct MapPlaceSaveSubmission {
@@ -2147,6 +2174,12 @@ private enum MapPlaceSaveStep {
     case details
 }
 
+private enum PlaceTypePickerMode {
+    case category
+    case subcategory
+    case cuisine
+}
+
 struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
@@ -2159,7 +2192,9 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedRatingScore: Int
     @State private var selectedAnswers: [String: Set<String>]
     @State private var personalLabels: Set<String>
+    @State private var selectedCuisine: String?
     @State private var isChoosingPlaceType = false
+    @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -2174,6 +2209,7 @@ struct MapPlaceSaveFlowSheet: View {
         _selectedRatingScore = State(initialValue: context.initialRatingScore)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _personalLabels = State(initialValue: context.initialPersonalLabels)
+        _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
         _note = State(initialValue: context.initialNote)
     }
 
@@ -2214,6 +2250,21 @@ struct MapPlaceSaveFlowSheet: View {
         )
     }
 
+    private var isRestaurantsFoodSelected: Bool {
+        selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood
+    }
+
+    private var placeTypeCompactTitle: String {
+        let display = WanderPlaceCategory.display(for: selectedAssignmentForSave)
+        guard isRestaurantsFoodSelected, let selectedCuisine else {
+            return display.compactTitle
+        }
+
+        return [selectedCuisine, display.subcategory, display.category]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
     private var saveVisibility: PlaceVisibility {
         store.isPrivateProfile ? .selfOnly : selectedVisibility
     }
@@ -2246,9 +2297,14 @@ struct MapPlaceSaveFlowSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .background(WanderTheme.canvasWarm.color)
             .sheet(isPresented: $isChoosingPlaceType) {
-                PlaceTypePickerSheet(selectedAssignment: $selectedAssignment) {
-                    syncAnswersForCurrentQuestions()
+                PlaceTypePickerSheet(
+                    selectedAssignment: $selectedAssignment,
+                    selectedCuisine: $selectedCuisine,
+                    initialMode: placeTypePickerMode
+                ) {
+                    handlePlaceTypeSelection()
                 }
+                .id(placeTypePickerMode)
             }
             .onAppear {
                 if store.isPrivateProfile {
@@ -2404,53 +2460,61 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var placeTypeSection: some View {
-        let display = WanderPlaceCategory.display(for: selectedAssignmentForSave, sourceLabel: selectedCategorySourceLabel)
+        let display = WanderPlaceCategory.display(for: selectedAssignmentForSave)
         let categoryValue = selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.fallbackPlace
             ? "choose category"
             : display.category
 
         return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text("place type")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-                Text(display.sourceLabel)
-                    .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .padding(.vertical, WanderTheme.spacing1)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Capsule())
-            }
+            Text("place type")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
 
-            Button {
-                isChoosingPlaceType = true
-            } label: {
-                VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                Button {
+                    placeTypePickerMode = .category
+                    isChoosingPlaceType = true
+                } label: {
                     PlaceTypeRow(title: "category", value: categoryValue)
+                }
+                .buttonStyle(.plain)
+
+                Divider().background(WanderTheme.borderHairline.color)
+
+                if isRestaurantsFoodSelected {
+                    Button {
+                        placeTypePickerMode = .cuisine
+                        isChoosingPlaceType = true
+                    } label: {
+                        PlaceTypeRow(
+                            title: "cuisine",
+                            value: selectedCuisine ?? "optional",
+                            isPlaceholderValue: selectedCuisine == nil
+                        )
+                    }
+                    .buttonStyle(.plain)
+
                     Divider().background(WanderTheme.borderHairline.color)
+                }
+
+                Button {
+                    placeTypePickerMode = .subcategory
+                    isChoosingPlaceType = true
+                } label: {
                     PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
                 }
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color)
-                )
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-
-    private var selectedCategorySourceLabel: String {
-        if selectedAssignmentForSave.source == PlaceCategorySource.user.rawValue {
-            return "edited"
-        }
-        return WanderPlaceCategory.display(for: selectedAssignmentForSave).sourceLabel
     }
 
     private var saveAsSection: some View {
@@ -2501,8 +2565,19 @@ struct MapPlaceSaveFlowSheet: View {
         selectedCandidate.previewSubtitle(
             includeDistance: false,
             includeCategory: false,
-            trailingParts: [WanderPlaceCategory.display(for: selectedAssignmentForSave).compactTitle]
+            trailingParts: [placeTypeCompactTitle]
         )
+    }
+
+    private static func initialCuisine(for context: MapPlaceSaveContext) -> String? {
+        guard context.candidate.primaryCategory == WanderPlaceCategory.restaurantsFood else {
+            return nil
+        }
+
+        return context.initialCuisine
+            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.rawProviderType)
+            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.subcategory)
+            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.category)
     }
 
     private func prepareDetails() {
@@ -2520,6 +2595,14 @@ struct MapPlaceSaveFlowSheet: View {
         }
 
         selectedAnswers = nextAnswers
+    }
+
+    private func handlePlaceTypeSelection() {
+        if selectedAssignment.primaryCategory != WanderPlaceCategory.restaurantsFood {
+            selectedCuisine = nil
+        }
+
+        syncAnswersForCurrentQuestions()
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
@@ -2567,6 +2650,17 @@ struct MapPlaceSaveFlowSheet: View {
                     questionKey: PlaceMemoryAttributeKeys.personalLabels,
                     valueType: "personal_label",
                     stringValues: orderedPersonalLabels
+                )
+            )
+        }
+
+        if selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood,
+           let selectedCuisine {
+            drafts.append(
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: selectedCuisine
                 )
             )
         }
@@ -2662,6 +2756,7 @@ private struct MapSaveChoicePill: View {
 private struct PlaceTypeRow: View {
     let title: String
     let value: String
+    var isPlaceholderValue = false
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -2671,7 +2766,7 @@ private struct PlaceTypeRow: View {
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(isPlaceholderValue ? WanderTheme.textFaint.color : WanderTheme.textInk.color)
                 .lineLimit(1)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .black))
@@ -2684,10 +2779,37 @@ private struct PlaceTypeRow: View {
 
 private struct PlaceTypePickerSheet: View {
     @Binding var selectedAssignment: PlaceCategoryAssignment
+    @Binding var selectedCuisine: String?
+    let initialMode: PlaceTypePickerMode
     let onSelect: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var mode: PlaceTypePickerMode
     @State private var query = ""
-    @State private var customSubcategory = ""
+
+    init(
+        selectedAssignment: Binding<PlaceCategoryAssignment>,
+        selectedCuisine: Binding<String?>,
+        initialMode: PlaceTypePickerMode,
+        onSelect: @escaping () -> Void
+    ) {
+        _selectedAssignment = selectedAssignment
+        _selectedCuisine = selectedCuisine
+        self.initialMode = initialMode
+        self.onSelect = onSelect
+
+        let primaryCategory = selectedAssignment.wrappedValue.primaryCategory
+        let hasEditableSelection = WanderPlaceCategory.editableCategories.contains(primaryCategory)
+        let startingMode: PlaceTypePickerMode
+        if !hasEditableSelection {
+            startingMode = .category
+        } else if initialMode == .cuisine,
+                  primaryCategory != WanderPlaceCategory.restaurantsFood {
+            startingMode = .subcategory
+        } else {
+            startingMode = initialMode
+        }
+        _mode = State(initialValue: startingMode)
+    }
 
     private var normalizedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2716,224 +2838,606 @@ private struct PlaceTypePickerSheet: View {
         WanderPlaceCategory.editableCategories.contains(selectedPrimaryCategory)
     }
 
-    private var selectedSuggestions: [String] {
+    private var selectedSubcategories: [String] {
         WanderPlaceCategory.subcategorySuggestions(for: selectedPrimaryCategory)
     }
 
-    private var filteredSubcategories: [String] {
-        let queryText = normalizedQuery
-        guard !queryText.isEmpty else {
-            return selectedSuggestions
-        }
-
-        let matches = selectedSuggestions.filter { subcategory in
-            subcategory.localizedCaseInsensitiveContains(queryText)
-        }
-        return matches.isEmpty ? selectedSuggestions : matches
+    private var selectedSubcategoryGroups: [PlaceCategorySubcategoryGroup] {
+        filteredGroupsForCurrentSelection(
+            role: selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood ? .type : nil
+        )
     }
 
-    private var customSubcategoryValue: String? {
-        WanderPlaceCategory.normalizedSubcategory(customSubcategory)
+    private var selectedCuisineGroups: [PlaceCategorySubcategoryGroup] {
+        filteredGroupsForCurrentSelection(role: .cuisine)
+    }
+
+    private var subcategoryGroupsForCurrentSelection: [PlaceCategorySubcategoryGroup] {
+        WanderPlaceCategory.subcategoryGroups(for: selectedPrimaryCategory)
+    }
+
+    private var restaurantTypeCount: Int {
+        WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count
+    }
+
+    private var restaurantCuisineCount: Int {
+        WanderPlaceCategory.restaurantCuisineOptions.count
+    }
+
+    private var selectedCategoryTitle: String {
+        WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory)
+    }
+
+    private var selectedCategoryCount: Int {
+        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+            return restaurantTypeCount
+        }
+
+        return selectedSubcategories.count
+    }
+
+    private var selectedSubcategorySubtitle: String {
+        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+            return "\(selectedCategoryTitle) - \(restaurantTypeCount) types"
+        }
+
+        return "\(selectedCategoryTitle) - \(selectedCategoryCount) types"
+    }
+
+    private var selectedCuisineSubtitle: String {
+        "\(selectedCategoryTitle) - \(restaurantCuisineCount) cuisines"
+    }
+
+    private var selectedCategorySearchName: String {
+        selectedCategoryTitle.lowercased()
+    }
+
+    private var customSearchSubcategory: String? {
+        guard mode == .subcategory,
+              hasEditableSelection,
+              let custom = WanderPlaceCategory.normalizedSubcategory(normalizedQuery),
+              custom.count > 1
+        else { return nil }
+
+        let optionRole: PlaceCategorySubcategoryRole? = selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood ? .type : nil
+        let alreadyExists = optionsForCurrentSelection(role: optionRole).contains { subcategory in
+            subcategory.caseInsensitiveCompare(custom) == .orderedSame
+        }
+        return alreadyExists ? nil : custom
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    TextField("search category or subcategory", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .tint(WanderTheme.terracotta.color)
-                        .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-
-                    pickerSection(categories: filteredCategories)
-                    subcategorySection
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                switch mode {
+                case .category:
+                    categoryPickerContent
+                case .subcategory:
+                    subcategoryPickerContent
+                case .cuisine:
+                    cuisinePickerContent
                 }
-                .padding(WanderTheme.spacing4)
             }
-            .background(WanderTheme.canvasWarm.color)
-            .navigationTitle("choose place type")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done") {
-                        dismiss()
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing8)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var categoryPickerContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            CategoryPickerHeader(title: "choose category", subtitle: "\(WanderPlaceCategory.editableCategories.count) primary categories")
+
+            CategoryPickerSearchField(placeholder: "Search primary categories", text: $query)
+
+            if filteredCategories.isEmpty {
+                CategoryPickerEmptyState(title: "No category found", message: "Try restaurant, trail, gym, hotel, shop, or transit.")
+            } else {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: WanderTheme.spacing2),
+                        GridItem(.flexible(), spacing: WanderTheme.spacing2)
+                    ],
+                    spacing: WanderTheme.spacing2
+                ) {
+                    ForEach(filteredCategories, id: \.self) { category in
+                        PrimaryCategoryPickerTile(
+                            category: category,
+                            isSelected: category == selectedAssignment.primaryCategory
+                        ) {
+                            selectPrimaryCategory(category)
+                        }
                     }
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
                 }
             }
         }
     }
 
-    private var subcategorySection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text("subcategory")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-                if hasEditableSelection {
-                    Text("\(selectedSuggestions.count)")
-                        .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+    private var subcategoryPickerContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            CategoryPickerHeader(title: "choose subcategory", subtitle: selectedSubcategorySubtitle)
+
+            CategoryPickerSearchField(placeholder: "Search \(selectedCategorySearchName) types", text: $query)
+
+            selectedCategoryPills
+
+            if !hasEditableSelection {
+                CategoryPickerEmptyState(title: "Choose a category first", message: "Pick one of the 14 primary categories, then choose its type.")
+            } else if selectedSubcategoryGroups.isEmpty {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    CategoryPickerEmptyState(title: "No matching type", message: "Try a broader search, or add your custom type below.")
+                    customSubcategoryControl
                 }
+            } else {
+                ForEach(selectedSubcategoryGroups, id: \.title) { group in
+                    SubcategoryGroupSection(
+                        group: group,
+                        selectedSubcategory: selectedAssignment.subcategory
+                    ) { subcategory in
+                        selectSubcategory(subcategory)
+                        dismiss()
+                    }
+                }
+
+                customSubcategoryControl
             }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                if !hasEditableSelection {
-                    Text("Choose one of the primary categories above, then pick the most specific type here.")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else if !filteredSubcategories.isEmpty {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 126), spacing: WanderTheme.spacing2)],
-                        alignment: .leading,
-                        spacing: WanderTheme.spacing2
-                    ) {
-                        ForEach(filteredSubcategories, id: \.self) { subcategory in
-                            MapSaveChoicePill(
-                                title: subcategory,
-                                isSelected: selectedAssignment.subcategory?.caseInsensitiveCompare(subcategory) == .orderedSame
-                            ) {
-                                selectedAssignment = PlaceCategoryAssignment(
-                                    primaryCategory: selectedPrimaryCategory,
-                                    subcategory: subcategory,
-                                    source: PlaceCategorySource.user.rawValue,
-                                    confidence: 1,
-                                    rawProviderType: selectedAssignment.rawProviderType
-                                )
-                                onSelect()
-                            }
-                        }
+    private var cuisinePickerContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            CategoryPickerHeader(title: "choose cuisine", subtitle: selectedCuisineSubtitle)
+
+            CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
+
+            selectedCategoryPills
+
+            if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
+                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Cuisine only applies to restaurants and food places.")
+            } else if selectedCuisineGroups.isEmpty {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    CategoryPickerEmptyState(title: "No matching cuisine", message: "Try Thai, Mexican, Korean BBQ, or South American.")
+                    clearCuisineControl
+                }
+            } else {
+                ForEach(selectedCuisineGroups, id: \.title) { group in
+                    SubcategoryGroupSection(
+                        group: group,
+                        selectedSubcategory: selectedCuisine
+                    ) { cuisine in
+                        selectCuisine(cuisine)
+                        dismiss()
                     }
                 }
 
-                if hasEditableSelection {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        TextField("custom subcategory", text: $customSubcategory)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .tint(WanderTheme.terracotta.color)
-                            .textInputAutocapitalization(.words)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(minHeight: 44)
-                            .background(WanderTheme.surfaceRaised.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                clearCuisineControl
+            }
+        }
+    }
 
-                        Button {
-                            guard let customSubcategoryValue else { return }
-                            selectedAssignment = PlaceCategoryAssignment(
-                                primaryCategory: selectedPrimaryCategory,
-                                subcategory: customSubcategoryValue,
-                                source: PlaceCategorySource.user.rawValue,
-                                confidence: 1,
-                                rawProviderType: selectedAssignment.rawProviderType
-                            )
-                            customSubcategory = ""
-                            onSelect()
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 15, weight: .black))
-                                .frame(width: 44, height: 44)
-                                .background(WanderTheme.textInk.color)
-                                .foregroundStyle(WanderTheme.textOnAction.color)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(customSubcategoryValue == nil)
-                        .opacity(customSubcategoryValue == nil ? 0.45 : 1)
-                        .accessibilityLabel("Use custom subcategory")
+    private var selectedCategoryPills: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            CategoryPickerModePill(
+                title: selectedCategoryTitle,
+                systemImage: WanderPlaceCategory.symbolName(for: selectedPrimaryCategory),
+                isSelected: true
+            )
+            Button {
+                query = ""
+                mode = .category
+            } label: {
+                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var clearCuisineControl: some View {
+        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood,
+           selectedCuisine != nil {
+            Button {
+                selectedCuisine = nil
+                onSelect()
+                dismiss()
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .black))
+                    Text("No cuisine")
+                        .font(.system(size: 13, weight: .black))
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: 42)
+                .background(WanderTheme.surfaceRaised.color)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Clear cuisine")
+        }
+    }
+
+    @ViewBuilder
+    private var customSubcategoryControl: some View {
+        if let customSearchSubcategory {
+            Button {
+                selectSubcategory(customSearchSubcategory)
+                dismiss()
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .black))
+                    Text("Use \"\(customSearchSubcategory)\"")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .font(.system(size: 13, weight: .black))
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: 42)
+                .background(WanderTheme.surfaceRaised.color)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Use custom subcategory \(customSearchSubcategory)")
+        }
+    }
+
+    private func selectPrimaryCategory(_ category: String) {
+        selectedAssignment = WanderPlaceCategory.assignment(
+            primaryCategory: category,
+            subcategory: WanderPlaceCategory.defaultSubcategory(for: category),
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: selectedAssignment.rawProviderType
+        )
+
+        if category == WanderPlaceCategory.restaurantsFood {
+            selectedCuisine = selectedCuisine
+                ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedAssignment.rawProviderType)
+        } else {
+            selectedCuisine = nil
+        }
+
+        query = ""
+        mode = .subcategory
+        onSelect()
+    }
+
+    private func selectCuisine(_ cuisine: String) {
+        selectedCuisine = cuisine
+        query = ""
+        onSelect()
+    }
+
+    private func selectSubcategory(_ subcategory: String) {
+        selectedAssignment = PlaceCategoryAssignment(
+            primaryCategory: selectedPrimaryCategory,
+            subcategory: subcategory,
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: selectedAssignment.rawProviderType
+        )
+        onSelect()
+    }
+
+    private func optionsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [String] {
+        groupsForCurrentSelection(role: role).flatMap(\.subcategories)
+    }
+
+    private func filteredGroupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
+        let groups = groupsForCurrentSelection(role: role)
+        let queryText = normalizedQuery
+        guard !queryText.isEmpty else {
+            return groups
+        }
+
+        return groups.compactMap { group in
+            let groupMatches = group.title.localizedCaseInsensitiveContains(queryText)
+            let subcategories = groupMatches
+                ? group.subcategories
+                : group.subcategories.filter { $0.localizedCaseInsensitiveContains(queryText) }
+
+            guard !subcategories.isEmpty else { return nil }
+            return PlaceCategorySubcategoryGroup(title: group.title, subcategories: subcategories, role: group.role)
+        }
+    }
+
+    private func groupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
+        let groups = subcategoryGroupsForCurrentSelection
+        guard let role else {
+            return groups
+        }
+
+        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+            return groups.filter { $0.role == role }
+        }
+
+        return role == .type ? groups : []
+    }
+}
+
+private struct CategoryPickerHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            Text(title)
+                .font(.system(size: 32, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(subtitle)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct CategoryPickerSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(WanderTheme.textFaint.color)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .tint(WanderTheme.terracotta.color)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 56)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color)
+        )
+    }
+}
+
+struct PrimaryCategoryPickerTile: View {
+    let category: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var accent: Color {
+        CategoryPickerVisuals.accentColor(for: category)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                HStack {
+                    ZStack {
+                        Circle().fill(accent.opacity(0.16))
+                        Image(systemName: WanderPlaceCategory.symbolName(for: category))
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(accent)
                     }
+                    .frame(width: 42, height: 42)
+
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+
+                Text(WanderPlaceCategory.broadCategory(for: category))
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+                    .frame(height: 44, alignment: .topLeading)
+
+                Text(CategoryPickerVisuals.tileDetail(for: category))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .frame(height: 34, alignment: .topLeading)
+
+                Text("\(WanderPlaceCategory.subcategorySuggestions(for: category).count) types")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 176, alignment: .topLeading)
+            .background(isSelected ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color, lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(WanderPlaceCategory.broadCategory(for: category)), \(WanderPlaceCategory.subcategorySuggestions(for: category).count) types")
+    }
+}
+
+struct CategoryPickerModePill: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing1) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .black))
+            Text(title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .font(.system(size: 14, weight: .black))
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: 44)
+        .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
+        .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+    }
+}
+
+struct SubcategoryGroupSection: View {
+    let group: PlaceCategorySubcategoryGroup
+    let selectedSubcategory: String?
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text(group.title)
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
+                ForEach(group.subcategories, id: \.self) { subcategory in
+                    Button {
+                        onSelect(subcategory)
+                    } label: {
+                        SubcategoryPickerChip(
+                            title: subcategory,
+                            isSelected: selectedSubcategory?.caseInsensitiveCompare(subcategory) == .orderedSame
+                        )
+                        .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        }
-    }
-
-    private func pickerSection(categories: [String]) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text("category")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-                Text("\(WanderPlaceCategory.editableCategories.count)")
-                    .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
-            }
-
-            VStack(spacing: 0) {
-                ForEach(Array(categories.enumerated()), id: \.element) { index, category in
-                    PlaceTypePickerOption(
-                        category: category,
-                        isSelected: category == selectedAssignment.primaryCategory
-                    ) {
-                        selectedAssignment = WanderPlaceCategory.assignment(
-                            primaryCategory: category,
-                            subcategory: WanderPlaceCategory.defaultSubcategory(for: category),
-                            source: PlaceCategorySource.user.rawValue,
-                            confidence: 1,
-                            rawProviderType: selectedAssignment.rawProviderType
-                        )
-                        onSelect()
-                    }
-
-                    if index < categories.count - 1 {
-                        Divider().background(WanderTheme.borderHairline.color)
-                    }
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
     }
 }
 
-private struct PlaceTypePickerOption: View {
-    let category: String
+private struct SubcategoryPickerChip: View {
+    let title: String
     let isSelected: Bool
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: WanderPlaceCategory.symbolName(for: category))
-                    .font(.system(size: 15, weight: .bold))
-                    .frame(width: 34, height: 34)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Circle())
+        Text(title)
+            .font(.system(size: 14, weight: .black))
+            .lineLimit(1)
+            .minimumScaleFactor(0.74)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(height: 40)
+            .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
+            .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+    }
+}
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(WanderPlaceCategory.broadCategory(for: category))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                    Text(WanderPlaceCategory.categoryDetail(for: category))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(2)
-                }
+private struct CategoryPickerEmptyState: View {
+    let title: String
+    let message: String
 
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.stateSuccess.color)
-                }
-            }
-            .padding(WanderTheme.spacing3)
-            .contentShape(Rectangle())
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            Text(title)
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+            Text(message)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
-        .buttonStyle(.plain)
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private enum CategoryPickerVisuals {
+    static func accentColor(for category: String) -> Color {
+        switch category {
+        case WanderPlaceCategory.restaurantsFood:
+            WanderTheme.terracotta.color
+        case WanderPlaceCategory.coffeeTeaSweets:
+            WanderTheme.categorySun.color
+        case WanderPlaceCategory.barsNightlife:
+            WanderTheme.terracottaDark.color
+        case WanderPlaceCategory.outdoorsNature:
+            WanderTheme.categoryMoss.color
+        case WanderPlaceCategory.thingsToDo:
+            WanderTheme.avatarSofia.color
+        case WanderPlaceCategory.wellnessFitness:
+            WanderTheme.stateSuccess.color
+        case WanderPlaceCategory.shopping:
+            WanderTheme.categorySage.color
+        case WanderPlaceCategory.servicesErrands:
+            WanderTheme.stateInfo.color
+        case WanderPlaceCategory.stays:
+            WanderTheme.textMuted.color
+        case WanderPlaceCategory.travelTransit:
+            WanderTheme.pinSocial.color
+        case WanderPlaceCategory.workEducation:
+            WanderTheme.avatarAndrew.color
+        case WanderPlaceCategory.civicFaith:
+            WanderTheme.borderStrong.color
+        case WanderPlaceCategory.areasAddresses:
+            WanderTheme.stateWarning.color
+        case WanderPlaceCategory.facilitiesOther:
+            WanderTheme.textFaint.color
+        default:
+            WanderTheme.textInk.color
+        }
+    }
+
+    static func tileDetail(for category: String) -> String {
+        switch category {
+        case WanderPlaceCategory.restaurantsFood:
+            "Restaurants, cuisines, quick bites"
+        case WanderPlaceCategory.coffeeTeaSweets:
+            "Coffee, tea, bakeries"
+        case WanderPlaceCategory.barsNightlife:
+            "Bars, lounges, clubs"
+        case WanderPlaceCategory.outdoorsNature:
+            "Parks, trails, water"
+        case WanderPlaceCategory.thingsToDo:
+            "Attractions, arts, venues"
+        case WanderPlaceCategory.shopping:
+            "Stores, markets, supplies"
+        case WanderPlaceCategory.wellnessFitness:
+            "Health, beauty, fitness"
+        case WanderPlaceCategory.stays:
+            "Hotels, rentals, camping"
+        case WanderPlaceCategory.servicesErrands:
+            "Salons, repairs, pet care"
+        case WanderPlaceCategory.travelTransit:
+            "Airports, stations, parking"
+        case WanderPlaceCategory.workEducation:
+            "Offices, schools, libraries"
+        case WanderPlaceCategory.civicFaith:
+            "Government, worship, safety"
+        case WanderPlaceCategory.areasAddresses:
+            "Cities, addresses, regions"
+        case WanderPlaceCategory.facilitiesOther:
+            "Restrooms, facilities, unknown"
+        default:
+            WanderPlaceCategory.categoryDetail(for: category)
+        }
     }
 }
 
@@ -3530,6 +4034,8 @@ struct PlaceSheet: View {
     }
 
     private static func facts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
+        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
+
         if attribute.valueType == "multi_tag" {
             return decodedStringArray(from: attribute.valueJSON).map { value in
                 PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
@@ -3824,6 +4330,8 @@ private struct SaveReviewCard: View {
     }
 
     private func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
+        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
+
         if attribute.valueType == "multi_tag" {
             return decodedStringArray(from: attribute.valueJSON).map { value in
                 PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
