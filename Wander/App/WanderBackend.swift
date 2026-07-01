@@ -209,6 +209,14 @@ final class WanderBackend: ObservableObject {
         return try await userPlaceRepository.save(draft)
     }
 
+    func deleteUserPlace(userPlaceID: String) async throws {
+        guard let userPlaceRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await userPlaceRepository.delete(userPlaceID: userPlaceID)
+    }
+
     func enqueueExtractionJob(_ draft: ExtractionJobDraft) async throws -> ExtractionJobEnqueueResult {
         guard let extractionRepository else {
             throw WanderRemoteError.notConfigured

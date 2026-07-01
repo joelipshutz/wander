@@ -213,6 +213,86 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(woodcat?.userPlace.visibility, .selfOnly)
     }
 
+    func testRemoveSaveDeletesOwnSavedMetadataLocally() {
+        let store = makeStore()
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_remove_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: "corner table",
+            sourceType: .manual,
+            ratingScore: 5,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"]),
+                PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["LA favorite"])
+            ]
+        )
+
+        XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertFalse(store.attributes(for: result.userPlaceID).isEmpty)
+
+        let removal = store.removeSave(userPlaceID: result.userPlaceID)
+
+        XCTAssertEqual(removal?.syncState, .tombstoned)
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).isEmpty)
+
+        let removed = store.userPlaces.first { $0.localID == result.userPlaceID || $0.id == result.userPlaceID }
+        XCTAssertNotNil(removed?.deletedAt)
+        XCTAssertNil(removed?.note)
+        XCTAssertNil(removed?.ratingSignal)
+        XCTAssertNil(removed?.ratingScore)
+        XCTAssertNil(removed?.recommendedScore)
+        XCTAssertEqual(removed?.recommendedCount, 0)
+        XCTAssertEqual(removed?.syncState, .tombstoned)
+    }
+
+    func testRemoveSaveCallsRemoteDeleteForSyncedSave() async {
+        let store = makeStore()
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_remote_remove_maru",
+                name: "Remote Remove Coffee",
+                category: "coffee",
+                latitude: 34.0408,
+                longitude: -118.2355,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "remote save",
+            sourceType: .manual,
+            ratingScore: 4,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["outlets"])
+            ]
+        )
+        let userPlace = store.userPlaces.first { $0.id == result.userPlaceID }
+        userPlace?.serverID = "up_remote_remove_save"
+        userPlace?.syncStateRaw = SyncState.synced.rawValue
+        let userPlaceRepository = FakeUserPlaceRepository()
+
+        let removal = await store.removeSave(
+            userPlaceID: result.userPlaceID,
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(removal?.syncState, .tombstoned)
+        XCTAssertEqual(userPlaceRepository.deletedUserPlaceIDs, ["up_remote_remove_save"])
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.place.canonicalName == "Remote Remove Coffee" })
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).isEmpty)
+        XCTAssertNotNil(userPlace?.deletedAt)
+        XCTAssertEqual(userPlace?.syncState, .tombstoned)
+        XCTAssertNil(userPlace?.lastSyncError)
+    }
+
     func testCurrentLocationSavePreservesSourceMetadata() {
         let store = makeStore()
         let candidate = PlaceCandidate(
@@ -2261,6 +2341,7 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
     private let userPlacesByUserID: [String: [VisiblePlace]]
     private(set) var savedDrafts: [UserPlaceDraft] = []
     private(set) var userPlaceRequests: [UserPlaceRequest] = []
+    private(set) var deletedUserPlaceIDs: [String] = []
 
     init(result: SaveResult? = nil, error: Error? = nil, userPlacesByUserID: [String: [VisiblePlace]] = [:]) {
         self.result = result
@@ -2283,7 +2364,12 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
 
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
 
-    func delete(userPlaceID: String) async throws {}
+    func delete(userPlaceID: String) async throws {
+        deletedUserPlaceIDs.append(userPlaceID)
+        if let error {
+            throw error
+        }
+    }
 }
 
 @MainActor

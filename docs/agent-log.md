@@ -8316,3 +8316,40 @@ Handoff checkpoint, 2026-07-01 15:29 PDT:
 - Branch pushed to `origin/codex/rec-30-swiftui-mockup`.
 - Added a Linear REC-30 comment with the draft PR link and mockup-only scope.
 - REC-30 remains `In Progress`; wiring should wait until Ryan/Joe review the mockup direction.
+
+Implementation restart, 2026-07-01 15:37 PDT:
+
+- Ryan requested wiring/functionality on this branch for Xcode testing.
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Found unrelated staged REC-62/blocking changes in this REC-30 worktree, including changes that removed the REC-30 mockup file content. They matched `origin/codex/rec-62-blocking-privacy`, so they were preserved in named stash `safety-rec62-staged-changes-before-rec30-wiring` before REC-30 edits.
+- Current status after the safety stash: clean `codex/rec-30-swiftui-mockup...origin/codex/rec-30-swiftui-mockup`.
+- Goal now: wire the reviewed `Remove save` action into the saved-place edit flow so Ryan can test it in Xcode, including local store behavior and focused tests where practical.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Services/WanderLocalStore.swift`
+  - `WanderTests/WanderStoreTests.swift`
+
+Implementation checkpoint, 2026-07-01 15:55 PDT:
+
+- Wired `Remove save` from the shared `MapPlaceSaveFlowSheet` through Map, Discover, and saved-place Profile list edit entry points.
+- Added local store removal behavior that tombstones unsynced saves, marks synced saves pending delete, clears note/rating/category overrides/attribute answers, hides the current user's removed save immediately, and dispatches backend delete when a remote user-place id exists.
+- Added `WanderBackend.deleteUserPlace(userPlaceID:)` as the app-facing repository wrapper.
+- Added a native destructive confirmation alert and loading/error state to the edit sheet. Confirmed removal dismisses the sheet and shows/remaps the surrounding screen state where needed.
+- Added store regression tests for local metadata cleanup and remote delete dispatch.
+- Files changed:
+  - `Wander/App/WanderBackend.swift`
+  - `Wander/Features/Discover/DiscoverScreen.swift`
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Features/Profile/ProfileScreen.swift`
+  - `Wander/Services/WanderLocalStore.swift`
+  - `WanderTests/WanderStoreTests.swift`
+  - `docs/agent-log.md`
+- Validation:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The first sandboxed build rerun was blocked by CoreSimulator/SwiftPM cache permissions, then passed with elevated Xcode permissions.
+- Draft PR #61 remains the review vehicle for this branch and will be updated by pushing `codex/rec-30-swiftui-mockup`.
+- Known issue: if backend delete fails after local removal, the save stays hidden locally and is marked failed for sync follow-up; there is no undo/restore path in this branch.

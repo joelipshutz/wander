@@ -39,6 +39,17 @@ private enum OwnPlaceSyncOutcome {
     case skipped
 }
 
+struct RemoveSaveResult: Equatable {
+    let userPlaceID: String
+    let syncState: SyncState
+}
+
+private struct LocalRemoveSaveChange {
+    let userPlaceID: String
+    let remoteUserPlaceID: String?
+    let syncState: SyncState
+}
+
 struct ProfileStats: Equatable {
     let been: Int
     let wanna: Int
@@ -1094,6 +1105,41 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
+    func removeSave(userPlaceID: String) -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+            return nil
+        }
+
+        return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
+    }
+
+    @discardableResult
+    func removeSave(userPlaceID: String, backend: WanderBackend?) async -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+            return nil
+        }
+
+        guard let backend,
+              let remoteUserPlaceID = localChange.remoteUserPlaceID
+        else {
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
+        }
+
+        do {
+            try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+            markUserPlace(localOrServerID: localChange.userPlaceID, syncState: .tombstoned)
+            lastRemoteError = nil
+            await refreshRemoteVisiblePlaces(backend: backend)
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
+        } catch {
+            let message = remoteErrorMessage(error)
+            markUserPlace(localOrServerID: localChange.userPlaceID, syncState: .failed, error: message)
+            lastRemoteError = message
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .failed)
+        }
+    }
+
+    @discardableResult
     func createUnresolvedDraft(sourceType: AddSourceType, originalInput: String? = nil, localAssetRef: String? = nil) -> UnresolvedDraft {
         let title: String
         let message: String
@@ -1946,6 +1992,52 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+    }
+
+    private func removeSaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+        guard let userPlace = userPlaces.first(where: { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
+        }) else {
+            return nil
+        }
+
+        let previousUserPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        let previousPlaceIDs = matchingPlaceIDs(userPlace.placeID)
+        let remoteUserPlaceID = userPlace.serverID
+        let nextSyncState: SyncState = remoteUserPlaceID == nil ? .tombstoned : .pendingDelete
+        let now = Date.now
+
+        userPlace.note = nil
+        userPlace.ratingSignal = nil
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.categoryOverride = nil
+        userPlace.subcategoryOverride = nil
+        userPlace.categoryOverrideSource = nil
+        userPlace.categoryOverrideConfidence = nil
+        userPlace.deletedAt = now
+        userPlace.updatedAt = now
+        userPlace.localUpdatedAt = now
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = nextSyncState.rawValue
+
+        placeAttributes.removeAll { previousUserPlaceIDs.contains($0.userPlaceID) }
+        remoteVisiblePlaceCache.removeAll { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && (previousUserPlaceIDs.contains(visiblePlace.userPlace.id) || previousPlaceIDs.contains(visiblePlace.place.id))
+        }
+
+        objectWillChange.send()
+        persist()
+
+        return LocalRemoveSaveChange(
+            userPlaceID: userPlace.id,
+            remoteUserPlaceID: remoteUserPlaceID,
+            syncState: nextSyncState
+        )
     }
 
     private func markPlace(localOrServerID: String, serverID: String, syncState: SyncState, error: String? = nil) {

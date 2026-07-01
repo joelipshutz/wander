@@ -947,6 +947,8 @@ private struct SavedPlacesListScreen: View {
         .sheet(item: $placeSaveFlow) { context in
             MapPlaceSaveFlowSheet(context: context) { submission in
                 await saveProfileFlowSubmission(submission)
+            } onRemove: { context in
+                await removeProfileSave(context)
             }
         }
         .wanderScreen()
@@ -1251,6 +1253,15 @@ private struct SavedPlacesListScreen: View {
             }
             return result
         }
+    }
+
+    @MainActor
+    private func removeProfileSave(_ context: MapPlaceSaveContext) async -> Bool {
+        guard case .edit(let visiblePlace) = context.mode else {
+            return false
+        }
+
+        return await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
     }
 }
 
