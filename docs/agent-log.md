@@ -8178,3 +8178,9 @@ Implementation checkpoint, 2026-07-01 11:42 PDT:
   - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
 - The repo-documented `iPhone 16 Plus, OS=18.6` simulator destination is not installed in this environment, so validation used the available `iPhone 17, OS=26.5` simulator.
+
+Completion checkpoint, 2026-07-01 11:44 PDT:
+
+- Implementation commit: `448c12fb6` (`fix: confirm graph list unfollow`).
+- Opened ready PR #58: `https://github.com/joelipshutz/wander/pull/58`.
+- Next: review/squash-merge PR #58, then release only if explicitly requested.
