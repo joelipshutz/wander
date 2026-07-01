@@ -7926,3 +7926,10 @@ Review notes:
 - Plan design review: no blocking visual issue for the requested branch. The picker matches the approved direction: warm full-screen sheet, big search, two-column primary tiles, grouped chips, visible selected state, and direct change affordance.
 - Plan engineering review: no blocking architecture issue. The change is isolated to the SwiftUI picker plus a taxonomy grouping helper and tests; it preserves existing category metadata source/confidence/raw provider type wiring and effective user overrides.
 - Known product/data gap: tile counts and visible subcategory options are the counts/values from the current shared taxonomy. Some numbers in the pasted mockup, such as `Outdoors & nature - 32 types`, are larger than the current live taxonomy (`23` today). This branch keeps UI truthful instead of faking counts; expanding the shared taxonomy would be a separate data/framework update touching Swift, shared JSON, Supabase Edge taxonomy, and possibly SQL normalization tests.
+
+PR checkpoint, 2026-06-30 22:09 PDT:
+
+- Committed implementation as `f03773aa6` (`Implement category tile picker`) and pushed branch `codex/category-picker-tiles`.
+- Opened ready PR #55: `https://github.com/joelipshutz/wander/pull/55`.
+- Added Linear comment on `REC-66` with PR link, validation status, screenshots, and the taxonomy-count gap.
+- No `main` merge, build-number bump, TestFlight upload, or Slack tester note was performed. This PR is ready for Ryan to test before sign-off.
