@@ -8124,3 +8124,27 @@ Included app-code changes since completed TestFlight build 57:
 - Category metadata fields and migration to the new framework.
 - `optional` cuisine placeholder styling now uses faint text.
 - `Coffee lounge` and `Chocolate lounge` are available under `Coffee, Tea, & Sweets`.
+
+Outcome, 2026-07-01 10:42 PDT:
+
+- Pushed build-number commit `3b9e9f7e1` (`chore: bump testflight build 58`) to `main`; `CURRENT_PROJECT_VERSION` is `58` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build58-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build58-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+- Full XCTest suite passed on `iPhone 17 Pro, OS=26.5`; `xcresulttool` reported build and test action succeeded with 209 tests.
+- Archive path: `/private/tmp/Wander-0.1-build58.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=58` verified.
+- Export options: `/private/tmp/WanderExportUpload58.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Initial `xcodebuild -exportArchive` failed with `exportArchive Failed to Use Accounts`; retried successfully with the local App Store Connect API key from `/Users/ryanlieblein/.openclaw/workspace/.env.keys`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 58 --archive-path /private/tmp/Wander-0.1-build58.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build58-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (58)` id `d6452b6a-adfa-4e41-b1cd-9438dd6a5eb7` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Posted tester-facing Slack note to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782927680540029`.
+- Added a completion comment to Linear issue `REC-66` and moved it to `Done`.
+
+Known issues:
+
+- Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
+- Camera capture still needs real-device QA.
