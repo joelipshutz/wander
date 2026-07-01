@@ -8148,3 +8148,50 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+
+## 2026-07-01 11:44 PDT - Codex - REC-62 Blocking Privacy
+
+Agent: Codex
+Branch: `codex/rec-62-blocking-privacy`
+Worktree: `/private/tmp/recme-rec-62-blocking-privacy`
+Linear: `REC-62` - Blocking a user does not hide the profile
+
+Starting status:
+
+- Created a fresh worktree from `origin/main` at `7d709ceb2` because the root checkout has unrelated uncommitted `docs/agent-log.md` work on `codex/profile-pictures`.
+- REC-62 says blocked users can still see the blocker; blocking should remove friend/following visibility and make the blocker unsearchable to the blocked user.
+- Used the rec.me Linear log triage guidance and skipped hosted PostHog/Supabase checks for now because the ticket describes a deterministic visibility contract and does not include a build/device/account clue that would change the implementation path.
+
+Goal: enforce hard-block behavior so blocking removes graph visibility in both directions and prevents the blocked user from finding the blocker in profile search.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/WanderLocalStore.swift`
+- `WanderTests/WanderStoreTests.swift`
+
+Implementation checkpoint, 2026-07-01 12:01 PDT:
+
+- Moved Linear `REC-62` from `Backlog` to `In Progress`.
+- App-side fix:
+  - Added a generic block-pair predicate in `WanderLocalStore`.
+  - `followers(of:)` and `following(of:)` now return an empty graph when the graph owner is blocked with the current user.
+  - Graph rows are filtered if either the current user is blocked with the listed profile or the graph owner is blocked with the listed profile, protecting against stale follow edges.
+- Added `WanderStoreTests.testBlockFiltersStaleFollowEdgesFromBlockedUsersGraph`, which keeps old follow edges after `user_joe` blocks `user_ryan` and verifies Ryan's graph no longer exposes Joe.
+- Backend fix:
+  - Added migration `20260701185500_harden_blocked_social_graph.sql`.
+  - `app.viewer_relationship` now returns `non_follower` for blocked pairs before checking follow/mutual edges.
+  - `app.profile_following` and `app.profile_followers` now filter rows blocked between the graph owner and listed profile in addition to filtering rows blocked with the current viewer.
+  - Updated `supabase/tests/rls_visibility.sql` with a stale blocked follow edge plus assertions for relationship, username search, and following graph visibility.
+- Supabase verification:
+  - Local `pnpm dlx supabase test db supabase/tests/rls_visibility.sql` could not run because no local Supabase/Postgres connection was available: `PgClient: Failed to connect`.
+  - Copied ignored linked Supabase metadata from the root checkout into this temp worktree for verification only.
+  - `pnpm dlx supabase migration list --linked` succeeded and showed this branch's migration `20260701185500` as local-only.
+  - Hosted rollback harness `/private/tmp/rec62_hosted_visibility_harness.sql` applied the new function definitions inside a transaction, inserted synthetic REC-62 rows, verified blocked relationship/search/following behavior, and rolled back successfully.
+- Validation:
+  - `git diff --check` passed.
+  - Focused regression passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testBlockFiltersStaleFollowEdgesFromBlockedUsersGraph`
+  - Full suite passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_12-00-43--0700.xcresult`: 210 tests, 0 failures, 0 skipped.

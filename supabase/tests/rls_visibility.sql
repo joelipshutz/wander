@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(15);
+select plan(18);
 
 insert into public.profiles (id, handle, display_name)
 values
@@ -16,7 +16,8 @@ insert into public.follows (follower_user_id, followed_user_id, source)
 values
   ('user_follower', 'user_owner', 'profile'),
   ('user_mutual', 'user_owner', 'profile'),
-  ('user_owner', 'user_mutual', 'profile');
+  ('user_owner', 'user_mutual', 'profile'),
+  ('user_blocked', 'user_owner', 'profile');
 
 insert into public.blocks (blocker_user_id, blocked_user_id)
 values ('user_owner', 'user_blocked');
@@ -132,6 +133,15 @@ select is((select count(*) from public.profiles where id = 'user_owner')::int, 1
 select set_config('request.jwt.claim.sub', 'user_blocked', true);
 select is((select count(*) from public.user_places)::int, 0, 'blocked viewer cannot read places');
 select is((select count(*) from public.profiles where id = 'user_owner')::int, 0, 'blocked viewer cannot read profile shell');
+select is((select app.viewer_relationship('user_owner')), 'non_follower', 'blocked viewer relationship to blocker is non-follower');
+select is_empty(
+  $$ select * from app.search_profiles_by_handle('own') $$,
+  'blocked viewer cannot find blocker in username search'
+);
+select is_empty(
+  $$ select * from app.profile_following('user_blocked') where id = 'user_owner' $$,
+  'blocked viewer following graph excludes blocker even with stale follow edge'
+);
 
 select set_config('request.jwt.claim.sub', 'user_mutual', true);
 select isnt_empty(

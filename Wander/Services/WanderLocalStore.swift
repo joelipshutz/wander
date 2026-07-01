@@ -726,18 +726,22 @@ final class WanderStore: ObservableObject {
     }
 
     func followers(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followedUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followerUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
     func following(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followerUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followedUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
@@ -1674,10 +1678,23 @@ final class WanderStore: ObservableObject {
     }
 
     private func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
+        isBlockedBetween(currentUser.id, and: userID)
+    }
+
+    private func isBlockedBetween(_ firstUserID: String, and secondUserID: String) -> Bool {
         blocks.contains { block in
-            (block.blockerUserID == currentUser.id && block.blockedUserID == userID)
-                || (block.blockerUserID == userID && block.blockedUserID == currentUser.id)
+            (block.blockerUserID == firstUserID && block.blockedUserID == secondUserID)
+                || (block.blockerUserID == secondUserID && block.blockedUserID == firstUserID)
         }
+    }
+
+    private func canReadGraph(for userID: String) -> Bool {
+        userID == currentUser.id || !isBlockedBetweenCurrentUser(and: userID)
+    }
+
+    private func canShowGraphProfile(_ profileID: String, for graphOwnerID: String) -> Bool {
+        !isBlockedBetweenCurrentUser(and: profileID)
+            && !isBlockedBetween(graphOwnerID, and: profileID)
     }
 
     private func isProfilePrivate(_ userID: String) -> Bool {

@@ -12,6 +12,64 @@ final class WanderStoreTests: XCTestCase {
         WanderStore(fixtures: WanderFixtures.seed())
     }
 
+    private func makeStoreWithStaleBlockedGraph() -> WanderStore {
+        let joe = LocalProfile(
+            localID: "local_profile_joe",
+            serverID: "user_joe",
+            handle: "joe",
+            displayName: "Joe",
+            syncState: .synced
+        )
+        let ryan = LocalProfile(
+            localID: "local_profile_ryan",
+            serverID: "user_ryan",
+            handle: "ryan",
+            displayName: "Ryan",
+            syncState: .synced
+        )
+
+        return WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [],
+                userPlaces: [],
+                placeAttributes: [],
+                follows: [
+                    LocalFollow(
+                        localID: "local_follow_joe_ryan",
+                        serverID: "follow_joe_ryan",
+                        followerUserID: joe.id,
+                        followedUserID: ryan.id,
+                        source: .profile,
+                        syncState: .synced
+                    ),
+                    LocalFollow(
+                        localID: "local_follow_ryan_joe",
+                        serverID: "follow_ryan_joe",
+                        followerUserID: ryan.id,
+                        followedUserID: joe.id,
+                        source: .profile,
+                        syncState: .synced
+                    )
+                ],
+                blocks: [
+                    LocalBlock(
+                        localID: "local_block_joe_ryan",
+                        serverID: "block_joe_ryan",
+                        blockerUserID: joe.id,
+                        blockedUserID: ryan.id,
+                        syncState: .synced
+                    )
+                ],
+                placeLists: [],
+                placeListMembers: [],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+    }
+
     private func makeTemporaryPersistence() -> (persistence: WanderStorePersistence, directory: URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("wander-store-tests-\(UUID().uuidString)", isDirectory: true)
@@ -190,6 +248,15 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.relationship(to: "user_ryan"), .nonFollower)
         XCTAssertFalse(store.visiblePlaces().contains { $0.owner.id == "user_ryan" })
         XCTAssertEqual(store.blockedProfiles().map(\.id), ["user_ryan"])
+    }
+
+    func testBlockFiltersStaleFollowEdgesFromBlockedUsersGraph() {
+        let store = makeStoreWithStaleBlockedGraph()
+
+        XCTAssertEqual(store.relationship(to: "user_ryan"), .nonFollower)
+        XCTAssertEqual(store.blockedProfiles().map(\.id), ["user_ryan"])
+        XCTAssertTrue(store.followers(of: "user_ryan").isEmpty)
+        XCTAssertTrue(store.following(of: "user_ryan").isEmpty)
     }
 
     func testSavingSamePlaceMergesIntoExistingUserPlace() {
