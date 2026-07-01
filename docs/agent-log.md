@@ -7897,5 +7897,7 @@ Outcome, 2026-06-30 21:58 PDT:
 - Added `docs/decisions.md` process decision `Linear requester assignment`.
 - Created Linear `REC-67`, assigned to `ryan.lieblein@gmail.com`, and moved it to `In Progress` before editing.
 - Opened ready PR #54: `https://github.com/joelipshutz/wander/pull/54`.
+- Moved Linear `REC-67` to `In Review` with the PR attached and a validation comment.
 - Validation: `git diff --check` passed.
 - No app code changed, so no Xcode build/test or TestFlight work was run.
+- Next step: review and merge PR #54 when ready; no TestFlight release is needed for this docs/process-only change.
