@@ -1971,6 +1971,127 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(blockRepository.unblockedUserIDs, ["user_maya"])
         XCTAssertNotNil(block?.lastSyncError)
     }
+
+    func testSeededPlaceListsRespectOwnerFriendAndCollabScopes() {
+        let store = makeStore()
+
+        XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == "list_laptop" })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == "list_maya_sunset" })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_launch" })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_saturday" })
+    }
+
+    func testListSuggestionsExcludeExistingPlaces() {
+        let store = makeStore()
+        let list = store.placeLists.first { $0.id == "list_laptop" }!
+        let existingPlaceIDs = Set(store.visiblePlaces(in: list).map(\.place.id))
+
+        let suggestions = store.listSuggestions(for: list, limit: 6)
+
+        XCTAssertFalse(suggestions.isEmpty)
+        XCTAssertTrue(suggestions.allSatisfy { !existingPlaceIDs.contains($0.visiblePlace.place.id) })
+    }
+
+    func testOwnerCanAddNetworkPlaceAndAutoSaveItToWant() async {
+        let store = makeStore()
+        let list = store.placeLists.first { $0.id == "list_laptop" }!
+        let socialPlace = store.visiblePlaces()
+            .first { $0.place.canonicalName == "Griffith Observatory Trail" && $0.owner.id != store.currentUser.id }!
+
+        let result = await store.addVisiblePlace(socialPlace, to: list, backend: nil)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertTrue(result.createdWantSave)
+        XCTAssertTrue(result.shouldExplainAutoSave)
+        XCTAssertTrue(store.visiblePlaces(in: list).contains { $0.place.canonicalName == "Griffith Observatory Trail" })
+        XCTAssertTrue(store.currentUserVisiblePlaces.contains {
+            $0.place.canonicalName == "Griffith Observatory Trail"
+                && $0.userPlace.status == .wannaGo
+        })
+    }
+
+    func testCollaboratorCannotAddPlaceToSomeoneElsesList() async {
+        let store = makeStore()
+        let collabList = store.placeLists.first { $0.id == "list_launch" }!
+        let place = store.visiblePlaces().first { $0.place.canonicalName == "Bar Nido" }!
+        let initialCount = store.visiblePlaces(in: collabList).count
+
+        let result = await store.addVisiblePlace(place, to: collabList, backend: nil)
+
+        XCTAssertEqual(result.outcome, .permissionDenied)
+        XCTAssertEqual(store.visiblePlaces(in: collabList).count, initialCount)
+    }
+
+    func testOwnerRemoveListPlacePersistsLocally() {
+        let store = makeStore()
+        let list = store.placeLists.first { $0.id == "list_laptop" }!
+
+        XCTAssertTrue(store.removePlace(placeID: "place_circuit_coffee", from: list))
+
+        XCTAssertFalse(store.visiblePlaces(in: list).contains { $0.place.id == "place_circuit_coffee" })
+        XCTAssertEqual(
+            store.placeListItems.first { $0.serverID == "list_item_laptop_circuit" }?.syncState,
+            .pendingDelete
+        )
+    }
+
+    func testOwnerCanCreateUpdateAndDeletePlaceListLocally() {
+        let store = makeStore()
+
+        let created = store.createPlaceList(
+            name: "  LA patios  ",
+            description: "  sunny tables  ",
+            visibility: .stealth,
+            collaboratorUserIDs: ["user_ryan", store.currentUser.id]
+        )!
+
+        XCTAssertEqual(created.name, "LA patios")
+        XCTAssertEqual(created.description, "sunny tables")
+        XCTAssertEqual(created.visibility, .stealth)
+        XCTAssertEqual(created.syncState, .pendingCreate)
+        XCTAssertEqual(store.collaborators(for: created).map(\.id), ["user_ryan"])
+        XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == created.id })
+
+        XCTAssertTrue(
+            store.updatePlaceList(
+                id: created.id,
+                name: "Dinner backups",
+                description: "date night and late tables",
+                visibility: .followers,
+                collaboratorUserIDs: ["user_maya"]
+            )
+        )
+
+        let updated = store.placeLists.first { $0.id == created.id }!
+        XCTAssertEqual(updated.name, "Dinner backups")
+        XCTAssertEqual(updated.description, "date night and late tables")
+        XCTAssertEqual(updated.visibility, .followers)
+        XCTAssertEqual(updated.syncState, .pendingCreate)
+        XCTAssertEqual(store.collaborators(for: updated).map(\.id), ["user_maya"])
+
+        XCTAssertTrue(store.deletePlaceList(id: updated.id))
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == updated.id })
+    }
+
+    func testCollaboratorCannotManageAnotherUsersList() {
+        let store = makeStore()
+        let collabList = store.placeLists.first { $0.id == "list_launch" }!
+
+        XCTAssertFalse(store.setPlaceListCollaborators(listID: collabList.id, collaboratorUserIDs: ["user_maya"]))
+        XCTAssertEqual(store.collaborators(for: collabList).map(\.id), [store.currentUser.id])
+    }
+
+    func testListPersistenceRestoresListsAndAutoSaveSetting() {
+        let fixture = makeTemporaryPersistence()
+        let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
+        firstStore.autoSaveListAddsToWant = false
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+
+        XCTAssertEqual(relaunchedStore.placeLists.map(\.id), firstStore.placeLists.map(\.id))
+        XCTAssertEqual(relaunchedStore.placeListItems.map(\.id), firstStore.placeListItems.map(\.id))
+        XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
+    }
 }
 
 @MainActor

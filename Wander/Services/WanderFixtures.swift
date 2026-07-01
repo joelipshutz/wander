@@ -9,6 +9,9 @@ struct WanderFixtures {
     let placeAttributes: [LocalPlaceAttribute]
     let follows: [LocalFollow]
     let blocks: [LocalBlock]
+    let placeLists: [LocalPlaceList]
+    let placeListMembers: [LocalPlaceListMember]
+    let placeListItems: [LocalPlaceListItem]
     let contactProvider: FakeContactProvider
 
     @MainActor
@@ -28,6 +31,9 @@ struct WanderFixtures {
             placeAttributes: [],
             follows: [],
             blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
             contactProvider: FakeContactProvider(seededMatches: [])
         )
     }
@@ -108,6 +114,40 @@ struct WanderFixtures {
             ContactMatch(id: "contact_sam", displayName: "Sam", handle: nil, userID: nil, isAlreadyFollowing: false, followsCurrentUser: false)
         ])
 
+        let placeLists = [
+            LocalPlaceList(localID: "local_list_laptop", serverID: "list_laptop", ownerUserID: currentUser.id, name: "LA laptop mornings", description: "Quiet tables, outlets, and coffee that does not turn into a scene.", visibility: .followers, syncState: .synced),
+            LocalPlaceList(localID: "local_list_date", serverID: "list_date", ownerUserID: currentUser.id, name: "Date night short list", description: "Warm rooms where conversation is easy.", visibility: .followers, syncState: .synced),
+            LocalPlaceList(localID: "local_list_sunset", serverID: "list_sunset", ownerUserID: currentUser.id, name: "Low-effort sunsets", description: "Places that feel planned without becoming a project.", visibility: .stealth, syncState: .synced),
+            LocalPlaceList(localID: "local_list_maya_sunset", serverID: "list_maya_sunset", ownerUserID: maya.id, name: "Maya's sunset walks", description: "Soft landings around LA.", visibility: .followers, syncState: .synced),
+            LocalPlaceList(localID: "local_list_saturday", serverID: "list_saturday", ownerUserID: currentUser.id, name: "Saturday plan", description: "A shared shortlist for where the day can go next.", visibility: .followers, syncState: .synced),
+            LocalPlaceList(localID: "local_list_launch", serverID: "list_launch", ownerUserID: ryan.id, name: "Launch week meals", description: "Places near the office where nobody has to decide too hard.", visibility: .stealth, syncState: .synced)
+        ]
+
+        let placeListMembers = [
+            LocalPlaceListMember(localID: "local_list_member_date_maya", serverID: "list_member_date_maya", listID: "list_date", userID: maya.id, role: .collaborator),
+            LocalPlaceListMember(localID: "local_list_member_saturday_maya", serverID: "list_member_saturday_maya", listID: "list_saturday", userID: maya.id, role: .collaborator),
+            LocalPlaceListMember(localID: "local_list_member_saturday_ryan", serverID: "list_member_saturday_ryan", listID: "list_saturday", userID: ryan.id, role: .collaborator),
+            LocalPlaceListMember(localID: "local_list_member_launch_joe", serverID: "list_member_launch_joe", listID: "list_launch", userID: currentUser.id, role: .collaborator)
+        ]
+
+        let placeListItems = [
+            LocalPlaceListItem(localID: "local_list_item_laptop_circuit", serverID: "list_item_laptop_circuit", listID: "list_laptop", placeID: laptopCoffee.id, ownerUserPlaceID: "up_joe_circuit_coffee", sourceUserPlaceID: "up_joe_circuit_coffee", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_laptop_fern", serverID: "list_item_laptop_fern", listID: "list_laptop", placeID: demoCoffee.id, sourceUserPlaceID: "up_demo_fern_desk", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_laptop_woodcat", serverID: "list_item_laptop_woodcat", listID: "list_laptop", placeID: coffee.id, ownerUserPlaceID: "up_joe_woodcat", sourceUserPlaceID: "up_joe_woodcat", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_laptop_elysian", serverID: "list_item_laptop_elysian", listID: "list_laptop", placeID: picnic.id, ownerUserPlaceID: "up_joe_elysian_picnic", sourceUserPlaceID: "up_joe_elysian_picnic", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_date_bar_nido", serverID: "list_item_date_bar_nido", listID: "list_date", placeID: dinner.id, ownerUserPlaceID: "up_joe_bar_nido", sourceUserPlaceID: "up_joe_bar_nido", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_date_juniper", serverID: "list_item_date_juniper", listID: "list_date", placeID: demoDinner.id, sourceUserPlaceID: "up_demo_juniper_table", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_date_noodles", serverID: "list_item_date_noodles", listID: "list_date", placeID: noodles.id, sourceUserPlaceID: "up_ryan_noodles", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_sunset_griffith", serverID: "list_item_sunset_griffith", listID: "list_sunset", placeID: hike.id, sourceUserPlaceID: "up_maya_griffith", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_sunset_elysian", serverID: "list_item_sunset_elysian", listID: "list_sunset", placeID: picnic.id, ownerUserPlaceID: "up_joe_elysian_picnic", sourceUserPlaceID: "up_joe_elysian_picnic", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_maya_sunset_griffith", serverID: "list_item_maya_sunset_griffith", listID: "list_maya_sunset", placeID: hike.id, sourceUserPlaceID: "up_maya_griffith", addedByUserID: maya.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_maya_sunset_elysian", serverID: "list_item_maya_sunset_elysian", listID: "list_maya_sunset", placeID: picnic.id, sourceUserPlaceID: "up_maya_elysian_picnic", addedByUserID: maya.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_saturday_circuit", serverID: "list_item_saturday_circuit", listID: "list_saturday", placeID: laptopCoffee.id, ownerUserPlaceID: "up_joe_circuit_coffee", sourceUserPlaceID: "up_joe_circuit_coffee", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_saturday_elysian", serverID: "list_item_saturday_elysian", listID: "list_saturday", placeID: picnic.id, ownerUserPlaceID: "up_joe_elysian_picnic", sourceUserPlaceID: "up_joe_elysian_picnic", addedByUserID: currentUser.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_launch_fern", serverID: "list_item_launch_fern", listID: "list_launch", placeID: demoCoffee.id, sourceUserPlaceID: "up_demo_fern_desk", addedByUserID: ryan.id, syncState: .synced),
+            LocalPlaceListItem(localID: "local_list_item_launch_juniper", serverID: "list_item_launch_juniper", listID: "list_launch", placeID: demoDinner.id, sourceUserPlaceID: "up_demo_juniper_table", addedByUserID: ryan.id, syncState: .synced)
+        ]
+
         return WanderFixtures(
             currentUser: currentUser,
             profiles: [currentUser, maya, ryan, demo],
@@ -116,6 +156,9 @@ struct WanderFixtures {
             placeAttributes: placeAttributes,
             follows: follows,
             blocks: [],
+            placeLists: placeLists,
+            placeListMembers: placeListMembers,
+            placeListItems: placeListItems,
             contactProvider: contacts
         )
     }

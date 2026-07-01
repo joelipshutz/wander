@@ -7783,3 +7783,35 @@ Landing review checkpoint, 2026-06-30 17:28 PDT:
 - PR #51 was open, not draft, mergeable, and had no hold labels, reviews, PR comments, or Greptile comments.
 - Pre-landing review found no blocking SQL/data safety, RLS/RPC security posture, LLM trust-boundary, enum completeness, filter-normalization, or scope-drift issue.
 - Small review fix before merge: `PlaceProfileCopy.fitSentence` now keys the quiet coffee/laptop sentence from `WanderPlaceCategory.questionCategory(for: place.categoryAssignment)` instead of comparing against the rendered category label. This prevents the new `Coffee shop · Food & drink` display label from suppressing that copy path.
+
+## 2026-06-30 17:40 PDT - Codex - Lists Core PR Rebase And TestFlight Gate
+
+Agent: Codex
+Branch: `codex/lists-core`
+Worktree: `/private/tmp/recme-lists-core`
+Linear: `REC-63` (`Ship Lists core add flow and QA cleanup`)
+
+Goal: rebase PR #47 on latest `main` after build 55/category-taxonomy work, preserve private-profile and production-category behavior, rerun validation, merge if clean, and continue the explicit TestFlight release path requested in chat.
+
+Starting status:
+
+- PR #47 was open on `codex/lists-core`, but merge-dirty against latest `origin/main`.
+- Created Linear issue `REC-63`, linked PR #47, and moved it to `In Review` while the merge/TestFlight gate is active.
+- First rebase onto build 52 passed build/tests, but `main` advanced again to build 55/category-taxonomy before merge.
+
+Resolution plan:
+
+- Keep build 55/category-taxonomy and private-profile behavior from `main`.
+- Keep Lists core models/UI/add flow/suggestion function from PR #47.
+- Preserve private-profile collaborator gating in the list editor/detail surfaces while using the new live store-backed list state.
+
+Rebase validation, 2026-06-30 17:50 PDT:
+
+- Completed rebase of `codex/lists-core` onto `origin/main` (`c3c0bf2`) after build 55/category-taxonomy landed.
+- Resolved conflicts by preserving build 55/category-taxonomy behavior and Lists core additions. Project membership was regenerated with `xcodegen generate`.
+- `git diff --check origin/main...HEAD` passed.
+- Generic simulator build passed:
+  `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO`
+- Full simulator test attempt on `iPhone 17, OS=26.5` failed before app code because that simulator is unavailable on this machine.
+- Full simulator suite passed on available `iPhone 17, OS=26.2`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO -jobs 1`

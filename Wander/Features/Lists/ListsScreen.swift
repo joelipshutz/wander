@@ -54,13 +54,21 @@ struct ListsScreen: View {
                     presentation: presentation,
                     startsWithFriendSearch: editorStartsWithFriendSearch,
                     startsWithDeleteConfirmation: editorStartsWithDeleteConfirmation,
+                    onSave: { draft in
+                        saveList(draft, presentation: presentation)
+                    },
                     onDelete: deleteList
                 )
                     .presentationDetents([.large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
             .sheet(item: $collaboratorList) { list in
-                CollaboratorInviteSheet(list: list)
+                CollaboratorInviteSheet(
+                    list: list,
+                    onSave: { collaborators in
+                        saveCollaborators(collaborators, for: list)
+                    }
+                )
                     .presentationDetents([.medium, .large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
@@ -76,15 +84,15 @@ struct ListsScreen: View {
     private func detailScreen(for list: PlaceListMock, initialSelectedPlace: ListPlaceMock? = nil) -> some View {
         ListDetailScreen(
             list: list,
-            onEdit: {
+            onEdit: { list in
                 editorPresentation = .edit(list)
             },
-            onCollaborators: {
+            onCollaborators: { list in
                 if canOpenCollaborators(for: list) {
                     collaboratorList = list
                 }
             },
-            onOpenMap: {
+            onOpenMap: { list in
                 mapList = list
             },
             initialSelectedPlace: initialSelectedPlace
@@ -97,6 +105,9 @@ struct ListsScreen: View {
     }
 
     private func deleteList(_ list: PlaceListMock) {
+        if let sourceListID = list.sourceListID {
+            _ = store.deletePlaceList(id: sourceListID)
+        }
         deletedListIDs.insert(list.id)
 
         if selectedList?.id == list.id {
@@ -107,6 +118,55 @@ struct ListsScreen: View {
         }
         if mapList?.id == list.id {
             mapList = nil
+        }
+    }
+
+    private func saveList(_ draft: ListEditorDraft, presentation: ListEditorPresentation) {
+        let visibility: PlaceListVisibility = draft.isStealth ? .stealth : .followers
+        let collaboratorUserIDs = draft.collaborators.map(\.id)
+
+        switch presentation {
+        case .create:
+            _ = store.createPlaceList(
+                name: draft.title,
+                description: draft.description,
+                visibility: visibility,
+                collaboratorUserIDs: collaboratorUserIDs
+            )
+            selectedScopeID = ListsScope.mine.rawValue
+        case .edit(let list):
+            guard let sourceListID = list.sourceListID else { return }
+            _ = store.updatePlaceList(
+                id: sourceListID,
+                name: draft.title,
+                description: draft.description,
+                visibility: visibility,
+                collaboratorUserIDs: collaboratorUserIDs
+            )
+            refreshOpenList(sourceListID: sourceListID)
+        }
+    }
+
+    private func saveCollaborators(_ collaborators: [ListCollaboratorMock], for list: PlaceListMock) {
+        guard let sourceListID = list.sourceListID else { return }
+        _ = store.setPlaceListCollaborators(
+            listID: sourceListID,
+            collaboratorUserIDs: collaborators.map(\.id)
+        )
+        refreshOpenList(sourceListID: sourceListID)
+    }
+
+    private func refreshOpenList(sourceListID: String) {
+        guard let localList = store.visiblePlaceLists.first(where: { $0.id == sourceListID }) else { return }
+        let refreshed = PlaceListMock(list: localList, store: store)
+        if selectedList?.sourceListID == sourceListID {
+            selectedList = refreshed
+        }
+        if collaboratorList?.sourceListID == sourceListID {
+            collaboratorList = refreshed
+        }
+        if mapList?.sourceListID == sourceListID {
+            mapList = refreshed
         }
     }
 
@@ -264,14 +324,22 @@ struct ListsScreen: View {
     private var activeLists: [PlaceListMock] {
         guard scenario != .empty else { return [] }
 
-        switch selectedScope {
-        case .mine:
-            return PlaceListMock.mine.filter { !deletedListIDs.contains($0.id) }
-        case .friends:
-            return PlaceListMock.friends.filter { !deletedListIDs.contains($0.id) }
-        case .collabs:
-            return PlaceListMock.collabs.filter { !deletedListIDs.contains($0.id) }
+        let storeLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
+            .map { PlaceListMock(list: $0, store: store) }
+            .filter { !deletedListIDs.contains($0.id) }
+
+        guard !storeLists.isEmpty else {
+            switch selectedScope {
+            case .mine:
+                return PlaceListMock.mine.filter { !deletedListIDs.contains($0.id) }
+            case .friends:
+                return PlaceListMock.friends.filter { !deletedListIDs.contains($0.id) }
+            case .collabs:
+                return PlaceListMock.collabs.filter { !deletedListIDs.contains($0.id) }
+            }
         }
+
+        return storeLists
     }
 
     private var selectedScope: ListsScope {
@@ -289,6 +357,14 @@ enum ListsScope: String, CaseIterable {
         case .mine: "My lists"
         case .friends: "Friends"
         case .collabs: "Collabs"
+        }
+    }
+
+    var placeListScope: PlaceListScope {
+        switch self {
+        case .mine: .mine
+        case .friends: .friends
+        case .collabs: .collabs
         }
     }
 }
@@ -351,6 +427,7 @@ private struct ListTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             ListPreviewMosaic(list: list)
+                .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
@@ -384,6 +461,8 @@ private struct ListTile: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
     }
 }
 
@@ -422,20 +501,24 @@ private struct ListPreviewMosaic: View {
 
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
     let list: PlaceListMock
-    var onEdit: () -> Void
-    var onCollaborators: () -> Void
-    var onOpenMap: () -> Void
-    @State private var addedPlaces: [ListPlaceMock] = []
+    var onEdit: (PlaceListMock) -> Void
+    var onCollaborators: (PlaceListMock) -> Void
+    var onOpenMap: (PlaceListMock) -> Void
     @State private var removedPlaceIDs = Set<String>()
-    @State private var addPlaceQuery = ""
     @State private var selectedPlace: ListPlaceMock?
+    @State private var isAddingPlaces = false
+    @State private var suggestions: [ListPlaceSuggestion] = []
+    @State private var isLoadingSuggestions = false
+    @State private var shouldShowAutoSaveExplanation = false
+    @State private var autoSaveToastTask: Task<Void, Never>?
 
     init(
         list: PlaceListMock,
-        onEdit: @escaping () -> Void = {},
-        onCollaborators: @escaping () -> Void = {},
-        onOpenMap: @escaping () -> Void = {},
+        onEdit: @escaping (PlaceListMock) -> Void = { _ in },
+        onCollaborators: @escaping (PlaceListMock) -> Void = { _ in },
+        onOpenMap: @escaping (PlaceListMock) -> Void = { _ in },
         initialSelectedPlace: ListPlaceMock? = nil
     ) {
         self.list = list
@@ -449,9 +532,9 @@ private struct ListDetailScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 detailHeader
-                addPlacesSearch
                 mapPreview
                 placeRows
+                suggestionsSection
             }
             .padding(WanderTheme.spacing4)
             .padding(.bottom, WanderTheme.spacing16)
@@ -461,32 +544,62 @@ private struct ListDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 16, weight: .black))
-                        .frame(width: 40, height: 40)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Circle())
+                if canAddPlaces {
+                    Button {
+                        isAddingPlaces = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .black))
+                            .frame(width: 40, height: 40)
+                            .background(WanderTheme.textInk.color)
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Add places to list")
                 }
-                .accessibilityLabel("Edit list")
 
-                Button(action: onCollaborators) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 16, weight: .black))
-                        .frame(width: 40, height: 40)
-                        .background(WanderTheme.surfaceSand.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Circle())
+                if canManageList {
+                    Button {
+                        onEdit(displayList)
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 16, weight: .black))
+                            .frame(width: 40, height: 40)
+                            .background(WanderTheme.surfaceSand.color)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Edit list")
                 }
-                .disabled(!canManageCollaborators)
-                .opacity(canManageCollaborators ? 1 : 0.48)
-                .accessibilityLabel("Manage collaborators")
-                .accessibilityHint(collaboratorAccessibilityHint)
             }
+        }
+        .task(id: sourceList?.id ?? list.id) {
+            await loadSuggestions()
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
+        }
+        .navigationDestination(isPresented: $isAddingPlaces) {
+            if let sourceList {
+                ListAddPlacesScreen(list: sourceList) { result in
+                    handleAddResult(result)
+                }
+            } else {
+                ListAddPlacesUnavailableScreen()
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if shouldShowAutoSaveExplanation {
+                ListAutoSaveToast()
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
+        .onDisappear {
+            autoSaveToastTask?.cancel()
         }
     }
 
@@ -515,19 +628,19 @@ private struct ListDetailScreen: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
-                        Text(list.name)
+                        Text(displayList.name)
                             .font(.system(size: 30, weight: .black, design: .rounded))
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
 
-                        if list.isStealth {
+                        if displayList.isStealth {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 14, weight: .black))
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
                     }
 
-                    Text(list.description)
+                    Text(displayList.description)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -536,10 +649,26 @@ private struct ListDetailScreen: View {
             }
 
             HStack(spacing: WanderTheme.spacing2) {
-                FacePileView(collaborators: list.collaborators, size: 30)
-                Text(list.collaboratorSummary)
+                FacePileView(collaborators: displayList.collaborators, size: 30)
+                Text(displayList.collaboratorSummary)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
+                if canManageList {
+                    Button {
+                        onCollaborators(displayList)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .black))
+                            .frame(width: 28, height: 28)
+                            .background(WanderTheme.terracottaTint.color)
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Manage collaborators")
+                    .disabled(!canManageCollaborators)
+                    .opacity(canManageCollaborators ? 1 : 0.48)
+                    .accessibilityHint(collaboratorAccessibilityHint)
+                }
                 Spacer()
                 Text("\(visiblePlaces.count) places")
                     .font(.system(size: 12, weight: .black))
@@ -550,22 +679,13 @@ private struct ListDetailScreen: View {
     }
 
     private var mapPreview: some View {
-        Button(action: onOpenMap) {
-            ListMapPreview(list: list, height: 168, label: "open list map")
+        Button {
+            onOpenMap(displayList)
+        } label: {
+            ListMapPreview(list: displayList, height: 168, label: "open list map")
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open map preview for \(list.name)")
-    }
-
-    private var addPlacesSearch: some View {
-        ListAddPlacesSearchSection(
-            query: $addPlaceQuery,
-            candidates: addableSavedPlaces,
-            onAdd: { place in
-                addedPlaces.append(place)
-                addPlaceQuery = ""
-            }
-        )
+        .accessibilityLabel("Open map preview for \(displayList.name)")
     }
 
     private var placeRows: some View {
@@ -585,11 +705,12 @@ private struct ListDetailScreen: View {
                 ForEach(visiblePlaces) { place in
                     ListPlaceRow(
                         place: place,
+                        canRemove: canManageList,
                         onOpen: {
                             selectedPlace = place
                         },
                         onRemove: {
-                            removedPlaceIDs.insert(place.id)
+                            removePlace(place)
                         }
                     )
                 }
@@ -597,32 +718,108 @@ private struct ListDetailScreen: View {
         }
     }
 
-    private var visiblePlaces: [ListPlaceMock] {
-        (list.places + addedPlaces).filter { !removedPlaceIDs.contains($0.id) }
+    @ViewBuilder
+    private var suggestionsSection: some View {
+        if canAddPlaces {
+            ListSuggestionsSection(
+                suggestions: suggestions,
+                isLoading: isLoadingSuggestions,
+                onAdd: { suggestion in
+                    Task {
+                        await addSuggestion(suggestion)
+                    }
+                },
+                onOpen: { suggestion in
+                    selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                }
+            )
+        }
     }
 
-    private var addableSavedPlaces: [ListPlaceMock] {
-        let existingKeys = Set(visiblePlaces.map(\.dedupeKey))
+    private var visiblePlaces: [ListPlaceMock] {
+        displayList.places.filter { !removedPlaceIDs.contains($0.id) }
+    }
 
-        return store.currentUserVisiblePlaces
-            .map(ListPlaceMock.init(visiblePlace:))
-            .filter { !existingKeys.contains($0.dedupeKey) }
-            .sorted { $0.name < $1.name }
+    private var sourceList: LocalPlaceList? {
+        guard let sourceListID = list.sourceListID else { return nil }
+        return store.placeLists.first { $0.id == sourceListID }
+    }
+
+    private var displayList: PlaceListMock {
+        sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
+    }
+
+    private var canManageList: Bool {
+        sourceList.map(store.canManage) ?? list.canManage
+    }
+
+    private var canAddPlaces: Bool {
+        canManageList && sourceList != nil
+    }
+
+    @MainActor
+    private func loadSuggestions() async {
+        guard let sourceList, canManageList else {
+            suggestions = []
+            return
+        }
+
+        isLoadingSuggestions = true
+        suggestions = await store.listSuggestions(for: sourceList, limit: 5, backend: backend)
+        isLoadingSuggestions = false
+    }
+
+    @MainActor
+    private func addSuggestion(_ suggestion: ListPlaceSuggestion) async {
+        guard let sourceList else { return }
+        let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend)
+        handleAddResult(result)
+        await loadSuggestions()
+    }
+
+    @MainActor
+    private func handleAddResult(_ result: ListPlaceAddResult) {
+        if result.shouldExplainAutoSave {
+            showAutoSaveToast()
+        }
+    }
+
+    @MainActor
+    private func showAutoSaveToast() {
+        autoSaveToastTask?.cancel()
+        shouldShowAutoSaveExplanation = true
+        autoSaveToastTask = Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                shouldShowAutoSaveExplanation = false
+                autoSaveToastTask = nil
+            }
+        }
+    }
+
+    @MainActor
+    private func removePlace(_ place: ListPlaceMock) {
+        if let sourceList, let placeID = place.placeID {
+            _ = store.removePlace(placeID: placeID, from: sourceList)
+        } else {
+            removedPlaceIDs.insert(place.id)
+        }
     }
 
     private var canManageCollaborators: Bool {
-        guard list.isOwnedByCurrentUser else { return false }
-        return !store.isPrivateProfile || list.isCollaborative
+        guard displayList.isOwnedByCurrentUser else { return false }
+        return !store.isPrivateProfile || displayList.isCollaborative
     }
 
     private var collaboratorAccessibilityHint: String {
-        if !list.isOwnedByCurrentUser {
+        if !displayList.isOwnedByCurrentUser {
             return "Only the list owner can manage collaborators"
         }
 
         guard store.isPrivateProfile else { return "" }
 
-        if !list.isCollaborative {
+        if !displayList.isCollaborative {
             return "New collaborative lists are unavailable while Private Profile is on"
         }
 
@@ -630,105 +827,442 @@ private struct ListDetailScreen: View {
     }
 }
 
-private struct ListAddPlacesSearchSection: View {
-    @Binding var query: String
-    let candidates: [ListPlaceMock]
-    let onAdd: (ListPlaceMock) -> Void
-
-    private var filteredCandidates: [ListPlaceMock] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return Array(candidates.prefix(3)) }
-
-        return candidates
-            .filter { place in
-                place.name.lowercased().contains(normalized)
-                    || place.category.lowercased().contains(normalized)
-                    || place.metadata.lowercased().contains(normalized)
-            }
-            .prefix(6)
-            .map { $0 }
-    }
+private struct ListSuggestionsSection: View {
+    let suggestions: [ListPlaceSuggestion]
+    let isLoading: Bool
+    let onAdd: (ListPlaceSuggestion) -> Void
+    let onOpen: (ListPlaceSuggestion) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("add places")
+                Text("suggested places")
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                 Spacer()
             }
 
-            HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .black))
+            if isLoading {
+                ListLoadingRow(title: "Finding places that fit this list")
+            } else if suggestions.isEmpty {
+                Text("Suggestions will appear as the list gets more specific.")
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("Search saved places", text: $query)
-                    .font(.system(size: 16, weight: .bold))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-            .padding(WanderTheme.spacing3)
-            .frame(minHeight: 54)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
-
-            if candidates.isEmpty {
-                Label("All saved places are already in this list.", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .padding(.horizontal, WanderTheme.spacing1)
-            } else if !filteredCandidates.isEmpty {
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing4)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            } else {
                 VStack(spacing: WanderTheme.spacing2) {
-                    ForEach(filteredCandidates) { place in
-                        Button {
-                            onAdd(place)
-                        } label: {
-                            HStack(spacing: WanderTheme.spacing3) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                        .fill(place.tint)
-                                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                                        .font(.system(size: 18, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
-                                }
-                                .frame(width: 44, height: 44)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(place.name)
-                                        .font(.system(size: 14, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
-                                        .lineLimit(1)
-                                    Text(place.metadata)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(WanderTheme.textMuted.color)
-                                        .lineLimit(1)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 24, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracotta.color)
+                    ForEach(suggestions.prefix(4)) { suggestion in
+                        ListVisiblePlaceAddRow(
+                            visiblePlace: suggestion.visiblePlace,
+                            supportingText: suggestion.reason,
+                            onOpen: {
+                                onOpen(suggestion)
+                            },
+                            onAdd: {
+                                onAdd(suggestion)
                             }
-                            .padding(WanderTheme.spacing3)
-                            .background(WanderTheme.surfaceBone.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Add \(place.name) to list")
+                        )
                     }
                 }
-            } else {
-                Text("No saved places match that search.")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .padding(.horizontal, WanderTheme.spacing1)
             }
         }
+    }
+}
+
+private struct ListAddPlacesScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    let list: LocalPlaceList
+    let onAdded: (ListPlaceAddResult) -> Void
+    @State private var query = ""
+    @State private var suggestions: [ListPlaceSuggestion] = []
+    @State private var searchGroups: [VisiblePlaceGroup] = []
+    @State private var isLoadingSuggestions = false
+    @State private var isSearching = false
+    @State private var selectedPlace: ListPlaceMock?
+    @State private var shouldShowAutoSaveExplanation = false
+    @State private var autoSaveToastTask: Task<Void, Never>?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("add places")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                    Text(list.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                ListPlaceSearchField(query: $query)
+
+                if normalizedQuery.isEmpty {
+                    suggestionsContent
+                } else {
+                    searchContent
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing16)
+        }
+        .wanderScreen()
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") {
+                    dismiss()
+                }
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            }
+        }
+        .task(id: list.id) {
+            await loadSuggestions()
+        }
+        .onChange(of: query) { _, _ in
+            Task {
+                await runSearch()
+            }
+        }
+        .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+            selectedPlaceDestination
+        }
+        .overlay(alignment: .bottom) {
+            if shouldShowAutoSaveExplanation {
+                ListAutoSaveToast()
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
+        .onDisappear {
+            autoSaveToastTask?.cancel()
+        }
+    }
+
+    @ViewBuilder
+    private var suggestionsContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Text("suggested for this list")
+                .font(.system(size: 18, weight: .black))
+
+            if isLoadingSuggestions {
+                ListLoadingRow(title: "Finding places that fit")
+            } else if addableSuggestions.isEmpty {
+                Text("Start with search, then suggestions will get sharper as the list fills in.")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing4)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            } else {
+                VStack(spacing: WanderTheme.spacing2) {
+                    ForEach(addableSuggestions) { suggestion in
+                        ListVisiblePlaceAddRow(
+                            visiblePlace: suggestion.visiblePlace,
+                            supportingText: suggestion.reason,
+                            onOpen: {
+                                selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                            },
+                            onAdd: {
+                                Task {
+                                    await add(suggestion.visiblePlace)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var searchContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Text("results")
+                .font(.system(size: 18, weight: .black))
+
+            if isSearching {
+                ListLoadingRow(title: "Searching visible places")
+            } else if addableSearchGroups.isEmpty {
+                Text("No addable places match that search.")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing4)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            } else {
+                VStack(spacing: WanderTheme.spacing2) {
+                    ForEach(addableSearchGroups) { group in
+                        let visiblePlace = group.primary
+                        ListVisiblePlaceAddRow(
+                            visiblePlace: visiblePlace,
+                            supportingText: searchSupportingText(for: group),
+                            onOpen: {
+                                selectedPlace = ListPlaceMock(visiblePlace: visiblePlace)
+                            },
+                            onAdd: {
+                                Task {
+                                    await add(visiblePlace)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var addableSuggestions: [ListPlaceSuggestion] {
+        suggestions.filter { !store.hasPlace($0.visiblePlace, in: list) }
+    }
+
+    private var addableSearchGroups: [VisiblePlaceGroup] {
+        searchGroups.filter { !store.hasPlace($0.primary, in: list) }
+    }
+
+    private var selectedPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedPlace != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedPlace = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedPlaceDestination: some View {
+        if let selectedPlace {
+            ListPlaceProfileDestination(place: selectedPlace) {
+                self.selectedPlace = nil
+            }
+        }
+    }
+
+    @MainActor
+    private func loadSuggestions() async {
+        isLoadingSuggestions = true
+        suggestions = await store.listSuggestions(for: list, limit: 8, backend: backend)
+        isLoadingSuggestions = false
+    }
+
+    @MainActor
+    private func runSearch() async {
+        let query = normalizedQuery
+        guard !query.isEmpty else {
+            searchGroups = []
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        let results = await store.discover(query: query, scope: .everyone, backend: backend)
+        searchGroups = VisiblePlaceGrouping.groups(from: results.places, currentUserID: store.currentUser.id)
+        isSearching = false
+    }
+
+    @MainActor
+    private func add(_ visiblePlace: VisiblePlace) async {
+        let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        onAdded(result)
+        handleAddResult(result)
+        await loadSuggestions()
+        if !normalizedQuery.isEmpty {
+            await runSearch()
+        }
+    }
+
+    @MainActor
+    private func handleAddResult(_ result: ListPlaceAddResult) {
+        if result.shouldExplainAutoSave {
+            showAutoSaveToast()
+        }
+    }
+
+    @MainActor
+    private func showAutoSaveToast() {
+        autoSaveToastTask?.cancel()
+        shouldShowAutoSaveExplanation = true
+        autoSaveToastTask = Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                shouldShowAutoSaveExplanation = false
+                autoSaveToastTask = nil
+            }
+        }
+    }
+
+    private func searchSupportingText(for group: VisiblePlaceGroup) -> String {
+        let place = group.primary.place
+        let parts: [String?] = [
+            group.recommendedScore.map { String(format: "%.1f avg", $0) },
+            group.saveCount > 1 ? "\(group.saveCount) saves" : nil,
+            place.category,
+            place.locality
+        ]
+        return parts
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " - ")
+    }
+}
+
+private struct ListAddPlacesUnavailableScreen: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Text("add places")
+                .font(.system(size: 30, weight: .black, design: .rounded))
+            Text("This list is not connected to local list data yet.")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(WanderTheme.spacing4)
+        .wanderScreen()
+    }
+}
+
+private struct ListAutoSaveToast: View {
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 15, weight: .black))
+                .frame(width: 34, height: 34)
+                .background(WanderTheme.terracotta.color)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .clipShape(Circle())
+
+            Text("We also saved this to your Want list.")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color.opacity(0.98))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 18, x: 0, y: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.65), lineWidth: 1)
+        )
+    }
+}
+
+private struct ListPlaceSearchField: View {
+    @Binding var query: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            TextField("Search places", text: $query)
+                .font(.system(size: 16, weight: .bold))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(minHeight: 54)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+    }
+}
+
+private struct ListVisiblePlaceAddRow: View {
+    let visiblePlace: VisiblePlace
+    let supportingText: String
+    let onOpen: () -> Void
+    let onAdd: () -> Void
+
+    private var place: ListPlaceMock {
+        ListPlaceMock(visiblePlace: visiblePlace)
+    }
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                            .fill(place.tint)
+                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                            .font(.system(size: 18, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                    }
+                    .frame(width: 48, height: 48)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(place.name)
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(1)
+                        Text(supportingText.isEmpty ? place.metadata : supportingText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing2)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onAdd) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Add \(place.name) to list")
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+        )
+    }
+}
+
+private struct ListLoadingRow: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            ProgressView()
+                .tint(WanderTheme.terracotta.color)
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
 
@@ -799,6 +1333,7 @@ private struct ListMapPreview: View {
 
 private struct ListPlaceRow: View {
     let place: ListPlaceMock
+    var canRemove: Bool = true
     let onOpen: () -> Void
     let onRemove: () -> Void
 
@@ -835,15 +1370,17 @@ private struct ListPlaceRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(place.name)")
 
-            Button(action: onRemove) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .black))
-                    .frame(width: 40, height: 40)
-                    .background(WanderTheme.surfaceSand.color)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .clipShape(Circle())
+            if canRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .black))
+                        .frame(width: 40, height: 40)
+                        .background(WanderTheme.surfaceSand.color)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .clipShape(Circle())
+                }
+                .accessibilityLabel("Remove \(place.name)")
             }
-            .accessibilityLabel("Remove \(place.name)")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -859,10 +1396,12 @@ private struct CollaboratorInviteSheet: View {
     @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
+    let onSave: ([ListCollaboratorMock]) -> Void
     @State private var selectedCollaborators: [ListCollaboratorMock]
 
-    init(list: PlaceListMock) {
+    init(list: PlaceListMock, onSave: @escaping ([ListCollaboratorMock]) -> Void = { _ in }) {
         self.list = list
+        self.onSave = onSave
         _selectedCollaborators = State(initialValue: list.collaborators)
     }
 
@@ -898,6 +1437,7 @@ private struct CollaboratorInviteSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
+                        onSave(selectedCollaborators)
                         dismiss()
                     }
                     .font(.system(size: 14, weight: .black))
@@ -928,9 +1468,9 @@ private struct FriendCollaboratorSearchSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("invite collaborator")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
-                        Text("Search friends and add the people who can contribute to this list.")
+                    Text("invite collaborator")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                    Text("Search friends and add the people who can view this list with you.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1299,7 +1839,7 @@ private struct ListMapFullScreen: View {
                     .zIndex(20)
                 } else {
                     ListMapPlaceRail(list: list) { place in
-                        selectedPlace = place
+                        profilePlace = place
                     }
                     .zIndex(10)
                 }
@@ -1454,10 +1994,18 @@ private enum ListEditorPresentation: Identifiable, Hashable {
     }
 }
 
+private struct ListEditorDraft {
+    let title: String
+    let description: String
+    let isStealth: Bool
+    let collaborators: [ListCollaboratorMock]
+}
+
 private struct ListEditorSheet: View {
     @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
     private let presentation: ListEditorPresentation
+    private let onSave: (ListEditorDraft) -> Void
     private let onDelete: (PlaceListMock) -> Void
     private let isOwnedByCurrentUser: Bool
     private let startedAsCollaborative: Bool
@@ -1472,9 +2020,11 @@ private struct ListEditorSheet: View {
         presentation: ListEditorPresentation,
         startsWithFriendSearch: Bool = false,
         startsWithDeleteConfirmation: Bool = false,
+        onSave: @escaping (ListEditorDraft) -> Void = { _ in },
         onDelete: @escaping (PlaceListMock) -> Void = { _ in }
     ) {
         self.presentation = presentation
+        self.onSave = onSave
         self.onDelete = onDelete
 
         switch presentation {
@@ -1535,10 +2085,11 @@ private struct ListEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
-                        dismiss()
+                        saveAndDismiss()
                     }
                     .font(.system(size: 14, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
+                    .disabled(trimmedTitle.isEmpty)
                 }
             }
             .sheet(isPresented: $isShowingFriendSearch) {
@@ -1574,14 +2125,18 @@ private struct ListEditorSheet: View {
         return false
     }
 
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var editorActionButtons: some View {
         VStack(spacing: WanderTheme.spacing3) {
             WanderPrimaryButton(
                 title: isEditing ? "Save changes" : "Save list",
                 systemImage: "checkmark",
-                isDisabled: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                isDisabled: trimmedTitle.isEmpty
             ) {
-                dismiss()
+                saveAndDismiss()
             }
 
             if isEditing {
@@ -1594,6 +2149,19 @@ private struct ListEditorSheet: View {
         .padding(.top, WanderTheme.spacing3)
         .padding(.bottom, WanderTheme.spacing3)
         .background(WanderTheme.canvasWarm.color.opacity(0.96))
+    }
+
+    private func saveAndDismiss() {
+        guard !trimmedTitle.isEmpty else { return }
+        onSave(
+            ListEditorDraft(
+                title: title,
+                description: description,
+                isStealth: isStealth,
+                collaborators: stagedCollaborators
+            )
+        )
+        dismiss()
     }
 
     private var deleteConfirmationMessage: String {
@@ -1759,7 +2327,7 @@ private struct ListEditorSheet: View {
                         Text("@\(collaborator.handle)")
                             .font(.system(size: 13, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text(isEditing ? "can add places" : "draft invite")
+                        Text(isEditing ? "can view" : "draft invite")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                         Spacer()
@@ -1852,6 +2420,9 @@ private struct PlaceListMock: Identifiable, Hashable {
     let isStealth: Bool
     let collaborators: [ListCollaboratorMock]
     let places: [ListPlaceMock]
+    var sourceListID: String? = nil
+    var ownerUserID: String = "you"
+    var canManage: Bool = true
 
     var previewPlaces: [ListPlaceMock] { places }
     var isOwnedByCurrentUser: Bool { ownerName == "You" }
@@ -1891,6 +2462,23 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 }
 
+@MainActor
+private extension PlaceListMock {
+    init(list: LocalPlaceList, store: WanderStore) {
+        let owner = store.profiles.first { $0.id == list.ownerUserID }
+        self.id = list.id
+        self.name = list.name
+        self.description = list.description
+        self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
+        self.isStealth = list.isStealth
+        self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
+        self.places = store.visiblePlaces(in: list).map(ListPlaceMock.init(visiblePlace:))
+        self.sourceListID = list.id
+        self.ownerUserID = list.ownerUserID
+        self.canManage = store.canManage(list)
+    }
+}
+
 private struct ListPlaceMock: Identifiable {
     let id: String
     let name: String
@@ -1902,6 +2490,8 @@ private struct ListPlaceMock: Identifiable {
     let longitude: Double
     let status: PlaceStatus
     let note: String?
+    let placeID: String?
+    let visiblePlaceID: String?
 
     init(
         id: String,
@@ -1913,7 +2503,9 @@ private struct ListPlaceMock: Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         status: PlaceStatus = .wannaGo,
-        note: String? = nil
+        note: String? = nil,
+        placeID: String? = nil,
+        visiblePlaceID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -1925,6 +2517,8 @@ private struct ListPlaceMock: Identifiable {
         self.longitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
         self.status = status
         self.note = note
+        self.placeID = placeID
+        self.visiblePlaceID = visiblePlaceID
     }
 
     var coordinate: CLLocationCoordinate2D {
@@ -1955,7 +2549,9 @@ private struct ListPlaceMock: Identifiable {
             latitude: place.latitude,
             longitude: place.longitude,
             status: visiblePlace.userPlace.status,
-            note: visiblePlace.userPlace.note
+            note: visiblePlace.userPlace.note,
+            placeID: place.id,
+            visiblePlaceID: visiblePlace.id
         )
     }
 
