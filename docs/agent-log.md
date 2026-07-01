@@ -7890,3 +7890,12 @@ Expected files:
 - `AGENTS.md`
 - `docs/decisions.md`
 - `docs/agent-log.md`
+
+Outcome, 2026-06-30 21:58 PDT:
+
+- Added `AGENTS.md` Linear issue assignment guidance requiring agent-created issues to assign Ryan or Joe at creation time.
+- Added `docs/decisions.md` process decision `Linear requester assignment`.
+- Created Linear `REC-67`, assigned to `ryan.lieblein@gmail.com`, and moved it to `In Progress` before editing.
+- Opened ready PR #54: `https://github.com/joelipshutz/wander/pull/54`.
+- Validation: `git diff --check` passed.
+- No app code changed, so no Xcode build/test or TestFlight work was run.
