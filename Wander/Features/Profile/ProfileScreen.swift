@@ -691,38 +691,37 @@ struct ProfileDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                ScrollView {
-                    if let state {
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                            profileHeader(state: state)
+            ScrollView {
+                if let state {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        profileHeader(state: state)
 
-                            if state.isBlocked {
-                                AccessChangedPanel(title: "This profile isn't available", subtitle: "Blocked profiles stay out of search, lists, and map results.")
-                            } else if state.visiblePlaces.isEmpty && state.shell.relationship == .nonFollower {
-                                AccessChangedPanel(title: "Follow to see shared places", subtitle: "You'll only see places this person shares with followers.")
-                            } else {
-                                ForEach(state.visiblePlaces) { visiblePlace in
-                                    ProfilePlaceRow(visiblePlace: visiblePlace)
-                                }
+                        if state.isBlocked {
+                            AccessChangedPanel(title: "This profile isn't available", subtitle: "Blocked profiles stay out of search, lists, and map results.")
+                        } else if state.visiblePlaces.isEmpty && state.shell.relationship == .nonFollower {
+                            AccessChangedPanel(title: "Follow to see shared places", subtitle: "You'll only see places this person shares with followers.")
+                        } else {
+                            ForEach(state.visiblePlaces) { visiblePlace in
+                                ProfilePlaceRow(visiblePlace: visiblePlace)
                             }
                         }
-                        .padding(WanderTheme.spacing3)
                     }
-                }
-
-                if showBlockConfirm {
-                    BlockConfirmationModal(
-                        confirm: confirmBlock,
-                        cancel: { showBlockConfirm = false }
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .padding(WanderTheme.spacing3)
                 }
             }
             .wanderScreen()
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .animation(.easeInOut(duration: 0.16), value: showBlockConfirm)
+            .alert("Block this person?", isPresented: $showBlockConfirm) {
+                Button("Yes, block", role: .destructive) {
+                    confirmBlock()
+                }
+                Button("No, cancel", role: .cancel) {
+                    showBlockConfirm = false
+                }
+            } message: {
+                Text("You won't see each other's profiles, places, or search results.")
+            }
             .task(id: profileID) {
                 await refreshRemoteProfile()
             }
@@ -834,59 +833,6 @@ struct ProfileDetailView: View {
             .map(String.init)
             .joined()
             .uppercased()
-    }
-}
-
-private struct BlockConfirmationModal: View {
-    let confirm: () -> Void
-    let cancel: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.28)
-                .ignoresSafeArea()
-                .onTapGesture(perform: cancel)
-
-            VStack(spacing: WanderTheme.spacing4) {
-                Text("Block this person?")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: WanderTheme.spacing2) {
-                    Button(action: confirm) {
-                        Text("Yes, block")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .foregroundStyle(.white)
-                    .background(WanderTheme.stateError.color)
-                    .clipShape(Capsule())
-
-                    Button(action: cancel) {
-                        Text("No, cancel")
-                            .font(.system(size: 14, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .background(WanderTheme.surfaceSand.color)
-                    .overlay(
-                        Capsule()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
-                    .clipShape(Capsule())
-                }
-            }
-            .padding(WanderTheme.spacing4)
-            .frame(maxWidth: 330)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .shadow(color: .black.opacity(0.18), radius: 22, x: 0, y: 12)
-            .padding(.horizontal, WanderTheme.spacing4)
-        }
-        .transition(.opacity)
-        .zIndex(20)
     }
 }
 

@@ -8259,3 +8259,27 @@ Follow-up checkpoint, 2026-07-01 12:52 PDT:
 - Expected files:
   - `docs/agent-log.md`
   - `Wander/Features/Profile/ProfileScreen.swift`
+
+Follow-up checkpoint, 2026-07-01 15:22 PDT:
+
+- Ryan clarified that the block confirmation should look like the iOS native popup, matching the REC-44 unfollow prompt design, while keeping the rest of the block/search/blocked-list behavior unchanged.
+- Current branch: `codex/rec-62-blocking-privacy`.
+- Current git status before edits: clean and tracking `origin/codex/rec-62-blocking-privacy`.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Profile/ProfileScreen.swift`
+
+Follow-up implementation, 2026-07-01 15:25 PDT:
+
+- Replaced the custom `BlockConfirmationModal` overlay with a native SwiftUI `.alert`, matching the REC-44 unfollow prompt pattern.
+- Kept the existing block flow behavior:
+  - `Yes, block` is destructive and still preserves the profile shell before blocking.
+  - `No, cancel` dismisses without changing state.
+  - Discover member search cleanup and blocked-users-list rendering are unchanged.
+- Validation:
+  - `git diff --check` passed.
+  - Simulator build passed:
+    `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO`
+  - Full suite passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_15-24-04--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
