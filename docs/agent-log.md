@@ -8290,3 +8290,31 @@ Branch update validation, 2026-07-01 15:45 PDT:
   - `git diff --check`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-merge/Logs/Test/Test-Wander-2026.07.01_15-41-28--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
+
+## 2026-07-01 15:46 PDT - Codex - TestFlight Build 59 REC-44/REC-62 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Linear: `REC-44`, `REC-62`
+
+Goal: package latest `main` into TestFlight after Ryan requested PR #59 squash-merge plus TestFlight upload and Slack update.
+
+Starting status:
+
+- Squash-merged PR #59 to `main` as `5de466a3a` (`Fix REC-62 hard-block profile visibility`).
+- PR #58 (`REC-44`) was already on `main` after build 58 and has not yet shipped in a TestFlight build.
+- Last completed TestFlight build is 58; `CURRENT_PROJECT_VERSION` starts at `58`.
+- This explicit release will bump once to build 59 and package all app-code changes since build 58.
+
+Included app-code changes since completed TestFlight build 58:
+
+- REC-44: followers/following/friends rows now open profiles instead of accidentally unfollowing, unfollow requires confirmation in profile and graph-list flows, and already-followed profile headers no longer show a redundant status pill.
+- REC-62: hard-block behavior now hides blocker/blockee visibility across profile search and stale graph rows, Discover member blocking clears search/results and returns to the members list, and blocked users remain visible in Settings so they can be unblocked.
+- REC-62 backend contract: Supabase visibility RPC migration and RLS tests harden blocked relationship/search/following behavior.
+
+Expected release files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
