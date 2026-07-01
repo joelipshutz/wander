@@ -8185,3 +8185,10 @@ Checkpoint 2026-07-01 12:22 PDT:
 - Validation: focused `xcodebuild test` for `RemoteRepositoryTests/testNotificationRepositoryCallsPreferenceAndTokenRPCs` and `RemoteRepositoryTests/testPushNotificationDeviceTokenHexEncoding` passed on iPhone 17 Pro OS 26.5.
 - Validation: full `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec60-full-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
 - Validation gap: `pnpm dlx supabase test db supabase/tests/notifications.sql` could not connect to local Postgres (`LegacyDbConnectError`); SQL coverage is committed but local Supabase/Docker DB was not available in this session.
+
+Final 2026-07-01 12:24 PDT:
+
+- Outcome: implementation complete and opened ready PR https://github.com/joelipshutz/wander/pull/60.
+- Commit: `c9e6b4283` plus this agent-log handoff update.
+- Known issue: SQL pgTAP test file is committed but still needs a successful local or hosted Supabase test run before merge because the local DB was unreachable here.
+- Next steps: review PR, run/apply the Supabase migration in the target environment, configure APNs worker secrets (`WANDER_WORKER_SECRET`, Supabase service role key, APNs key/team/topic/private key), and schedule/invoke `push-notification-worker` after deployment.
