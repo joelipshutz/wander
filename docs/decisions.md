@@ -57,7 +57,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 
 | Decision | Status | Notes |
 |---|---|---|
-| Linear requester assignment | Locked | Agent-created Linear issues must be assigned at creation time to the human requester when that requester is Ryan or Joe. Ryan maps to `ryan.lieblein@gmail.com`; Joe maps to `jolipshutz@gmail.com`. If the requester is unclear or the Linear user cannot be resolved, ask or report the blocker instead of creating an unassigned issue. |
+| Linear requester assignment | Locked | Agent-created Linear issues must be assigned at creation time to the human requester when that requester is Ryan or Joe. Ryan maps to `ryan.lieblein@gmail.com`; Joe maps to `jolipshutz@gmail.com`. If the requester is unclear or the Linear user cannot be resolved, ask or report the blocker instead of creating an unassigned issue. This repo rule does not configure Slack's `@Linear` agent; Slack-created issues require Linear Slack Agent guidance or webhook/API automation with the same mapping. |
 
 ## Design Decisions
 

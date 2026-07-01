@@ -67,6 +67,11 @@ Linear issue assignment:
 - If the requester is unclear, ask before creating the Linear issue rather than
   creating an unassigned issue. If assignment fails because the Linear user
   cannot be resolved, stop and report the blocker.
+- This repo rule applies to repo-aware agents creating issues through Linear
+  tools. It does not configure Slack's `@Linear` agent, Slack message actions,
+  or `/linear` command. Slack-created issues must be covered by Linear Slack
+  Agent guidance or a separate Linear webhook/API automation using the same
+  Ryan/Joe assignment mapping.
 
 During and after work:
 

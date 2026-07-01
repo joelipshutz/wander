@@ -7901,3 +7901,10 @@ Outcome, 2026-06-30 21:58 PDT:
 - Validation: `git diff --check` passed.
 - No app code changed, so no Xcode build/test or TestFlight work was run.
 - Next step: review and merge PR #54 when ready; no TestFlight release is needed for this docs/process-only change.
+
+Slack caveat checkpoint, 2026-06-30 23:29 PDT:
+
+- Ryan reported Slack `@Linear` issue creation did not auto-assign issues to him.
+- Confirmed the repo rule applies only to repo-aware agents; Slack `@Linear` issue creation is governed by Linear Slack integration settings.
+- Assigned recent Ryan-created unassigned Linear issues `REC-66`, `REC-68`, `REC-69`, `REC-70`, and `REC-71` to `ryan.lieblein@gmail.com`.
+- Updated `AGENTS.md` and `docs/decisions.md` to call out that Slack-created issues need Linear Slack Agent guidance or webhook/API automation using the same Ryan/Joe mapping.
