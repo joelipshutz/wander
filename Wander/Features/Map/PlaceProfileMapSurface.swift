@@ -1144,10 +1144,10 @@ private enum PlaceProfileCopy {
 
     static func fitSentence(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> String? {
         let tags = displayTags(place: place, presentation: presentation).map { $0.lowercased() }
-        let category = categoryDisplay(for: place)?.lowercased()
+        let questionCategory = WanderPlaceCategory.questionCategory(for: place.categoryAssignment)
 
         if tags.contains("quiet"),
-           category == "coffee" || tags.contains("coffee"),
+           questionCategory == "coffee" || tags.contains("coffee"),
            tags.contains(where: { $0.contains("laptop") || $0.contains("wifi") }) {
             return "Good for quiet coffee + laptop time."
         }

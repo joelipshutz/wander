@@ -7776,3 +7776,10 @@ PR checkpoint, 2026-06-30 16:14 PDT:
 - Committed implementation as `66c95cbf4` (`Implement production category taxonomy UI`) and pushed branch `codex/category-production-ui`.
 - Opened ready PR #51: `https://github.com/joelipshutz/wander/pull/51`.
 - No build-number bump, `main` merge, TestFlight upload, or Slack tester note was performed. This is ready for Ryan to test before sign-off.
+
+Landing review checkpoint, 2026-06-30 17:28 PDT:
+
+- Ryan explicitly asked to push this to `main` and TestFlight, so PR #51 moved into the merge/release workflow.
+- PR #51 was open, not draft, mergeable, and had no hold labels, reviews, PR comments, or Greptile comments.
+- Pre-landing review found no blocking SQL/data safety, RLS/RPC security posture, LLM trust-boundary, enum completeness, filter-normalization, or scope-drift issue.
+- Small review fix before merge: `PlaceProfileCopy.fitSentence` now keys the quiet coffee/laptop sentence from `WanderPlaceCategory.questionCategory(for: place.categoryAssignment)` instead of comparing against the rendered category label. This prevents the new `Coffee shop · Food & drink` display label from suppressing that copy path.
