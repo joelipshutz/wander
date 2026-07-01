@@ -7868,3 +7868,63 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 18:16 PDT - Codex - REC-4 RLS Audit And REC-61 Sync Prompt Verification
+
+Agent: Codex
+Branch: `codex/rec-4-rec-61-rls-sync`
+Worktree: `/private/tmp/recme-next-issue`
+Linear: `REC-4` (`Decide Supabase public RLS fix`), `REC-61` (`Data and Sync prompts for sign-in while already signed in`)
+
+Goal: audit the hosted Supabase public schema against the checked-in RLS intent, apply a migration if any public app table is under-protected, and verify/fix the signed-in Data and Sync prompt loop.
+
+Starting status:
+
+- Fresh issue worktree fast-forwarded to latest `origin/main` at `105a515` after the production category taxonomy and Lists core merges.
+- Root checkout is on unrelated `codex/rating-score-reset`; release and prior feature worktrees exist separately, so implementation stays isolated here.
+- Mission Control task creation failed because `http://localhost:4000` was not reachable from this shell.
+- GBrain lookup for rec.me RLS/sync context timed out on a PGLite lock; the lock path was gone on inspection, so repo docs and Linear context are the source of truth for this pass.
+- Required eng-review gate for auth/sync/backend scope: no new architecture or service surface is planned; review focus is hosted RLS verification, exact migration only if needed, and regression coverage for any REC-61 fix.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Supabase migrations/tests if REC-4 finds a hosted/check-in gap
+- Settings/Profile sync UI/store files if REC-61 is still reproducible
+- Matching Swift or SQL regression tests for any behavior change
+
+Implementation checkpoint, 2026-06-30 18:37 PDT:
+
+- REC-61 was still reproducible in code: `SettingsScreen` always called `auth.presentGate(for: .syncPending)` from the Data and sync row, even when `auth.state` was already signed in.
+- Fixed the row to route signed-in users to `store.syncUnsyncedOwnPlaces(backend:)` and only present the `syncPending` sign-in gate for signed-out/loading/unavailable auth states.
+- Added `SettingsDataSyncPolicy` coverage in `AuthSessionTests` so the signed-in path cannot regress back to the sign-in loop silently.
+- REC-4 checked-in migration audit found every app-created `public.*` table has a matching `alter table ... enable row level security`, including the newly merged Lists tables.
+- Added `supabase/tests/public_rls_security_advisor.sql` to assert app-owned public tables have RLS enabled, anon table grants are limited to `question_definitions` read, and the `public` role has no direct public table grants.
+- Hosted Supabase verification is still blocked in this shell:
+  - Env has `WANDER_SUPABASE_PROJECT_REF`, `WANDER_SUPABASE_URL`, `WANDER_SUPABASE_ANON_KEY`, and `WANDER_SUPABASE_SERVICE_ROLE_KEY`.
+  - Env does not have `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, or a DB URL.
+  - Cached Supabase CLI is available, but linked queries print `NotFound: FileSystem.readFile (/Users/joelipshutz/.supabase/profile)` and then hang because no CLI profile/login exists.
+  - Root checkout has Supabase link metadata for project `rugmtlgufrhlxwfkumhw`, but no saved DB password.
+  - Docker is not installed, so local `supabase test db` is unavailable.
+
+Validation:
+
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /private/tmp/DerivedData-rec4-rec61 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/AuthSessionTests` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /private/tmp/DerivedData-rec4-rec61 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesBackfillsPendingLocalRowsAfterSignIn` passed.
+- Full simulator suite passed:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /private/tmp/DerivedData-rec4-rec61 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- `git diff --check` passed.
+- Static migration comparison of created public tables vs RLS-enabled public tables returned no missing app tables.
+
+Known issue:
+
+- REC-4 cannot honestly move to Done until someone provides either a logged-in Supabase CLI profile/access token or a direct DB URL/password so hosted `pg_class.relrowsecurity`, `pg_policies`, and grants can be inspected. The app-owned checked-in schema is guarded by the new test, but the original hosted alert may still be an extension-owned table such as PostGIS `spatial_ref_sys`, which needs live advisor output before choosing a fix.
+
+PR checkpoint, 2026-06-30 18:42 PDT:
+
+- Committed as `fix: repair settings data sync route` after rebasing onto latest `origin/main` (`328401a`).
+- Pushed branch `codex/rec-4-rec-61-rls-sync`.
+- Opened ready PR #53: `https://github.com/joelipshutz/wander/pull/53`.
+- PR #53 is mergeable and not draft.
+- Moved Linear `REC-61` to `In Review` with PR/test details.
+- Left Linear `REC-4` in `In Progress` with a blocker comment for hosted Supabase inspection credentials.
