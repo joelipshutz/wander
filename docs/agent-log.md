@@ -7868,3 +7868,65 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 23:05 PDT - Codex - Lists Backend Deploy
+
+Agent: Codex
+Branch: `codex/rec-65-lists-backend-deploy`
+Worktree: `/private/tmp/recme-lists-backend-deploy`
+Linear: `REC-65` (`Deploy Lists Supabase schema and suggestion function`)
+
+Goal: deploy the hosted Supabase pieces needed for the build 57 Lists release: list schema/RLS/RPC migration and `suggest-list-places` Edge Function.
+
+Starting status:
+
+- `REC-65` moved to `In Progress`.
+- Clean worktree from `origin/main` at `328401a`.
+- Need verify linked Supabase project, remote migration state, OpenAI function secret availability if inspectable, then apply/deploy and verify.
+
+Expected files:
+
+- `docs/agent-log.md`
+
+Planned commands:
+
+- `supabase migration list`
+- `supabase db push`
+- `supabase functions deploy suggest-list-places`
+- Lightweight hosted verification for migration/function availability
+
+Checkpoint, 2026-06-30 23:24 PDT:
+
+- Global `supabase` was not installed, but `npx supabase` is available (`2.109.0`).
+- Fresh worktree linking through `npx supabase link --project-ref ... --password ...` hung and was interrupted. The root workspace was already linked and showed the actual pooler endpoint as `aws-1-us-west-2.pooler.supabase.com:5432`.
+- Used direct db-url mode against the hosted pooler. `npx supabase migration list --db-url ...` showed local migration `20260628112000` missing remotely and all later migrations already present remotely.
+- `npx supabase db push --db-url ... --dry-run` showed only `supabase/migrations/20260628112000_place_lists.sql`; because later migrations were already remote, the CLI required `--include-all`.
+- Reviewed `20260628112000_place_lists.sql` before applying. It creates new list tables/RLS/RPC wrappers and does not recreate existing rating/category functions.
+- Applied `20260628112000_place_lists.sql` to hosted Supabase with:
+  `npx supabase db push --db-url ... --include-all --yes`
+- `npx supabase migration list --db-url ...` now shows `20260628112000` present locally and remotely.
+- `pnpm dlx deno check --config supabase/functions/suggest-list-places/deno.json supabase/functions/suggest-list-places/index.ts` passed.
+- Hosted verification query passed for the Lists DB contract:
+  - 3 expected list tables have RLS enabled.
+  - 8 expected list policies exist.
+  - 17 expected list functions exist.
+  - Expected app security-definer functions are security definer and pin `search_path=public, app`.
+  - Authenticated execute grants on public list RPC wrappers are present.
+- Supabase query advisory reported unrelated `public.spatial_ref_sys` has RLS disabled. This was not auto-remediated because it is a PostGIS metadata table and enabling RLS without policies could break extension behavior; surface this separately for an explicit decision.
+
+Current blocker:
+
+- `suggest-list-places` is not deployed. A direct POST to `https://rugmtlgufrhlxwfkumhw.supabase.co/functions/v1/suggest-list-places` returned `404 Requested function was not found`.
+- Function deploy requires Supabase Management API auth. This shell has no `SUPABASE_ACCESS_TOKEN` and no Supabase CLI profile at `~/.supabase/profile`.
+- `npx supabase functions deploy suggest-list-places --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api` hung silently; rerunning with `--debug` reported `NotFound: FileSystem.readFile (/Users/joelipshutz/.supabase/profile)`.
+- `npx supabase login --name rec-65-lists-backend --no-browser` cannot run in this non-TTY environment and returned `Cannot use automatic login flow inside non-TTY environments. Please provide --token flag or set the SUPABASE_ACCESS_TOKEN environment variable.`
+
+Restart instructions:
+
+- Provide a Supabase management access token in `SUPABASE_ACCESS_TOKEN` or run:
+  `npx supabase login --token <token>`
+- Then deploy:
+  `npx supabase functions deploy suggest-list-places --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api`
+- Verify with:
+  `curl -X POST "$WANDER_SUPABASE_URL/functions/v1/suggest-list-places" -H "Authorization: Bearer $WANDER_SUPABASE_ANON_KEY" -H "Content-Type: application/json" -d '{"candidate_places":[]}'`
+  Expected response after deploy: `{"suggestions":[]}`.
