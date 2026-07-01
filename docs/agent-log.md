@@ -8148,3 +8148,100 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+## 2026-07-01 11:29 PDT - Codex - REC-44 Unfollow Confirmation
+
+Agent: Codex
+Branch: `codex/rec-44-unfollow-confirmation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-44-unfollow-confirmation`
+Starting status: clean branch from `origin/main` at `7d709ceb2`; root checkout is on stale `codex/profile-pictures` and is intentionally not used for edits. `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` review completed before implementation.
+
+Goal: fix Linear `REC-44` so tapping a person in followers/following opens the profile instead of accidentally unfollowing, and make unfollow require tapping the explicit unfollow control plus confirming in a warning dialog.
+
+Linear: `REC-44` moved to `In Progress` and commented with branch/worktree.
+
+Engineering review gate: not needed; this is an isolated SwiftUI interaction guard on an existing profile/follow surface, with no new persisted state, backend contract, visibility semantics, or cross-screen data behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Related focused tests if an existing test target can cover the interaction helper cleanly.
+
+Implementation checkpoint, 2026-07-01 11:42 PDT:
+
+- Updated the followers/following/friends graph list rows so tapping the person row opens `ProfileDetailView` instead of mutating follow state.
+- Kept follow/unfollow as an explicit trailing pill action.
+- Added an unfollow confirmation dialog with requested copy: `are you sure you want to unfollow <name>`, `yes, unfollow`, and `no, cancel`.
+- Added existing-store metadata to graph rows: saved-place count per person.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator destination is not installed in this environment, so validation used the available `iPhone 17, OS=26.5` simulator.
+
+Completion checkpoint, 2026-07-01 11:44 PDT:
+
+- Implementation commit: `448c12fb6` (`fix: confirm graph list unfollow`).
+- Opened ready PR #58: `https://github.com/joelipshutz/wander/pull/58`.
+- Next: review/squash-merge PR #58, then release only if explicitly requested.
+
+Follow-up checkpoint, 2026-07-01 11:54 PDT:
+
+- Ryan tested PR #58 in Xcode and found three remaining interaction issues:
+  - Followers/following graph list unfollow confirmation should be a centered popup without the bottom action-sheet caret, and should show both `Yes, unfollow` and `No, cancel`.
+  - Discover member profile three-dot menu can still unfollow without warning.
+  - Profile detail for existing friends/following shows a redundant full-width `friend`/`following` status button under the header.
+- Plan: switch graph-list unfollow confirmation from `confirmationDialog` to `alert`, add the same alert to `ProfileDetailView` for the shared Discover/Profile path, and remove the redundant non-action status button while keeping follow for non-followers and the three-dot menu for block/unfollow.
+
+Follow-up validation, 2026-07-01 12:12 PDT:
+
+- Replaced graph-list unfollow `confirmationDialog` with centered SwiftUI `alert` and title-cased actions: `Yes, unfollow` and `No, cancel`.
+- Added the same centered unfollow alert to `ProfileDetailView`, so Discover member profile and Profile graph-list profile sheets share the warning before unfollowing from the three-dot menu.
+- Removed the redundant full-width `friend` / `following` status pill from already-followed profile detail headers; the three-dot menu remains the place for block/unfollow.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 12:45 PDT:
+
+- Ryan requested the unfollow warning title start with capital `Are`, and the confirmation buttons be deterministic: `Yes, unfollow` on the left and `No, cancel` on the right everywhere the warning appears.
+- SwiftUI native `alert` button ordering is platform-controlled, so the unfollow warning now uses one shared centered popup view with an overlay and explicit left/right button layout.
+- Updated both warning entry points in `ProfileScreen.swift`:
+  - `ProfileDetailView`, used by Discover member profiles and graph-list profile sheets.
+  - `GraphListScreen`, used by Profile followers/following/friends lists.
+- A repo-wide Swift search found no other unfollow warning popup entry points.
+
+Follow-up validation, 2026-07-01 12:53 PDT:
+
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 14:56 PDT:
+
+- Ryan requested the unfollow confirmation use the native iOS popup window design while keeping the centered alert placement and the two warning buttons.
+- Plan: replace the custom `UnfollowConfirmationPopup` overlay with native SwiftUI `alert` modifiers in both existing unfollow warning entry points, preserving capitalized `Are` copy and the `Yes, unfollow` / `No, cancel` labels.
+
+Follow-up validation, 2026-07-01 15:02 PDT:
+
+- Removed the custom unfollow confirmation overlay and restored native SwiftUI/iOS `alert` presentation for both `ProfileDetailView` and `GraphListScreen`.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Landing checkpoint, 2026-07-01 15:14 PDT:
+
+- Ryan requested squash-merge of PR #58 to `main`; no TestFlight build/release was requested, so no build number bump, archive, upload, or Slack release note will run.
+- PR #58 merge gate:
+  - GitHub reported PR #58 as ready, not draft, no labels, `mergeStateStatus=CLEAN`, and no failing status checks listed.
+  - Branch is current with `origin/main` (`0` behind, `5` ahead).
+  - Greptile bot comment scan found no active line-level or top-level Greptile comments.
+  - Pre-landing review found no blocking issues; diff is scoped to REC-44 profile/follow interaction changes plus this agent log.
+- Landing verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: push this landing log update to PR #58, squash-merge PR #58, update local `main`, and move REC-44 to `Done` after the merge succeeds.
