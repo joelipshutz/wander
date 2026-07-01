@@ -726,18 +726,22 @@ final class WanderStore: ObservableObject {
     }
 
     func followers(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followedUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followerUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
     func following(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followerUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followedUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
@@ -1527,6 +1531,11 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func block(profile: ProfileShell, backend: WanderBackend?) async {
+        preserveBlockedProfileShell(profile)
+        await block(userID: profile.id, backend: backend)
+    }
+
     func unblock(userID: String) {
         blocks.removeAll { $0.blockerUserID == currentUser.id && $0.blockedUserID == userID }
         persist()
@@ -1660,8 +1669,12 @@ final class WanderStore: ObservableObject {
     func blockedProfiles() -> [ProfileShell] {
         blocks
             .filter { $0.blockerUserID == currentUser.id }
-            .compactMap { block in profiles.first(where: { $0.id == block.blockedUserID }) }
-            .map(shell(for:))
+            .map { block in
+                guard let profile = profiles.first(where: { $0.id == block.blockedUserID }) else {
+                    return fallbackBlockedProfileShell(for: block.blockedUserID)
+                }
+                return shell(for: profile)
+            }
     }
 
     func authGate(for action: AddSourceType) -> AuthGateCopy {
@@ -1674,14 +1687,69 @@ final class WanderStore: ObservableObject {
     }
 
     private func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
+        isBlockedBetween(currentUser.id, and: userID)
+    }
+
+    private func isBlockedBetween(_ firstUserID: String, and secondUserID: String) -> Bool {
         blocks.contains { block in
-            (block.blockerUserID == currentUser.id && block.blockedUserID == userID)
-                || (block.blockerUserID == userID && block.blockedUserID == currentUser.id)
+            (block.blockerUserID == firstUserID && block.blockedUserID == secondUserID)
+                || (block.blockerUserID == secondUserID && block.blockedUserID == firstUserID)
         }
+    }
+
+    private func canReadGraph(for userID: String) -> Bool {
+        userID == currentUser.id || !isBlockedBetweenCurrentUser(and: userID)
+    }
+
+    private func canShowGraphProfile(_ profileID: String, for graphOwnerID: String) -> Bool {
+        !isBlockedBetweenCurrentUser(and: profileID)
+            && !isBlockedBetween(graphOwnerID, and: profileID)
     }
 
     private func isProfilePrivate(_ userID: String) -> Bool {
         profiles.first { $0.id == userID }?.isPrivateProfile == true
+    }
+
+    private func fallbackBlockedProfileShell(for userID: String) -> ProfileShell {
+        let handle = slug(userID)
+        return ProfileShell(
+            id: userID,
+            handle: handle.isEmpty ? "blocked-user" : handle,
+            displayName: "Blocked user",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .nonFollower
+        )
+    }
+
+    private func preserveBlockedProfileShell(_ shell: ProfileShell) {
+        guard shell.id != currentUser.id else { return }
+
+        if let existing = profiles.first(where: { $0.id == shell.id || $0.handle == shell.handle }) {
+            existing.serverID = shell.id
+            existing.handle = shell.handle
+            existing.searchHandle = shell.handle.lowercased()
+            existing.displayName = shell.displayName
+            existing.avatarURL = shell.avatarURL
+            existing.bio = shell.bio
+            existing.syncStateRaw = SyncState.synced.rawValue
+            existing.updatedAt = .now
+        } else {
+            profiles.append(
+                LocalProfile(
+                    localID: "blocked_profile_\(slug(shell.id))",
+                    serverID: shell.id,
+                    handle: shell.handle,
+                    displayName: shell.displayName,
+                    avatarURL: shell.avatarURL,
+                    bio: shell.bio,
+                    syncState: .synced
+                )
+            )
+        }
+
+        objectWillChange.send()
+        persist()
     }
 
     private func visibilityForSave(_ visibility: PlaceVisibility) -> PlaceVisibility {

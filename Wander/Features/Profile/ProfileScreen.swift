@@ -677,8 +677,14 @@ struct ProfileDetailView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let profileID: String
+    let onBlock: (String) -> Void
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
+
+    init(profileID: String, onBlock: @escaping (String) -> Void = { _ in }) {
+        self.profileID = profileID
+        self.onBlock = onBlock
+    }
 
     private var state: ProfileViewState? {
         store.profileState(for: profileID)
@@ -707,15 +713,13 @@ struct ProfileDetailView: View {
             .wanderScreen()
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog("Block this person?", isPresented: $showBlockConfirm, titleVisibility: .visible) {
+            .alert("Block this person?", isPresented: $showBlockConfirm) {
                 Button("Block", role: .destructive) {
-                    auth.requireSignIn(for: .manageBlocks) {
-                        Task {
-                            await store.block(userID: profileID, backend: backend)
-                        }
-                    }
+                    confirmBlock()
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) {
+                    showBlockConfirm = false
+                }
             } message: {
                 Text("You won't see each other's profiles, places, or search results.")
             }
@@ -729,6 +733,23 @@ struct ProfileDetailView: View {
             }
             .task(id: profileID) {
                 await refreshRemoteProfile()
+            }
+        }
+    }
+
+    private func confirmBlock() {
+        let profile = state?.shell
+        showBlockConfirm = false
+        auth.requireSignIn(for: .manageBlocks) {
+            Task {
+                if let profile {
+                    await store.block(profile: profile, backend: backend)
+                } else {
+                    await store.block(userID: profileID, backend: backend)
+                }
+                await MainActor.run {
+                    onBlock(profileID)
+                }
             }
         }
     }

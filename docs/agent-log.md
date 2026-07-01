@@ -8245,3 +8245,48 @@ Landing checkpoint, 2026-07-01 15:14 PDT:
   - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Next: push this landing log update to PR #58, squash-merge PR #58, update local `main`, and move REC-44 to `Done` after the merge succeeds.
+
+## 2026-07-01 15:40 PDT - Codex - REC-62 Blocking Privacy Landing And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-62-blocking-privacy`
+Worktree: `/private/tmp/recme-rec-62-blocking-privacy`
+Linear: `REC-62` - Blocking a user does not hide the profile
+
+Goal: squash-merge PR #59 to `main`, then create and upload a new TestFlight build and post tester-facing Slack release notes.
+
+Starting status:
+
+- Ryan explicitly requested squash-merge plus TestFlight release and Slack update.
+- PR #59 was open and ready but GitHub reported `mergeStateStatus=DIRTY` after PR #58 landed on `main`.
+- Updated the branch from `origin/main`; `Wander/Features/Profile/ProfileScreen.swift` merged cleanly and only `docs/agent-log.md` conflicted.
+- Resolved the agent-log conflict by preserving the REC-44 notes already on `main` and appending this consolidated REC-62 landing/release entry.
+
+Implemented REC-62 behavior included in PR #59:
+
+- Hard-block visibility: blocked pairs no longer expose profile search, follower/following graph visibility, or stale follow edges.
+- Discover members block flow: blocking from a searched member dismisses the profile, clears member search/results, and returns to the default members list.
+- Blocked users list: blocked profiles remain renderable in Settings so the user can unblock them, including fallback rows for ID-only block records.
+- Block confirmation: shared `ProfileDetailView` uses the centered REC-44-style confirmation presentation with `Block` and `Cancel`; search confirmed no remaining block-specific `confirmationDialog`, `Yes, block`, or `No, cancel` confirmation copy.
+- Backend contract: added Supabase migration `20260701185500_harden_blocked_social_graph.sql` plus RLS test coverage for blocked relationship/search/following behavior.
+
+Validation already completed on the branch before landing:
+
+- `git diff --check`
+- Full XCTest suite on `iPhone 17 Pro, OS=26.5`: 212 tests, 0 failures, 0 skipped.
+- Supabase local pgTAP could not run because no local Supabase/Postgres connection was available (`PgClient: Failed to connect`), but a hosted rollback harness applied the new function definitions in a transaction, inserted synthetic REC-62 rows, verified blocked relationship/search/following behavior, and rolled back successfully.
+
+Next:
+
+- Complete the merge conflict resolution commit on PR #59.
+- Rerun build/tests after updating from `main`.
+- Push PR #59, squash-merge it, update local `main`, bump the next TestFlight build number, archive/upload, run `scripts/testflight-release.mjs`, update Linear, and post to `#testflight-feedback`.
+
+Branch update validation, 2026-07-01 15:45 PDT:
+
+- Merged `origin/main` into `codex/rec-62-blocking-privacy` to pick up REC-44 before landing PR #59.
+- Resolved only `docs/agent-log.md`; effective PR diff against `origin/main` remains scoped to REC-62 app, tests, and Supabase visibility files.
+- Validation passed:
+  - `git diff --check`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-merge/Logs/Test/Test-Wander-2026.07.01_15-41-28--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
