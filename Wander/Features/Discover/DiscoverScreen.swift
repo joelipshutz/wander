@@ -39,6 +39,7 @@ struct DiscoverScreen: View {
                 [
                     visiblePlace.id,
                     visiblePlace.owner.id,
+                    visiblePlace.owner.avatarURL ?? "",
                     visiblePlace.userPlace.status.rawValue,
                     visiblePlace.userPlace.visibility.rawValue
                 ].joined(separator: ":")
@@ -309,7 +310,8 @@ struct DiscoverScreen: View {
                     DiscoverPlaceResultCard(
                         group: group,
                         isSavedByCurrentUser: isSavedByCurrentUser(group.primary),
-                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName
+                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName,
+                        currentUserID: store.currentUser.id
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
                     } save: {
@@ -552,7 +554,7 @@ struct DiscoverScreen: View {
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
 
-        return (placeResults.places + store.visiblePlaces())
+        return (store.visiblePlaces() + placeResults.places)
             .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
@@ -768,6 +770,7 @@ private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
     let isSavedByCurrentUser: Bool
     let matchedOwnerName: String
+    let currentUserID: String
     let openPlace: () -> Void
     let save: () -> Void
     let edit: () -> Void
@@ -810,10 +813,19 @@ private struct DiscoverPlaceResultCard: View {
                                 .lineLimit(1)
                         }
 
-                        Text(matchLine)
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .lineLimit(1)
+                        HStack(spacing: WanderTheme.spacing2) {
+                            WanderAvatar(
+                                initials: displayOwner.initials,
+                                avatarURL: displayOwner.avatarURL,
+                                size: 24,
+                                color: displayOwnerColor
+                            )
+
+                            Text(matchLine)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
@@ -874,6 +886,18 @@ private struct DiscoverPlaceResultCard: View {
                 return trimmed?.isEmpty == false ? trimmed : nil
             }
             .joined(separator: " · ")
+    }
+
+    private var displayOwner: LocalProfile {
+        group.places.first { visiblePlace in
+            visiblePlace.owner.displayName == matchedOwnerName
+                || visiblePlace.owner.handle == matchedOwnerName
+        }?.owner ?? visiblePlace.owner
+    }
+
+    private var displayOwnerColor: Color {
+        if displayOwner.id == currentUserID { return WanderTheme.terracotta.color }
+        return displayOwner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
     }
 }
 

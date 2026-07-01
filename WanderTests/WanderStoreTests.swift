@@ -1961,6 +1961,34 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
 
+    func testDiscoverMembersKeepsLocalAvatarWhenRemoteSearchOmitsAvatar() async {
+        let store = makeStore()
+        let avatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=local"
+        store.profiles.first { $0.id == "user_ryan" }?.avatarURL = avatarURL
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_ryan",
+                    handle: "ryan",
+                    displayName: "Ryan Updated",
+                    avatarURL: nil,
+                    bio: "remote profile",
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        let profiles = await store.discoverMembers(query: "ry", backend: backend)
+
+        XCTAssertEqual(profiles.map(\.handle), ["ryan"])
+        XCTAssertEqual(profiles.first?.displayName, "Ryan Updated")
+        XCTAssertEqual(profiles.first?.avatarURL, avatarURL)
+        XCTAssertEqual(profiles.first?.relationship, .mutual)
+        XCTAssertEqual(store.profileState(for: "user_ryan")?.shell.avatarURL, avatarURL)
+        XCTAssertEqual(profileRepository.queries, ["ry"])
+    }
+
     func testDiscoverMembersKeepsRemoteAvatarWhenLocalShellIsStale() async {
         let store = makeStore()
         let avatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=remote"
@@ -2077,8 +2105,10 @@ final class WanderStoreTests: XCTestCase {
     func testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
-        let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: nil, bio: nil, relationship: .follower)
-        let ryan = ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: nil, bio: nil, relationship: .follower)
+        let mayaAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=2"
+        let ryanAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=2"
+        let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: mayaAvatarURL, bio: nil, relationship: .follower)
+        let ryan = ProfileShell(id: "user_ryan", handle: "ryan", displayName: "Ryan", avatarURL: ryanAvatarURL, bio: nil, relationship: .follower)
         let mayaPlace = VisiblePlace(
             id: "up_remote_maya_speranza",
             place: LocalPlace(
@@ -2159,11 +2189,16 @@ final class WanderStoreTests: XCTestCase {
         await store.refreshRemoteSocialSurfaces(backend: backend)
 
         XCTAssertEqual(store.following(of: store.currentUser.id).map(\.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(store.following(of: store.currentUser.id).map(\.avatarURL), [mayaAvatarURL, ryanAvatarURL])
         XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.place.canonicalName), ["Speranza", "Dama"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"])).map(\.owner.avatarURL), [mayaAvatarURL, ryanAvatarURL])
         XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_maya"])).map(\.place.canonicalName), ["Speranza"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_maya"])).first?.owner.avatarURL, mayaAvatarURL)
         XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_ryan"])).map(\.place.canonicalName), ["Dama"])
+        XCTAssertEqual(store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"], ownerIDs: ["user_ryan"])).first?.owner.avatarURL, ryanAvatarURL)
         let discoverPlaces = await store.discover(query: "", scope: .everyone, backend: backend).places
         XCTAssertEqual(discoverPlaces.map(\.owner.id), ["user_maya", "user_ryan"])
+        XCTAssertEqual(discoverPlaces.map(\.owner.avatarURL), [mayaAvatarURL, ryanAvatarURL])
         XCTAssertEqual(discoverPlaces.map(\.place.canonicalName), ["Speranza", "Dama"])
         XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
         XCTAssertEqual(placeRepository.viewports.count, 1)
