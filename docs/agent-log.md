@@ -8308,3 +8308,10 @@ Known gaps / next steps:
 - Full XCTest suite not run for this mockup-only checkpoint.
 - Before wiring, decide final post-removal behavior, loading/error state, sync/offline handling, and whether the destructive action should appear only for saves owned by the current user.
 - `origin/main` advanced during this work with the REC-44 log entry; that log content was preserved in this worktree to avoid future agent-log deletion noise.
+
+Handoff checkpoint, 2026-07-01 15:29 PDT:
+
+- Mockup commit: `3091fba86` (`design: mock remove save flow`).
+- Opened draft PR #61 for design review: `https://github.com/joelipshutz/wander/pull/61`.
+- Branch pushed to `origin/codex/rec-30-swiftui-mockup`.
+- REC-30 remains `In Progress`; wiring should wait until Ryan/Joe review the mockup direction.
