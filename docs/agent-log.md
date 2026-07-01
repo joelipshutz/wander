@@ -8202,3 +8202,19 @@ Follow-up validation, 2026-07-01 12:12 PDT:
   - `git diff --check`
   - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 12:45 PDT:
+
+- Ryan requested the unfollow warning title start with capital `Are`, and the confirmation buttons be deterministic: `Yes, unfollow` on the left and `No, cancel` on the right everywhere the warning appears.
+- SwiftUI native `alert` button ordering is platform-controlled, so the unfollow warning now uses one shared centered popup view with an overlay and explicit left/right button layout.
+- Updated both warning entry points in `ProfileScreen.swift`:
+  - `ProfileDetailView`, used by Discover member profiles and graph-list profile sheets.
+  - `GraphListScreen`, used by Profile followers/following/friends lists.
+- A repo-wide Swift search found no other unfollow warning popup entry points.
+
+Follow-up validation, 2026-07-01 12:53 PDT:
+
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
