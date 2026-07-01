@@ -7974,3 +7974,26 @@ Review notes:
 - Plan design review: no blocking design issue found in code review. The picker keeps the approved warm full-screen sheet direction, category tile grid, grouped chips, search-first flow, selected state, and change affordance. Live simulator visual QA screenshots were not recaptured after this revision, so Ryan should still do an Xcode visual pass before merge.
 - Intentional boundary: the iOS app does not send OpenAI requests or embed the OpenAI key. First-time local/default behavior uses provider metadata and deterministic taxonomy fallbacks; server-side extraction/classification remains the place where the approved OpenAI key should be used.
 - Known gap: historical cuisine attributes are not globally backfilled by the SQL migration. Existing provider rows like `thai restaurant` migrate shared subcategory to `Restaurant`; the app derives/saves optional cuisine when a user edits/saves through the new flow.
+
+Follow-up checkpoint, 2026-07-01 09:50 PDT:
+
+- Ryan asked to refine the `Restaurants & Food` place type UI:
+  - Move `cuisine` above `subcategory` on the place type card.
+  - Make `subcategory` open only restaurant/food type options such as Food court, breakfast, sandwich, bagel, oyster bar, and taco truck.
+  - Make `cuisine` open a separate picker containing only cuisine options.
+- Worktree status before edits: clean `codex/category-picker-tiles...origin/codex/category-picker-tiles`.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/CategoryTaxonomyMockups.swift`, `docs/agent-log.md`, and possibly focused Swift tests if the private picker behavior needs coverage through taxonomy helpers.
+
+Follow-up completion, 2026-07-01 09:59 PDT:
+
+- Updated the live save/edit place type card so `Restaurants & Food` places show `category`, then `cuisine`, then `subcategory`.
+- Split the picker modes:
+  - tapping `subcategory` opens only restaurant/food type groups such as `Food court`, `Breakfast`, `Sandwich`, `Bagel`, `Oyster bar`, and `Taco truck`.
+  - tapping `cuisine` opens a separate grouped/searchable cuisine picker containing only cuisine values such as `Thai`, `Mexican`, `Korean BBQ`, and `South American`, with a `No cuisine` clear action when applicable.
+- Updated DEBUG SwiftUI taxonomy mockups to include a separate `cuisine` page and to show the revised place type ordering.
+- Added a taxonomy regression test proving restaurant type options and cuisine options stay separate.
+- Validation passed:
+  - `git diff --check`
+  - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 10 tests, 0 failures.
+  - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 208 tests, 0 failures.
+- Known gaps: no new simulator screenshots were captured for this follow-up; Ryan should verify the visual flow in Xcode before merge.

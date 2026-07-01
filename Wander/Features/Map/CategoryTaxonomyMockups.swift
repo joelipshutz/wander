@@ -5,6 +5,7 @@ enum CategoryTaxonomyMockupPage: String, CaseIterable {
     case edit
     case categories
     case subcategories
+    case cuisine
     case labels
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> CategoryTaxonomyMockupPage? {
@@ -33,6 +34,8 @@ struct CategoryTaxonomyMockupRoot: View {
                 CategoryTaxonomyPrimaryPickerMockup()
             case .subcategories:
                 CategoryTaxonomySubcategoryPickerMockup()
+            case .cuisine:
+                CategoryTaxonomyCuisinePickerMockup()
             case .labels:
                 CategoryTaxonomyLabelsMockup()
             }
@@ -122,9 +125,9 @@ private struct CategoryTaxonomyEditMockup: View {
             MockupSection(title: "place type") {
                 MockupDetailRow(title: "category", value: "Restaurants & Food", systemImage: "square.grid.2x2.fill")
                 Divider().background(WanderTheme.borderHairline.color)
-                MockupDetailRow(title: "subcategory", value: "Restaurant", systemImage: "line.3.horizontal.decrease.circle.fill")
-                Divider().background(WanderTheme.borderHairline.color)
                 MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
+                Divider().background(WanderTheme.borderHairline.color)
+                MockupDetailRow(title: "subcategory", value: "Restaurant", systemImage: "line.3.horizontal.decrease.circle.fill")
             }
 
             MockupSection(title: "save as") {
@@ -202,7 +205,7 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
 
 private struct CategoryTaxonomySubcategoryPickerMockup: View {
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "choose subcategory", subtitle: "Restaurants & Food - 47 types, 85 cuisines") {
+        CategoryTaxonomyMockupScreen(title: "choose subcategory", subtitle: "Restaurants & Food - 47 types") {
             MockupSearchField(text: "Search restaurants & food types")
 
             HStack(spacing: WanderTheme.spacing2) {
@@ -211,8 +214,26 @@ private struct CategoryTaxonomySubcategoryPickerMockup: View {
                 Spacer(minLength: 0)
             }
 
-            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood), id: \.title) { group in
-                SubcategoryGroupSection(group: group, selectedSubcategory: group.role == .cuisine ? "Thai" : "Restaurant") { _ in }
+            ForEach(WanderPlaceCategory.restaurantTypeGroups(), id: \.title) { group in
+                SubcategoryGroupSection(group: group, selectedSubcategory: "Restaurant") { _ in }
+            }
+        }
+    }
+}
+
+private struct CategoryTaxonomyCuisinePickerMockup: View {
+    var body: some View {
+        CategoryTaxonomyMockupScreen(title: "choose cuisine", subtitle: "Restaurants & Food - 85 cuisines") {
+            MockupSearchField(text: "Search cuisines")
+
+            HStack(spacing: WanderTheme.spacing2) {
+                CategoryPickerModePill(title: "Restaurants & Food", systemImage: "fork.knife", isSelected: true)
+                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
+                Spacer(minLength: 0)
+            }
+
+            ForEach(WanderPlaceCategory.restaurantCuisineGroups(), id: \.title) { group in
+                SubcategoryGroupSection(group: group, selectedSubcategory: "Thai") { _ in }
             }
         }
     }

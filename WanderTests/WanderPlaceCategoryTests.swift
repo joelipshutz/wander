@@ -175,5 +175,16 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertTrue(groups.flatMap(\.subcategories).contains("Thai"))
         XCTAssertEqual(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count, 47)
         XCTAssertEqual(WanderPlaceCategory.restaurantCuisineOptions.count, 85)
+
+        let restaurantTypes = Set(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories))
+        let cuisines = Set(WanderPlaceCategory.restaurantCuisineOptions)
+        XCTAssertTrue(restaurantTypes.contains("Food court"))
+        XCTAssertTrue(restaurantTypes.contains("Breakfast"))
+        XCTAssertTrue(restaurantTypes.contains("Bagel"))
+        XCTAssertTrue(restaurantTypes.contains("Oyster bar"))
+        XCTAssertTrue(restaurantTypes.contains("Taco truck"))
+        XCTAssertFalse(restaurantTypes.contains("Thai"))
+        XCTAssertFalse(cuisines.contains("Food court"))
+        XCTAssertTrue(cuisines.contains("Thai"))
     }
 }

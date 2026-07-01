@@ -2177,6 +2177,7 @@ private enum MapPlaceSaveStep {
 private enum PlaceTypePickerMode {
     case category
     case subcategory
+    case cuisine
 }
 
 struct MapPlaceSaveFlowSheet: View {
@@ -2480,6 +2481,18 @@ struct MapPlaceSaveFlowSheet: View {
 
                 Divider().background(WanderTheme.borderHairline.color)
 
+                if isRestaurantsFoodSelected {
+                    Button {
+                        placeTypePickerMode = .cuisine
+                        isChoosingPlaceType = true
+                    } label: {
+                        PlaceTypeRow(title: "cuisine", value: selectedCuisine ?? "optional")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(WanderTheme.borderHairline.color)
+                }
+
                 Button {
                     placeTypePickerMode = .subcategory
                     isChoosingPlaceType = true
@@ -2487,18 +2500,6 @@ struct MapPlaceSaveFlowSheet: View {
                     PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
                 }
                 .buttonStyle(.plain)
-
-                if isRestaurantsFoodSelected {
-                    Divider().background(WanderTheme.borderHairline.color)
-
-                    Button {
-                        placeTypePickerMode = .subcategory
-                        isChoosingPlaceType = true
-                    } label: {
-                        PlaceTypeRow(title: "cuisine", value: selectedCuisine ?? "optional")
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -2791,10 +2792,18 @@ private struct PlaceTypePickerSheet: View {
         self.initialMode = initialMode
         self.onSelect = onSelect
 
-        let hasEditableSelection = WanderPlaceCategory.editableCategories.contains(
-            selectedAssignment.wrappedValue.primaryCategory
-        )
-        _mode = State(initialValue: hasEditableSelection ? initialMode : .category)
+        let primaryCategory = selectedAssignment.wrappedValue.primaryCategory
+        let hasEditableSelection = WanderPlaceCategory.editableCategories.contains(primaryCategory)
+        let startingMode: PlaceTypePickerMode
+        if !hasEditableSelection {
+            startingMode = .category
+        } else if initialMode == .cuisine,
+                  primaryCategory != WanderPlaceCategory.restaurantsFood {
+            startingMode = .subcategory
+        } else {
+            startingMode = initialMode
+        }
+        _mode = State(initialValue: startingMode)
     }
 
     private var normalizedQuery: String {
@@ -2829,21 +2838,13 @@ private struct PlaceTypePickerSheet: View {
     }
 
     private var selectedSubcategoryGroups: [PlaceCategorySubcategoryGroup] {
-        let groups = subcategoryGroupsForCurrentSelection
-        let queryText = normalizedQuery
-        guard !queryText.isEmpty else {
-            return groups
-        }
+        filteredGroupsForCurrentSelection(
+            role: selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood ? .type : nil
+        )
+    }
 
-        return groups.compactMap { group in
-            let groupMatches = group.title.localizedCaseInsensitiveContains(queryText)
-            let subcategories = groupMatches
-                ? group.subcategories
-                : group.subcategories.filter { $0.localizedCaseInsensitiveContains(queryText) }
-
-            guard !subcategories.isEmpty else { return nil }
-            return PlaceCategorySubcategoryGroup(title: group.title, subcategories: subcategories, role: group.role)
-        }
+    private var selectedCuisineGroups: [PlaceCategorySubcategoryGroup] {
+        filteredGroupsForCurrentSelection(role: .cuisine)
     }
 
     private var subcategoryGroupsForCurrentSelection: [PlaceCategorySubcategoryGroup] {
@@ -2870,12 +2871,16 @@ private struct PlaceTypePickerSheet: View {
         return selectedSubcategories.count
     }
 
-    private var selectedCategorySubtitle: String {
+    private var selectedSubcategorySubtitle: String {
         if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
-            return "\(selectedCategoryTitle) - \(restaurantTypeCount) types, \(restaurantCuisineCount) cuisines"
+            return "\(selectedCategoryTitle) - \(restaurantTypeCount) types"
         }
 
         return "\(selectedCategoryTitle) - \(selectedCategoryCount) types"
+    }
+
+    private var selectedCuisineSubtitle: String {
+        "\(selectedCategoryTitle) - \(restaurantCuisineCount) cuisines"
     }
 
     private var selectedCategorySearchName: String {
@@ -2889,7 +2894,8 @@ private struct PlaceTypePickerSheet: View {
               custom.count > 1
         else { return nil }
 
-        let alreadyExists = selectedSubcategories.contains { subcategory in
+        let optionRole: PlaceCategorySubcategoryRole? = selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood ? .type : nil
+        let alreadyExists = optionsForCurrentSelection(role: optionRole).contains { subcategory in
             subcategory.caseInsensitiveCompare(custom) == .orderedSame
         }
         return alreadyExists ? nil : custom
@@ -2903,6 +2909,8 @@ private struct PlaceTypePickerSheet: View {
                     categoryPickerContent
                 case .subcategory:
                     subcategoryPickerContent
+                case .cuisine:
+                    cuisinePickerContent
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -2946,25 +2954,11 @@ private struct PlaceTypePickerSheet: View {
 
     private var subcategoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            CategoryPickerHeader(title: "choose subcategory", subtitle: selectedCategorySubtitle)
+            CategoryPickerHeader(title: "choose subcategory", subtitle: selectedSubcategorySubtitle)
 
             CategoryPickerSearchField(placeholder: "Search \(selectedCategorySearchName) types", text: $query)
 
-            HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(
-                    title: selectedCategoryTitle,
-                    systemImage: WanderPlaceCategory.symbolName(for: selectedPrimaryCategory),
-                    isSelected: true
-                )
-                Button {
-                    query = ""
-                    mode = .category
-                } label: {
-                    CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
+            selectedCategoryPills
 
             if !hasEditableSelection {
                 CategoryPickerEmptyState(title: "Choose a category first", message: "Pick one of the 14 primary categories, then choose its type.")
@@ -2977,21 +2971,64 @@ private struct PlaceTypePickerSheet: View {
                 ForEach(selectedSubcategoryGroups, id: \.title) { group in
                     SubcategoryGroupSection(
                         group: group,
-                        selectedSubcategory: group.role == .cuisine ? selectedCuisine : selectedAssignment.subcategory
+                        selectedSubcategory: selectedAssignment.subcategory
                     ) { subcategory in
-                        if group.role == .cuisine {
-                            selectCuisine(subcategory)
-                        } else {
-                            selectSubcategory(subcategory)
-                            dismiss()
-                        }
+                        selectSubcategory(subcategory)
+                        dismiss()
+                    }
+                }
+
+                customSubcategoryControl
+            }
+        }
+    }
+
+    private var cuisinePickerContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            CategoryPickerHeader(title: "choose cuisine", subtitle: selectedCuisineSubtitle)
+
+            CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
+
+            selectedCategoryPills
+
+            if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
+                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Cuisine only applies to restaurants and food places.")
+            } else if selectedCuisineGroups.isEmpty {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    CategoryPickerEmptyState(title: "No matching cuisine", message: "Try Thai, Mexican, Korean BBQ, or South American.")
+                    clearCuisineControl
+                }
+            } else {
+                ForEach(selectedCuisineGroups, id: \.title) { group in
+                    SubcategoryGroupSection(
+                        group: group,
+                        selectedSubcategory: selectedCuisine
+                    ) { cuisine in
+                        selectCuisine(cuisine)
+                        dismiss()
                     }
                 }
 
                 clearCuisineControl
-
-                customSubcategoryControl
             }
+        }
+    }
+
+    private var selectedCategoryPills: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            CategoryPickerModePill(
+                title: selectedCategoryTitle,
+                systemImage: WanderPlaceCategory.symbolName(for: selectedPrimaryCategory),
+                isSelected: true
+            )
+            Button {
+                query = ""
+                mode = .category
+            } label: {
+                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
+            }
+            .buttonStyle(.plain)
+            Spacer()
         }
     }
 
@@ -3002,6 +3039,7 @@ private struct PlaceTypePickerSheet: View {
             Button {
                 selectedCuisine = nil
                 onSelect()
+                dismiss()
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "xmark")
@@ -3085,6 +3123,41 @@ private struct PlaceTypePickerSheet: View {
             rawProviderType: selectedAssignment.rawProviderType
         )
         onSelect()
+    }
+
+    private func optionsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [String] {
+        groupsForCurrentSelection(role: role).flatMap(\.subcategories)
+    }
+
+    private func filteredGroupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
+        let groups = groupsForCurrentSelection(role: role)
+        let queryText = normalizedQuery
+        guard !queryText.isEmpty else {
+            return groups
+        }
+
+        return groups.compactMap { group in
+            let groupMatches = group.title.localizedCaseInsensitiveContains(queryText)
+            let subcategories = groupMatches
+                ? group.subcategories
+                : group.subcategories.filter { $0.localizedCaseInsensitiveContains(queryText) }
+
+            guard !subcategories.isEmpty else { return nil }
+            return PlaceCategorySubcategoryGroup(title: group.title, subcategories: subcategories, role: group.role)
+        }
+    }
+
+    private func groupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
+        let groups = subcategoryGroupsForCurrentSelection
+        guard let role else {
+            return groups
+        }
+
+        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+            return groups.filter { $0.role == role }
+        }
+
+        return role == .type ? groups : []
     }
 }
 
