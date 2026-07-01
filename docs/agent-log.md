@@ -8195,3 +8195,11 @@ Implementation checkpoint, 2026-07-01 12:01 PDT:
   - Full suite passed:
     `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_12-00-43--0700.xcresult`: 210 tests, 0 failures, 0 skipped.
+
+Handoff, 2026-07-01 12:05 PDT:
+
+- Implementation commit message: `fix: harden block visibility`.
+- Pushed branch `codex/rec-62-blocking-privacy` to origin.
+- Opened ready PR #59: `https://github.com/joelipshutz/wander/pull/59`.
+- Linked PR #59 to Linear `REC-62`, moved the issue to `In Review`, and added a Linear implementation/verification comment.
+- Next step: review/merge PR #59, then apply migration `20260701185500_harden_blocked_social_graph.sql` with the normal release/deploy workflow before shipping to TestFlight.
