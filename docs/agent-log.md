@@ -7842,3 +7842,29 @@ Included app-code changes since completed TestFlight build 55:
 - Unsaved-place auto-save to Want list with a short bottom confirmation.
 - My Lists tile sizing cleanup.
 - Supabase list migration and `suggest-list-places` Edge Function source.
+
+Outcome, 2026-06-30 18:29 PDT:
+
+- Pushed build-number commit `105a515` (`chore: bump testflight build 57`) to `main`; `CURRENT_PROJECT_VERSION` is `57` in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Release validation passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build57-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' -derivedDataPath /private/tmp/DerivedData-build57-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The installed simulator runtime used for full tests was `iPhone 17, OS=26.2`.
+- Archive path: `/private/tmp/Wander-0.1-build57.xcarchive`; archived `CFBundleShortVersionString=0.1` and `CFBundleVersion=57` verified.
+- Export options: `/private/tmp/WanderExportUpload57.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- Ran `node scripts/testflight-release.mjs --build-number 57 --archive-path /private/tmp/Wander-0.1-build57.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build57-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- Helper confirmed build `0.1 (57)` id `f5b640c6-8c2e-4070-947a-cd972bb71408` as `processing=VALID`, set `usesNonExemptEncryption=false`, updated What to Test copy for `en-US`, attached the build to `Wander Alpha`, submitted external TestFlight review, and reported review state `APPROVED`.
+- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`.
+- Posted tester-facing Slack note to `#testflight-feedback`: `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782869250923329`.
+- Moved Linear issue `REC-63` to `Done` with a completion comment.
+
+Known issues:
+
+- Hosted Supabase migration `20260628112000_place_lists.sql` and `suggest-list-places` Edge Function deploy still need to be run for live backend suggestions.
+- Camera capture should be verified on a real device.
+
+Process follow-up:
+
+- Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.

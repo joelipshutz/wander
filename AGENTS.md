@@ -39,6 +39,29 @@ At handoff or completion:
 
 This log is coordination infrastructure. Treat it as part of the deliverable.
 
+## Required Linear Tracking
+
+Agents must work from a Linear issue for any non-trivial feature, fix, release,
+or docs/process change.
+
+Before starting implementation:
+
+- Find the existing Linear issue if the work came from Linear, TestFlight
+  feedback, or a prior planning thread.
+- If the work starts in chat and no issue exists yet, create a Linear issue in
+  the `recme` team that captures the user request, assign it to the active
+  owner when clear, and move it to `In Progress` before editing code.
+- Link the PR or branch back to the issue once one exists.
+
+During and after work:
+
+- Keep the Linear issue status aligned with reality: `In Progress` while
+  actively coding, `In Review` during PR/release validation, and `Done` only
+  after the requested work is actually shipped or otherwise complete.
+- Add a Linear comment with validation, TestFlight/build links, known follow-up,
+  or blocker details when the work is meaningful enough that future agents
+  would otherwise have to reconstruct it from chat.
+
 ## Collaboration And Git Workflow
 
 `main` is the integration branch. Do not do non-trivial feature, fix, or release work directly on `main`; use a short-lived branch and open a PR back to `main`.
