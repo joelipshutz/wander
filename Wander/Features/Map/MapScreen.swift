@@ -2486,7 +2486,11 @@ struct MapPlaceSaveFlowSheet: View {
                         placeTypePickerMode = .cuisine
                         isChoosingPlaceType = true
                     } label: {
-                        PlaceTypeRow(title: "cuisine", value: selectedCuisine ?? "optional")
+                        PlaceTypeRow(
+                            title: "cuisine",
+                            value: selectedCuisine ?? "optional",
+                            isPlaceholderValue: selectedCuisine == nil
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -2752,6 +2756,7 @@ private struct MapSaveChoicePill: View {
 private struct PlaceTypeRow: View {
     let title: String
     let value: String
+    var isPlaceholderValue = false
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -2761,7 +2766,7 @@ private struct PlaceTypeRow: View {
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(isPlaceholderValue ? WanderTheme.textFaint.color : WanderTheme.textInk.color)
                 .lineLimit(1)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .black))

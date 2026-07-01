@@ -7997,3 +7997,25 @@ Follow-up completion, 2026-07-01 09:59 PDT:
   - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 10 tests, 0 failures.
   - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-taxonomy-ui CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 208 tests, 0 failures.
 - Known gaps: no new simulator screenshots were captured for this follow-up; Ryan should verify the visual flow in Xcode before merge.
+
+Release checkpoint, 2026-07-01 10:08 PDT:
+
+- Ryan requested two final PR changes, then squash-merge to `main` and create a new TestFlight build:
+  - Make the `optional` Cuisine value light gray so it reads as placeholder text.
+  - Add `Chocolate lounge` and `Coffee lounge` to the `Coffee, Tea, & Sweets` subcategory taxonomy.
+- Loaded repo release workflow skill `agent-skills/recme-pr-review-merge-release/SKILL.md`.
+- Ran `git fetch origin`; current category worktree status before edits: clean `codex/category-picker-tiles...origin/codex/category-picker-tiles`.
+- Inspected worktrees and recent agent log. The category PR work remains isolated in `/private/tmp/recme-category-picker-tiles`; unrelated worktrees exist on other branches and should not be touched.
+- Expected files before merge/release: `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderPlaceCategory.swift`, `shared/place-taxonomy.json`, `WanderTests/WanderPlaceCategoryTests.swift`, `docs/agent-log.md`, and later `project.yml` / `Wander.xcodeproj/project.pbxproj` for the TestFlight build bump after merge.
+
+Release follow-up, 2026-07-01 10:16 PDT:
+
+- Updated the cuisine placeholder styling so `optional` renders in the faint text color while selected cuisine values still render as normal ink.
+- Added `Coffee lounge` and `Chocolate lounge` to the shared taxonomy, Swift taxonomy, grouped picker sections, DEBUG mockup counts, and focused taxonomy tests.
+- Validation passed before commit:
+  - `git diff --check`
+  - `python3 -m json.tool shared/place-taxonomy.json`
+  - Node taxonomy validation using the bundled runtime: 15 total categories including the internal fallback, and `coffee_tea_sweets` now has 25 subcategories.
+  - `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
+  - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 11 tests, 0 failures.
+  - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed per `xcresulttool`: build and test action succeeded with 209 tests.

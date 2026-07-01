@@ -56,7 +56,7 @@ private struct PrimaryCategoryMock: Identifiable {
 private enum CategoryTaxonomyMockData {
     static let primaryCategories: [PrimaryCategoryMock] = [
         PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, cuisines, quick bites", symbol: "fork.knife", color: WanderTheme.terracotta.color, count: 132),
-        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", symbol: "cup.and.saucer.fill", color: WanderTheme.categorySun.color, count: 23),
+        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", symbol: "cup.and.saucer.fill", color: WanderTheme.categorySun.color, count: 25),
         PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", symbol: "wineglass.fill", color: WanderTheme.terracottaDark.color, count: 26),
         PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", symbol: "tree.fill", color: WanderTheme.categoryMoss.color, count: 41),
         PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", symbol: "ticket.fill", color: WanderTheme.avatarSofia.color, count: 52),

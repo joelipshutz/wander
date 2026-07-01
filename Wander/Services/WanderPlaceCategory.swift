@@ -231,10 +231,10 @@ enum WanderPlaceCategory {
             "juice", "smoothie", "acai", "ice cream", "candy", "chocolate", "cat cafe", "dog cafe"
         ],
             subcategories: [
-            "Coffee shop", "Cafe", "Coffee stand", "Roastery", "Tea house", "Tea store", "Juice shop",
+            "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store", "Juice shop",
             "Smoothie shop", "Acai", "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop",
             "Dessert shop", "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop",
-            "Chocolate factory", "Confectionery", "Cat cafe", "Dog cafe"
+            "Chocolate factory", "Chocolate lounge", "Confectionery", "Cat cafe", "Dog cafe"
         ],
             isEditable: true
         ),
@@ -629,7 +629,7 @@ enum WanderPlaceCategory {
         ],
         coffeeTeaSweets: [
             PlaceCategorySubcategoryGroup(title: "Coffee & tea", subcategories: [
-                "Coffee shop", "Cafe", "Coffee stand", "Roastery", "Tea house", "Tea store"
+                "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store"
             ]),
             PlaceCategorySubcategoryGroup(title: "Juice & light treats", subcategories: [
                 "Juice shop", "Smoothie shop", "Acai", "Cat cafe", "Dog cafe"
@@ -637,7 +637,7 @@ enum WanderPlaceCategory {
             PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: [
                 "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop", "Dessert shop",
                 "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop", "Chocolate factory",
-                "Confectionery"
+                "Chocolate lounge", "Confectionery"
             ])
         ],
         barsNightlife: [

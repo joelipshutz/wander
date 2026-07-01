@@ -187,4 +187,23 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertFalse(cuisines.contains("Food court"))
         XCTAssertTrue(cuisines.contains("Thai"))
     }
+
+    func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
+        let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(suggestions.count, 25)
+        XCTAssertTrue(suggestions.contains("Coffee lounge"))
+        XCTAssertTrue(suggestions.contains("Chocolate lounge"))
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("coffee lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Coffee lounge"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("chocolate lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Chocolate lounge"
+        )
+
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertTrue(groups.first { $0.title == "Coffee & tea" }?.subcategories.contains("Coffee lounge") == true)
+        XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Chocolate lounge") == true)
+    }
 }
