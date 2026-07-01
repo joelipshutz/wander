@@ -487,6 +487,7 @@ struct DiscoverScreen: View {
 
         await refreshPlaces()
         await refreshMembers()
+        selectedPlace = nil
         savedMessage = "Removed from your map."
         return true
     }

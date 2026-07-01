@@ -1261,7 +1261,12 @@ private struct SavedPlacesListScreen: View {
             return false
         }
 
-        return await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
+        guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
+            return false
+        }
+
+        selectedPlace = nil
+        return true
     }
 }
 

@@ -862,11 +862,16 @@ struct MapScreen: View {
 
         clearNativeMapFeatureSelection()
         selectedSearchCandidateID = nil
-        if let selectedPlaceGroupKey,
-           !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey) {
-            self.selectedPlaceGroupKey = visiblePlaceGroupKeys.first
-            isPlaceProfilePresented = false
+        if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        ) {
+            selectedPlaceGroupKey = remainingGroup.key
+        } else {
+            selectedPlaceGroupKey = nil
         }
+        isPlaceProfilePresented = false
         showTransientMapSearchMessage("Removed from your map.")
         return true
     }
@@ -2507,18 +2512,12 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var removeSaveSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            MapSaveDestructiveButton(
-                title: isRemoving ? "removing..." : "Remove save",
-                systemImage: "trash",
-                isDisabled: isSaving || isRemoving
-            ) {
-                isShowingRemoveConfirmation = true
-            }
-            Text("Removes this saved place from your map. The place can still appear if someone you follow saved it.")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .fixedSize(horizontal: false, vertical: true)
+        MapSaveDestructiveButton(
+            title: isRemoving ? "removing..." : "Remove save",
+            systemImage: "trash",
+            isDisabled: isSaving || isRemoving
+        ) {
+            isShowingRemoveConfirmation = true
         }
         .padding(.top, WanderTheme.spacing1)
     }

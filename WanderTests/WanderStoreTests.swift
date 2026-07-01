@@ -293,6 +293,42 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(userPlace?.lastSyncError)
     }
 
+    func testRemoveSavePreservesFollowingSavesForSamePlaceGroup() {
+        let store = makeStore()
+        guard let currentUserSave = store.currentUserVisiblePlaces.first(where: { visiblePlace in
+            visiblePlace.place.canonicalName == "Circuit Coffee"
+        }) else {
+            return XCTFail("Expected seeded current-user save for Circuit Coffee")
+        }
+
+        XCTAssertFalse(store.attributes(for: currentUserSave.userPlace.id).isEmpty)
+
+        let removal = store.removeSave(userPlaceID: currentUserSave.userPlace.id)
+
+        XCTAssertEqual(removal?.syncState, .pendingDelete)
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { visiblePlace in
+            visiblePlace.place.canonicalName == "Circuit Coffee"
+        })
+        XCTAssertTrue(store.attributes(for: currentUserSave.userPlace.id).isEmpty)
+
+        let remainingCircuitSaves = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
+            .filter { $0.place.canonicalName == "Circuit Coffee" }
+        XCTAssertEqual(Set(remainingCircuitSaves.map(\.owner.id)), ["user_maya", "user_ryan"])
+
+        let allVisibleCircuitSaves = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["you", "social"]))
+            .filter { $0.place.canonicalName == "Circuit Coffee" }
+        XCTAssertFalse(allVisibleCircuitSaves.contains { $0.owner.id == store.currentUser.id })
+        let group = remainingCircuitSaves.first.flatMap { visiblePlace in
+            VisiblePlaceGrouping.matchingGroup(
+                for: visiblePlace,
+                in: allVisibleCircuitSaves,
+                currentUserID: store.currentUser.id
+            )
+        }
+        XCTAssertEqual(group?.saveCount, 2)
+        XCTAssertEqual(group?.isSavedByCurrentUser, false)
+    }
+
     func testCurrentLocationSavePreservesSourceMetadata() {
         let store = makeStore()
         let candidate = PlaceCandidate(

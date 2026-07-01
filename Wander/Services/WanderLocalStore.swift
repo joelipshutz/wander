@@ -46,7 +46,8 @@ struct RemoveSaveResult: Equatable {
 
 private struct LocalRemoveSaveChange {
     let userPlaceID: String
-    let remoteUserPlaceID: String?
+    let removedUserPlaceIDs: [String]
+    let remoteUserPlaceIDs: [String]
     let syncState: SyncState
 }
 
@@ -1119,21 +1120,25 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        guard let backend,
-              let remoteUserPlaceID = localChange.remoteUserPlaceID
-        else {
+        guard let backend, !localChange.remoteUserPlaceIDs.isEmpty else {
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
         }
 
         do {
-            try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
-            markUserPlace(localOrServerID: localChange.userPlaceID, syncState: .tombstoned)
+            for remoteUserPlaceID in localChange.remoteUserPlaceIDs {
+                try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+            }
+            for removedUserPlaceID in localChange.removedUserPlaceIDs {
+                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .tombstoned)
+            }
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
         } catch {
             let message = remoteErrorMessage(error)
-            markUserPlace(localOrServerID: localChange.userPlaceID, syncState: .failed, error: message)
+            for removedUserPlaceID in localChange.removedUserPlaceIDs {
+                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .failed, error: message)
+            }
             lastRemoteError = message
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .failed)
         }
@@ -2003,31 +2008,63 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        let previousUserPlaceIDs = matchingUserPlaceIDs(userPlaceID)
-        let previousPlaceIDs = matchingPlaceIDs(userPlace.placeID)
-        let remoteUserPlaceID = userPlace.serverID
-        let nextSyncState: SyncState = remoteUserPlaceID == nil ? .tombstoned : .pendingDelete
+        let targetPlace = places.first { place in
+            place.id == userPlace.placeID || place.localID == userPlace.placeID || place.serverID == userPlace.placeID
+        }
+        let targetVisiblePlace = targetPlace.map { place in
+            VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: currentUser)
+        }
+        var previousUserPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        if let targetVisiblePlace {
+            for visiblePlace in currentUserVisiblePlaces where VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace) {
+                previousUserPlaceIDs.formUnion(matchingUserPlaceIDs(visiblePlace.userPlace.id))
+            }
+        }
+
+        let userPlacesToRemove = userPlaces.filter { candidate in
+            candidate.userID == currentUser.id
+                && candidate.deletedAt == nil
+                && (previousUserPlaceIDs.contains(candidate.id)
+                    || previousUserPlaceIDs.contains(candidate.localID)
+                    || candidate.serverID.map { previousUserPlaceIDs.contains($0) } == true)
+        }
+        guard !userPlacesToRemove.isEmpty else {
+            return nil
+        }
+
+        let removedUserPlaceIDs = userPlacesToRemove.map(\.id)
+        let remoteUserPlaceIDs = userPlacesToRemove.compactMap(\.serverID)
+        let nextSyncState: SyncState = remoteUserPlaceIDs.isEmpty ? .tombstoned : .pendingDelete
         let now = Date.now
 
-        userPlace.note = nil
-        userPlace.ratingSignal = nil
-        userPlace.ratingScore = nil
-        userPlace.recommendedScore = nil
-        userPlace.recommendedCount = 0
-        userPlace.categoryOverride = nil
-        userPlace.subcategoryOverride = nil
-        userPlace.categoryOverrideSource = nil
-        userPlace.categoryOverrideConfidence = nil
-        userPlace.deletedAt = now
-        userPlace.updatedAt = now
-        userPlace.localUpdatedAt = now
-        userPlace.lastSyncError = nil
-        userPlace.syncStateRaw = nextSyncState.rawValue
+        for userPlace in userPlacesToRemove {
+            let rowSyncState: SyncState = userPlace.serverID == nil ? .tombstoned : .pendingDelete
+            userPlace.note = nil
+            userPlace.ratingSignal = nil
+            userPlace.ratingScore = nil
+            userPlace.recommendedScore = nil
+            userPlace.recommendedCount = 0
+            userPlace.categoryOverride = nil
+            userPlace.subcategoryOverride = nil
+            userPlace.categoryOverrideSource = nil
+            userPlace.categoryOverrideConfidence = nil
+            userPlace.deletedAt = now
+            userPlace.updatedAt = now
+            userPlace.localUpdatedAt = now
+            userPlace.lastSyncError = nil
+            userPlace.syncStateRaw = rowSyncState.rawValue
+        }
 
         placeAttributes.removeAll { previousUserPlaceIDs.contains($0.userPlaceID) }
         remoteVisiblePlaceCache.removeAll { visiblePlace in
-            visiblePlace.owner.id == currentUser.id
-                && (previousUserPlaceIDs.contains(visiblePlace.userPlace.id) || previousPlaceIDs.contains(visiblePlace.place.id))
+            guard visiblePlace.owner.id == currentUser.id else { return false }
+            if previousUserPlaceIDs.contains(visiblePlace.userPlace.id) {
+                return true
+            }
+            guard let targetVisiblePlace else {
+                return false
+            }
+            return VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
         }
 
         objectWillChange.send()
@@ -2035,7 +2072,8 @@ final class WanderStore: ObservableObject {
 
         return LocalRemoveSaveChange(
             userPlaceID: userPlace.id,
-            remoteUserPlaceID: remoteUserPlaceID,
+            removedUserPlaceIDs: removedUserPlaceIDs,
+            remoteUserPlaceIDs: remoteUserPlaceIDs,
             syncState: nextSyncState
         )
     }

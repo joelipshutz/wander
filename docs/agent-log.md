@@ -8353,3 +8353,29 @@ Implementation checkpoint, 2026-07-01 15:55 PDT:
 - The first sandboxed build rerun was blocked by CoreSimulator/SwiftPM cache permissions, then passed with elevated Xcode permissions.
 - Draft PR #61 remains the review vehicle for this branch and will be updated by pushing `codex/rec-30-swiftui-mockup`.
 - Known issue: if backend delete fails after local removal, the save stays hidden locally and is marked failed for sync follow-up; there is no undo/restore path in this branch.
+
+Follow-up checkpoint, 2026-07-01 16:12 PDT:
+
+- Ryan requested removing the helper disclaimer under the destructive button and tightening confirmed removal behavior.
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, recent `docs/agent-log.md`, and current stash list before edits.
+- Current status before edits: clean `codex/rec-30-swiftui-mockup...origin/codex/rec-30-swiftui-mockup`.
+- Goal: after confirmation, remove only the current user's saved place from Been/Wanna lists, map icon/grouping, and other own-save surfaces while preserving followed users' saves for the same place.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Features/Profile/ProfileScreen.swift`
+  - `Wander/Services/WanderLocalStore.swift`
+  - `WanderTests/WanderStoreTests.swift`
+
+Follow-up outcome, 2026-07-01 16:18 PDT:
+
+- Removed the helper disclaimer under the destructive `Remove save` button.
+- Updated store removal to remove every current-user visible save that matches the same place group, including duplicate local/remote aliases, while preserving followed users' saves for that place.
+- Updated Map post-remove behavior to either select the remaining followed-user group for that place or clear selection entirely when no visible save remains, so the current user's map icon/outline disappears after confirmation.
+- Cleared stale selected-place state after removal from Discover and Profile saved-place flows.
+- Added regression coverage for removing Joe's seeded Circuit Coffee save while preserving Maya/Ryan's followed saves and verifying the resulting grouped place is no longer saved by the current user.
+- Validation:
+  - `git diff --check`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave -only-testing:WanderTests/WanderStoreTests/testRemoveSavePreservesFollowingSavesForSamePlaceGroup`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
