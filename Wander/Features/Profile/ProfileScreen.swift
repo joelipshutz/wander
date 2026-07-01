@@ -847,49 +847,46 @@ private struct BlockConfirmationModal: View {
                 .ignoresSafeArea()
                 .onTapGesture(perform: cancel)
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Block this person?")
-                        .font(.system(size: 22, weight: .black, design: .rounded))
-                    Text("You won't see each other's profiles, places, or search results.")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            VStack(spacing: WanderTheme.spacing4) {
+                Text("Block this person?")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                VStack(spacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing2) {
                     Button(action: confirm) {
-                        Text("yes, block")
-                            .font(.system(size: 16, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                            .background(WanderTheme.terracotta.color)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .clipShape(Capsule())
+                        Text("Yes, block")
+                            .font(.system(size: 14, weight: .black))
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
+                    .foregroundStyle(.white)
+                    .background(WanderTheme.stateError.color)
+                    .clipShape(Capsule())
 
                     Button(action: cancel) {
-                        Text("no, cancel")
-                            .font(.system(size: 16, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                            .background(WanderTheme.surfaceSand.color)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Capsule())
+                        Text("No, cancel")
+                            .font(.system(size: 14, weight: .black))
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .background(WanderTheme.surfaceSand.color)
+                    .overlay(
+                        Capsule()
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                    .clipShape(Capsule())
                 }
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: 330)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 24, x: 0, y: 12)
-            .padding(WanderTheme.spacing4)
+            .shadow(color: .black.opacity(0.18), radius: 22, x: 0, y: 12)
+            .padding(.horizontal, WanderTheme.spacing4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
+        .transition(.opacity)
+        .zIndex(20)
     }
 }
 

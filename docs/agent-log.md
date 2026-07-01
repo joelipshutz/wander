@@ -8214,6 +8214,21 @@ Follow-up checkpoint, 2026-07-01 12:36 PDT:
 - Expected files:
   - `docs/agent-log.md`
   - `Wander/Features/Profile/ProfileScreen.swift`
+
+Follow-up implementation, 2026-07-01 12:56 PDT:
+
+- Updated `BlockConfirmationModal` to match the unfollow prompt popup visual design from the PR #58 worktree reference:
+  - centered title-only copy
+  - `Yes, block` and `No, cancel` side-by-side capsule actions
+  - destructive red primary button, sand bordered cancel button
+  - matching bone surface, radius, dimmer, and shadow
+- Validation:
+  - `git diff --check` passed.
+  - Focused regression passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testBlockingProfileShellKeepsBlockedUserRenderableForUnblock`
+  - Full suite passed:
+    `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_12-54-33--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
   - `Wander/Features/Discover/DiscoverScreen.swift`
   - `Wander/Services/WanderLocalStore.swift`
   - `WanderTests/WanderStoreTests.swift`
@@ -8234,3 +8249,13 @@ Follow-up implementation, 2026-07-01 12:41 PDT:
 - Full suite passed:
   `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
 - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_12-42-14--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
+
+Follow-up checkpoint, 2026-07-01 12:52 PDT:
+
+- Ryan asked to align the `Block this person?` popup with the unfollow prompt popup design from PR #58.
+- Current branch: `codex/rec-62-blocking-privacy`.
+- Current git status: clean and tracking `origin/codex/rec-62-blocking-privacy`.
+- Worktree note: the PR #58 local worktree has uncommitted `ProfileScreen.swift` and `docs/agent-log.md` changes, so it is being used as a read-only visual reference only.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Profile/ProfileScreen.swift`
