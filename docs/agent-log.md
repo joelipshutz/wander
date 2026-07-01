@@ -7868,3 +7868,25 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 21:50 PDT - Codex - Linear Auto-Assignment Policy
+
+Agent: Codex
+Branch: `codex/linear-auto-assignee`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/linear-auto-assignee`
+Linear: `REC-67` (`Add Linear auto-assignment policy for Ryan and Joe`)
+
+Goal: add durable repo guidance so Linear issues created by agents assign to the human requester/creator, using Ryan and Joe's Linear emails instead of leaving chat-started issues unassigned.
+
+Starting status:
+
+- Fetched `origin`.
+- Root checkout was clean but on stale branch `codex/profile-pictures`; created this isolated worktree from latest `origin/main`.
+- Current worktree status clean on `codex/linear-auto-assignee` tracking `origin/main`.
+- Existing auxiliary worktrees are active, but this change only touches docs/process files plus the shared agent log.
+
+Expected files:
+
+- `AGENTS.md`
+- `docs/decisions.md`
+- `docs/agent-log.md`

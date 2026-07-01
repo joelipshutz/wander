@@ -50,8 +50,23 @@ Before starting implementation:
   feedback, or a prior planning thread.
 - If the work starts in chat and no issue exists yet, create a Linear issue in
   the `recme` team that captures the user request, assign it to the active
-  owner when clear, and move it to `In Progress` before editing code.
+  human requester at creation time, and move it to `In Progress` before editing
+  code.
 - Link the PR or branch back to the issue once one exists.
+
+Linear issue assignment:
+
+- Newly created agent-generated Linear issues must not be left unassigned when
+  Ryan or Joe is the requester/creator.
+- Assign Ryan-requested or Ryan-created issues to `ryan.lieblein@gmail.com`.
+- Assign Joe-requested or Joe-created issues to `jolipshutz@gmail.com`.
+- Set the Linear tool `assignee` field during issue creation. Use the email
+  above rather than relying on fuzzy display-name matching. `assignee: "me"` is
+  acceptable only when the connected Linear OAuth account is known to belong to
+  the active requester.
+- If the requester is unclear, ask before creating the Linear issue rather than
+  creating an unassigned issue. If assignment fails because the Linear user
+  cannot be resolved, stop and report the blocker.
 
 During and after work:
 

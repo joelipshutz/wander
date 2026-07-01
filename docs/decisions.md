@@ -53,6 +53,12 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Explicit TestFlight releases | Locked | Merging app changes to `main` no longer automatically triggers a build-number bump, archive, upload, TestFlight attachment, or tester Slack note. App-code merges are candidates for the next explicit TestFlight release. Only push a TestFlight/TF build when Joe or Ryan explicitly asks, with wording such as "push the TestFlight build", "upload the TF build", "release this to TestFlight", or "go push in your build". The next explicit release packages latest `main`, includes all eligible app changes since the last completed TestFlight build, and bumps the build number once. |
 | Linear completion after merge | Locked | Ordinary product/app issues can move to `Done` once the implementation is merged to `main` and required validation passes. TestFlight remains the `Done` gate only when the issue or user request explicitly requires TestFlight QA, release validation, or a TestFlight push. |
 
+## Process Decisions
+
+| Decision | Status | Notes |
+|---|---|---|
+| Linear requester assignment | Locked | Agent-created Linear issues must be assigned at creation time to the human requester when that requester is Ryan or Joe. Ryan maps to `ryan.lieblein@gmail.com`; Joe maps to `jolipshutz@gmail.com`. If the requester is unclear or the Linear user cannot be resolved, ask or report the blocker instead of creating an unassigned issue. |
+
 ## Design Decisions
 
 | Decision | Status | Notes |
