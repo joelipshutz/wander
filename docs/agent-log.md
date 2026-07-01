@@ -7868,3 +7868,61 @@ Known issues:
 Process follow-up:
 
 - Added `AGENTS.md` guidance requiring chat-started non-trivial work to create a Linear issue and move it to `In Progress` before implementation.
+
+## 2026-06-30 21:38 PDT - Codex - Category Tile Picker Production UI
+
+Agent: Codex
+Branch: `codex/category-picker-tiles`
+Worktree: `/private/tmp/recme-category-picker-tiles`
+Linear: `REC-66` (`Implement production category tile picker and exhaustive subcategory picker`)
+
+Goal: implement the latest approved SwiftUI mockups as production UI, not DEBUG-only mockups: a 14-primary-category tile picker and a grouped, searchable, exhaustive subcategory picker wired into the real save/edit place flow.
+
+Starting status:
+
+- Created isolated worktree from latest `origin/main` at `328401a30` after `git fetch origin`.
+- Root checkout remains on unrelated `codex/profile-pictures`; this work uses the isolated branch to avoid overlap.
+- Linear issue `REC-66` was created and moved to `In Progress`.
+- Current branch status: clean `codex/category-picker-tiles...origin/main`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- `Wander/Services/WanderPlaceCategory.swift`
+- category-related Swift tests in `WanderTests/`
+- preview/mockup or screenshot artifacts outside the repo if needed for review
+
+Design target:
+
+- Primary picker: two-column square-ish tiles for all 14 primary categories, with icon at top, primary category name, short descriptor, type count, search bar, and selected check state.
+- Subcategory picker: title/subtitle, search bar, selected primary chip plus change action, grouped exhaustive chips, selected chip state, and no loss of custom subcategory support.
+- Preserve current metadata logic: primary category, subcategory, source/confidence/raw provider type, provider normalization, user overrides, and personal labels/tags distinction.
+
+Implementation checkpoint, 2026-06-30 22:04 PDT:
+
+- Replaced the production place-type picker with two explicit modes:
+  - category mode: searchable 14-primary-category tile grid with icons, descriptions, type counts, and selected check state.
+  - subcategory mode: searchable grouped chip sections under the selected primary category, selected primary/change pills, selected chip state, and search-as-custom subcategory support.
+- Split the save/edit sheet place type control into separate `category` and `subcategory` rows so users land directly in the right picker.
+- Added `PlaceCategorySubcategoryGroup` and taxonomy-backed grouping for every editable category. The grouping helper filters curated groups against `WanderPlaceCategory.subcategorySuggestions` and appends a `More types` group for any missed taxonomy value, so the UI cannot silently drop subcategories.
+- Updated DEBUG taxonomy mockups to render from the same production category/subcategory sources instead of stale hard-coded mockup arrays.
+- Added Swift taxonomy tests proving every editable category's grouped subcategories exactly match the shared taxonomy suggestions without duplicates, plus a Food & drink group-shape regression.
+
+Validation, 2026-06-30 22:04 PDT:
+
+- `git diff --check` passed.
+- `xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused taxonomy suite passed:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests`
+- Full simulator suite passed:
+  `xcodebuild test-without-building -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,id=715A24C7-6462-44C7-9CDD-19CA13695109' -derivedDataPath /private/tmp/DerivedData-category-picker-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Captured simulator screenshots from the DEBUG mockup route, now shared-taxonomy backed:
+  - `/private/tmp/recme-category-primary.png`
+  - `/private/tmp/recme-subcategory-picker.png`
+
+Review notes:
+
+- Plan design review: no blocking visual issue for the requested branch. The picker matches the approved direction: warm full-screen sheet, big search, two-column primary tiles, grouped chips, visible selected state, and direct change affordance.
+- Plan engineering review: no blocking architecture issue. The change is isolated to the SwiftUI picker plus a taxonomy grouping helper and tests; it preserves existing category metadata source/confidence/raw provider type wiring and effective user overrides.
+- Known product/data gap: tile counts and visible subcategory options are the counts/values from the current shared taxonomy. Some numbers in the pasted mockup, such as `Outdoors & nature - 32 types`, are larger than the current live taxonomy (`23` today). This branch keeps UI truthful instead of faking counts; expanding the shared taxonomy would be a separate data/framework update touching Swift, shared JSON, Supabase Edge taxonomy, and possibly SQL normalization tests.

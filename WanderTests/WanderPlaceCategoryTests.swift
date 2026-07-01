@@ -137,4 +137,31 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
         XCTAssertFalse(WanderPlaceCategory.editableCategories.contains(WanderPlaceCategory.fallbackPlace))
     }
+
+    func testSubcategoryGroupsAreExhaustiveForEveryEditableCategory() {
+        for category in WanderPlaceCategory.editableCategories {
+            let suggestions = WanderPlaceCategory.subcategorySuggestions(for: category)
+            let grouped = WanderPlaceCategory.subcategoryGroups(for: category).flatMap(\.subcategories)
+
+            XCTAssertEqual(grouped.count, suggestions.count, "\(category) should group every taxonomy subcategory")
+            XCTAssertEqual(Set(grouped), Set(suggestions), "\(category) grouped subcategories must match the taxonomy")
+            XCTAssertEqual(Set(grouped).count, grouped.count, "\(category) should not duplicate grouped subcategories")
+        }
+    }
+
+    func testFoodDrinkSubcategoriesUseMockupStyleGroups() {
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.foodDrink)
+
+        XCTAssertEqual(groups.map(\.title), [
+            "Coffee & tea",
+            "Restaurants",
+            "Bars & drinks",
+            "Bakeries & sweets",
+            "Markets & quick bites"
+        ])
+        XCTAssertTrue(groups[0].subcategories.contains("Coffee shop"))
+        XCTAssertTrue(groups[1].subcategories.contains("Thai restaurant"))
+        XCTAssertTrue(groups[2].subcategories.contains("Cocktail bar"))
+        XCTAssertEqual(groups.flatMap(\.subcategories).count, 40)
+    }
 }

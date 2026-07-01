@@ -190,8 +190,8 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
                 columns: [GridItem(.flexible(), spacing: WanderTheme.spacing2), GridItem(.flexible(), spacing: WanderTheme.spacing2)],
                 spacing: WanderTheme.spacing2
             ) {
-                ForEach(CategoryTaxonomyMockData.primaryCategories) { category in
-                    PrimaryCategoryTile(category: category, isSelected: category.id == "food_drink")
+                ForEach(WanderPlaceCategory.editableCategories, id: \.self) { category in
+                    PrimaryCategoryPickerTile(category: category, isSelected: category == WanderPlaceCategory.foodDrink) {}
                 }
             }
         }
@@ -204,15 +204,13 @@ private struct CategoryTaxonomySubcategoryPickerMockup: View {
             MockupSearchField(text: "Search food & drink types")
 
             HStack(spacing: WanderTheme.spacing2) {
-                MockupChoicePill(title: "Food & drink", isSelected: true, systemImage: "fork.knife")
-                MockupChoicePill(title: "change", isSelected: false, systemImage: "square.grid.2x2")
+                CategoryPickerModePill(title: "Food & drink", systemImage: "fork.knife", isSelected: true)
+                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
                 Spacer(minLength: 0)
             }
 
-            ForEach(Array(CategoryTaxonomyMockData.foodDrinkGroups.enumerated()), id: \.offset) { _, group in
-                MockupSection(title: group.title) {
-                    MockupChipGrid(values: group.values, selected: ["Thai restaurant"])
-                }
+            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.foodDrink), id: \.title) { group in
+                SubcategoryGroupSection(group: group, selectedSubcategory: "Thai restaurant") { _ in }
             }
         }
     }
@@ -286,10 +284,12 @@ private struct CategoryTaxonomyMockupScreen<Content: View>: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             Text(title)
-                .font(.system(size: 30, weight: .black))
+                .font(.system(size: 32, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
             Text(subtitle)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -464,15 +464,15 @@ private struct MockupSearchField: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .black))
+                .font(.system(size: 22, weight: .black))
                 .foregroundStyle(WanderTheme.textFaint.color)
             Text(text)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 46)
+        .frame(minHeight: 56)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))

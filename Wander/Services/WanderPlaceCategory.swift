@@ -132,6 +132,11 @@ struct PlaceCategoryTaxonomyEntry: Equatable {
     let isEditable: Bool
 }
 
+struct PlaceCategorySubcategoryGroup: Equatable {
+    let title: String
+    let subcategories: [String]
+}
+
 enum WanderPlaceCategory {
     static let foodDrink = "food_drink"
     static let outdoorsNature = "outdoors_nature"
@@ -470,6 +475,77 @@ enum WanderPlaceCategory {
         "transportation": transportationTransit
     ]
 
+    private static let curatedSubcategoryGroups: [String: [PlaceCategorySubcategoryGroup]] = [
+        foodDrink: [
+            PlaceCategorySubcategoryGroup(title: "Coffee & tea", subcategories: ["Coffee shop", "Cafe", "Tea shop"]),
+            PlaceCategorySubcategoryGroup(title: "Restaurants", subcategories: ["Restaurant", "Thai restaurant", "Mexican restaurant", "Japanese restaurant", "Sushi restaurant", "Ramen restaurant", "Chinese restaurant", "Korean restaurant", "Vietnamese restaurant", "Indian restaurant", "Italian restaurant", "Pizza restaurant", "Mediterranean restaurant", "Seafood restaurant", "Steakhouse", "Diner", "Brunch spot"]),
+            PlaceCategorySubcategoryGroup(title: "Bars & drinks", subcategories: ["Bar", "Cocktail bar", "Wine bar", "Brewery", "Pub", "Dive bar", "Rooftop bar", "Nightlife"]),
+            PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: ["Bakery", "Dessert shop", "Ice cream shop", "Donut shop", "Bagel shop"]),
+            PlaceCategorySubcategoryGroup(title: "Markets & quick bites", subcategories: ["Juice bar", "Sandwich shop", "Fast food restaurant", "Food truck", "Food court", "Food market", "Farmers market"])
+        ],
+        outdoorsNature: [
+            PlaceCategorySubcategoryGroup(title: "Parks & gardens", subcategories: ["Park", "National park", "State park", "Garden", "Botanical garden", "Dog park", "Playground", "Picnic area"]),
+            PlaceCategorySubcategoryGroup(title: "Trails & scenery", subcategories: ["Hike or trail", "Trailhead", "Scenic overlook", "Canyon", "Mountain", "Nature preserve", "Observatory"]),
+            PlaceCategorySubcategoryGroup(title: "Water & stays", subcategories: ["Beach", "Lake", "River", "Waterfall", "Hot spring", "Pier", "Marina", "Campground"])
+        ],
+        artsCultureFaith: [
+            PlaceCategorySubcategoryGroup(title: "Museums & arts", subcategories: ["Museum", "Art museum", "Gallery", "Art gallery", "Public art", "Cultural center"]),
+            PlaceCategorySubcategoryGroup(title: "History & landmarks", subcategories: ["Historic site", "Landmark", "Monument", "Library", "Bookstore"]),
+            PlaceCategorySubcategoryGroup(title: "Faith & reflection", subcategories: ["Temple", "Shrine", "Church", "Cathedral", "Mosque", "Synagogue", "Chapel", "Meditation center", "Spiritual place"])
+        ],
+        entertainment: [
+            PlaceCategorySubcategoryGroup(title: "Shows & venues", subcategories: ["Entertainment venue", "Movie theater", "Music venue", "Concert hall", "Comedy club", "Theater", "Event venue"]),
+            PlaceCategorySubcategoryGroup(title: "Games & nights out", subcategories: ["Arcade", "Bowling alley", "Karaoke", "Pool hall", "Casino", "Escape room"]),
+            PlaceCategorySubcategoryGroup(title: "Attractions", subcategories: ["Tourist attraction", "Arena", "Stadium", "Zoo", "Aquarium", "Amusement park", "Theme park"])
+        ],
+        healthWellness: [
+            PlaceCategorySubcategoryGroup(title: "Wellness & recovery", subcategories: ["Wellness studio", "Spa", "Massage", "Sauna", "Bathhouse", "Meditation center", "Therapy office", "Chiropractor", "Acupuncture", "Physical therapy", "Recovery studio"]),
+            PlaceCategorySubcategoryGroup(title: "Medical care", subcategories: ["Hospital", "Urgent care", "Medical center", "Clinic", "Doctor", "Dentist", "Optometrist"]),
+            PlaceCategorySubcategoryGroup(title: "Pharmacy", subcategories: ["Pharmacy", "Drugstore"])
+        ],
+        sportsFitness: [
+            PlaceCategorySubcategoryGroup(title: "Gyms & studios", subcategories: ["Gym", "Fitness center", "Training studio", "Pilates studio", "Reformer pilates", "Lagree studio", "Yoga studio", "Barre studio", "Boxing gym", "Martial arts gym", "Climbing gym", "Dance studio", "Spin studio"]),
+            PlaceCategorySubcategoryGroup(title: "Courts & fields", subcategories: ["Tennis court", "Basketball court", "Soccer field", "Baseball field", "Golf course", "Pool"]),
+            PlaceCategorySubcategoryGroup(title: "Action sports", subcategories: ["Skate park", "Ski area", "Surf spot"])
+        ],
+        shopping: [
+            PlaceCategorySubcategoryGroup(title: "Stores & boutiques", subcategories: ["Shop", "Store", "Boutique", "Market", "Mall", "Gift shop"]),
+            PlaceCategorySubcategoryGroup(title: "Food & essentials", subcategories: ["Grocery store", "Convenience store", "Flower shop", "Pet store"]),
+            PlaceCategorySubcategoryGroup(title: "Specialty retail", subcategories: ["Art supply store", "Bookstore", "Record store", "Clothing store", "Shoe store", "Jewelry store", "Home goods store", "Furniture store", "Hardware store", "Electronics store", "Vintage store", "Thrift store"])
+        ],
+        services: [
+            PlaceCategorySubcategoryGroup(title: "Beauty & care", subcategories: ["Service business", "Hair salon", "Barber", "Nail salon", "Beauty salon"]),
+            PlaceCategorySubcategoryGroup(title: "Repairs & errands", subcategories: ["Laundry", "Dry cleaner", "Tailor", "Shoe repair", "Phone repair", "Auto repair", "Car wash", "Bank", "ATM", "Post office", "Shipping center"]),
+            PlaceCategorySubcategoryGroup(title: "Pet care", subcategories: ["Veterinarian", "Veterinary clinic", "Animal hospital", "Pet clinic", "Pet groomer"])
+        ],
+        lodging: [
+            PlaceCategorySubcategoryGroup(title: "Hotels", subcategories: ["Hotel", "Motel", "Resort", "Boutique hotel", "Inn", "Hostel", "Bed and breakfast", "3-star hotel", "4-star hotel", "5-star hotel"]),
+            PlaceCategorySubcategoryGroup(title: "Alternative stays", subcategories: ["Vacation rental", "Cabin", "Camp stay"])
+        ],
+        transportationTransit: [
+            PlaceCategorySubcategoryGroup(title: "Stations & terminals", subcategories: ["Transit stop", "Airport", "Train station", "Bus station", "Subway station", "Light rail station", "Ferry terminal"]),
+            PlaceCategorySubcategoryGroup(title: "Parking & pickup", subcategories: ["Taxi stand", "Ride pickup", "Parking lot", "Parking garage"]),
+            PlaceCategorySubcategoryGroup(title: "Vehicles & fuel", subcategories: ["Rental car", "Gas station", "EV charging station", "Bike share", "Car share", "Rest stop"])
+        ],
+        education: [
+            PlaceCategorySubcategoryGroup(title: "Schools & campuses", subcategories: ["School", "Elementary school", "High school", "College", "University", "Campus", "Preschool", "Daycare"]),
+            PlaceCategorySubcategoryGroup(title: "Classes & study", subcategories: ["Tutoring center", "Language school", "Music school", "Art class", "Cooking class", "Workshop", "Library", "Study spot"])
+        ],
+        workVenues: [
+            PlaceCategorySubcategoryGroup(title: "Work", subcategories: ["Coworking space", "Office", "Meeting room", "Conference center", "Business center"]),
+            PlaceCategorySubcategoryGroup(title: "Production", subcategories: ["Studio", "Production studio", "Photo studio", "Warehouse", "Workshop space"]),
+            PlaceCategorySubcategoryGroup(title: "Events", subcategories: ["Event space", "Convention center", "Rooftop venue", "Private event room"])
+        ],
+        homeNeighborhood: [
+            PlaceCategorySubcategoryGroup(title: "Homes & buildings", subcategories: ["Home", "Apartment building", "Condo", "House", "Building", "Lobby"]),
+            PlaceCategorySubcategoryGroup(title: "Neighborhood anchors", subcategories: ["Neighborhood spot", "Block", "Courtyard", "Community garden", "Neighborhood landmark", "Local shortcut", "Viewpoint", "Meetup spot"])
+        ],
+        publicServices: [
+            PlaceCategorySubcategoryGroup(title: "Government & civic", subcategories: ["Public service", "Government office", "City hall", "Courthouse", "Embassy", "Consulate", "DMV", "Civic building"]),
+            PlaceCategorySubcategoryGroup(title: "Safety & utilities", subcategories: ["Police station", "Fire station", "Public restroom", "Recycling center", "Utility office", "Community center"])
+        ]
+    ]
+
     static func primary(for pointCategory: MKPointOfInterestCategory?, name: String? = nil) -> String? {
         if let nameCategory = primaryFromName(name, pointCategory: pointCategory) {
             return nameCategory
@@ -644,6 +720,39 @@ enum WanderPlaceCategory {
 
     static func subcategorySuggestions(for primaryCategory: String) -> [String] {
         entry(for: primaryCategory)?.subcategories ?? []
+    }
+
+    static func subcategoryGroups(for primaryCategory: String) -> [PlaceCategorySubcategoryGroup] {
+        let primary = normalizedPrimaryCategory(primaryCategory)
+        let suggestions = subcategorySuggestions(for: primary)
+        guard !suggestions.isEmpty else { return [] }
+
+        var used = Set<String>()
+        var groups: [PlaceCategorySubcategoryGroup] = []
+
+        for group in curatedSubcategoryGroups[primary] ?? [] {
+            let values = group.subcategories.filter { subcategory in
+                let key = normalizedCategoryText(subcategory)
+                guard suggestions.contains(where: { normalizedCategoryText($0) == key }) else {
+                    return false
+                }
+                return used.insert(key).inserted
+            }
+
+            if !values.isEmpty {
+                groups.append(PlaceCategorySubcategoryGroup(title: group.title, subcategories: values))
+            }
+        }
+
+        let remaining = suggestions.filter { subcategory in
+            !used.contains(normalizedCategoryText(subcategory))
+        }
+
+        if !remaining.isEmpty {
+            groups.append(PlaceCategorySubcategoryGroup(title: "More types", subcategories: remaining))
+        }
+
+        return groups
     }
 
     static func symbolName(for category: String) -> String {
