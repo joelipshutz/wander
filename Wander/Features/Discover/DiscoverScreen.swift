@@ -165,7 +165,9 @@ struct DiscoverScreen: View {
                 selectedPlaceDestination
             }
             .sheet(item: $selectedProfile) { profile in
-                ProfileDetailView(profileID: profile.id)
+                ProfileDetailView(profileID: profile.id) { blockedProfileID in
+                    handleMemberBlocked(profileID: blockedProfileID)
+                }
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -547,6 +549,13 @@ struct DiscoverScreen: View {
         }
 
         memberResults = await store.discoverMembers(query: memberQuery, backend: backend)
+    }
+
+    private func handleMemberBlocked(profileID: String) {
+        selectedProfile = nil
+        memberQuery = ""
+        memberResults = []
+        searchFieldFocused = false
     }
 
     private func refreshRemotePlacesIfNeeded() async {

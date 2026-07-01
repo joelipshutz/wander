@@ -8203,3 +8203,34 @@ Handoff, 2026-07-01 12:05 PDT:
 - Opened ready PR #59: `https://github.com/joelipshutz/wander/pull/59`.
 - Linked PR #59 to Linear `REC-62`, moved the issue to `In Review`, and added a Linear implementation/verification comment.
 - Next step: review/merge PR #59, then apply migration `20260701185500_harden_blocked_social_graph.sql` with the normal release/deploy workflow before shipping to TestFlight.
+
+Follow-up checkpoint, 2026-07-01 12:36 PDT:
+
+- Ryan verified the main block behavior and asked for final Discover members polish:
+  - Block confirmation from a Discover members profile should be centered without a popover caret.
+  - Confirmation should show a destructive Yes/Block action and a No/Cancel action underneath it.
+  - Blocking a searched member should clear member search/results and return to the default members list.
+  - Blocked users must still appear in Settings > blocked users so they can be unblocked later.
+- Expected files:
+  - `docs/agent-log.md`
+  - `Wander/Features/Profile/ProfileScreen.swift`
+  - `Wander/Features/Discover/DiscoverScreen.swift`
+  - `Wander/Services/WanderLocalStore.swift`
+  - `WanderTests/WanderStoreTests.swift`
+  - targeted tests if the affected behavior is model-testable without UI automation.
+
+Follow-up implementation, 2026-07-01 12:41 PDT:
+
+- Replaced the native profile block `confirmationDialog` with a centered in-sheet `BlockConfirmationModal`, removing the top popover/caret presentation.
+- Added vertical actions: `yes, block` followed by `no, cancel`.
+- Added a `ProfileDetailView` block callback; Discover clears `memberQuery`, empties `memberResults`, dismisses the selected profile sheet, and drops search focus after a block.
+- Added `WanderStore.block(profile:backend:)` so blocking from a profile preserves the visible profile shell for Settings blocked users.
+- Made `blockedProfiles()` return a fallback `Blocked user` shell for ID-only block rows so every block can render an unblock control.
+- Added regressions:
+  - `testBlockingProfileShellKeepsBlockedUserRenderableForUnblock`
+  - `testBlockingByIDStillShowsPlaceholderBlockedUserForUnblock`
+- Focused validation passed:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testBlockFiltersStaleFollowEdgesFromBlockedUsersGraph -only-testing:WanderTests/WanderStoreTests/testBlockingProfileShellKeepsBlockedUserRenderableForUnblock -only-testing:WanderTests/WanderStoreTests/testBlockingByIDStillShowsPlaceholderBlockedUserForUnblock`
+- Full suite passed:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-focused CODE_SIGNING_ALLOWED=NO -jobs 1`
+- `xcresulttool` summary for `/private/tmp/DerivedData-rec62-focused/Logs/Test/Test-Wander-2026.07.01_12-42-14--0700.xcresult`: 212 tests, 0 failures, 0 skipped.

@@ -259,6 +259,41 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.following(of: "user_ryan").isEmpty)
     }
 
+    func testBlockingProfileShellKeepsBlockedUserRenderableForUnblock() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let sofia = ProfileShell(
+            id: "user_sofia",
+            handle: "sofia",
+            displayName: "Sofia",
+            avatarURL: "https://example.com/sofia.jpg",
+            bio: "sunset walks",
+            relationship: .nonFollower
+        )
+
+        await store.block(profile: sofia, backend: nil)
+
+        let blocked = store.blockedProfiles()
+        XCTAssertEqual(blocked.map(\.id), ["user_sofia"])
+        XCTAssertEqual(blocked.first?.displayName, "Sofia")
+        XCTAssertEqual(blocked.first?.handle, "sofia")
+        XCTAssertEqual(blocked.first?.avatarURL, "https://example.com/sofia.jpg")
+        XCTAssertTrue(store.searchProfiles(handleQuery: "so").isEmpty)
+    }
+
+    func testBlockingByIDStillShowsPlaceholderBlockedUserForUnblock() {
+        let store = makeStore()
+
+        store.block(userID: "user_remote_only")
+
+        let blocked = store.blockedProfiles()
+        XCTAssertTrue(blocked.contains { profile in
+            profile.id == "user_remote_only"
+                && profile.displayName == "Blocked user"
+                && profile.handle == "user_remote_only"
+        })
+    }
+
     func testSavingSamePlaceMergesIntoExistingUserPlace() {
         let store = makeStore()
         let originalCount = store.currentUserVisiblePlaces.count
