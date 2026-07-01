@@ -8098,3 +8098,29 @@ Release follow-up, 2026-07-01 10:16 PDT:
   - `pnpm dlx deno test supabase/functions/_shared/place-taxonomy.test.ts` passed: 2 tests, 0 failures.
   - focused `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests` passed: 11 tests, 0 failures.
   - full `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-category-final CODE_SIGNING_ALLOWED=NO -jobs 1` passed per `xcresulttool`: build and test action succeeded with 209 tests.
+
+## 2026-07-01 10:19 PDT - Codex - TestFlight Build 58 Category Picker Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Linear: `REC-66` (`Implement production category tile picker and exhaustive subcategory picker`)
+
+Goal: package latest `main` after PR #55 into TestFlight so Joe and Ryan can test the production category tile picker, exhaustive grouped subcategory picker, restaurant cuisine/type split, category metadata migration, and final Coffee/Chocolate lounge polish on device.
+
+Starting status:
+
+- PR #55 was squash-merged to `main` as `bb7f12d51` (`Implement category tile picker`).
+- The existing main release worktree had one local build-56 agent-log commit; it was rebased onto current `origin/main` so the release keeps that durable log entry without losing the PR #55 merge.
+- Build 57 was the last completed TestFlight release; `CURRENT_PROJECT_VERSION` started at `57`.
+- Expected release files from here: `project.yml`, `Wander.xcodeproj/project.pbxproj`, and `docs/agent-log.md`.
+
+Included app-code changes since completed TestFlight build 57:
+
+- Production primary category tile picker with the revised category names and all broad categories.
+- Grouped, searchable, exhaustive subcategory picker sourced from the shared taxonomy.
+- Separate `Restaurants & Food` cuisine and subcategory picker menus, with cuisine optional.
+- First-time provider metadata defaults for category/subcategory, including MapKit nightlife strings mapping into `Bars & Nightlife`.
+- Category metadata fields and migration to the new framework.
+- `optional` cuisine placeholder styling now uses faint text.
+- `Coffee lounge` and `Chocolate lounge` are available under `Coffee, Tea, & Sweets`.
