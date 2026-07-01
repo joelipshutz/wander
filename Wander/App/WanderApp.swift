@@ -3,8 +3,10 @@ import SwiftData
 
 @main
 struct WanderApp: App {
+    @UIApplicationDelegateAdaptor(WanderAppDelegate.self) private var appDelegate
     @StateObject private var auth: AuthSessionStore
     @StateObject private var backend: WanderBackend
+    @StateObject private var pushNotifications = PushNotificationManager()
     private let analytics: AnalyticsClient
     private let discoverParser: any LLMFilterParser
 
@@ -35,6 +37,7 @@ struct WanderApp: App {
         WanderRootView(analytics: analytics, parser: discoverParser)
             .environmentObject(auth)
             .environmentObject(backend)
+            .environmentObject(pushNotifications)
             .modelContainer(WanderModelContainer.preview)
     }
 

@@ -8148,3 +8148,40 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+
+## 2026-07-01 11:48 PDT - Codex - REC-60 Push Notification Implementation
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec-60-notifications`
+Linear: `REC-60` - Add push notifications for follower and list activity
+Starting status: clean branch created from `origin/main` at `7d709ceb2`; root checkout is on stale `codex/profile-pictures` with an unrelated agent-log planning edit and is not used for implementation.
+
+Goal: implement the approved REC-60 notification push set in a new branch, including backend wiring for not-yet-fully-fledged app surfaces so notifications are ready when those features ship.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Supabase migrations and SQL tests for notification tokens/preferences/events/RPCs
+- Supabase Edge Function or shared backend notification helpers
+- iOS notification service/model wiring and Settings preferences
+- Focused unit/contract tests for notification routing and no-push guardrails
+
+Plan:
+
+- Inspect current Supabase social/list/extraction RPCs, local store flows, and settings architecture.
+- Add durable backend contracts for device registration, notification preferences, event creation, push eligibility, and APNs dispatch readiness.
+- Wire currently available social flows and backend stubs for list/extraction notification scenarios, while preserving no-push cases for unfollow/block/removal/privacy edits.
+- Add tests for preference defaults, block/privacy guards, mutual-follow dedupe, shared-list notification creation, and notification payload safety.
+
+Checkpoint 2026-07-01 12:22 PDT:
+
+- Implemented notification preferences, APNs device-token registration, push event queueing, service-role claim/result RPCs, and a Supabase Edge Function worker for APNs dispatch.
+- Wired event creation for approved push cases: followed you, mutual follow, collaborator added to list, place added to shared list, saved from your map, and capture/extraction ready. Discovery digest preference/type exists but has no producer yet by design.
+- Preserved no-push behavior for disabled preference buckets, missing active tokens, blocks, self-actions, collaborator removal, and private note payloads.
+- Added iOS APNs lifecycle wiring, notification settings UI, sign-in gate, sign-out token unregister, entitlements, and repository tests.
+- Validation: `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
+- Validation: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Validation: focused `xcodebuild test` for `RemoteRepositoryTests/testNotificationRepositoryCallsPreferenceAndTokenRPCs` and `RemoteRepositoryTests/testPushNotificationDeviceTokenHexEncoding` passed on iPhone 17 Pro OS 26.5.
+- Validation: full `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec60-full-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Validation gap: `pnpm dlx supabase test db supabase/tests/notifications.sql` could not connect to local Postgres (`LegacyDbConnectError`); SQL coverage is committed but local Supabase/Docker DB was not available in this session.

@@ -580,6 +580,71 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
     }
 
+    func testNotificationRepositoryCallsPreferenceAndTokenRPCs() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["get_notification_preferences"] = """
+        {
+          "push_enabled": true,
+          "social_graph_enabled": true,
+          "shared_lists_enabled": true,
+          "recommendations_enabled": true,
+          "capture_enabled": true,
+          "discovery_digest_enabled": false
+        }
+        """.data(using: .utf8)
+        rpc.responses["update_notification_preferences"] = """
+        {
+          "push_enabled": true,
+          "social_graph_enabled": true,
+          "shared_lists_enabled": true,
+          "recommendations_enabled": true,
+          "capture_enabled": true,
+          "discovery_digest_enabled": true
+        }
+        """.data(using: .utf8)
+        rpc.responses["register_push_token"] = #""token-row-id""#.data(using: .utf8)
+        let repository = SupabaseNotificationRepository(rpc: rpc)
+
+        let preferences = try await repository.preferences()
+        let updated = try await repository.updatePreferences(
+            NotificationPreferencesUpdate(discoveryDigestEnabled: true)
+        )
+        let tokenID = try await repository.registerPushToken(
+            "abcdef1234567890",
+            environment: .sandbox,
+            appBundleID: "com.grayline.wander"
+        )
+        try await repository.unregisterPushToken("abcdef1234567890", environment: .sandbox)
+
+        XCTAssertTrue(preferences.socialGraphEnabled)
+        XCTAssertFalse(preferences.discoveryDigestEnabled)
+        XCTAssertTrue(updated.discoveryDigestEnabled)
+        XCTAssertEqual(tokenID, "token-row-id")
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            [
+                "get_notification_preferences",
+                "update_notification_preferences",
+                "register_push_token",
+                "unregister_push_token"
+            ]
+        )
+
+        let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
+        XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
+
+        XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
+        XCTAssertEqual(rpc.rawBodies[2]["input_environment"] as? String, "sandbox")
+        XCTAssertEqual(rpc.rawBodies[2]["input_app_bundle_id"] as? String, "com.grayline.wander")
+
+        XCTAssertEqual(rpc.rawBodies[3]["input_device_token"] as? String, "abcdef1234567890")
+        XCTAssertEqual(rpc.rawBodies[3]["input_environment"] as? String, "sandbox")
+    }
+
+    func testPushNotificationDeviceTokenHexEncoding() {
+        XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
+    }
+
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
         let parser = RemoteDiscoverFilterParser(repository: FailingDiscoverFilterRepository())
 

@@ -7,6 +7,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var showsSettings = false
     @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
@@ -48,6 +49,7 @@ struct ProfileScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(pushNotifications)
             }
             .sheet(isPresented: $showsProfileCamera) {
                 ProfileCameraPicker { image in

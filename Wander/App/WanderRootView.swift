@@ -4,6 +4,7 @@ import SwiftUI
 struct WanderRootView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
@@ -83,11 +84,23 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(pushNotifications)
             }
         }
         .task {
+            await pushNotifications.refreshAuthorizationStatus()
             await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
+            guard let deviceToken = notification.userInfo?[WanderAppDelegate.deviceTokenKey] as? Data else { return }
+            Task {
+                await pushNotifications.handleRegisteredDeviceToken(deviceToken, backend: backend, authState: auth.state)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didFailToRegisterForRemoteNotifications)) { notification in
+            guard let error = notification.userInfo?[WanderAppDelegate.errorKey] as? Error else { return }
+            pushNotifications.handleRegistrationFailure(error)
         }
         .onChange(of: auth.isPresentingNativeAuth) { _, isPresenting in
             guard !isPresenting else { return }
@@ -134,6 +147,7 @@ struct WanderRootView: View {
                 #endif
                 await store.refreshRemoteCurrentProfile(backend: backend)
                 let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
+                await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
                 #if DEBUG
                 WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public)")
                 #endif

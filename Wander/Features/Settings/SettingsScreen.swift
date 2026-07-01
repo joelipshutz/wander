@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct SettingsScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var activeDetail: SettingsDetail?
     @State private var pendingPrivateProfileValue: Bool?
     @State private var showsPrivateProfileWarning = false
@@ -27,6 +29,11 @@ struct SettingsScreen: View {
             switch detail {
             case .trust:
                 TrustAndPrivacySheet()
+            case .notifications:
+                NotificationSettingsSheet()
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+                    .environmentObject(pushNotifications)
             }
         }
         .alert(
@@ -79,6 +86,7 @@ struct SettingsScreen: View {
 
                 Button {
                     Task {
+                        await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
                         try? await auth.signOut()
                     }
                 } label: {
@@ -288,7 +296,11 @@ struct SettingsScreen: View {
                 activeDetail = .trust
             }
             SettingsRow(title: "Contacts", subtitle: "planned native permission later", systemImage: "person.crop.rectangle.stack")
-            SettingsRow(title: "Notifications", subtitle: "after first save", systemImage: "bell")
+            SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle.lowercased(), systemImage: "bell") {
+                auth.requireSignIn(for: .manageNotifications) {
+                    activeDetail = .notifications
+                }
+            }
             SettingsRow(title: "Data and sync", subtitle: "\(store.pendingSyncCount) pending local item\(store.pendingSyncCount == 1 ? "" : "s")", systemImage: "arrow.triangle.2.circlepath") {
                 auth.presentGate(for: .syncPending)
             }
@@ -303,6 +315,7 @@ struct SettingsScreen: View {
 
 private enum SettingsDetail: String, Identifiable {
     case trust
+    case notifications
 
     var id: String { rawValue }
 }
@@ -378,6 +391,243 @@ private struct TrustAndPrivacySheet: View {
                     .foregroundStyle(WanderTheme.terracotta.color)
                 }
             }
+        }
+    }
+}
+
+private struct NotificationSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @State private var preferences = NotificationPreferences()
+    @State private var isLoading = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("notifications")
+                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Choose the account activity rec.me can send to this phone.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    statusBlock
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                        SettingsSectionTitle("push types")
+                        notificationToggle(
+                            title: "Push notifications",
+                            systemImage: "bell.badge",
+                            binding: preferenceBinding(\.pushEnabled) { NotificationPreferencesUpdate(pushEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Follows and friends",
+                            systemImage: "person.2",
+                            binding: preferenceBinding(\.socialGraphEnabled) { NotificationPreferencesUpdate(socialGraphEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Shared lists",
+                            systemImage: "bookmark.square",
+                            binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Saves from your map",
+                            systemImage: "map",
+                            binding: preferenceBinding(\.recommendationsEnabled) { NotificationPreferencesUpdate(recommendationsEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Capture ready",
+                            systemImage: "sparkles",
+                            binding: preferenceBinding(\.captureEnabled) { NotificationPreferencesUpdate(captureEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Discovery digest",
+                            systemImage: "calendar.badge.clock",
+                            binding: preferenceBinding(\.discoveryDigestEnabled) { NotificationPreferencesUpdate(discoveryDigestEnabled: $0) }
+                        )
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WanderTheme.stateError.color)
+                    }
+                }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
+            }
+            .wanderScreen()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                }
+            }
+        }
+        .task {
+            await load()
+        }
+    }
+
+    private var statusBlock: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 38, height: 38)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(pushNotifications.statusTitle)
+                        .font(.system(size: 15, weight: .black))
+                    Text(statusSubtitle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer()
+            }
+
+            if pushNotifications.canRequestAuthorization {
+                Button {
+                    Task {
+                        await pushNotifications.requestAuthorizationAndRegister()
+                        await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: auth.state)
+                    }
+                } label: {
+                    actionLabel(
+                        title: pushNotifications.isRequestingAuthorization ? "asking" : "allow notifications",
+                        systemImage: "bell.badge"
+                    )
+                }
+                .disabled(pushNotifications.isRequestingAuthorization)
+            } else if pushNotifications.authorizationStatus == .denied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    actionLabel(title: "open iOS settings", systemImage: "gear")
+                }
+            } else if pushNotifications.canRegisterForRemoteNotifications {
+                Button {
+                    UIApplication.shared.registerForRemoteNotifications()
+                } label: {
+                    actionLabel(
+                        title: pushNotifications.isRegisteringToken ? "syncing" : "sync this device",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
+                .disabled(pushNotifications.isRegisteringToken)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var statusSubtitle: String {
+        switch pushNotifications.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return "This device can receive rec.me activity."
+        case .denied:
+            return "Enable alerts in iOS Settings to receive pushes."
+        case .notDetermined:
+            return "rec.me will ask only when you allow it here."
+        @unknown default:
+            return "Notification status is unavailable."
+        }
+    }
+
+    private func actionLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: systemImage)
+            Text(title)
+        }
+        .font(.system(size: 15, weight: .black))
+        .foregroundStyle(WanderTheme.textOnAction.color)
+        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+        .background(WanderTheme.terracotta.color)
+        .clipShape(Capsule())
+    }
+
+    private func notificationToggle(title: String, systemImage: String, binding: Binding<Bool>) -> some View {
+        Toggle(isOn: binding) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 32, height: 32)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(WanderTheme.textInk.color)
+        .disabled(isLoading || isSaving || !backend.canRegisterPushNotifications)
+    }
+
+    private func preferenceBinding(
+        _ keyPath: WritableKeyPath<NotificationPreferences, Bool>,
+        update: @escaping (Bool) -> NotificationPreferencesUpdate
+    ) -> Binding<Bool> {
+        Binding {
+            preferences[keyPath: keyPath]
+        } set: { nextValue in
+            preferences[keyPath: keyPath] = nextValue
+            Task {
+                await save(update(nextValue))
+            }
+        }
+    }
+
+    private func load() async {
+        await pushNotifications.refreshAuthorizationStatus()
+        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            preferences = try await backend.notificationPreferences()
+        } catch {
+            errorMessage = "Could not load notification settings."
+        }
+    }
+
+    private func save(_ update: NotificationPreferencesUpdate) async {
+        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+            return
+        }
+
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        do {
+            preferences = try await backend.updateNotificationPreferences(update)
+        } catch {
+            errorMessage = "Could not save notification settings."
         }
     }
 }
