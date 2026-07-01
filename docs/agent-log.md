@@ -8148,6 +8148,7 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+
 ## 2026-07-01 11:29 PDT - Codex - REC-44 Unfollow Confirmation
 
 Agent: Codex
@@ -8245,3 +8246,65 @@ Landing checkpoint, 2026-07-01 15:14 PDT:
   - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Next: push this landing log update to PR #58, squash-merge PR #58, update local `main`, and move REC-44 to `Done` after the merge succeeds.
+
+## 2026-07-01 15:00 PDT - Codex - REC-30 Remove Save SwiftUI Mockup
+
+Agent: Codex
+Branch: `codex/rec-30-swiftui-mockup`
+Worktree: `/private/tmp/recme-rec-30-swiftui-mockup`
+Linear: `REC-30` (`Add a user-friendly remove save action when editing a saved place`)
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` entries before edits.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty on `docs/agent-log.md` and remains on `codex/profile-pictures`; this work is isolated in a fresh worktree from `origin/main`.
+- REC-30 was moved from `Backlog` to `In Progress` in Linear.
+- Current worktree status before edits: clean `codex/rec-30-swiftui-mockup...origin/main`.
+
+Goal: design a SwiftUI mockup for the saved-place edit view's user-friendly destructive "Remove save" action and confirmation flow for review before implementation wiring.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Add/` or the existing saved-place edit SwiftUI surface once identified
+- Possible DEBUG-only mockup or preview host files if the production edit view should not be wired yet
+- `DESIGN.md` and existing design-system files for reference only unless a token gap is discovered
+
+Plan:
+
+- Inspect the existing edit-place flow and approved design system.
+- Create only the reviewable SwiftUI mockup/state surface first, leaving destructive save-removal behavior unwired.
+- Run plan-design review against the mockup and iOS design-review rubric where a live device daemon is not available.
+- Stop for Ryan/Joe review before implementation wiring and tests.
+
+Design checkpoint, 2026-07-01 15:21 PDT:
+
+- Added DEBUG-only SwiftUI mockup pages in `Wander/Features/Map/CategoryTaxonomyMockups.swift`:
+  - `-WanderCategoryTaxonomyMockup removeSave`
+  - `-WanderCategoryTaxonomyMockup removeSaveConfirm`
+- Mockup direction: keep `save changes` as the primary action, place full-width destructive `Remove save` below it, and use a native centered iOS alert before deletion.
+- Confirmation copy explains that removing a save deletes the user's saved metadata for that place: note, rating, tags, labels, and answers. It also clarifies that the place is not removed for anyone else.
+- This checkpoint intentionally does not wire deletion behavior, store mutation, sync state, navigation dismissal, toast, undo, or error/loading states.
+- Plan-design review: `DESIGN_NOT_AVAILABLE` for the automated design binary, so the review used the skill rubric manually against the implemented SwiftUI surface.
+- iOS design-review: no live-device StateServer daemon was used; simulator screenshots were captured and inspected instead.
+- Screenshot review covered:
+  - `/private/tmp/recme-rec-30-remove-save.png` on iPhone 17 Pro, OS 26.5
+  - `/private/tmp/recme-rec-30-remove-save-confirm.png` on iPhone 17 Pro, OS 26.5
+  - `/private/tmp/recme-rec-30-remove-save-iphone17e.png` on iPhone 17e, OS 26.5
+  - `/private/tmp/recme-rec-30-remove-save-confirm-iphone17e.png` on iPhone 17e, OS 26.5
+- Visual fixes found during screenshot review:
+  - Made the bottom action surface opaque so form text does not ghost through it.
+  - Extended the bottom action background through the home-indicator safe area so smaller phones do not show stray form content below the helper copy.
+- Design review score: approve direction for Ryan/Joe review, with implementation decisions still open. Estimated 8/10 for IA, 8/10 for user confidence, 9/10 for design-system alignment, 7/10 for state coverage because success/loading/error/post-remove states are not mocked yet.
+- Recommended implementation decision: after confirmed removal, dismiss the edit sheet and show a map toast like `Removed from your map.` Avoid undo unless the store/backend can restore all deleted metadata reliably.
+
+Validation:
+
+- `git diff --check`
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-mockup-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Known gaps / next steps:
+
+- Full XCTest suite not run for this mockup-only checkpoint.
+- Before wiring, decide final post-removal behavior, loading/error state, sync/offline handling, and whether the destructive action should appear only for saves owned by the current user.
+- `origin/main` advanced during this work with the REC-44 log entry; that log content was preserved in this worktree to avoid future agent-log deletion noise.

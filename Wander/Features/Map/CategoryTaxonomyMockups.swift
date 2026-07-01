@@ -3,6 +3,8 @@ import SwiftUI
 
 enum CategoryTaxonomyMockupPage: String, CaseIterable {
     case edit
+    case removeSave
+    case removeSaveConfirm
     case categories
     case subcategories
     case cuisine
@@ -30,6 +32,10 @@ struct CategoryTaxonomyMockupRoot: View {
             switch page {
             case .edit:
                 CategoryTaxonomyEditMockup()
+            case .removeSave:
+                RemoveSaveEditMockup()
+            case .removeSaveConfirm:
+                RemoveSaveEditMockup(startsWithConfirmation: true)
             case .categories:
                 CategoryTaxonomyPrimaryPickerMockup()
             case .subcategories:
@@ -41,6 +47,115 @@ struct CategoryTaxonomyMockupRoot: View {
             }
         }
         .preferredColorScheme(.light)
+    }
+}
+
+private struct RemoveSaveEditMockup: View {
+    @State private var isShowingRemoveConfirmation: Bool
+
+    init(startsWithConfirmation: Bool = false) {
+        _isShowingRemoveConfirmation = State(initialValue: startsWithConfirmation)
+    }
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(title: "edit this place", subtitle: "Jitlada - saved by you") {
+            placeHeader
+
+            MockupSection(title: "place type") {
+                MockupDetailRow(title: "category", value: "Restaurants & Food", systemImage: "square.grid.2x2.fill")
+                Divider().background(WanderTheme.borderHairline.color)
+                MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
+                Divider().background(WanderTheme.borderHairline.color)
+                MockupDetailRow(title: "subcategory", value: "Restaurant", systemImage: "line.3.horizontal.decrease.circle.fill")
+            }
+
+            MockupSection(title: "save as") {
+                HStack(spacing: WanderTheme.spacing2) {
+                    MockupChoicePill(title: "been", isSelected: true)
+                    MockupChoicePill(title: "wanna go", isSelected: false)
+                    Spacer(minLength: 0)
+                }
+            }
+
+            MockupSection(title: "details saved here") {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    MockupSummaryLine(label: "rating", value: "4.5 - worth bringing friends")
+                    Divider().background(WanderTheme.borderHairline.color)
+                    MockupSummaryLine(label: "tags", value: "spicy, date-night room, share plates")
+                    Divider().background(WanderTheme.borderHairline.color)
+                    MockupSummaryLine(label: "my labels", value: "LA favorite, Joe rec")
+                }
+            }
+
+            MockupSection(title: "note") {
+                Text("Order the crispy rice salad. Good for an easy LA dinner when someone wants heat.")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            actionButtons
+        }
+        .alert("Remove save?", isPresented: $isShowingRemoveConfirmation) {
+            Button("Remove save", role: .destructive) {}
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes Jitlada from your map and deletes your note, rating, tags, labels, and answers. It will not remove the place for anyone else.")
+        }
+    }
+
+    private var placeHeader: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            ZStack {
+                Circle().fill(WanderTheme.terracottaTint.color)
+                Image(systemName: "fork.knife")
+                    .font(.system(size: 21, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Jitlada")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("5233 Sunset Blvd")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text("Saved Jun 12 - visible to followers")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var actionButtons: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            WanderPrimaryButton(title: "save changes", systemImage: "checkmark") {}
+            MockupDestructiveButton(title: "Remove save", systemImage: "trash") {
+                isShowingRemoveConfirmation = true
+            }
+            Text("Removes this saved place from your map. The place can still appear if someone you follow saved it.")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing3)
+        .padding(.bottom, WanderTheme.spacing3)
+        .background {
+            WanderTheme.canvasWarm.color
+                .ignoresSafeArea(.container, edges: .bottom)
+                .overlay(alignment: .top) {
+                    WanderTheme.borderHairline.color.frame(height: 1)
+                }
+        }
     }
 }
 
@@ -392,6 +507,27 @@ private struct MockupChoicePill: View {
         .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
         .clipShape(Capsule())
         .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+    }
+}
+
+private struct MockupDestructiveButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(.system(size: 16, weight: .bold))
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(WanderTheme.stateError.color)
+            .foregroundStyle(WanderTheme.textOnAction.color)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
