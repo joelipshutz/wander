@@ -211,7 +211,7 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             params: ProfileVisiblePlacesParams(
                 profileID: userID,
                 statusFilter: filters.statuses.isEmpty ? nil : filters.statuses.map(\.rawValue).sorted(),
-                categoryFilter: filters.categories.isEmpty ? nil : filters.categories.sorted()
+                categoryFilter: filters.normalizedCategories.isEmpty ? nil : filters.normalizedCategories.sorted()
             )
         )
         return try rows.map { try $0.visiblePlace() }
@@ -288,10 +288,12 @@ struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
     }
 
     func parseFilters(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
-        try await functions.invoke(
+        var filters: DiscoverFilters = try await functions.invoke(
             "parse-discover-query",
             body: ParseDiscoverQueryParams(query: query, schema: schema)
         )
+        filters.categories = Set(filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
+        return filters
     }
 }
 

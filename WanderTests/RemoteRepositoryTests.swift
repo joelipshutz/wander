@@ -264,7 +264,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["profile_visible_places"])
         XCTAssertEqual(rpc.calls[0].body["profile_id"] as? String, "user_ryan")
         XCTAssertEqual(rpc.calls[0].body["status_filter"] as? [String], ["wanna_go"])
-        XCTAssertEqual(rpc.calls[0].body["category_filter"] as? [String], ["restaurant"])
+        XCTAssertEqual(rpc.calls[0].body["category_filter"] as? [String], [WanderPlaceCategory.foodDrink])
     }
 
     func testVisiblePlacesRejectUnknownStatus() async throws {
@@ -512,7 +512,7 @@ final class RemoteRepositoryTests: XCTestCase {
         """.data(using: .utf8)
         let repository = SupabaseDiscoverFilterRepository(functions: rpc)
         let schema = DiscoverFilterSchema(
-            allowedCategories: ["coffee", "hike"],
+            allowedCategories: [WanderPlaceCategory.foodDrink, WanderPlaceCategory.outdoorsNature],
             allowedStatuses: [.been, .wannaGo],
             allowedRelationships: [.owner, .mutual],
             allowedTags: ["quiet"]
@@ -520,14 +520,14 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let filters = try await repository.parseFilters(query: "Joe's favorite coffee spots in LA", schema: schema)
 
-        XCTAssertEqual(filters.categories, ["coffee"])
+        XCTAssertEqual(filters.categories, [WanderPlaceCategory.foodDrink])
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "Joe")
         XCTAssertEqual(rpc.calls.map(\.name), ["function:parse-discover-query"])
         XCTAssertEqual(rpc.rawBodies[0]["query"] as? String, "Joe's favorite coffee spots in LA")
 
         let encodedSchema = rpc.rawBodies[0]["schema"] as? [String: Any]
-        XCTAssertEqual(encodedSchema?["allowedCategories"] as? [String], ["coffee", "hike"])
+        XCTAssertEqual(encodedSchema?["allowedCategories"] as? [String], [WanderPlaceCategory.foodDrink, WanderPlaceCategory.outdoorsNature])
         XCTAssertEqual(encodedSchema?["allowedStatuses"] as? [String], ["been", "wanna_go"])
         XCTAssertEqual(encodedSchema?["allowedRelationships"] as? [String], ["owner", "mutual"])
         XCTAssertEqual(encodedSchema?["allowedTags"] as? [String], ["quiet"])
@@ -538,10 +538,10 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let filters = try await parser.parse(
             query: "Joe's favorite coffee spots in LA",
-            schema: DiscoverFilterSchema(allowedCategories: ["coffee"])
+            schema: DiscoverFilterSchema(allowedCategories: [WanderPlaceCategory.foodDrink])
         )
 
-        XCTAssertEqual(filters.categories, ["coffee"])
+        XCTAssertEqual(filters.categories, [WanderPlaceCategory.foodDrink])
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
     }

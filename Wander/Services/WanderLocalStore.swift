@@ -265,7 +265,8 @@ final class WanderStore: ObservableObject {
 
             let visiblePlace = VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
-            guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.effectiveCategory) else { return nil }
+            let normalizedCategories = filters.normalizedCategories
+            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return nil }
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
 
             if !filters.ownerScopes.isEmpty {
@@ -287,7 +288,8 @@ final class WanderStore: ObservableObject {
         remoteVisiblePlaceCache.filter { visiblePlace in
             guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
             guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
-            guard filters.categories.isEmpty || filters.categories.contains(visiblePlace.effectiveCategory) else { return false }
+            let normalizedCategories = filters.normalizedCategories
+            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
             guard !filters.ownerScopes.isEmpty else { return true }
@@ -469,7 +471,7 @@ final class WanderStore: ObservableObject {
         let filters = await parseDiscover(query: query)
         var placeFilters = PlaceFilters()
         placeFilters.statuses = filters.statuses
-        placeFilters.categories = filters.categories
+        placeFilters.categories = Set(filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
         placeFilters.ownerScopes = scope.ownerScopes
 
         if scope == .everyone, let relationship = filters.relationship {

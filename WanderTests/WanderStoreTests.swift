@@ -593,9 +593,9 @@ final class WanderStoreTests: XCTestCase {
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
         let attributes = store.attributes(for: result.userPlaceID)
 
-        XCTAssertEqual(saved?.place.category, "coffee")
+        XCTAssertEqual(saved?.place.category, WanderPlaceCategory.foodDrink)
         XCTAssertEqual(saved?.place.subcategory, "Coffee shop")
-        XCTAssertEqual(saved?.effectiveCategory, "coffee")
+        XCTAssertEqual(saved?.effectiveCategory, WanderPlaceCategory.foodDrink)
         XCTAssertEqual(attributes.map(\.questionKey), [PlaceMemoryAttributeKeys.personalLabels, "work_setup"])
         XCTAssertEqual(attributes.first { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }?.valueJSON, "[\"work-friendly\",\"joe rec\"]")
     }
@@ -619,10 +619,11 @@ final class WanderStoreTests: XCTestCase {
         )
 
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
-        XCTAssertEqual(saved?.place.category, "restaurant")
+        XCTAssertEqual(saved?.place.category, WanderPlaceCategory.foodDrink)
         XCTAssertEqual(saved?.place.subcategory, "Thai restaurant")
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: [WanderPlaceCategory.foodDrink])).contains { $0.userPlace.id == result.userPlaceID })
         XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["restaurant"])).contains { $0.userPlace.id == result.userPlaceID })
-        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["thai restaurant"])).isEmpty)
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["thai restaurant"])).contains { $0.userPlace.id == result.userPlaceID })
     }
 
     func testUserCategoryOverrideFiltersWithoutRewritingSharedPlace() {
@@ -640,7 +641,7 @@ final class WanderStoreTests: XCTestCase {
 
         let edited = original.recategorized(
             as: PlaceCategoryAssignment(
-                primaryCategory: "shop",
+                primaryCategory: WanderPlaceCategory.shopping,
                 subcategory: "Corner store",
                 source: PlaceCategorySource.user.rawValue,
                 confidence: 1,
@@ -650,11 +651,12 @@ final class WanderStoreTests: XCTestCase {
         let result = store.saveCandidate(edited, status: .been, visibility: .followers, note: nil, sourceType: .manual)
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
 
-        XCTAssertEqual(saved?.place.category, "coffee")
+        XCTAssertEqual(saved?.place.category, WanderPlaceCategory.foodDrink)
         XCTAssertEqual(saved?.place.subcategory, "Coffee shop")
-        XCTAssertEqual(saved?.userPlace.categoryOverride, "shop")
+        XCTAssertEqual(saved?.userPlace.categoryOverride, WanderPlaceCategory.shopping)
         XCTAssertEqual(saved?.userPlace.subcategoryOverride, "Corner store")
-        XCTAssertEqual(saved?.effectiveCategory, "shop")
+        XCTAssertEqual(saved?.effectiveCategory, WanderPlaceCategory.shopping)
+        XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: [WanderPlaceCategory.shopping])).contains { $0.userPlace.id == result.userPlaceID })
         XCTAssertTrue(store.visiblePlaces(filters: PlaceFilters(categories: ["shop"])).contains { $0.userPlace.id == result.userPlaceID })
         XCTAssertFalse(store.visiblePlaces(filters: PlaceFilters(categories: ["coffee"])).contains { $0.userPlace.id == result.userPlaceID })
     }
@@ -979,8 +981,9 @@ final class WanderStoreTests: XCTestCase {
 
         let results = await store.discover(query: "hikes in LA from people")
 
-        XCTAssertEqual(results.places.map { $0.place.category }, ["hike"])
-        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["hike", "following", "LA"])
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.place.category == WanderPlaceCategory.outdoorsNature })
+        XCTAssertEqual(store.lastDiscoverFilters.chips.map(\.title), ["Outdoors & nature", "following", "LA"])
         XCTAssertTrue(results.profiles.isEmpty)
     }
 
@@ -991,7 +994,7 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(results.places.isEmpty)
         XCTAssertTrue(results.places.allSatisfy { $0.owner.handle == "joe" })
-        XCTAssertTrue(results.places.allSatisfy { $0.place.category == "coffee" })
+        XCTAssertTrue(results.places.allSatisfy { $0.place.category == WanderPlaceCategory.foodDrink })
         XCTAssertEqual(store.lastDiscoverFilters.ownerQuery, "joe")
         XCTAssertEqual(store.lastDiscoverFilters.statuses, [.been])
     }
