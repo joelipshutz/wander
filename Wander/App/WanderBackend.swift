@@ -23,7 +23,7 @@ final class WanderBackend: ObservableObject {
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
-            let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client)
+            let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client, userPlaceDeleter: client)
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)

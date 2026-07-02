@@ -378,6 +378,16 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(attributes?.first?["value"] as? [String], ["wifi solid", "quiet"])
     }
 
+    func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
+        let rpc = RecordingRPC()
+        let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
+
+        try await repository.delete(userPlaceID: "up_saved")
+
+        XCTAssertEqual(rpc.deletedUserPlaceIDs, ["up_saved"])
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
     func testUnblockCallsExpectedRPC() async throws {
         let rpc = RecordingRPC()
         let repository = SupabaseBlockRepository(rpc: rpc)
@@ -651,7 +661,7 @@ private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository 
 }
 
 @MainActor
-private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling {
+private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling, RemoteUserPlaceDeleting {
     struct Call: Equatable {
         let name: String
         let body: [String: AnyHashable]
@@ -660,6 +670,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
     var responses: [String: Data] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
+    private(set) var deletedUserPlaceIDs: [String] = []
 
     func call<Value: Decodable, Params: Encodable>(
         _ name: String,
@@ -696,6 +707,10 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         }
 
         return try decoder.decode(Value.self, from: data)
+    }
+
+    func deleteUserPlace(userPlaceID: String) async throws {
+        deletedUserPlaceIDs.append(userPlaceID)
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {

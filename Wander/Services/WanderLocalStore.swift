@@ -2005,7 +2005,7 @@ final class WanderStore: ObservableObject {
                 && userPlace.deletedAt == nil
                 && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
         }) else {
-            return nil
+            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID)
         }
 
         let targetPlace = places.first { place in
@@ -2075,6 +2075,57 @@ final class WanderStore: ObservableObject {
             removedUserPlaceIDs: removedUserPlaceIDs,
             remoteUserPlaceIDs: remoteUserPlaceIDs,
             syncState: nextSyncState
+        )
+    }
+
+    private func removeRemoteOnlySaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+        guard let targetVisiblePlace = remoteVisiblePlaceCache.first(where: { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && (visiblePlace.userPlace.id == userPlaceID
+                    || visiblePlace.userPlace.localID == userPlaceID
+                    || visiblePlace.userPlace.serverID == userPlaceID)
+        }) else {
+            return nil
+        }
+
+        let matchingVisiblePlaces = remoteVisiblePlaceCache.filter { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
+        }
+        guard !matchingVisiblePlaces.isEmpty else {
+            return nil
+        }
+
+        var removedUserPlaceIDs = Set<String>()
+        var remoteUserPlaceIDs = Set<String>()
+        for visiblePlace in matchingVisiblePlaces {
+            removedUserPlaceIDs.insert(visiblePlace.userPlace.id)
+            removedUserPlaceIDs.insert(visiblePlace.userPlace.localID)
+            if let serverID = visiblePlace.userPlace.serverID {
+                removedUserPlaceIDs.insert(serverID)
+                remoteUserPlaceIDs.insert(serverID)
+            } else if UUID(uuidString: visiblePlace.userPlace.id) != nil {
+                remoteUserPlaceIDs.insert(visiblePlace.userPlace.id)
+            }
+        }
+
+        placeAttributes.removeAll { removedUserPlaceIDs.contains($0.userPlaceID) }
+        remoteVisiblePlaceCache.removeAll { visiblePlace in
+            guard visiblePlace.owner.id == currentUser.id else { return false }
+            if removedUserPlaceIDs.contains(visiblePlace.userPlace.id) {
+                return true
+            }
+            return VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
+        }
+
+        objectWillChange.send()
+        persist()
+
+        return LocalRemoveSaveChange(
+            userPlaceID: targetVisiblePlace.userPlace.id,
+            removedUserPlaceIDs: Array(removedUserPlaceIDs),
+            remoteUserPlaceIDs: Array(remoteUserPlaceIDs),
+            syncState: .pendingDelete
         )
     }
 

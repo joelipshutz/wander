@@ -8379,3 +8379,25 @@ Follow-up outcome, 2026-07-01 16:18 PDT:
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave -only-testing:WanderTests/WanderStoreTests/testRemoveSavePreservesFollowingSavesForSamePlaceGroup`
   - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Stale pin cleanup and landing checkpoint, 2026-07-02 15:54 PDT:
+
+- Ryan confirmed REC-30 was working locally except two stale remote pins on `@ryan_lieblein`: `Blind Barber` and `LA Fitness`. He asked to remove those from his map, then push the PR to `main`.
+- Used repo-owned `recme-pr-review-merge-release` workflow for the landing portion. This request is merge/land only, not an explicit TestFlight release.
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` before edits. Current REC-30 worktree was clean on `codex/rec-30-swiftui-mockup`.
+- Hosted Supabase read-only query found exactly two active Ryan-owned rows:
+  - `8b567297-6e55-45a4-ae58-79b4288aa0a6` / `Blind Barber`
+  - `f6dec848-001d-4251-a407-ea6a440588d7` / `LA Fitness`
+- Soft-deleted only those two `public.user_places` rows by setting `deleted_at` and `updated_at`.
+- Verification query showed `@ryan_lieblein` active rows for those places are now `0`; canonical place rows still exist with `0` active user saves.
+- Root cause for the in-app failure: `SupabaseUserPlaceRepository.delete(userPlaceID:)` was still a `notImplemented` stub, and stale remote-only current-user saves were not present in local `userPlaces`, so `removeSaveLocally` returned `nil`.
+- Added REC-30 code fixes before landing:
+  - `WanderSupabaseClient.deleteUserPlace(userPlaceID:)` uses authenticated PostgREST `DELETE /rest/v1/user_places?id=eq.<uuid>` under existing owner-delete RLS.
+  - `SupabaseUserPlaceRepository.delete` now delegates to the authenticated delete client.
+  - `WanderStore.removeSaveLocally` now handles current-user saves that exist only in `remoteVisiblePlaceCache`, clears those pins immediately, and then calls backend delete.
+  - Added focused tests for remote repository delete dispatch and remote-only current-user stale-pin removal.
+- Focused validation passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceDeleteUsesRemoteDeleteClient -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave -only-testing:WanderTests/WanderStoreTests/testRemoveSavePreservesFollowingSavesForSamePlaceGroup -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesRemoteOnlyCurrentUserSave`
+- Merge-gate validation passed:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
