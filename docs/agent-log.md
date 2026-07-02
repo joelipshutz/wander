@@ -8401,3 +8401,9 @@ Landing update, 2026-07-02 16:13 PDT:
   - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec30-landing-build-2/Logs/Test/Test-Wander-2026.07.02_16-21-03--0700.xcresult`: 217 tests, 0 failures, 0 skipped.
+- PR #61 landing gate:
+  - Updated the title/body from mockup-only to the completed REC-30 remove-save flow.
+  - Marked PR #61 ready for review; GitHub reported `mergeStateStatus=CLEAN`.
+  - `gh pr checks 61` reported no checks on the branch.
+  - PR comments/reviews scan returned no comments and no reviews.
+  - Next: squash-merge PR #61 to `main`, update Linear `REC-30` to `Done`, and do not run a TestFlight release because Ryan did not request one.
