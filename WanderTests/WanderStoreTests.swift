@@ -315,6 +315,186 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(woodcat?.userPlace.visibility, .selfOnly)
     }
 
+    func testRemoveSaveDeletesOwnSavedMetadataLocally() {
+        let store = makeStore()
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_remove_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: "corner table",
+            sourceType: .manual,
+            ratingScore: 5,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"]),
+                PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["LA favorite"])
+            ]
+        )
+
+        XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertFalse(store.attributes(for: result.userPlaceID).isEmpty)
+
+        let removal = store.removeSave(userPlaceID: result.userPlaceID)
+
+        XCTAssertEqual(removal?.syncState, .tombstoned)
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).isEmpty)
+
+        let removed = store.userPlaces.first { $0.localID == result.userPlaceID || $0.id == result.userPlaceID }
+        XCTAssertNotNil(removed?.deletedAt)
+        XCTAssertNil(removed?.note)
+        XCTAssertNil(removed?.ratingSignal)
+        XCTAssertNil(removed?.ratingScore)
+        XCTAssertNil(removed?.recommendedScore)
+        XCTAssertEqual(removed?.recommendedCount, 0)
+        XCTAssertEqual(removed?.syncState, .tombstoned)
+    }
+
+    func testRemoveSaveCallsRemoteDeleteForSyncedSave() async {
+        let store = makeStore()
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "manual_remote_remove_maru",
+                name: "Remote Remove Coffee",
+                category: "coffee",
+                latitude: 34.0408,
+                longitude: -118.2355,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "remote save",
+            sourceType: .manual,
+            ratingScore: 4,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["outlets"])
+            ]
+        )
+        let userPlace = store.userPlaces.first { $0.id == result.userPlaceID }
+        userPlace?.serverID = "up_remote_remove_save"
+        userPlace?.syncStateRaw = SyncState.synced.rawValue
+        let userPlaceRepository = FakeUserPlaceRepository()
+
+        let removal = await store.removeSave(
+            userPlaceID: result.userPlaceID,
+            backend: WanderBackend(userPlaceRepository: userPlaceRepository)
+        )
+
+        XCTAssertEqual(removal?.syncState, .tombstoned)
+        XCTAssertEqual(userPlaceRepository.deletedUserPlaceIDs, ["up_remote_remove_save"])
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.place.canonicalName == "Remote Remove Coffee" })
+        XCTAssertTrue(store.attributes(for: result.userPlaceID).isEmpty)
+        XCTAssertNotNil(userPlace?.deletedAt)
+        XCTAssertEqual(userPlace?.syncState, .tombstoned)
+        XCTAssertNil(userPlace?.lastSyncError)
+    }
+
+    func testRemoveSavePreservesFollowingSavesForSamePlaceGroup() {
+        let store = makeStore()
+        guard let currentUserSave = store.currentUserVisiblePlaces.first(where: { visiblePlace in
+            visiblePlace.place.canonicalName == "Circuit Coffee"
+        }) else {
+            return XCTFail("Expected seeded current-user save for Circuit Coffee")
+        }
+
+        XCTAssertFalse(store.attributes(for: currentUserSave.userPlace.id).isEmpty)
+
+        let removal = store.removeSave(userPlaceID: currentUserSave.userPlace.id)
+
+        XCTAssertEqual(removal?.syncState, .pendingDelete)
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { visiblePlace in
+            visiblePlace.place.canonicalName == "Circuit Coffee"
+        })
+        XCTAssertTrue(store.attributes(for: currentUserSave.userPlace.id).isEmpty)
+
+        let remainingCircuitSaves = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
+            .filter { $0.place.canonicalName == "Circuit Coffee" }
+        XCTAssertEqual(Set(remainingCircuitSaves.map(\.owner.id)), ["user_maya", "user_ryan"])
+
+        let allVisibleCircuitSaves = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["you", "social"]))
+            .filter { $0.place.canonicalName == "Circuit Coffee" }
+        XCTAssertFalse(allVisibleCircuitSaves.contains { $0.owner.id == store.currentUser.id })
+        let group = remainingCircuitSaves.first.flatMap { visiblePlace in
+            VisiblePlaceGrouping.matchingGroup(
+                for: visiblePlace,
+                in: allVisibleCircuitSaves,
+                currentUserID: store.currentUser.id
+            )
+        }
+        XCTAssertEqual(group?.saveCount, 2)
+        XCTAssertEqual(group?.isSavedByCurrentUser, false)
+    }
+
+    func testRemoveSaveDeletesRemoteOnlyCurrentUserSave() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan_lieblein")))
+        let remoteUserPlaceID = "8b567297-6e55-45a4-ae58-79b4288aa0a6"
+        let remotePlaceID = "93722c05-6b0d-4dfe-a687-85d73f8e7aa1"
+        let remotePlace = VisiblePlace(
+            id: remoteUserPlaceID,
+            place: LocalPlace(
+                localID: remotePlaceID,
+                serverID: remotePlaceID,
+                canonicalName: "Blind Barber",
+                category: "bar",
+                latitude: 34.083,
+                longitude: -118.361,
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: remoteUserPlaceID,
+                serverID: remoteUserPlaceID,
+                userID: "user_live",
+                placeID: remotePlaceID,
+                status: .wannaGo,
+                visibility: .followers,
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "user_live",
+                serverID: "user_live",
+                handle: "ryan_lieblein",
+                displayName: "Ryan",
+                syncState: .synced
+            ),
+            attributes: [
+                LocalPlaceAttribute(
+                    localID: "remote_attr_blind_barber_tag",
+                    userPlaceID: remoteUserPlaceID,
+                    questionKey: "bar_tags",
+                    valueType: "multi_tag",
+                    valueJSON: "[\"old\"]",
+                    syncState: .synced
+                )
+            ]
+        )
+        let placeRepository = FakePlaceRepository(places: [remotePlace])
+        let userPlaceRepository = FakeUserPlaceRepository()
+        let backend = WanderBackend(placeRepository: placeRepository, userPlaceRepository: userPlaceRepository)
+
+        await store.refreshRemoteVisiblePlaces(
+            in: MapViewport(minLatitude: 34, minLongitude: -119, maxLatitude: 35, maxLongitude: -118),
+            backend: backend
+        )
+        XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.id == remoteUserPlaceID })
+        XCTAssertEqual(store.attributes(for: remoteUserPlaceID).map(\.questionKey), ["bar_tags"])
+        placeRepository.setPlaces([])
+
+        let removal = await store.removeSave(userPlaceID: remoteUserPlaceID, backend: backend)
+
+        XCTAssertEqual(removal?.syncState, .tombstoned)
+        XCTAssertEqual(userPlaceRepository.deletedUserPlaceIDs, [remoteUserPlaceID])
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == remoteUserPlaceID })
+        XCTAssertTrue(store.attributes(for: remoteUserPlaceID).isEmpty)
+    }
+
     func testCurrentLocationSavePreservesSourceMetadata() {
         let store = makeStore()
         let candidate = PlaceCandidate(
@@ -2330,11 +2510,15 @@ private final class FakeSocialPlaceSaveRepository: SocialPlaceSaveRepository {
 
 @MainActor
 private final class FakePlaceRepository: PlaceRepository {
-    private let placesResult: [VisiblePlace]
+    private var placesResult: [VisiblePlace]
     private(set) var viewports: [MapViewport] = []
 
     init(places: [VisiblePlace]) {
         self.placesResult = places
+    }
+
+    func setPlaces(_ places: [VisiblePlace]) {
+        placesResult = places
     }
 
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] {
@@ -2363,6 +2547,7 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
     private let userPlacesByUserID: [String: [VisiblePlace]]
     private(set) var savedDrafts: [UserPlaceDraft] = []
     private(set) var userPlaceRequests: [UserPlaceRequest] = []
+    private(set) var deletedUserPlaceIDs: [String] = []
 
     init(result: SaveResult? = nil, error: Error? = nil, userPlacesByUserID: [String: [VisiblePlace]] = [:]) {
         self.result = result
@@ -2385,7 +2570,12 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
 
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
 
-    func delete(userPlaceID: String) async throws {}
+    func delete(userPlaceID: String) async throws {
+        deletedUserPlaceIDs.append(userPlaceID)
+        if let error {
+            throw error
+        }
+    }
 }
 
 @MainActor

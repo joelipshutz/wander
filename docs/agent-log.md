@@ -8148,6 +8148,7 @@ Known issues:
 
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
+
 ## 2026-07-01 11:29 PDT - Codex - REC-44 Unfollow Confirmation
 
 Agent: Codex
@@ -8348,3 +8349,61 @@ Known issues:
 Next:
 
 - Test build 59 from TestFlight for REC-44 and REC-62 flows: profile graph row taps/unfollow confirmation, Discover member blocking search clear, blocked users list/unblock, and two-account blocked visibility.
+
+## 2026-07-02 15:54 PDT - Codex - REC-30 Remove Save Cleanup And Landing
+
+Agent: Codex
+Branch: `codex/rec-30-swiftui-mockup`
+Worktree: `/private/tmp/recme-rec-30-swiftui-mockup`
+Linear: `REC-30` (`Add a user-friendly remove save action when editing a saved place`)
+
+Goal: remove two stale Ryan-owned remote pins, finish REC-30 remove-save wiring, and land PR #61 to `main`. This is merge/land only; no TestFlight release was requested.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Current REC-30 worktree was clean on `codex/rec-30-swiftui-mockup`.
+- PR #61 was still draft and `DIRTY` against `main`; latest `main` included REC-62/TestFlight build 59 history.
+- The gstack `/review` skill could not run to completion because its referenced `review/checklist.md` and `review/greptile-triage.md` files were missing from the installed skill directory; used the repo landing workflow's manual review gate instead.
+
+Hosted cleanup:
+
+- Hosted Supabase read-only query found exactly two active Ryan-owned rows:
+  - `8b567297-6e55-45a4-ae58-79b4288aa0a6` / `Blind Barber`
+  - `f6dec848-001d-4251-a407-ea6a440588d7` / `LA Fitness`
+- Soft-deleted only those two `public.user_places` rows by setting `deleted_at` and `updated_at`.
+- Verification query showed `@ryan_lieblein` active rows for those places are now `0`; canonical place rows still exist with `0` active user saves.
+
+Code follow-up:
+
+- Root cause for the in-app failure: `SupabaseUserPlaceRepository.delete(userPlaceID:)` was still a `notImplemented` stub, and stale remote-only current-user saves were not present in local `userPlaces`, so `removeSaveLocally` returned `nil`.
+- Added `WanderSupabaseClient.deleteUserPlace(userPlaceID:)` using authenticated PostgREST `DELETE /rest/v1/user_places?id=eq.<uuid>` under existing owner-delete RLS.
+- Wired `SupabaseUserPlaceRepository.delete` to the authenticated delete client.
+- Updated `WanderStore.removeSaveLocally` to handle current-user saves that exist only in `remoteVisiblePlaceCache`, clear those pins immediately, and then call backend delete.
+- Added focused tests for remote repository delete dispatch and remote-only current-user stale-pin removal.
+
+Validation:
+
+- `git diff --check`
+- Focused remove-save/backend delete tests:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceDeleteUsesRemoteDeleteClient -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave -only-testing:WanderTests/WanderStoreTests/testRemoveSavePreservesFollowingSavesForSamePlaceGroup -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesRemoteOnlyCurrentUserSave`
+- Merge-gate build/tests before updating from latest `main`:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Landing update, 2026-07-02 16:13 PDT:
+
+- Merged latest `origin/main` into `codex/rec-30-swiftui-mockup`; only `docs/agent-log.md` conflicted.
+- Preserved the REC-62/TestFlight build 59 mainline log and appended this REC-30 landing entry.
+- Manual pre-landing review found one stale mockup-only copy issue: the old remove-save disclaimer remained in `CategoryTaxonomyMockups.swift`. Removed it so both the production sheet and SwiftUI mockup no longer show the disclaimer below the destructive button.
+- Post-merge validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec30-landing-build-2/Logs/Test/Test-Wander-2026.07.02_16-21-03--0700.xcresult`: 217 tests, 0 failures, 0 skipped.
+- PR #61 landing gate:
+  - Updated the title/body from mockup-only to the completed REC-30 remove-save flow.
+  - Marked PR #61 ready for review; GitHub reported `mergeStateStatus=CLEAN`.
+  - `gh pr checks 61` reported no checks on the branch.
+  - PR comments/reviews scan returned no comments and no reviews.
+  - Next: squash-merge PR #61 to `main`, update Linear `REC-30` to `Done`, and do not run a TestFlight release because Ryan did not request one.

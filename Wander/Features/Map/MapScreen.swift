@@ -320,6 +320,8 @@ struct MapScreen: View {
             .sheet(item: $mapSaveFlow) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveMapFlowSubmission(submission)
+                } onRemove: { context in
+                    await removeMapSave(context)
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
@@ -842,6 +844,36 @@ struct MapScreen: View {
 
             return result
         }
+    }
+
+    @MainActor
+    private func removeMapSave(_ context: MapPlaceSaveContext) async -> Bool {
+        guard case .edit(let visiblePlace) = context.mode else {
+            return false
+        }
+
+        let removal = await store.removeSave(
+            userPlaceID: visiblePlace.userPlace.id,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard removal != nil else {
+            return false
+        }
+
+        clearNativeMapFeatureSelection()
+        selectedSearchCandidateID = nil
+        if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
+            for: visiblePlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        ) {
+            selectedPlaceGroupKey = remainingGroup.key
+        } else {
+            selectedPlaceGroupKey = nil
+        }
+        isPlaceProfilePresented = false
+        showTransientMapSearchMessage("Removed from your map.")
+        return true
     }
 
     private func showTransientMapSearchMessage(_ message: String) {
@@ -2183,6 +2215,7 @@ private enum PlaceTypePickerMode {
 struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @State private var step: MapPlaceSaveStep = .confirm
@@ -2197,11 +2230,18 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var isSaving = false
+    @State private var isRemoving = false
+    @State private var isShowingRemoveConfirmation = false
     @State private var errorMessage: String?
 
-    init(context: MapPlaceSaveContext, onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?) {
+    init(
+        context: MapPlaceSaveContext,
+        onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+    ) {
         self.context = context
         self.onSave = onSave
+        self.onRemove = onRemove
         _step = State(initialValue: context.isEditing ? .details : .confirm)
         _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
         _selectedStatus = State(initialValue: context.initialStatus)
@@ -2315,6 +2355,14 @@ struct MapPlaceSaveFlowSheet: View {
                 if isPrivateProfile {
                     selectedVisibility = .selfOnly
                 }
+            }
+            .alert("Remove save?", isPresented: $isShowingRemoveConfirmation) {
+                Button("Remove save", role: .destructive) {
+                    removeSave()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(removeSaveConfirmationMessage)
             }
         }
     }
@@ -2452,11 +2500,26 @@ struct MapPlaceSaveFlowSheet: View {
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
                 systemImage: "checkmark",
-                isDisabled: isSaving
+                isDisabled: isSaving || isRemoving
             ) {
                 save()
             }
+
+            if context.isEditing {
+                removeSaveSection
+            }
         }
+    }
+
+    private var removeSaveSection: some View {
+        MapSaveDestructiveButton(
+            title: isRemoving ? "removing..." : "Remove save",
+            systemImage: "trash",
+            isDisabled: isSaving || isRemoving
+        ) {
+            isShowingRemoveConfirmation = true
+        }
+        .padding(.top, WanderTheme.spacing1)
     }
 
     private var placeTypeSection: some View {
@@ -2717,6 +2780,29 @@ struct MapPlaceSaveFlowSheet: View {
             }
         }
     }
+
+    private var removeSaveConfirmationMessage: String {
+        "This removes \(context.candidate.name) from your map and deletes your note, rating, tags, labels, and answers. It will not remove the place for anyone else."
+    }
+
+    private func removeSave() {
+        guard context.isEditing, !isSaving, !isRemoving else { return }
+
+        isRemoving = true
+        errorMessage = nil
+
+        Task {
+            let removed = await onRemove(context)
+            await MainActor.run {
+                isRemoving = false
+                if removed {
+                    dismiss()
+                } else {
+                    errorMessage = "Could not remove this save. Try again."
+                }
+            }
+        }
+    }
 }
 
 private struct MapSavePickerBlock<Content: View>: View {
@@ -2750,6 +2836,31 @@ private struct MapSaveChoicePill: View {
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct MapSaveDestructiveButton: View {
+    let title: String
+    let systemImage: String
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(.system(size: 16, weight: .bold))
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(WanderTheme.stateError.color)
+            .foregroundStyle(WanderTheme.textOnAction.color)
+            .clipShape(Capsule())
+            .opacity(isDisabled ? 0.52 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(title)
     }
 }
 
