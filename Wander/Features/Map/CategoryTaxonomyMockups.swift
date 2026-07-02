@@ -141,10 +141,6 @@ private struct RemoveSaveEditMockup: View {
             MockupDestructiveButton(title: "Remove save", systemImage: "trash") {
                 isShowingRemoveConfirmation = true
             }
-            Text("Removes this saved place from your map. The place can still appear if someone you follow saved it.")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing3)

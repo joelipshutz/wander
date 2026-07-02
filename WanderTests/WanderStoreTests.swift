@@ -12,6 +12,64 @@ final class WanderStoreTests: XCTestCase {
         WanderStore(fixtures: WanderFixtures.seed())
     }
 
+    private func makeStoreWithStaleBlockedGraph() -> WanderStore {
+        let joe = LocalProfile(
+            localID: "local_profile_joe",
+            serverID: "user_joe",
+            handle: "joe",
+            displayName: "Joe",
+            syncState: .synced
+        )
+        let ryan = LocalProfile(
+            localID: "local_profile_ryan",
+            serverID: "user_ryan",
+            handle: "ryan",
+            displayName: "Ryan",
+            syncState: .synced
+        )
+
+        return WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [],
+                userPlaces: [],
+                placeAttributes: [],
+                follows: [
+                    LocalFollow(
+                        localID: "local_follow_joe_ryan",
+                        serverID: "follow_joe_ryan",
+                        followerUserID: joe.id,
+                        followedUserID: ryan.id,
+                        source: .profile,
+                        syncState: .synced
+                    ),
+                    LocalFollow(
+                        localID: "local_follow_ryan_joe",
+                        serverID: "follow_ryan_joe",
+                        followerUserID: ryan.id,
+                        followedUserID: joe.id,
+                        source: .profile,
+                        syncState: .synced
+                    )
+                ],
+                blocks: [
+                    LocalBlock(
+                        localID: "local_block_joe_ryan",
+                        serverID: "block_joe_ryan",
+                        blockerUserID: joe.id,
+                        blockedUserID: ryan.id,
+                        syncState: .synced
+                    )
+                ],
+                placeLists: [],
+                placeListMembers: [],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+    }
+
     private func makeTemporaryPersistence() -> (persistence: WanderStorePersistence, directory: URL) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("wander-store-tests-\(UUID().uuidString)", isDirectory: true)
@@ -190,6 +248,50 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.relationship(to: "user_ryan"), .nonFollower)
         XCTAssertFalse(store.visiblePlaces().contains { $0.owner.id == "user_ryan" })
         XCTAssertEqual(store.blockedProfiles().map(\.id), ["user_ryan"])
+    }
+
+    func testBlockFiltersStaleFollowEdgesFromBlockedUsersGraph() {
+        let store = makeStoreWithStaleBlockedGraph()
+
+        XCTAssertEqual(store.relationship(to: "user_ryan"), .nonFollower)
+        XCTAssertEqual(store.blockedProfiles().map(\.id), ["user_ryan"])
+        XCTAssertTrue(store.followers(of: "user_ryan").isEmpty)
+        XCTAssertTrue(store.following(of: "user_ryan").isEmpty)
+    }
+
+    func testBlockingProfileShellKeepsBlockedUserRenderableForUnblock() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let sofia = ProfileShell(
+            id: "user_sofia",
+            handle: "sofia",
+            displayName: "Sofia",
+            avatarURL: "https://example.com/sofia.jpg",
+            bio: "sunset walks",
+            relationship: .nonFollower
+        )
+
+        await store.block(profile: sofia, backend: nil)
+
+        let blocked = store.blockedProfiles()
+        XCTAssertEqual(blocked.map(\.id), ["user_sofia"])
+        XCTAssertEqual(blocked.first?.displayName, "Sofia")
+        XCTAssertEqual(blocked.first?.handle, "sofia")
+        XCTAssertEqual(blocked.first?.avatarURL, "https://example.com/sofia.jpg")
+        XCTAssertTrue(store.searchProfiles(handleQuery: "so").isEmpty)
+    }
+
+    func testBlockingByIDStillShowsPlaceholderBlockedUserForUnblock() {
+        let store = makeStore()
+
+        store.block(userID: "user_remote_only")
+
+        let blocked = store.blockedProfiles()
+        XCTAssertTrue(blocked.contains { profile in
+            profile.id == "user_remote_only"
+                && profile.displayName == "Blocked user"
+                && profile.handle == "user_remote_only"
+        })
     }
 
     func testSavingSamePlaceMergesIntoExistingUserPlace() {
