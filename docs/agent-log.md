@@ -8501,3 +8501,18 @@ Landing gate, 2026-07-02 17:46 PDT:
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec69-focused/Logs/Test/Test-Wander-2026.07.02_17-44-03--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
 - Next: commit/push this landing log update, mark PR #62 ready, squash-merge to `main`, move `REC-69` to `Done`, and leave TestFlight for the next explicit release request.
+
+Landing outcome, 2026-07-02 17:50 PDT:
+
+- Marked PR #62 ready and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/62
+- Merge commit on `main`: `f5d884306c1abe28940b8362b9f14f0ba1296c55` (`Fix REC-69 map tap-away interactions`).
+- `gh pr merge` reported a local cleanup error because `main` was already checked out in `/private/tmp/recme-testflight-build53`, but GitHub completed the server-side merge successfully.
+- Fast-forwarded the clean local `main` worktree `/private/tmp/recme-testflight-build53` to `origin/main`.
+- Deleted the remote feature branch `codex/rec-69-map-dismiss`.
+- Moved Linear issue `REC-69` to `Done` and added a merge/validation comment.
+- Final validation before merge remained:
+  - `git diff --check`
+  - generic iOS Simulator `xcodebuild build`
+  - full `xcodebuild test` on iPhone 17 Pro iOS 26.5 simulator, 219 passed, 0 failed, 0 skipped.
+- No TestFlight release was requested or performed; no build number bump, archive/upload, Slack release note, or App Store Connect/TestFlight action was taken.
+- Next: this fix will ride in the next explicit TestFlight release batch.
