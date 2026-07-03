@@ -8469,3 +8469,11 @@ Next:
 
 - Commit and push `codex/rec-69-map-dismiss`.
 - Open the branch worktree in Xcode for Ryan to test.
+
+Outcome, 2026-07-02 17:25 PDT:
+
+- Implementation commit: `4eaaaf70a` (`fix: handle map tap away interactions`).
+- Pushed branch `codex/rec-69-map-dismiss` to origin.
+- Opened draft PR #62: https://github.com/joelipshutz/wander/pull/62
+- Added a Linear `REC-69` comment with branch, PR, scenario coverage, and validation summary.
+- Known issues: no automated UI gesture test for live MapKit tap/long-press routing; Ryan should verify the three scenarios manually in Xcode on the branch worktree.
