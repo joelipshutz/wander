@@ -8771,3 +8771,32 @@ Outcome 2026-07-03 03:35 PDT:
   - `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
   - `xcodebuild -list -project Wander.xcodeproj` passed and resolved packages.
   - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-postmerge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+## 2026-07-03 03:42 PDT - Codex - REC-60 Xcode Project Sync
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec-60-notifications`
+Linear: `REC-60` - Add push notifications for follower and list activity
+Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout remains on stale `codex/profile-pictures` with an unrelated agent-log edit and is not used.
+
+Goal: regenerate the Xcode project for PR #60, push any generated project changes, and provide concrete test steps for Ryan.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Possibly `Wander.xcodeproj/project.pbxproj` if XcodeGen produces a project diff.
+
+Plan:
+
+- Run `xcodegen generate`.
+- Inspect and push any generated Xcode project changes to PR #60.
+- Re-run a basic build validation if project files changed.
+- Comment/finalize with hands-on test steps for notification behavior.
+
+Outcome 2026-07-03 03:48 PDT:
+
+- Ran `xcodegen generate`; it updated `Wander.xcodeproj/project.pbxproj` by removing two generated `CODE_SIGN_IDENTITY = "iPhone Developer"` lines while preserving the REC-60 entitlements/APNs project settings and build number `60`.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-xcode-sync-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Next: commit and push the Xcode project sync to PR #60.
