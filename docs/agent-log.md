@@ -8605,3 +8605,25 @@ Known issues:
 Next:
 
 - Review PR #63, run the Supabase pgTAP test in an environment with the Supabase CLI, and apply the migration only through the normal reviewed/hosted migration flow.
+
+## 2026-07-02 19:33 PDT - Codex - REC-75 Defaults Assessment
+
+Agent: Codex
+Branch: `codex/rec-75-default-tags-labels`
+Worktree: `/private/tmp/recme-rec-75-default-tags-labels`
+Linear: `REC-75` - Update default tags and labels when category changes
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty in `docs/agent-log.md` on stale `codex/profile-pictures`, so REC-75 is isolated in this fresh worktree from `origin/main`.
+- Created and pushed branch `codex/rec-75-default-tags-labels`; worktree started clean from `origin/main` at `7625ab7b7`.
+- Moved Linear `REC-75` to `In Progress` and added an initial assessment comment.
+
+Assessment before implementation:
+
+- Already implemented: category-aware smart-question/tag blocks via `AddQuestionTemplates.blocks(category:status:)`; edit-place recomputes those blocks after category/subcategory/status changes; personal labels are stored separately as `personal_labels`; personal label suggestions are category/status/locality-aware.
+- Partially implemented: changing category/subcategory in the Map save/edit sheet updates visible tag/default answer blocks and seeds defaults for new block keys, while preserving selections that remain under the same key.
+- Not yet implemented: defaults are not exhaustive per primary category/subcategory combination; personal labels are suggested but never auto-selected as defaults; old category-specific tag keys can be filtered out during sync when the category changes; there is no metadata separating user-picked values from auto-defaulted values.
+
+No implementation wiring has started yet.
