@@ -442,7 +442,7 @@ struct UserPlaceDraft: Equatable {
     let visibility: PlaceVisibility
     let note: String?
     let ratingSignal: String?
-    let ratingScore: Int?
+    let ratingScore: Double?
     let categoryOverride: String?
     let subcategoryOverride: String?
     let categoryOverrideSource: String?
@@ -457,7 +457,7 @@ struct UserPlaceDraft: Equatable {
         visibility: PlaceVisibility,
         note: String?,
         ratingSignal: String? = nil,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         categoryOverride: String? = nil,
         subcategoryOverride: String? = nil,
         categoryOverrideSource: String? = nil,

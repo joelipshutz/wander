@@ -106,7 +106,7 @@ struct VisiblePlace: Identifiable {
         guard userPlace.status == .been,
               let ratingScore = userPlace.ratingScore
         else { return nil }
-        return Double(ratingScore)
+        return ratingScore
     }
 
     var recommendedCount: Int {
@@ -189,7 +189,7 @@ struct VisiblePlaceGroup: Identifiable {
             return primary.recommendedScore
         }
 
-        return Double(scores.reduce(0, +)) / Double(scores.count)
+        return scores.reduce(0, +) / Double(scores.count)
     }
 
     var recommendedCount: Int {

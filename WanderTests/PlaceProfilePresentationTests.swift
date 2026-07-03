@@ -180,7 +180,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         owner: LocalProfile,
         place: LocalPlace,
         status: PlaceStatus? = nil,
-        ratingScore: Int?,
+        ratingScore: Double?,
         interestSignal: String? = nil,
         tags: [String]
     ) -> PlaceSaveSummary {
@@ -194,7 +194,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             visibility: .followers,
             note: nil,
             ratingScore: ratingScore,
-            recommendedScore: ratingScore.map(Double.init),
+            recommendedScore: ratingScore,
             recommendedCount: ratingScore == nil ? 0 : 1,
             sourceType: "test",
             syncState: .synced

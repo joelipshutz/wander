@@ -602,7 +602,8 @@
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Wander/Resources/Wander.entitlements;
-				CURRENT_PROJECT_VERSION = 58;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 60;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wander/Resources/Info.plist;
@@ -669,7 +670,8 @@
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Wander/Resources/Wander.entitlements;
-				CURRENT_PROJECT_VERSION = 58;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 60;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wander/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

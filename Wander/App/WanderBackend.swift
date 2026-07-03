@@ -24,7 +24,7 @@ final class WanderBackend: ObservableObject {
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
-            let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client)
+            let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client, userPlaceDeleter: client)
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
@@ -213,6 +213,14 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await userPlaceRepository.save(draft)
+    }
+
+    func deleteUserPlace(userPlaceID: String) async throws {
+        guard let userPlaceRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await userPlaceRepository.delete(userPlaceID: userPlaceID)
     }
 
     func enqueueExtractionJob(_ draft: ExtractionJobDraft) async throws -> ExtractionJobEnqueueResult {

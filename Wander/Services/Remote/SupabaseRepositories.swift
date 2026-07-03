@@ -200,9 +200,11 @@ struct SupabasePlaceRepository: PlaceRepository {
 
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository {
     private let rpc: RemoteProcedureCalling
+    private let userPlaceDeleter: RemoteUserPlaceDeleting?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, userPlaceDeleter: RemoteUserPlaceDeleting? = nil) {
         self.rpc = rpc
+        self.userPlaceDeleter = userPlaceDeleter
     }
 
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
@@ -230,7 +232,11 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func delete(userPlaceID: String) async throws {
-        throw WanderRemoteError.notImplemented("delete user place RPC")
+        guard let userPlaceDeleter else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await userPlaceDeleter.deleteUserPlace(userPlaceID: userPlaceID)
     }
 
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {
@@ -870,7 +876,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let visibility: String
     let note: String?
     let ratingSignal: String?
-    let ratingScore: Int?
+    let ratingScore: Double?
     let categoryOverride: String?
     let subcategoryOverride: String?
     let categoryOverrideSource: String?

@@ -8149,6 +8149,542 @@ Known issues:
 - Add tab manual quick chips still normalize into the new framework, but that specific manual-entry picker is not redesigned yet.
 - Camera capture still needs real-device QA.
 
+## 2026-07-01 11:29 PDT - Codex - REC-44 Unfollow Confirmation
+
+Agent: Codex
+Branch: `codex/rec-44-unfollow-confirmation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-44-unfollow-confirmation`
+Starting status: clean branch from `origin/main` at `7d709ceb2`; root checkout is on stale `codex/profile-pictures` and is intentionally not used for edits. `git fetch origin`, `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` review completed before implementation.
+
+Goal: fix Linear `REC-44` so tapping a person in followers/following opens the profile instead of accidentally unfollowing, and make unfollow require tapping the explicit unfollow control plus confirming in a warning dialog.
+
+Linear: `REC-44` moved to `In Progress` and commented with branch/worktree.
+
+Engineering review gate: not needed; this is an isolated SwiftUI interaction guard on an existing profile/follow surface, with no new persisted state, backend contract, visibility semantics, or cross-screen data behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Related focused tests if an existing test target can cover the interaction helper cleanly.
+
+Implementation checkpoint, 2026-07-01 11:42 PDT:
+
+- Updated the followers/following/friends graph list rows so tapping the person row opens `ProfileDetailView` instead of mutating follow state.
+- Kept follow/unfollow as an explicit trailing pill action.
+- Added an unfollow confirmation dialog with requested copy: `are you sure you want to unfollow <name>`, `yes, unfollow`, and `no, cancel`.
+- Added existing-store metadata to graph rows: saved-place count per person.
+- Verification:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The repo-documented `iPhone 16 Plus, OS=18.6` simulator destination is not installed in this environment, so validation used the available `iPhone 17, OS=26.5` simulator.
+
+Completion checkpoint, 2026-07-01 11:44 PDT:
+
+- Implementation commit: `448c12fb6` (`fix: confirm graph list unfollow`).
+- Opened ready PR #58: `https://github.com/joelipshutz/wander/pull/58`.
+- Next: review/squash-merge PR #58, then release only if explicitly requested.
+
+Follow-up checkpoint, 2026-07-01 11:54 PDT:
+
+- Ryan tested PR #58 in Xcode and found three remaining interaction issues:
+  - Followers/following graph list unfollow confirmation should be a centered popup without the bottom action-sheet caret, and should show both `Yes, unfollow` and `No, cancel`.
+  - Discover member profile three-dot menu can still unfollow without warning.
+  - Profile detail for existing friends/following shows a redundant full-width `friend`/`following` status button under the header.
+- Plan: switch graph-list unfollow confirmation from `confirmationDialog` to `alert`, add the same alert to `ProfileDetailView` for the shared Discover/Profile path, and remove the redundant non-action status button while keeping follow for non-followers and the three-dot menu for block/unfollow.
+
+Follow-up validation, 2026-07-01 12:12 PDT:
+
+- Replaced graph-list unfollow `confirmationDialog` with centered SwiftUI `alert` and title-cased actions: `Yes, unfollow` and `No, cancel`.
+- Added the same centered unfollow alert to `ProfileDetailView`, so Discover member profile and Profile graph-list profile sheets share the warning before unfollowing from the three-dot menu.
+- Removed the redundant full-width `friend` / `following` status pill from already-followed profile detail headers; the three-dot menu remains the place for block/unfollow.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 12:45 PDT:
+
+- Ryan requested the unfollow warning title start with capital `Are`, and the confirmation buttons be deterministic: `Yes, unfollow` on the left and `No, cancel` on the right everywhere the warning appears.
+- SwiftUI native `alert` button ordering is platform-controlled, so the unfollow warning now uses one shared centered popup view with an overlay and explicit left/right button layout.
+- Updated both warning entry points in `ProfileScreen.swift`:
+  - `ProfileDetailView`, used by Discover member profiles and graph-list profile sheets.
+  - `GraphListScreen`, used by Profile followers/following/friends lists.
+- A repo-wide Swift search found no other unfollow warning popup entry points.
+
+Follow-up validation, 2026-07-01 12:53 PDT:
+
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Follow-up checkpoint, 2026-07-01 14:56 PDT:
+
+- Ryan requested the unfollow confirmation use the native iOS popup window design while keeping the centered alert placement and the two warning buttons.
+- Plan: replace the custom `UnfollowConfirmationPopup` overlay with native SwiftUI `alert` modifiers in both existing unfollow warning entry points, preserving capitalized `Are` copy and the `Yes, unfollow` / `No, cancel` labels.
+
+Follow-up validation, 2026-07-01 15:02 PDT:
+
+- Removed the custom unfollow confirmation overlay and restored native SwiftUI/iOS `alert` presentation for both `ProfileDetailView` and `GraphListScreen`.
+- Verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-popup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Landing checkpoint, 2026-07-01 15:14 PDT:
+
+- Ryan requested squash-merge of PR #58 to `main`; no TestFlight build/release was requested, so no build number bump, archive, upload, or Slack release note will run.
+- PR #58 merge gate:
+  - GitHub reported PR #58 as ready, not draft, no labels, `mergeStateStatus=CLEAN`, and no failing status checks listed.
+  - Branch is current with `origin/main` (`0` behind, `5` ahead).
+  - Greptile bot comment scan found no active line-level or top-level Greptile comments.
+  - Pre-landing review found no blocking issues; diff is scoped to REC-44 profile/follow interaction changes plus this agent log.
+- Landing verification passed:
+  - `git diff --check`
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec44-landing CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: push this landing log update to PR #58, squash-merge PR #58, update local `main`, and move REC-44 to `Done` after the merge succeeds.
+
+## 2026-07-01 15:40 PDT - Codex - REC-62 Blocking Privacy Landing And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-62-blocking-privacy`
+Worktree: `/private/tmp/recme-rec-62-blocking-privacy`
+Linear: `REC-62` - Blocking a user does not hide the profile
+
+Goal: squash-merge PR #59 to `main`, then create and upload a new TestFlight build and post tester-facing Slack release notes.
+
+Starting status:
+
+- Ryan explicitly requested squash-merge plus TestFlight release and Slack update.
+- PR #59 was open and ready but GitHub reported `mergeStateStatus=DIRTY` after PR #58 landed on `main`.
+- Updated the branch from `origin/main`; `Wander/Features/Profile/ProfileScreen.swift` merged cleanly and only `docs/agent-log.md` conflicted.
+- Resolved the agent-log conflict by preserving the REC-44 notes already on `main` and appending this consolidated REC-62 landing/release entry.
+
+Implemented REC-62 behavior included in PR #59:
+
+- Hard-block visibility: blocked pairs no longer expose profile search, follower/following graph visibility, or stale follow edges.
+- Discover members block flow: blocking from a searched member dismisses the profile, clears member search/results, and returns to the default members list.
+- Blocked users list: blocked profiles remain renderable in Settings so the user can unblock them, including fallback rows for ID-only block records.
+- Block confirmation: shared `ProfileDetailView` uses the centered REC-44-style confirmation presentation with `Block` and `Cancel`; search confirmed no remaining block-specific `confirmationDialog`, `Yes, block`, or `No, cancel` confirmation copy.
+- Backend contract: added Supabase migration `20260701185500_harden_blocked_social_graph.sql` plus RLS test coverage for blocked relationship/search/following behavior.
+
+Validation already completed on the branch before landing:
+
+- `git diff --check`
+- Full XCTest suite on `iPhone 17 Pro, OS=26.5`: 212 tests, 0 failures, 0 skipped.
+- Supabase local pgTAP could not run because no local Supabase/Postgres connection was available (`PgClient: Failed to connect`), but a hosted rollback harness applied the new function definitions in a transaction, inserted synthetic REC-62 rows, verified blocked relationship/search/following behavior, and rolled back successfully.
+
+Next:
+
+- Complete the merge conflict resolution commit on PR #59.
+- Rerun build/tests after updating from `main`.
+- Push PR #59, squash-merge it, update local `main`, bump the next TestFlight build number, archive/upload, run `scripts/testflight-release.mjs`, update Linear, and post to `#testflight-feedback`.
+
+Branch update validation, 2026-07-01 15:45 PDT:
+
+- Merged `origin/main` into `codex/rec-62-blocking-privacy` to pick up REC-44 before landing PR #59.
+- Resolved only `docs/agent-log.md`; effective PR diff against `origin/main` remains scoped to REC-62 app, tests, and Supabase visibility files.
+- Validation passed:
+  - `git diff --check`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec62-merge CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec62-merge/Logs/Test/Test-Wander-2026.07.01_15-41-28--0700.xcresult`: 212 tests, 0 failures, 0 skipped.
+
+## 2026-07-01 15:46 PDT - Codex - TestFlight Build 59 REC-44/REC-62 Release
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Linear: `REC-44`, `REC-62`
+
+Goal: package latest `main` into TestFlight after Ryan requested PR #59 squash-merge plus TestFlight upload and Slack update.
+
+Starting status:
+
+- Squash-merged PR #59 to `main` as `5de466a3a` (`Fix REC-62 hard-block profile visibility`).
+- PR #58 (`REC-44`) was already on `main` after build 58 and has not yet shipped in a TestFlight build.
+- Last completed TestFlight build is 58; `CURRENT_PROJECT_VERSION` starts at `58`.
+- This explicit release will bump once to build 59 and package all app-code changes since build 58.
+
+Included app-code changes since completed TestFlight build 58:
+
+- REC-44: followers/following/friends rows now open profiles instead of accidentally unfollowing, unfollow requires confirmation in profile and graph-list flows, and already-followed profile headers no longer show a redundant status pill.
+- REC-62: hard-block behavior now hides blocker/blockee visibility across profile search and stale graph rows, Discover member blocking clears search/results and returns to the members list, and blocked users remain visible in Settings so they can be unblocked.
+- REC-62 backend contract: Supabase visibility RPC migration and RLS tests harden blocked relationship/search/following behavior.
+
+Expected release files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+
+Release completion, 2026-07-01 16:07 PDT:
+
+- Squash-merged PR #59 into `main` as `5de466a3a` and fast-forwarded the release worktree.
+- Bumped `CURRENT_PROJECT_VERSION` from 58 to 59 in `project.yml` and `Wander.xcodeproj/project.pbxproj`.
+- Build-number commit pushed to `main`: `2f4da4636` (`chore: bump testflight build 59`).
+- Ran `xcodegen generate`; it produced broad project-file churn unrelated to the build number, so the generated pbxproj churn was discarded and only the required `CURRENT_PROJECT_VERSION = 59` lines were kept.
+- Supabase hosted migrations applied and verified:
+  - `20260701164000_revised_place_taxonomy.sql`
+  - `20260701185500_harden_blocked_social_graph.sql`
+  - Verified `app.viewer_relationship`, `app.profile_following`, `app.profile_followers`, `public.profile_relationship`, `public.profile_following`, and `public.profile_followers` metadata, search paths, grants, and invoker posture.
+  - Ran hosted REC-62 rollback smoke harness successfully for blocked relationship/search/following behavior.
+- Release validation passed:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build59-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build59-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - XCTest result: 212 tests, 0 failures, 0 skipped.
+- Archived build 59 at `/private/tmp/Wander-0.1-build59.xcarchive`; archive plist confirmed version `0.1` and build `59`.
+- Exported/uploaded with `/private/tmp/WanderExportUpload59.plist` using `manageAppVersionAndBuildNumber=false`; upload succeeded.
+- Ran `node scripts/testflight-release.mjs --build-number 59 --archive-path /private/tmp/Wander-0.1-build59.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build59-what-to-test.txt --timeout-attempts 40 --poll-seconds 30`.
+- TestFlight helper result: build `0.1 (59)` id `b9ae7b81-b38b-4da0-be6d-55da01877699`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1782947222482509
+- Linear `REC-44` and `REC-62` are `Done`; added release comments linking build 59, validation, and Slack tester note.
+
+Known issues:
+
+- Camera capture still needs real-device QA.
+
+Next:
+
+- Test build 59 from TestFlight for REC-44 and REC-62 flows: profile graph row taps/unfollow confirmation, Discover member blocking search clear, blocked users list/unblock, and two-account blocked visibility.
+
+## 2026-07-02 15:54 PDT - Codex - REC-30 Remove Save Cleanup And Landing
+
+Agent: Codex
+Branch: `codex/rec-30-swiftui-mockup`
+Worktree: `/private/tmp/recme-rec-30-swiftui-mockup`
+Linear: `REC-30` (`Add a user-friendly remove save action when editing a saved place`)
+
+Goal: remove two stale Ryan-owned remote pins, finish REC-30 remove-save wiring, and land PR #61 to `main`. This is merge/land only; no TestFlight release was requested.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Current REC-30 worktree was clean on `codex/rec-30-swiftui-mockup`.
+- PR #61 was still draft and `DIRTY` against `main`; latest `main` included REC-62/TestFlight build 59 history.
+- The gstack `/review` skill could not run to completion because its referenced `review/checklist.md` and `review/greptile-triage.md` files were missing from the installed skill directory; used the repo landing workflow's manual review gate instead.
+
+Hosted cleanup:
+
+- Hosted Supabase read-only query found exactly two active Ryan-owned rows:
+  - `8b567297-6e55-45a4-ae58-79b4288aa0a6` / `Blind Barber`
+  - `f6dec848-001d-4251-a407-ea6a440588d7` / `LA Fitness`
+- Soft-deleted only those two `public.user_places` rows by setting `deleted_at` and `updated_at`.
+- Verification query showed `@ryan_lieblein` active rows for those places are now `0`; canonical place rows still exist with `0` active user saves.
+
+Code follow-up:
+
+- Root cause for the in-app failure: `SupabaseUserPlaceRepository.delete(userPlaceID:)` was still a `notImplemented` stub, and stale remote-only current-user saves were not present in local `userPlaces`, so `removeSaveLocally` returned `nil`.
+- Added `WanderSupabaseClient.deleteUserPlace(userPlaceID:)` using authenticated PostgREST `DELETE /rest/v1/user_places?id=eq.<uuid>` under existing owner-delete RLS.
+- Wired `SupabaseUserPlaceRepository.delete` to the authenticated delete client.
+- Updated `WanderStore.removeSaveLocally` to handle current-user saves that exist only in `remoteVisiblePlaceCache`, clear those pins immediately, and then call backend delete.
+- Added focused tests for remote repository delete dispatch and remote-only current-user stale-pin removal.
+
+Validation:
+
+- `git diff --check`
+- Focused remove-save/backend delete tests:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceDeleteUsesRemoteDeleteClient -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesOwnSavedMetadataLocally -only-testing:WanderTests/WanderStoreTests/testRemoveSaveCallsRemoteDeleteForSyncedSave -only-testing:WanderTests/WanderStoreTests/testRemoveSavePreservesFollowingSavesForSamePlaceGroup -only-testing:WanderTests/WanderStoreTests/testRemoveSaveDeletesRemoteOnlyCurrentUserSave`
+- Merge-gate build/tests before updating from latest `main`:
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination generic/platform=iOS\ Simulator -derivedDataPath /private/tmp/DerivedData-rec30-wiring-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-wiring-tests -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30 CODE_SIGNING_ALLOWED=NO -jobs 1`
+
+Landing update, 2026-07-02 16:13 PDT:
+
+- Merged latest `origin/main` into `codex/rec-30-swiftui-mockup`; only `docs/agent-log.md` conflicted.
+- Preserved the REC-62/TestFlight build 59 mainline log and appended this REC-30 landing entry.
+- Manual pre-landing review found one stale mockup-only copy issue: the old remove-save disclaimer remained in `CategoryTaxonomyMockups.swift`. Removed it so both the production sheet and SwiftUI mockup no longer show the disclaimer below the destructive button.
+- Post-merge validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec30-landing-build-2 -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec30-landing-2 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec30-landing-build-2/Logs/Test/Test-Wander-2026.07.02_16-21-03--0700.xcresult`: 217 tests, 0 failures, 0 skipped.
+- PR #61 landing gate:
+  - Updated the title/body from mockup-only to the completed REC-30 remove-save flow.
+  - Marked PR #61 ready for review; GitHub reported `mergeStateStatus=CLEAN`.
+  - `gh pr checks 61` reported no checks on the branch.
+  - PR comments/reviews scan returned no comments and no reviews.
+  - Next: squash-merge PR #61 to `main`, update Linear `REC-30` to `Done`, and do not run a TestFlight release because Ryan did not request one.
+
+## 2026-07-02 17:01 PDT - Codex - REC-69 Map Tap Away And Coordinate Save
+
+Agent: Codex
+Branch: `codex/rec-69-map-dismiss`
+Worktree: `/private/tmp/recme-rec-69-map-dismiss`
+Linear: `REC-69` - Exit selected place when tapping elsewhere on the map
+
+Goal: implement the three REC-69 map scenarios and prepare the branch for Ryan to test in Xcode:
+
+- Scenario 1: tapping another place on the map should select that place and clear the previous search/search bar.
+- Scenario 2: long-pressing an empty map location should create a coordinate-based save candidate with fallback/empty category choices.
+- Scenario 3: tapping an empty map location should clear the selected/searched place and return to the default map view.
+
+Starting status:
+
+- Read Linear issue `REC-69` and comments.
+- Moved `REC-69` to `In Progress`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` has unrelated dirty `docs/agent-log.md` work on `codex/profile-pictures`, so this isolated worktree was created from current `origin/main`.
+- Starting worktree status is clean on `codex/rec-69-map-dismiss` at `d44e69bf8`.
+- Initial code read:
+  - Scenario 1 is only partially implemented: saved-place annotation taps already select the tapped place, but they do not clear `mapQuery` or old `mapSearchCandidates`.
+  - Native MapKit feature taps already normalize to `PlaceCandidate`, but also keep the previous search text.
+  - Scenario 3 only clears native feature candidates when `selectedMapFeature` changes to `nil`; it does not clear saved/search annotation selections when tapping blank map.
+  - Scenario 2 does not exist yet.
+
+Expected files:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/MapHitTestingTests.swift`
+- `docs/agent-log.md`
+
+Implementation update, 2026-07-02 17:23 PDT:
+
+- Wrapped the SwiftUI `Map` in `MapReader` so blank-tap and long-press gestures can convert screen points to coordinates.
+- Scenario 1:
+  - Saved-place annotation taps now route through `selectVisiblePlaceFromMapTap`, which clears native feature state, clears the search bar/typeahead, removes old search candidates, and selects the tapped saved place.
+  - Search-result annotation taps now route through `selectSearchCandidateFromMapTap`, which clears the search bar/typeahead and keeps only the tapped candidate selected.
+  - Native MapKit POI selections clear the search bar when selecting either a matching saved place or a new unsaved candidate.
+- Scenario 2:
+  - Long-pressing empty map space now creates a coordinate-backed `PlaceCandidate` named `Dropped pin`.
+  - The dropped pin uses `sourceProvider = "coordinate"`, displays rounded coordinates as its address, and uses the fallback `place` category with `unknown` source so the save sheet prompts for category choice instead of provider-inferred category.
+  - Long-presses near existing saved/search markers are ignored so marker interactions are not converted into coordinate pins.
+- Scenario 3:
+  - Blank map taps now clear selected saved/search places, search text, old search candidates, transient messages, and collapsed profile state.
+  - A short selection revision delay prevents blank-tap clearing from racing native MapKit POI selection.
+  - Follow-up taps generated by an accepted long-press are ignored once so the new dropped pin is not immediately cleared.
+- Added coordinate candidate regression coverage in `MapHitTestingTests`.
+
+Validation:
+
+- `git diff --check`
+- Focused tests passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/MapHitTestingTests -only-testing:WanderTests/MapCoordinateCandidateTests`
+- Full test suite passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Final `xcresulttool` summary for `/private/tmp/DerivedData-rec69-focused/Logs/Test/Test-Wander-2026.07.02_17-22-18--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+
+Next:
+
+- Commit and push `codex/rec-69-map-dismiss`.
+- Open the branch worktree in Xcode for Ryan to test.
+
+Outcome, 2026-07-02 17:25 PDT:
+
+- Implementation commit: `4eaaaf70a` (`fix: handle map tap away interactions`).
+- Pushed branch `codex/rec-69-map-dismiss` to origin.
+- Opened draft PR #62: https://github.com/joelipshutz/wander/pull/62
+- Added a Linear `REC-69` comment with branch, PR, scenario coverage, and validation summary.
+- Known issues: no automated UI gesture test for live MapKit tap/long-press routing; Ryan should verify the three scenarios manually in Xcode on the branch worktree.
+
+Landing start, 2026-07-02 17:35 PDT:
+
+- Ryan verified the branch in Xcode and requested squash-merge/push to `main`.
+- This is merge-only; no TestFlight release was requested, so do not bump build number, archive/upload, attach a build, or post tester-facing Slack release notes.
+- Ran `git fetch origin`, checked branch status/worktrees, read recent `docs/agent-log.md`, and inspected PR #62.
+- Worktree `/private/tmp/recme-rec-69-map-dismiss` is clean on `codex/rec-69-map-dismiss`; root checkout remains on unrelated dirty `codex/profile-pictures`.
+- PR #62 is open, draft, mergeable, and `CLEAN` against `main`; `origin/main` is still `d44e69bf8`.
+- Latest completed explicit TestFlight release remains build 59; no pending build-number bump/upload was found.
+- gstack `/review` skill is still missing required files `.agents/skills/gstack/review/checklist.md` and `review/greptile-triage.md`, so use the repo landing workflow's manual review gate and record the fallback.
+
+Landing gate, 2026-07-02 17:46 PDT:
+
+- Scope review: PR #62 changes are limited to `MapScreen.swift`, coordinate/map hit-testing tests, and this agent log.
+- Manual review found no blockers in the search-clearing, blank-tap clearing, MapKit feature-selection race guard, or coordinate dropped-pin fallback category flow.
+- GitHub reported no PR checks, comments, or reviews.
+- Advisory `bun run slop:diff origin/main` could not run because `bun` is not on PATH in this shell.
+- A fresh landing `xcodebuild build -quiet` attempt using new DerivedData stalled before producing an activity log while other Xcode worktree builds were active; interrupted only that REC-69 build, then reran validation using the warmed REC-69 package/DerivedData paths.
+- Pre-merge validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec69-focused/Logs/Test/Test-Wander-2026.07.02_17-44-03--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+- Next: commit/push this landing log update, mark PR #62 ready, squash-merge to `main`, move `REC-69` to `Done`, and leave TestFlight for the next explicit release request.
+
+Landing outcome, 2026-07-02 17:50 PDT:
+
+- Marked PR #62 ready and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/62
+- Merge commit on `main`: `f5d884306c1abe28940b8362b9f14f0ba1296c55` (`Fix REC-69 map tap-away interactions`).
+- `gh pr merge` reported a local cleanup error because `main` was already checked out in `/private/tmp/recme-testflight-build53`, but GitHub completed the server-side merge successfully.
+- Fast-forwarded the clean local `main` worktree `/private/tmp/recme-testflight-build53` to `origin/main`.
+- Deleted the remote feature branch `codex/rec-69-map-dismiss`.
+- Moved Linear issue `REC-69` to `Done` and added a merge/validation comment.
+- Final validation before merge remained:
+  - `git diff --check`
+  - generic iOS Simulator `xcodebuild build`
+  - full `xcodebuild test` on iPhone 17 Pro iOS 26.5 simulator, 219 passed, 0 failed, 0 skipped.
+- No TestFlight release was requested or performed; no build number bump, archive/upload, Slack release note, or App Store Connect/TestFlight action was taken.
+- Next: this fix will ride in the next explicit TestFlight release batch.
+
+## 2026-07-02 17:29 PDT - Codex - REC-72 Half-Step Ratings
+
+Agent: Codex
+Branch: `codex/rec-72`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-72`
+Linear: `REC-72` (`Add 0.5 increments to user rating scale`)
+
+Goal: implement half-step user ratings from `1` through `5` while reusing the existing numeric rating system and keeping saved-place/recommended rating behavior intact.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty in `docs/agent-log.md` on stale `codex/profile-pictures`, so this work is isolated in a fresh worktree from `origin/main`.
+- New branch `codex/rec-72` tracks `origin/main`; starting worktree status was clean before this log entry.
+- Linear `REC-72` is in `Backlog`, assigned to Ryan, with clear scope: support `1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Rating model/helper files under `Wander/Models/` or `Wander/Services/`
+- Rating UI in `Wander/Features/Map/MapScreen.swift`
+- DTO/repository/store files if `ratingScore` type changes across persistence or sync
+- Focused tests under `WanderTests/`
+
+Engineering review gate:
+
+- Required because this changes a shared saved-place rating contract.
+- Initial finding: the existing 1-5 numeric rating implementation already provides `PlaceRating`, `PlaceRatingSlider`, local persistence, remote DTO fields, and recommended score averages; the likely safest scope is to widen `ratingScore` from integer-only to half-step `Double` values without introducing a new flow.
+
+Implementation checkpoint, 2026-07-02 17:58 PDT:
+
+- Moved Linear `REC-72` to `In Progress` and commented with the isolated worktree/branch.
+- Widened the app rating contract from integer scores to `Double` half-step scores:
+  - `PlaceRating` now clamps to `1...5`, snaps to `0.5` increments, and formats half-step display values.
+  - `PlaceRatingSlider` now binds `Double`, steps by `0.5`, and renders labels for `1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5`.
+  - Local models, list payloads, drafts, persistence records, Supabase DTOs/repository params, map save context, place-profile summaries, and Discover/place-profile averages now preserve half-step `ratingScore` values.
+- Added Supabase migration `20260703003229_half_step_rating_scores.sql`:
+  - Converts `public.user_places.rating_score` to `numeric(2,1)`.
+  - Replaces the check constraint so only null or `1...5` half-step values are accepted.
+  - Recreates `app.save_own_place`, `app.visible_places_in_view`, `app.profile_visible_places`, and public wrappers with existing security posture: narrow `security definer` save RPC with `search_path = public, app`, invoker read RPCs/wrappers, and authenticated-only execute grants.
+  - Keeps `wanna_go` saves clearing `rating_score`.
+- Updated `supabase/tests/save_own_place.sql` to assert:
+  - `authenticated` can execute `app.save_own_place`.
+  - `4.5` stores as a numeric half-step rating.
+  - `4.25` is rejected with `invalid_rating_score`.
+
+Validation:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec72-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused regression tests passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testPlaceRatingsNormalizeForBeenSavesOnly -only-testing:WanderTests/RemoteRepositoryTests/testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceSaveCallsExpectedRPCWithPlaceAndAttributes -only-testing:WanderTests/PlaceProfilePresentationTests/testOverallRatingAveragesTrustedRatingsWhenUnsaved`
+- Full XCTest suite passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-full -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- `git diff --check` passed.
+
+Known gaps:
+
+- `supabase test db` could not be run in this environment because the `supabase` CLI is not installed (`zsh:1: command not found: supabase`). The pgTAP coverage was updated but remains unexecuted locally.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Commit the implementation, update `codex/rec-72` from latest `origin/main`, rerun validation if the rebase changes anything material, push, open a PR, and move Linear `REC-72` to review.
+
+Outcome, 2026-07-02 18:07 PDT:
+
+- Rebased `codex/rec-72` onto latest `origin/main` after REC-69 landed; only `docs/agent-log.md` conflicted.
+- Preserved the REC-69 landing log and appended the REC-72 entry after it.
+- Implementation commit on the rebased branch: `a2200f9cd` (`Add half-step place ratings`).
+- Pushed branch `codex/rec-72` to origin.
+- Opened ready PR #63: https://github.com/joelipshutz/wander/pull/63
+- Moved Linear `REC-72` to `In Review` and added a branch/PR/validation comment.
+
+Post-rebase validation:
+
+- `git diff --check origin/main...HEAD` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec72-postrebase-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-postrebase-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcresulttool` summary for `/private/tmp/DerivedData-rec72-postrebase-build/Logs/Test/Test-Wander-2026.07.02_18-02-21--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+
+Known issues:
+
+- `supabase test db` still has not run locally because the `supabase` CLI is not installed in this environment. The pgTAP coverage is committed and should be run in a DB-capable environment before applying the migration.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Review PR #63, run the Supabase pgTAP test in an environment with the Supabase CLI, and apply the migration only through the normal reviewed/hosted migration flow.
+
+## 2026-07-02 19:27 PDT - Codex - REC-72 Main Merge And TestFlight Build
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Linear: `REC-72` (`Add 0.5 increments to user rating scale`)
+PR: #63 (`codex/rec-72` -> `main`)
+
+Goal: Ryan explicitly requested pushing REC-72 to `main` and pushing everything currently in `main` to TestFlight.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, recent `docs/agent-log.md`, and `CURRENT_PROJECT_VERSION`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains on stale `codex/profile-pictures` with dirty `docs/agent-log.md`; do not use it for release edits.
+- Release worktree `/private/tmp/recme-testflight-build53` is clean on `main` at `b2525e3b4` tracking `origin/main`.
+- Latest completed explicit TestFlight release is build 59. `project.yml` still has `CURRENT_PROJECT_VERSION: "59"`, so there is no pending build-number bump/upload to resume.
+- Explicit TestFlight release requested, so after merging PR #63 this run should bump once to build 60 and package all eligible app-code/schema/UI changes since build 59.
+- gstack `/review` skill was read, but `.agents/skills/gstack/review/checklist.md` and `.agents/skills/gstack/review/greptile-triage.md` are missing, so use the repo landing workflow's manual review gate and record the fallback.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
+
+Initial included release scope since completed TestFlight build 59:
+
+- REC-69 / PR #62: map tap-away behavior, map search clearing on annotation/POI selection, and long-press coordinate dropped-pin save candidates.
+- REC-72 / PR #63: half-step place ratings in the app, local persistence/DTOs/repository payloads, and Supabase rating-score contract migration/tests.
+
+Checkpoint, 2026-07-02 19:38 PDT:
+
+- Squash-merged PR #63 into `main`; merge commit `7625ab7b786cfddfa5e5177a1f80ffb714df46a2`.
+- `gh pr merge` returned non-zero only because local branch `codex/rec-72` is checked out in `/Users/ryanlieblein/Developer/Wander-worktrees/rec-72`, so it could not delete that local branch. The PR is merged and `origin/main` contains the merge commit.
+- Fast-forwarded release worktree `main` from `b2525e3b4` to `7625ab7b7`.
+- Applied hosted Supabase migration `20260703003229_half_step_rating_scores.sql` to linked project `rugmtlgufrhlxwfkumhw`.
+- Verified hosted migration list shows local/remote `20260703003229` aligned.
+- Verified hosted RPC/security metadata:
+  - `app.save_own_place` remains `security definer`, volatile, `search_path=public, app`, authenticated execute.
+  - `app.visible_places_in_view` and `app.profile_visible_places` remain invoker/stable and return `rating_score double precision`.
+  - Public wrappers keep `search_path=app, public` and authenticated execute grants.
+- Verified hosted column contract: `public.user_places.rating_score` is `numeric(2,1)` with the half-step `1...5` check constraint.
+- Ran hosted rollback-wrapped REC-72 smoke query:
+  - `4.5` saves and stores.
+  - `4.25` is rejected with `invalid_rating_score`.
+  - `wanna_go` saves clear `rating_score`.
+
+Checkpoint, 2026-07-02 19:48 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `59` to `60` in `project.yml`.
+- Ran `xcodegen generate`; trimmed unrelated generated `Wander.xcodeproj/project.pbxproj` settings churn so the project diff only updates the two `CURRENT_PROJECT_VERSION = 60` values.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcresulttool` summary for `/private/tmp/DerivedData-build60-build/Logs/Test/Test-Wander-2026.07.02_19-46-13--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Release completion, 2026-07-02 20:32 PDT:
+
+- Build-number commit pushed to `main`: `b22eee64b` (`chore: bump TestFlight build 60`).
+- Archived build 60 at `/private/tmp/Wander-0.1-build60.xcarchive`; archive plist confirmed version `0.1` and build `60`.
+- Export options: `/private/tmp/WanderExportUpload60.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- First `scripts/testflight-release.mjs` run waited for Apple indexing until its App Store Connect token expired with a `401`; reran the helper against the same uploaded archive with a fresh token.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 60 --archive-path /private/tmp/Wander-0.1-build60.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build60-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`.
+- TestFlight helper result: build `0.1 (60)` id `8603a7d9-7c93-4b47-a245-9b56609b58d9`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783049540110249
+- Linear `REC-72` moved to `Done`; added release comment `fadf63de-e8d2-4b64-ba5d-1766f9d74b0a`.
+
+Known issues:
+
+- Camera capture still needs real-device QA.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Test build 60 from TestFlight for REC-69 and REC-72 flows: map tap-away/search clearing, long-press dropped-pin coordinate saves, half-step ratings, wanna-go rating clearing, and profile/Discover average ratings.
+
 ## 2026-07-01 11:48 PDT - Codex - REC-60 Push Notification Implementation
 
 Agent: Codex

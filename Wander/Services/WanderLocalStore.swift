@@ -39,6 +39,18 @@ private enum OwnPlaceSyncOutcome {
     case skipped
 }
 
+struct RemoveSaveResult: Equatable {
+    let userPlaceID: String
+    let syncState: SyncState
+}
+
+private struct LocalRemoveSaveChange {
+    let userPlaceID: String
+    let removedUserPlaceIDs: [String]
+    let remoteUserPlaceIDs: [String]
+    let syncState: SyncState
+}
+
 struct ProfileStats: Equatable {
     let been: Int
     let wanna: Int
@@ -726,18 +738,22 @@ final class WanderStore: ObservableObject {
     }
 
     func followers(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followedUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followerUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
     func following(of userID: String) -> [LocalProfile] {
-        follows
+        guard canReadGraph(for: userID) else { return [] }
+
+        return follows
             .filter { $0.followerUserID == userID }
             .compactMap { follow in profiles.first { $0.id == follow.followedUserID } }
-            .filter { !isBlockedBetweenCurrentUser(and: $0.id) }
+            .filter { canShowGraphProfile($0.id, for: userID) }
             .sorted { $0.handle < $1.handle }
     }
 
@@ -947,7 +963,7 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
@@ -960,7 +976,7 @@ final class WanderStore: ObservableObject {
             existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
             existing.ratingScore = savedRatingScore
-            existing.recommendedScore = savedRatingScore.map(Double.init)
+            existing.recommendedScore = savedRatingScore
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
             applyCategoryOverride(categoryOverride, to: existing)
             if let attributes {
@@ -984,7 +1000,7 @@ final class WanderStore: ObservableObject {
             note: note,
             ratingSignal: attributes.flatMap { ratingSignal(from: $0) },
             ratingScore: savedRatingScore,
-            recommendedScore: savedRatingScore.map(Double.init),
+            recommendedScore: savedRatingScore,
             recommendedCount: savedRatingScore == nil ? 0 : 1,
             categoryOverride: categoryOverride?.primaryCategory,
             subcategoryOverride: categoryOverride?.subcategory,
@@ -1015,7 +1031,7 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {
@@ -1090,6 +1106,45 @@ final class WanderStore: ObservableObject {
             WanderDebugLog.sync.error("direct save remote failed user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(message), privacy: .public)")
             #endif
             return SaveResult(userPlaceID: localResult.userPlaceID, syncState: .failed)
+        }
+    }
+
+    @discardableResult
+    func removeSave(userPlaceID: String) -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+            return nil
+        }
+
+        return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
+    }
+
+    @discardableResult
+    func removeSave(userPlaceID: String, backend: WanderBackend?) async -> RemoveSaveResult? {
+        guard let localChange = removeSaveLocally(userPlaceID: userPlaceID) else {
+            return nil
+        }
+
+        guard let backend, !localChange.remoteUserPlaceIDs.isEmpty else {
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: localChange.syncState)
+        }
+
+        do {
+            for remoteUserPlaceID in localChange.remoteUserPlaceIDs {
+                try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+            }
+            for removedUserPlaceID in localChange.removedUserPlaceIDs {
+                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .tombstoned)
+            }
+            lastRemoteError = nil
+            await refreshRemoteVisiblePlaces(backend: backend)
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
+        } catch {
+            let message = remoteErrorMessage(error)
+            for removedUserPlaceID in localChange.removedUserPlaceIDs {
+                markUserPlace(localOrServerID: removedUserPlaceID, syncState: .failed, error: message)
+            }
+            lastRemoteError = message
+            return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .failed)
         }
     }
 
@@ -1527,6 +1582,11 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func block(profile: ProfileShell, backend: WanderBackend?) async {
+        preserveBlockedProfileShell(profile)
+        await block(userID: profile.id, backend: backend)
+    }
+
     func unblock(userID: String) {
         blocks.removeAll { $0.blockerUserID == currentUser.id && $0.blockedUserID == userID }
         persist()
@@ -1660,8 +1720,12 @@ final class WanderStore: ObservableObject {
     func blockedProfiles() -> [ProfileShell] {
         blocks
             .filter { $0.blockerUserID == currentUser.id }
-            .compactMap { block in profiles.first(where: { $0.id == block.blockedUserID }) }
-            .map(shell(for:))
+            .map { block in
+                guard let profile = profiles.first(where: { $0.id == block.blockedUserID }) else {
+                    return fallbackBlockedProfileShell(for: block.blockedUserID)
+                }
+                return shell(for: profile)
+            }
     }
 
     func authGate(for action: AddSourceType) -> AuthGateCopy {
@@ -1674,14 +1738,69 @@ final class WanderStore: ObservableObject {
     }
 
     private func isBlockedBetweenCurrentUser(and userID: String) -> Bool {
+        isBlockedBetween(currentUser.id, and: userID)
+    }
+
+    private func isBlockedBetween(_ firstUserID: String, and secondUserID: String) -> Bool {
         blocks.contains { block in
-            (block.blockerUserID == currentUser.id && block.blockedUserID == userID)
-                || (block.blockerUserID == userID && block.blockedUserID == currentUser.id)
+            (block.blockerUserID == firstUserID && block.blockedUserID == secondUserID)
+                || (block.blockerUserID == secondUserID && block.blockedUserID == firstUserID)
         }
+    }
+
+    private func canReadGraph(for userID: String) -> Bool {
+        userID == currentUser.id || !isBlockedBetweenCurrentUser(and: userID)
+    }
+
+    private func canShowGraphProfile(_ profileID: String, for graphOwnerID: String) -> Bool {
+        !isBlockedBetweenCurrentUser(and: profileID)
+            && !isBlockedBetween(graphOwnerID, and: profileID)
     }
 
     private func isProfilePrivate(_ userID: String) -> Bool {
         profiles.first { $0.id == userID }?.isPrivateProfile == true
+    }
+
+    private func fallbackBlockedProfileShell(for userID: String) -> ProfileShell {
+        let handle = slug(userID)
+        return ProfileShell(
+            id: userID,
+            handle: handle.isEmpty ? "blocked-user" : handle,
+            displayName: "Blocked user",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .nonFollower
+        )
+    }
+
+    private func preserveBlockedProfileShell(_ shell: ProfileShell) {
+        guard shell.id != currentUser.id else { return }
+
+        if let existing = profiles.first(where: { $0.id == shell.id || $0.handle == shell.handle }) {
+            existing.serverID = shell.id
+            existing.handle = shell.handle
+            existing.searchHandle = shell.handle.lowercased()
+            existing.displayName = shell.displayName
+            existing.avatarURL = shell.avatarURL
+            existing.bio = shell.bio
+            existing.syncStateRaw = SyncState.synced.rawValue
+            existing.updatedAt = .now
+        } else {
+            profiles.append(
+                LocalProfile(
+                    localID: "blocked_profile_\(slug(shell.id))",
+                    serverID: shell.id,
+                    handle: shell.handle,
+                    displayName: shell.displayName,
+                    avatarURL: shell.avatarURL,
+                    bio: shell.bio,
+                    syncState: .synced
+                )
+            )
+        }
+
+        objectWillChange.send()
+        persist()
     }
 
     private func visibilityForSave(_ visibility: PlaceVisibility) -> PlaceVisibility {
@@ -1946,6 +2065,136 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+    }
+
+    private func removeSaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+        guard let userPlace = userPlaces.first(where: { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
+        }) else {
+            return removeRemoteOnlySaveLocally(userPlaceID: userPlaceID)
+        }
+
+        let targetPlace = places.first { place in
+            place.id == userPlace.placeID || place.localID == userPlace.placeID || place.serverID == userPlace.placeID
+        }
+        let targetVisiblePlace = targetPlace.map { place in
+            VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: currentUser)
+        }
+        var previousUserPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        if let targetVisiblePlace {
+            for visiblePlace in currentUserVisiblePlaces where VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace) {
+                previousUserPlaceIDs.formUnion(matchingUserPlaceIDs(visiblePlace.userPlace.id))
+            }
+        }
+
+        let userPlacesToRemove = userPlaces.filter { candidate in
+            candidate.userID == currentUser.id
+                && candidate.deletedAt == nil
+                && (previousUserPlaceIDs.contains(candidate.id)
+                    || previousUserPlaceIDs.contains(candidate.localID)
+                    || candidate.serverID.map { previousUserPlaceIDs.contains($0) } == true)
+        }
+        guard !userPlacesToRemove.isEmpty else {
+            return nil
+        }
+
+        let removedUserPlaceIDs = userPlacesToRemove.map(\.id)
+        let remoteUserPlaceIDs = userPlacesToRemove.compactMap(\.serverID)
+        let nextSyncState: SyncState = remoteUserPlaceIDs.isEmpty ? .tombstoned : .pendingDelete
+        let now = Date.now
+
+        for userPlace in userPlacesToRemove {
+            let rowSyncState: SyncState = userPlace.serverID == nil ? .tombstoned : .pendingDelete
+            userPlace.note = nil
+            userPlace.ratingSignal = nil
+            userPlace.ratingScore = nil
+            userPlace.recommendedScore = nil
+            userPlace.recommendedCount = 0
+            userPlace.categoryOverride = nil
+            userPlace.subcategoryOverride = nil
+            userPlace.categoryOverrideSource = nil
+            userPlace.categoryOverrideConfidence = nil
+            userPlace.deletedAt = now
+            userPlace.updatedAt = now
+            userPlace.localUpdatedAt = now
+            userPlace.lastSyncError = nil
+            userPlace.syncStateRaw = rowSyncState.rawValue
+        }
+
+        placeAttributes.removeAll { previousUserPlaceIDs.contains($0.userPlaceID) }
+        remoteVisiblePlaceCache.removeAll { visiblePlace in
+            guard visiblePlace.owner.id == currentUser.id else { return false }
+            if previousUserPlaceIDs.contains(visiblePlace.userPlace.id) {
+                return true
+            }
+            guard let targetVisiblePlace else {
+                return false
+            }
+            return VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
+        }
+
+        objectWillChange.send()
+        persist()
+
+        return LocalRemoveSaveChange(
+            userPlaceID: userPlace.id,
+            removedUserPlaceIDs: removedUserPlaceIDs,
+            remoteUserPlaceIDs: remoteUserPlaceIDs,
+            syncState: nextSyncState
+        )
+    }
+
+    private func removeRemoteOnlySaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
+        guard let targetVisiblePlace = remoteVisiblePlaceCache.first(where: { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && (visiblePlace.userPlace.id == userPlaceID
+                    || visiblePlace.userPlace.localID == userPlaceID
+                    || visiblePlace.userPlace.serverID == userPlaceID)
+        }) else {
+            return nil
+        }
+
+        let matchingVisiblePlaces = remoteVisiblePlaceCache.filter { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
+        }
+        guard !matchingVisiblePlaces.isEmpty else {
+            return nil
+        }
+
+        var removedUserPlaceIDs = Set<String>()
+        var remoteUserPlaceIDs = Set<String>()
+        for visiblePlace in matchingVisiblePlaces {
+            removedUserPlaceIDs.insert(visiblePlace.userPlace.id)
+            removedUserPlaceIDs.insert(visiblePlace.userPlace.localID)
+            if let serverID = visiblePlace.userPlace.serverID {
+                removedUserPlaceIDs.insert(serverID)
+                remoteUserPlaceIDs.insert(serverID)
+            } else if UUID(uuidString: visiblePlace.userPlace.id) != nil {
+                remoteUserPlaceIDs.insert(visiblePlace.userPlace.id)
+            }
+        }
+
+        placeAttributes.removeAll { removedUserPlaceIDs.contains($0.userPlaceID) }
+        remoteVisiblePlaceCache.removeAll { visiblePlace in
+            guard visiblePlace.owner.id == currentUser.id else { return false }
+            if removedUserPlaceIDs.contains(visiblePlace.userPlace.id) {
+                return true
+            }
+            return VisiblePlaceGrouping.matches(visiblePlace, targetVisiblePlace)
+        }
+
+        objectWillChange.send()
+        persist()
+
+        return LocalRemoveSaveChange(
+            userPlaceID: targetVisiblePlace.userPlace.id,
+            removedUserPlaceIDs: Array(removedUserPlaceIDs),
+            remoteUserPlaceIDs: Array(remoteUserPlaceIDs),
+            syncState: .pendingDelete
+        )
     }
 
     private func markPlace(localOrServerID: String, serverID: String, syncState: SyncState, error: String? = nil) {

@@ -131,7 +131,7 @@ enum PlaceProfilePresenter {
             .compactMap(\.visiblePlace.userPlace.ratingScore)
 
         if !localScores.isEmpty {
-            let average = Double(localScores.reduce(0, +)) / Double(localScores.count)
+            let average = localScores.reduce(0, +) / Double(localScores.count)
             return PlaceActualRating(score: average, count: localScores.count, source: .trusted)
         }
 

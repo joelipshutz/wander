@@ -55,6 +55,11 @@ protocol RemoteStorageCalling {
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL
 }
 
+@MainActor
+protocol RemoteUserPlaceDeleting {
+    func deleteUserPlace(userPlaceID: String) async throws
+}
+
 enum RemoteDecoding {
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -64,7 +69,7 @@ enum RemoteDecoding {
 }
 
 @MainActor
-final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling {
+final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteUserPlaceDeleting {
     let configuration: WanderBackendConfiguration
     private let authSession: AuthSessionProviding
     private let urlSession: URLSession
@@ -343,6 +348,65 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("Invalid versioned public storage URL")
         }
         return versionedURL
+    }
+
+    func deleteUserPlace(userPlaceID: String) async throws {
+        guard let supabaseURL = configuration.supabaseURL else {
+            #if DEBUG
+            WanderDebugLog.remote.error("delete user_place skipped reason=missing_supabase_url")
+            #endif
+            throw WanderRemoteError.notConfigured
+        }
+        guard UUID(uuidString: userPlaceID) != nil else {
+            throw WanderRemoteError.invalidResponse("Invalid remote user place id")
+        }
+
+        let headers = try await authenticatedHeaders()
+        let endpoint = supabaseURL
+            .appendingPathComponent("rest")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("user_places")
+
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            throw WanderRemoteError.invalidResponse("Invalid Supabase user_places endpoint")
+        }
+        components.queryItems = [URLQueryItem(name: "id", value: "eq.\(userPlaceID)")]
+        guard let url = components.url else {
+            throw WanderRemoteError.invalidResponse("Invalid Supabase user_places delete URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("delete user_place transport failed error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
+            #endif
+            throw error
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WanderRemoteError.invalidResponse("Missing HTTP response for user_places delete")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            #if DEBUG
+            WanderDebugLog.remote.error("delete user_place failed status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            #endif
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw WanderRemoteError.notAuthenticated
+            }
+            throw WanderRemoteError.invalidResponse("Delete user_place failed with \(httpResponse.statusCode): \(body)")
+        }
     }
 
     private func storageObjectURL(bucket: String, path: String, isPublic: Bool) throws -> URL {

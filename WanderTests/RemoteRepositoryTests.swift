@@ -144,7 +144,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "visibility": "followers",
             "note": "Easy sunset win.",
             "rating_signal": null,
-            "rating_score": 5,
+            "rating_score": 4.5,
             "recommended_score": 4.5,
             "recommended_count": 2,
             "source_type": "manual",
@@ -175,7 +175,7 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         XCTAssertEqual(places[0].userPlace.status, .been)
         XCTAssertEqual(places[0].userPlace.visibility, .followers)
-        XCTAssertEqual(places[0].userPlace.ratingScore, 5)
+        XCTAssertEqual(places[0].userPlace.ratingScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedCount, 2)
         XCTAssertEqual(places[0].attributes.map(\.questionKey), ["strenuousness"])
@@ -347,7 +347,7 @@ final class RemoteRepositoryTests: XCTestCase {
             status: .been,
             visibility: .followers,
             note: "window table",
-            ratingScore: 4,
+            ratingScore: 4.5,
             nearbyConfirmed: true,
             sourceType: "current_location",
             attributes: [
@@ -370,12 +370,22 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(userPlace?["status"] as? String, "been")
         XCTAssertEqual(userPlace?["visibility"] as? String, "followers")
         XCTAssertEqual(userPlace?["nearby_confirmed"] as? Bool, true)
-        XCTAssertEqual(userPlace?["rating_score"] as? Int, 4)
+        XCTAssertEqual(userPlace?["rating_score"] as? Double, 4.5)
         XCTAssertNil(userPlace?["rating_signal"])
 
         let attributes = body["input_attributes"] as? [[String: Any]]
         XCTAssertEqual(attributes?.map { $0["question_key"] as? String }, ["coffee_tags"])
         XCTAssertEqual(attributes?.first?["value"] as? [String], ["wifi solid", "quiet"])
+    }
+
+    func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
+        let rpc = RecordingRPC()
+        let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
+
+        try await repository.delete(userPlaceID: "up_saved")
+
+        XCTAssertEqual(rpc.deletedUserPlaceIDs, ["up_saved"])
+        XCTAssertTrue(rpc.calls.isEmpty)
     }
 
     func testUnblockCallsExpectedRPC() async throws {
@@ -716,7 +726,7 @@ private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository 
 }
 
 @MainActor
-private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling {
+private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling, RemoteUserPlaceDeleting {
     struct Call: Equatable {
         let name: String
         let body: [String: AnyHashable]
@@ -725,6 +735,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
     var responses: [String: Data] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
+    private(set) var deletedUserPlaceIDs: [String] = []
 
     func call<Value: Decodable, Params: Encodable>(
         _ name: String,
@@ -761,6 +772,10 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling 
         }
 
         return try decoder.decode(Value.self, from: data)
+    }
+
+    func deleteUserPlace(userPlaceID: String) async throws {
+        deletedUserPlaceIDs.append(userPlaceID)
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {

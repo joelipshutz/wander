@@ -165,7 +165,9 @@ struct DiscoverScreen: View {
                 selectedPlaceDestination
             }
             .sheet(item: $selectedProfile) { profile in
-                ProfileDetailView(profileID: profile.id)
+                ProfileDetailView(profileID: profile.id) { blockedProfileID in
+                    handleMemberBlocked(profileID: blockedProfileID)
+                }
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -173,6 +175,8 @@ struct DiscoverScreen: View {
             .sheet(item: $placeSaveFlow) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveDiscoverFlowSubmission(submission)
+                } onRemove: { context in
+                    await removeDiscoverSave(context)
                 }
             }
             .alert("Saved to your map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
@@ -473,6 +477,23 @@ struct DiscoverScreen: View {
         }
     }
 
+    @MainActor
+    private func removeDiscoverSave(_ context: MapPlaceSaveContext) async -> Bool {
+        guard case .edit(let visiblePlace) = context.mode else {
+            return false
+        }
+
+        guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
+            return false
+        }
+
+        await refreshPlaces()
+        await refreshMembers()
+        selectedPlace = nil
+        savedMessage = "Removed from your map."
+        return true
+    }
+
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
         return store.currentUserVisiblePlaces.first { currentUserPlace in
             VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
@@ -547,6 +568,13 @@ struct DiscoverScreen: View {
         }
 
         memberResults = await store.discoverMembers(query: memberQuery, backend: backend)
+    }
+
+    private func handleMemberBlocked(profileID: String) {
+        selectedProfile = nil
+        memberQuery = ""
+        memberResults = []
+        searchFieldFocused = false
     }
 
     private func refreshRemotePlacesIfNeeded() async {

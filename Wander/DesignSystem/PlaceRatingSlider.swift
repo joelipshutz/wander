@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct PlaceRatingSlider: View {
-    @Binding var score: Int
+    @Binding var score: Double
 
     private var normalizedScore: Double {
-        let span = Double(PlaceRating.maximumScore - PlaceRating.minimumScore)
+        let span = PlaceRating.maximumScore - PlaceRating.minimumScore
         guard span > 0 else { return 1 }
-        return Double(score - PlaceRating.minimumScore) / span
+        return (score - PlaceRating.minimumScore) / span
     }
 
     private var ratingTint: Color {
@@ -16,18 +16,18 @@ struct PlaceRatingSlider: View {
 
     private var ratingLabel: String {
         switch score {
-        case 1: "oof"
-        case 2: "meh"
-        case 3: "mid"
-        case 4: "yeah"
+        case ..<1.5: "oof"
+        case ..<2.5: "meh"
+        case ..<3.5: "mid"
+        case ..<4.5: "yeah"
         default: "wow"
         }
     }
 
     private var sliderValue: Binding<Double> {
         Binding(
-            get: { Double(score) },
-            set: { score = PlaceRating.normalized(Int($0.rounded())) ?? PlaceRating.defaultScore }
+            get: { score },
+            set: { score = PlaceRating.normalized($0) ?? PlaceRating.defaultScore }
         )
     }
 
@@ -41,27 +41,27 @@ struct PlaceRatingSlider: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textFaint.color)
                 Spacer()
-                Text("\(score)/5 · \(ratingLabel)")
+                Text("\(PlaceRating.display(score))/5 · \(ratingLabel)")
                     .font(.system(size: 14, weight: .black))
                     .foregroundStyle(ratingTint)
             }
 
             Slider(
                 value: sliderValue,
-                in: Double(PlaceRating.minimumScore)...Double(PlaceRating.maximumScore),
-                step: 1
+                in: PlaceRating.minimumScore...PlaceRating.maximumScore,
+                step: PlaceRating.step
             )
             .tint(ratingTint)
 
             HStack {
-                ForEach(PlaceRating.minimumScore...PlaceRating.maximumScore, id: \.self) { value in
-                    Text("\(value)")
+                ForEach(PlaceRating.allowedScores, id: \.self) { value in
+                    Text(PlaceRating.display(value))
                         .frame(maxWidth: .infinity)
-                        .foregroundStyle(value == score ? ratingTint : WanderTheme.textMuted.color)
-                        .fontWeight(value == score ? .black : .bold)
+                        .foregroundStyle(abs(value - score) < 0.001 ? ratingTint : WanderTheme.textMuted.color)
+                        .fontWeight(abs(value - score) < 0.001 ? .black : .bold)
                 }
             }
-            .font(.system(size: 11, weight: .bold))
+            .font(.system(size: 10, weight: .bold))
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
