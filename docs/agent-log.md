@@ -8192,3 +8192,25 @@ Final 2026-07-01 12:24 PDT:
 - Commit: `c9e6b4283` plus this agent-log handoff update.
 - Known issue: SQL pgTAP test file is committed but still needs a successful local or hosted Supabase test run before merge because the local DB was unreachable here.
 - Next steps: review PR, run/apply the Supabase migration in the target environment, configure APNs worker secrets (`WANDER_WORKER_SECRET`, Supabase service role key, APNs key/team/topic/private key), and schedule/invoke `push-notification-worker` after deployment.
+
+## 2026-07-03 03:16 PDT - Codex - REC-60 Supabase Validation
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec-60-notifications`
+Linear: `REC-60` - Add push notifications for follower and list activity
+Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout remains on stale `codex/profile-pictures` with an unrelated agent-log edit and is not used for this validation pass.
+
+Goal: run the real local or hosted Supabase validation for `supabase/tests/notifications.sql` and record the outcome on PR #60 / Linear.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Possibly the REC-60 migration/test files if validation exposes SQL fixes.
+
+Plan:
+
+- Check local Supabase/Docker/tooling state.
+- Run `supabase/tests/notifications.sql` against the strongest available Supabase environment.
+- If validation fails because of SQL defects, fix the migration/test and rerun.
+- Update PR/Linear/log with the final validation result.
