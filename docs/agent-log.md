@@ -8580,3 +8580,28 @@ Known gaps:
 Next:
 
 - Commit the implementation, update `codex/rec-72` from latest `origin/main`, rerun validation if the rebase changes anything material, push, open a PR, and move Linear `REC-72` to review.
+
+Outcome, 2026-07-02 18:07 PDT:
+
+- Rebased `codex/rec-72` onto latest `origin/main` after REC-69 landed; only `docs/agent-log.md` conflicted.
+- Preserved the REC-69 landing log and appended the REC-72 entry after it.
+- Implementation commit on the rebased branch: `a2200f9cd` (`Add half-step place ratings`).
+- Pushed branch `codex/rec-72` to origin.
+- Opened ready PR #63: https://github.com/joelipshutz/wander/pull/63
+- Moved Linear `REC-72` to `In Review` and added a branch/PR/validation comment.
+
+Post-rebase validation:
+
+- `git diff --check origin/main...HEAD` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec72-postrebase-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-postrebase-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcresulttool` summary for `/private/tmp/DerivedData-rec72-postrebase-build/Logs/Test/Test-Wander-2026.07.02_18-02-21--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+
+Known issues:
+
+- `supabase test db` still has not run locally because the `supabase` CLI is not installed in this environment. The pgTAP coverage is committed and should be run in a DB-capable environment before applying the migration.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Review PR #63, run the Supabase pgTAP test in an environment with the Supabase CLI, and apply the migration only through the normal reviewed/hosted migration flow.
