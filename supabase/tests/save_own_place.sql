@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(6);
+select plan(8);
 
 select is(
   (
@@ -21,6 +21,11 @@ select ok(
     where oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
   ),
   'save_own_place pins search_path to public, app'
+);
+
+select ok(
+  has_function_privilege('authenticated', 'app.save_own_place(jsonb,jsonb,jsonb)', 'execute'),
+  'authenticated can execute app.save_own_place'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -47,7 +52,7 @@ select isnt_empty(
         "visibility": "followers",
         "nearby_confirmed": true,
         "source_type": "manual",
-        "rating_score": 4
+        "rating_score": 4.5
       }'::jsonb,
       '[{
         "question_key": "coffee_tags",
@@ -61,12 +66,40 @@ select isnt_empty(
 
 select is(
   (
-    select rating_score::int
+    select rating_score
     from public.user_places
     where user_id = 'user_save_owner'
   ),
-  4,
-  'save_own_place stores numeric rating score for been places'
+  4.5::numeric,
+  'save_own_place stores half-step numeric rating score for been places'
+);
+
+select throws_ok(
+  $$
+    select *
+    from app.save_own_place(
+      '{
+        "canonical_name": "Save RPC Invalid Rating Test",
+        "category": "coffee",
+        "latitude": 34.0502,
+        "longitude": -118.2502,
+        "source_provider": "mapkit",
+        "source_provider_place_id": "save-rpc-invalid-rating-test",
+        "confidence": 0.9
+      }'::jsonb,
+      '{
+        "status": "been",
+        "visibility": "followers",
+        "nearby_confirmed": true,
+        "source_type": "manual",
+        "rating_score": 4.25
+      }'::jsonb,
+      '[]'::jsonb
+    )
+  $$,
+  'P0001',
+  'invalid_rating_score',
+  'save_own_place rejects non-half-step rating scores'
 );
 
 select isnt_empty(

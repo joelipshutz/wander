@@ -963,7 +963,7 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
@@ -976,7 +976,7 @@ final class WanderStore: ObservableObject {
             existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
             existing.ratingScore = savedRatingScore
-            existing.recommendedScore = savedRatingScore.map(Double.init)
+            existing.recommendedScore = savedRatingScore
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
             applyCategoryOverride(categoryOverride, to: existing)
             if let attributes {
@@ -1000,7 +1000,7 @@ final class WanderStore: ObservableObject {
             note: note,
             ratingSignal: attributes.flatMap { ratingSignal(from: $0) },
             ratingScore: savedRatingScore,
-            recommendedScore: savedRatingScore.map(Double.init),
+            recommendedScore: savedRatingScore,
             recommendedCount: savedRatingScore == nil ? 0 : 1,
             categoryOverride: categoryOverride?.primaryCategory,
             subcategoryOverride: categoryOverride?.subcategory,
@@ -1031,7 +1031,7 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility,
         note: String?,
         sourceType: AddSourceType,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {

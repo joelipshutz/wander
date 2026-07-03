@@ -306,7 +306,7 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         longitude: Double,
         providerID: String,
         status: PlaceStatus,
-        ratingScore: Int? = nil,
+        ratingScore: Double? = nil,
         note: String? = nil
     ) -> VisiblePlace {
         let place = LocalPlace(
@@ -330,7 +330,7 @@ final class VisiblePlaceGroupingTests: XCTestCase {
             visibility: .followers,
             note: note,
             ratingScore: ratingScore,
-            recommendedScore: ratingScore.map(Double.init),
+            recommendedScore: ratingScore,
             recommendedCount: ratingScore == nil ? 0 : 1,
             sourceType: "test",
             syncState: .synced

@@ -180,7 +180,7 @@ struct ListSuggestionPlacePayload: Codable, Equatable {
     let locality: String?
     let region: String?
     let status: PlaceStatus
-    let ratingScore: Int?
+    let ratingScore: Double?
     let recommendedScore: Double?
     let recommendedCount: Int
     let attributesText: String

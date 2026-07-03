@@ -294,7 +294,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let statusRaw: String
         let note: String?
         let ratingSignal: String?
-        let ratingScore: Int?
+        let ratingScore: Double?
         let recommendedScore: Double?
         let recommendedCount: Int?
         let categoryOverride: String?

@@ -946,6 +946,9 @@ final class WanderStoreTests: XCTestCase {
     func testPlaceRatingsNormalizeForBeenSavesOnly() {
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: nil), 3)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 0), 1)
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.25), 4.5)
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.74), 4.5)
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.75), 5)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 6), 5)
         XCTAssertNil(PlaceRating.scoreForSave(status: .wannaGo, score: 5))
         XCTAssertEqual(PlaceRating.averageDisplay(4.5), "4.5")

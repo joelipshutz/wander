@@ -2169,7 +2169,7 @@ struct MapPlaceSaveContext: Identifiable {
     let mode: MapPlaceSaveMode
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
-    let initialRatingScore: Int
+    let initialRatingScore: Double
     let initialNote: String
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
@@ -2345,7 +2345,7 @@ struct MapPlaceSaveSubmission {
     let candidate: PlaceCandidate
     let status: PlaceStatus
     let visibility: PlaceVisibility
-    let ratingScore: Int?
+    let ratingScore: Double?
     let note: String?
     let attributes: [PlaceAttributeDraft]
 }
@@ -2371,7 +2371,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
-    @State private var selectedRatingScore: Int
+    @State private var selectedRatingScore: Double
     @State private var selectedAnswers: [String: Set<String>]
     @State private var personalLabels: Set<String>
     @State private var selectedCuisine: String?
@@ -4577,7 +4577,7 @@ private struct SaveReviewCard: View {
         }
 
         if let ratingScore = userPlace.ratingScore {
-            facts.append(PlaceFact(title: "Rated \(ratingScore)/5", systemImage: "star.fill"))
+            facts.append(PlaceFact(title: "Rated \(PlaceRating.display(ratingScore))/5", systemImage: "star.fill"))
         }
 
         facts.append(contentsOf: summary.attributes.flatMap(attributeFacts(for:)))
