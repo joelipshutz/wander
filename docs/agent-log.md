@@ -8663,3 +8663,24 @@ Checkpoint, 2026-07-02 19:48 PDT:
 - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
 - `xcresulttool` summary for `/private/tmp/DerivedData-build60-build/Logs/Test/Test-Wander-2026.07.02_19-46-13--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
 - Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Release completion, 2026-07-02 20:32 PDT:
+
+- Build-number commit pushed to `main`: `b22eee64b` (`chore: bump TestFlight build 60`).
+- Archived build 60 at `/private/tmp/Wander-0.1-build60.xcarchive`; archive plist confirmed version `0.1` and build `60`.
+- Export options: `/private/tmp/WanderExportUpload60.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Upload succeeded via `xcodebuild -exportArchive`, and App Store Connect reported `Uploaded Wander`.
+- First `scripts/testflight-release.mjs` run waited for Apple indexing until its App Store Connect token expired with a `401`; reran the helper against the same uploaded archive with a fresh token.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 60 --archive-path /private/tmp/Wander-0.1-build60.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build60-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`.
+- TestFlight helper result: build `0.1 (60)` id `8603a7d9-7c93-4b47-a245-9b56609b58d9`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783049540110249
+- Linear `REC-72` moved to `Done`; added release comment `fadf63de-e8d2-4b64-ba5d-1766f9d74b0a`.
+
+Known issues:
+
+- Camera capture still needs real-device QA.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Test build 60 from TestFlight for REC-69 and REC-72 flows: map tap-away/search clearing, long-press dropped-pin coordinate saves, half-step ratings, wanna-go rating clearing, and profile/Discover average ratings.
