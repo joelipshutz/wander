@@ -8605,3 +8605,61 @@ Known issues:
 Next:
 
 - Review PR #63, run the Supabase pgTAP test in an environment with the Supabase CLI, and apply the migration only through the normal reviewed/hosted migration flow.
+
+## 2026-07-02 19:27 PDT - Codex - REC-72 Main Merge And TestFlight Build
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-testflight-build53`
+Linear: `REC-72` (`Add 0.5 increments to user rating scale`)
+PR: #63 (`codex/rec-72` -> `main`)
+
+Goal: Ryan explicitly requested pushing REC-72 to `main` and pushing everything currently in `main` to TestFlight.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, recent `docs/agent-log.md`, and `CURRENT_PROJECT_VERSION`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains on stale `codex/profile-pictures` with dirty `docs/agent-log.md`; do not use it for release edits.
+- Release worktree `/private/tmp/recme-testflight-build53` is clean on `main` at `b2525e3b4` tracking `origin/main`.
+- Latest completed explicit TestFlight release is build 59. `project.yml` still has `CURRENT_PROJECT_VERSION: "59"`, so there is no pending build-number bump/upload to resume.
+- Explicit TestFlight release requested, so after merging PR #63 this run should bump once to build 60 and package all eligible app-code/schema/UI changes since build 59.
+- gstack `/review` skill was read, but `.agents/skills/gstack/review/checklist.md` and `.agents/skills/gstack/review/greptile-triage.md` are missing, so use the repo landing workflow's manual review gate and record the fallback.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
+
+Initial included release scope since completed TestFlight build 59:
+
+- REC-69 / PR #62: map tap-away behavior, map search clearing on annotation/POI selection, and long-press coordinate dropped-pin save candidates.
+- REC-72 / PR #63: half-step place ratings in the app, local persistence/DTOs/repository payloads, and Supabase rating-score contract migration/tests.
+
+Checkpoint, 2026-07-02 19:38 PDT:
+
+- Squash-merged PR #63 into `main`; merge commit `7625ab7b786cfddfa5e5177a1f80ffb714df46a2`.
+- `gh pr merge` returned non-zero only because local branch `codex/rec-72` is checked out in `/Users/ryanlieblein/Developer/Wander-worktrees/rec-72`, so it could not delete that local branch. The PR is merged and `origin/main` contains the merge commit.
+- Fast-forwarded release worktree `main` from `b2525e3b4` to `7625ab7b7`.
+- Applied hosted Supabase migration `20260703003229_half_step_rating_scores.sql` to linked project `rugmtlgufrhlxwfkumhw`.
+- Verified hosted migration list shows local/remote `20260703003229` aligned.
+- Verified hosted RPC/security metadata:
+  - `app.save_own_place` remains `security definer`, volatile, `search_path=public, app`, authenticated execute.
+  - `app.visible_places_in_view` and `app.profile_visible_places` remain invoker/stable and return `rating_score double precision`.
+  - Public wrappers keep `search_path=app, public` and authenticated execute grants.
+- Verified hosted column contract: `public.user_places.rating_score` is `numeric(2,1)` with the half-step `1...5` check constraint.
+- Ran hosted rollback-wrapped REC-72 smoke query:
+  - `4.5` saves and stores.
+  - `4.25` is rejected with `invalid_rating_score`.
+  - `wanna_go` saves clear `rating_score`.
+
+Checkpoint, 2026-07-02 19:48 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from `59` to `60` in `project.yml`.
+- Ran `xcodegen generate`; trimmed unrelated generated `Wander.xcodeproj/project.pbxproj` settings churn so the project diff only updates the two `CURRENT_PROJECT_VERSION = 60` values.
+- `git diff --check` passed.
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- `xcresulttool` summary for `/private/tmp/DerivedData-build60-build/Logs/Test/Test-Wander-2026.07.02_19-46-13--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
