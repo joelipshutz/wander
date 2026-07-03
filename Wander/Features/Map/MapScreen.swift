@@ -10,6 +10,9 @@ struct MapScreen: View {
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
     @State private var ignoreNextMapFeatureClear = false
+    @State private var ignoreNextMapTap = false
+    @State private var lastMapPressPoint: CGPoint?
+    @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery = ""
@@ -26,6 +29,7 @@ struct MapScreen: View {
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
+    @State private var suppressNextQueryAutoSelection = false
     @State private var didCenterInitialPlaces = false
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -159,64 +163,79 @@ struct MapScreen: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                Map(position: $position, selection: $selectedMapFeature) {
-                    UserAnnotation()
+                MapReader { proxy in
+                    Map(position: $position, selection: $selectedMapFeature) {
+                        UserAnnotation()
 
-                    ForEach(mapAnnotationPlaces) { visiblePlace in
-                        Annotation(
-                            visiblePlace.place.canonicalName,
-                            coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
-                        ) {
-                            Button {
-                                clearNativeMapFeatureSelection()
-                                selectVisiblePlace(visiblePlace)
-                                selectedSearchCandidateID = nil
-                                isPlaceProfilePresented = false
-                            } label: {
-                                MapPlaceMarker(
-                                    visiblePlace: visiblePlace,
-                                    saves: saveSummaries(for: visiblePlace),
-                                    currentUserID: store.currentUser.id,
-                                    isSelected: isSelectedMapRepresentative(visiblePlace)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    ForEach(mappableSearchCandidates) { candidate in
-                        if let latitude = candidate.latitude,
-                           let longitude = candidate.longitude {
+                        ForEach(mapAnnotationPlaces) { visiblePlace in
                             Annotation(
-                                candidate.name,
-                                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                                visiblePlace.place.canonicalName,
+                                coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
                             ) {
                                 Button {
-                                    clearNativeMapFeatureSelection()
-                                    selectedSearchCandidateID = candidate.id
-                                    selectedPlaceGroupKey = nil
-                                    isPlaceProfilePresented = false
+                                    selectVisiblePlaceFromMapTap(visiblePlace)
                                 } label: {
-                                    SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
+                                    MapPlaceMarker(
+                                        visiblePlace: visiblePlace,
+                                        saves: saveSummaries(for: visiblePlace),
+                                        currentUserID: store.currentUser.id,
+                                        isSelected: isSelectedMapRepresentative(visiblePlace)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+
+                        ForEach(mappableSearchCandidates) { candidate in
+                            if let latitude = candidate.latitude,
+                               let longitude = candidate.longitude {
+                                Annotation(
+                                    candidate.name,
+                                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                                ) {
+                                    Button {
+                                        selectSearchCandidateFromMapTap(candidate)
+                                    } label: {
+                                        SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
                     }
-                }
-                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-                .mapFeatureSelectionDisabled { feature in
-                    feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
-                }
-                .mapFeatureSelectionContent { _ in }
-                .modifier(HideNativeMapFeatureAccessory())
-                .tint(Self.currentLocationTint)
-                .ignoresSafeArea()
-                .onChange(of: selectedMapFeature) { _, feature in
-                    handleMapFeatureSelection(feature)
-                }
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    currentSearchRegion = context.region
+                    .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .mapFeatureSelectionDisabled { feature in
+                        feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
+                    }
+                    .mapFeatureSelectionContent { _ in }
+                    .modifier(HideNativeMapFeatureAccessory())
+                    .tint(Self.currentLocationTint)
+                    .ignoresSafeArea()
+                    .onChange(of: selectedMapFeature) { _, feature in
+                        handleMapFeatureSelection(feature)
+                    }
+                    .onMapCameraChange(frequency: .onEnd) { context in
+                        currentSearchRegion = context.region
+                    }
+                    .onTapGesture(coordinateSpace: .local) { point in
+                        handleMapTap(at: point, proxy: proxy)
+                    }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                            .onChanged { value in
+                                lastMapPressPoint = value.location
+                            }
+                    )
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.48)
+                            .onEnded { didComplete in
+                                guard didComplete, let point = lastMapPressPoint else { return }
+                                if handleMapLongPress(at: point, proxy: proxy) {
+                                    ignoreNextMapTap = true
+                                }
+                                lastMapPressPoint = nil
+                            }
+                    )
                 }
 
                 VStack(spacing: 0) {
@@ -306,7 +325,12 @@ struct MapScreen: View {
                 centerMapOnInitialPlacesIfNeeded()
             }
             .onChange(of: mapQuery) { _, _ in
+                let shouldSuppressAutoSelection = suppressNextQueryAutoSelection
                 handleMapQueryChange()
+                if shouldSuppressAutoSelection {
+                    suppressNextQueryAutoSelection = false
+                    return
+                }
                 if let firstGroupKey = visiblePlaceGroupKeys.first,
                    !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
                     selectedPlaceGroupKey = firstGroupKey
@@ -368,6 +392,18 @@ struct MapScreen: View {
         isPlaceProfilePresented = false
     }
 
+    private func clearMapSelectionAndSearch() {
+        mapSelectionRevision += 1
+        mapFeatureResolutionTask?.cancel()
+        mapFeatureResolutionTask = nil
+        clearSearchTextForMapInteraction()
+        selectedPlaceGroupKey = nil
+        selectedSearchCandidateID = nil
+        mapSearchCandidates = []
+        mapSearchMessage = nil
+        isPlaceProfilePresented = false
+    }
+
     private func clearNativeMapFeatureSelection() {
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
@@ -377,14 +413,93 @@ struct MapScreen: View {
         selectedMapFeature = nil
     }
 
-    private func clearMapFeatureCandidateSelection() {
-        mapFeatureResolutionTask?.cancel()
-        mapFeatureResolutionTask = nil
-        selectedPlaceGroupKey = nil
+    private func clearSearchTextForMapInteraction() {
+        typeaheadTask?.cancel()
+        typeaheadTask = nil
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+        suppressedTypeaheadQuery = ""
+
+        if !mapQuery.isEmpty {
+            suppressNextQueryAutoSelection = true
+            mapQuery = ""
+        }
+
+        mapSearchMessage = nil
+    }
+
+    private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
+        mapSelectionRevision += 1
+        clearNativeMapFeatureSelection()
+        clearSearchTextForMapInteraction()
+        selectVisiblePlace(visiblePlace)
         selectedSearchCandidateID = nil
         mapSearchCandidates = []
-        mapSearchMessage = nil
         isPlaceProfilePresented = false
+    }
+
+    private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
+        mapSelectionRevision += 1
+        clearNativeMapFeatureSelection()
+        clearSearchTextForMapInteraction()
+        mapSearchCandidates = [candidate]
+        selectedSearchCandidateID = candidate.id
+        selectedPlaceGroupKey = nil
+        isPlaceProfilePresented = false
+    }
+
+    private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        if ignoreNextMapTap {
+            ignoreNextMapTap = false
+            return
+        }
+        guard !isTapNearSelectableMarker(point, proxy: proxy) else { return }
+
+        let revision = mapSelectionRevision
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard revision == mapSelectionRevision,
+                  selectedMapFeature == nil
+            else { return }
+
+            clearMapSelectionAndSearch()
+        }
+    }
+
+    private func handleMapLongPress(at point: CGPoint, proxy: MapProxy) -> Bool {
+        guard !isTapNearSelectableMarker(point, proxy: proxy),
+              let coordinate = proxy.convert(point, from: .local),
+              CLLocationCoordinate2DIsValid(coordinate)
+        else { return false }
+
+        let candidate = Self.coordinateCandidate(at: coordinate)
+        mapSelectionRevision += 1
+        clearNativeMapFeatureSelection()
+        clearSearchTextForMapInteraction()
+        mapSearchCandidates = [candidate]
+        selectedPlaceGroupKey = nil
+        selectedSearchCandidateID = candidate.id
+        isPlaceProfilePresented = false
+        mapSearchMessage = "Dropped pin. Tap + to add it."
+        return true
+    }
+
+    private func isTapNearSelectableMarker(_ point: CGPoint, proxy: MapProxy) -> Bool {
+        let savedPlaceCoordinates = mapAnnotationPlaces.map { visiblePlace in
+            CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
+        }
+        let searchCandidateCoordinates = mappableSearchCandidates.compactMap { candidate -> CLLocationCoordinate2D? in
+            guard let latitude = candidate.latitude,
+                  let longitude = candidate.longitude
+            else { return nil }
+
+            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+        let markerPoints = (savedPlaceCoordinates + searchCandidateCoordinates).compactMap { markerCoordinate in
+            proxy.convert(markerCoordinate, to: .local)
+        }
+
+        return MapHitTesting.isScreenPoint(point, nearAny: markerPoints)
     }
 
     private func resolveInitialSelection() {
@@ -637,12 +752,13 @@ struct MapScreen: View {
             if ignoreNextMapFeatureClear {
                 ignoreNextMapFeatureClear = false
             } else {
-                clearMapFeatureCandidateSelection()
+                clearMapSelectionAndSearch()
             }
             return
         }
 
         ignoreNextMapFeatureClear = false
+        mapSelectionRevision += 1
         resolveSelectedMapFeature(feature)
     }
 
@@ -677,6 +793,7 @@ struct MapScreen: View {
 
         if let visiblePlace = visiblePlace(matching: candidate) {
             clearNativeMapFeatureSelection()
+            clearSearchTextForMapInteraction()
             selectVisiblePlace(visiblePlace)
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
@@ -685,6 +802,7 @@ struct MapScreen: View {
             return
         }
 
+        clearSearchTextForMapInteraction()
         mapSearchCandidates = [candidate]
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = candidate.id
@@ -1255,6 +1373,37 @@ struct MapScreen: View {
 
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
+    }
+
+    static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
+        let display = coordinateDisplay(for: coordinate)
+        let latitude = Int((coordinate.latitude * 100_000).rounded())
+        let longitude = Int((coordinate.longitude * 100_000).rounded())
+        let sourceID = "coordinate_\(latitude)_\(longitude)"
+
+        return PlaceCandidate(
+            id: sourceID,
+            name: "Dropped pin",
+            category: WanderPlaceCategory.fallbackPlace,
+            primaryCategory: WanderPlaceCategory.fallbackPlace,
+            subcategory: nil,
+            categorySource: PlaceCategorySource.unknown.rawValue,
+            categoryConfidence: nil,
+            rawProviderType: nil,
+            address: display,
+            locality: nil,
+            region: nil,
+            country: nil,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            sourceProvider: "coordinate",
+            sourceProviderPlaceID: sourceID,
+            confidence: 0.35
+        )
+    }
+
+    static func coordinateDisplay(for coordinate: CLLocationCoordinate2D) -> String {
+        String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
     }
 
     private static func normalized(_ value: String) -> String {
