@@ -731,7 +731,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let visibility: String
     let note: String?
     let ratingSignal: String?
-    let ratingScore: Int?
+    let ratingScore: Double?
     let categoryOverride: String?
     let subcategoryOverride: String?
     let categoryOverrideSource: String?

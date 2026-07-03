@@ -8516,3 +8516,67 @@ Landing outcome, 2026-07-02 17:50 PDT:
   - full `xcodebuild test` on iPhone 17 Pro iOS 26.5 simulator, 219 passed, 0 failed, 0 skipped.
 - No TestFlight release was requested or performed; no build number bump, archive/upload, Slack release note, or App Store Connect/TestFlight action was taken.
 - Next: this fix will ride in the next explicit TestFlight release batch.
+
+## 2026-07-02 17:29 PDT - Codex - REC-72 Half-Step Ratings
+
+Agent: Codex
+Branch: `codex/rec-72`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-72`
+Linear: `REC-72` (`Add 0.5 increments to user rating scale`)
+
+Goal: implement half-step user ratings from `1` through `5` while reusing the existing numeric rating system and keeping saved-place/recommended rating behavior intact.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty in `docs/agent-log.md` on stale `codex/profile-pictures`, so this work is isolated in a fresh worktree from `origin/main`.
+- New branch `codex/rec-72` tracks `origin/main`; starting worktree status was clean before this log entry.
+- Linear `REC-72` is in `Backlog`, assigned to Ryan, with clear scope: support `1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Rating model/helper files under `Wander/Models/` or `Wander/Services/`
+- Rating UI in `Wander/Features/Map/MapScreen.swift`
+- DTO/repository/store files if `ratingScore` type changes across persistence or sync
+- Focused tests under `WanderTests/`
+
+Engineering review gate:
+
+- Required because this changes a shared saved-place rating contract.
+- Initial finding: the existing 1-5 numeric rating implementation already provides `PlaceRating`, `PlaceRatingSlider`, local persistence, remote DTO fields, and recommended score averages; the likely safest scope is to widen `ratingScore` from integer-only to half-step `Double` values without introducing a new flow.
+
+Implementation checkpoint, 2026-07-02 17:58 PDT:
+
+- Moved Linear `REC-72` to `In Progress` and commented with the isolated worktree/branch.
+- Widened the app rating contract from integer scores to `Double` half-step scores:
+  - `PlaceRating` now clamps to `1...5`, snaps to `0.5` increments, and formats half-step display values.
+  - `PlaceRatingSlider` now binds `Double`, steps by `0.5`, and renders labels for `1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5`.
+  - Local models, list payloads, drafts, persistence records, Supabase DTOs/repository params, map save context, place-profile summaries, and Discover/place-profile averages now preserve half-step `ratingScore` values.
+- Added Supabase migration `20260703003229_half_step_rating_scores.sql`:
+  - Converts `public.user_places.rating_score` to `numeric(2,1)`.
+  - Replaces the check constraint so only null or `1...5` half-step values are accepted.
+  - Recreates `app.save_own_place`, `app.visible_places_in_view`, `app.profile_visible_places`, and public wrappers with existing security posture: narrow `security definer` save RPC with `search_path = public, app`, invoker read RPCs/wrappers, and authenticated-only execute grants.
+  - Keeps `wanna_go` saves clearing `rating_score`.
+- Updated `supabase/tests/save_own_place.sql` to assert:
+  - `authenticated` can execute `app.save_own_place`.
+  - `4.5` stores as a numeric half-step rating.
+  - `4.25` is rejected with `invalid_rating_score`.
+
+Validation:
+
+- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec72-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused regression tests passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testPlaceRatingsNormalizeForBeenSavesOnly -only-testing:WanderTests/RemoteRepositoryTests/testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows -only-testing:WanderTests/RemoteRepositoryTests/testOwnPlaceSaveCallsExpectedRPCWithPlaceAndAttributes -only-testing:WanderTests/PlaceProfilePresentationTests/testOverallRatingAveragesTrustedRatingsWhenUnsaved`
+- Full XCTest suite passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec72-full -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72 CODE_SIGNING_ALLOWED=NO -jobs 1`
+- `git diff --check` passed.
+
+Known gaps:
+
+- `supabase test db` could not be run in this environment because the `supabase` CLI is not installed (`zsh:1: command not found: supabase`). The pgTAP coverage was updated but remains unexecuted locally.
+- Used the available `iPhone 17 Pro, OS 26.5` simulator instead of the repo's documented `iPhone 16 Plus, OS 18.6` destination.
+
+Next:
+
+- Commit the implementation, update `codex/rec-72` from latest `origin/main`, rerun validation if the rebase changes anything material, push, open a PR, and move Linear `REC-72` to review.

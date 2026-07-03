@@ -991,7 +991,7 @@ private struct PlaceProfileSaveCard: View {
                 Spacer()
                 if let ratingScore = displayedRatingScore {
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text("\(ratingScore) / 5")
+                        Text("\(PlaceRating.display(ratingScore)) / 5")
                             .font(.system(size: 13, weight: .black))
                             .foregroundStyle(WanderTheme.terracottaDark.color)
                         Text("rating")
@@ -1034,7 +1034,7 @@ private struct PlaceProfileSaveCard: View {
         summary.visiblePlace.userPlace
     }
 
-    private var displayedRatingScore: Int? {
+    private var displayedRatingScore: Double? {
         guard userPlace.status == .been else { return nil }
         return userPlace.ratingScore
     }
