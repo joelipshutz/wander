@@ -1,4 +1,5 @@
 import CoreGraphics
+import MapKit
 import XCTest
 @testable import Wander
 
@@ -23,6 +24,34 @@ final class MapHitTestingTests: XCTestCase {
                 nearAny: [marker]
             )
         )
+    }
+}
+
+final class MapCoordinateCandidateTests: XCTestCase {
+    @MainActor
+    func testCoordinateCandidateUsesDroppedPinWithFallbackCategory() {
+        let coordinate = CLLocationCoordinate2D(latitude: 34.083238, longitude: -118.361472)
+
+        let candidate = MapScreen.coordinateCandidate(at: coordinate)
+
+        XCTAssertEqual(candidate.id, "coordinate_3408324_-11836147")
+        XCTAssertEqual(candidate.name, "Dropped pin")
+        XCTAssertEqual(candidate.address, "34.08324, -118.36147")
+        XCTAssertEqual(candidate.category, WanderPlaceCategory.fallbackPlace)
+        XCTAssertEqual(candidate.primaryCategory, WanderPlaceCategory.fallbackPlace)
+        XCTAssertNil(candidate.subcategory)
+        XCTAssertEqual(candidate.categorySource, PlaceCategorySource.unknown.rawValue)
+        XCTAssertEqual(candidate.sourceProvider, "coordinate")
+        XCTAssertEqual(candidate.sourceProviderPlaceID, candidate.id)
+        XCTAssertEqual(candidate.latitude, coordinate.latitude)
+        XCTAssertEqual(candidate.longitude, coordinate.longitude)
+    }
+
+    @MainActor
+    func testCoordinateDisplayRoundsToFiveDecimals() {
+        let coordinate = CLLocationCoordinate2D(latitude: 33.999994, longitude: -118.000005)
+
+        XCTAssertEqual(MapScreen.coordinateDisplay(for: coordinate), "33.99999, -118.00001")
     }
 }
 
