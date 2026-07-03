@@ -8477,3 +8477,27 @@ Outcome, 2026-07-02 17:25 PDT:
 - Opened draft PR #62: https://github.com/joelipshutz/wander/pull/62
 - Added a Linear `REC-69` comment with branch, PR, scenario coverage, and validation summary.
 - Known issues: no automated UI gesture test for live MapKit tap/long-press routing; Ryan should verify the three scenarios manually in Xcode on the branch worktree.
+
+Landing start, 2026-07-02 17:35 PDT:
+
+- Ryan verified the branch in Xcode and requested squash-merge/push to `main`.
+- This is merge-only; no TestFlight release was requested, so do not bump build number, archive/upload, attach a build, or post tester-facing Slack release notes.
+- Ran `git fetch origin`, checked branch status/worktrees, read recent `docs/agent-log.md`, and inspected PR #62.
+- Worktree `/private/tmp/recme-rec-69-map-dismiss` is clean on `codex/rec-69-map-dismiss`; root checkout remains on unrelated dirty `codex/profile-pictures`.
+- PR #62 is open, draft, mergeable, and `CLEAN` against `main`; `origin/main` is still `d44e69bf8`.
+- Latest completed explicit TestFlight release remains build 59; no pending build-number bump/upload was found.
+- gstack `/review` skill is still missing required files `.agents/skills/gstack/review/checklist.md` and `review/greptile-triage.md`, so use the repo landing workflow's manual review gate and record the fallback.
+
+Landing gate, 2026-07-02 17:46 PDT:
+
+- Scope review: PR #62 changes are limited to `MapScreen.swift`, coordinate/map hit-testing tests, and this agent log.
+- Manual review found no blockers in the search-clearing, blank-tap clearing, MapKit feature-selection race guard, or coordinate dropped-pin fallback category flow.
+- GitHub reported no PR checks, comments, or reviews.
+- Advisory `bun run slop:diff origin/main` could not run because `bun` is not on PATH in this shell.
+- A fresh landing `xcodebuild build -quiet` attempt using new DerivedData stalled before producing an activity log while other Xcode worktree builds were active; interrupted only that REC-69 build, then reran validation using the warmed REC-69 package/DerivedData paths.
+- Pre-merge validation passed:
+  - `git diff --check`
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec69-focused -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec69 CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec69-focused/Logs/Test/Test-Wander-2026.07.02_17-44-03--0700.xcresult`: 219 tests passed, 0 failed, 0 skipped.
+- Next: commit/push this landing log update, mark PR #62 ready, squash-merge to `main`, move `REC-69` to `Done`, and leave TestFlight for the next explicit release request.
