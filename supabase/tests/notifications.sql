@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(22);
+select plan(23);
 
 insert into public.profiles (id, handle, display_name)
 values
@@ -57,8 +57,9 @@ select is(
   'current user can disable social graph notifications'
 );
 
-select set_config('request.jwt.claim.sub', 'user_notify_actor_disabled', true);
-select public.follow_user('user_notify_recipient', 'profile');
+reset role;
+insert into public.follows(follower_user_id, followed_user_id, source)
+values ('user_notify_actor_disabled', 'user_notify_recipient', 'profile');
 
 select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_notify_recipient'),
@@ -66,8 +67,8 @@ select is(
   'disabled social graph preference suppresses follow push events'
 );
 
-select set_config('request.jwt.claim.sub', 'user_no_token_actor', true);
-select public.follow_user('user_no_token_recipient', 'profile');
+insert into public.follows(follower_user_id, followed_user_id, source)
+values ('user_no_token_actor', 'user_no_token_recipient', 'profile');
 
 select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_no_token_recipient'),
@@ -78,8 +79,9 @@ select is(
 select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
 select (public.update_notification_preferences('{"social_graph_enabled": true}'::jsonb)).social_graph_enabled;
 
-select set_config('request.jwt.claim.sub', 'user_notify_actor_enabled', true);
-select public.follow_user('user_notify_recipient', 'profile');
+reset role;
+insert into public.follows(follower_user_id, followed_user_id, source)
+values ('user_notify_actor_enabled', 'user_notify_recipient', 'profile');
 
 select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_notify_recipient'),
@@ -93,9 +95,9 @@ select is(
   'follow push uses the followed_you type'
 );
 
-select like(
-  (select body from public.notification_events where recipient_user_id = 'user_notify_recipient' limit 1),
-  '%Actor Enabled started following you%',
+select ok(
+  (select body from public.notification_events where recipient_user_id = 'user_notify_recipient' limit 1)
+    like '%Actor Enabled started following you%',
   'follow push body names the actor without private payload data'
 );
 
@@ -109,10 +111,11 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
-select public.follow_user('user_followback_actor', 'profile');
-
-select set_config('request.jwt.claim.sub', 'user_followback_actor', true);
-select public.follow_user('user_original_follower', 'profile');
+reset role;
+insert into public.follows(follower_user_id, followed_user_id, source)
+values
+  ('user_original_follower', 'user_followback_actor', 'profile'),
+  ('user_followback_actor', 'user_original_follower', 'profile');
 
 select is(
   (select notification_type from public.notification_events where recipient_user_id = 'user_original_follower' limit 1),
@@ -188,17 +191,28 @@ select public.register_push_token(
   'com.grayline.wander'
 );
 
-select set_config('request.jwt.claim.sub', 'user_social_saver', true);
-select public.follow_user('user_source_owner', 'profile');
-
 reset role;
 delete from public.notification_events;
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_social_saver', true);
-select public.save_visible_place(
+insert into public.user_places (
+  id,
+  user_id,
+  place_id,
+  status,
+  visibility,
+  source_type,
+  source_user_place_id,
+  attribution_user_id
+)
+values (
+  '41000000-0000-0000-0000-000000000003',
+  'user_social_saver',
   '40000000-0000-0000-0000-000000000001',
-  '41000000-0000-0000-0000-000000000001'
+  'been',
+  'followers',
+  'social_save',
+  '41000000-0000-0000-0000-000000000001',
+  'user_source_owner'
 );
 
 select is(
@@ -223,13 +237,31 @@ select public.register_push_token(
   'com.grayline.wander'
 );
 
-select set_config('request.jwt.claim.sub', 'user_list_owner', true);
-select public.follow_user('user_list_collab', 'profile');
-select public.set_place_list_collaborators(
-  public.upsert_place_list(
-    '{"name": "Saturday plan", "description": "Shared shortlist", "visibility": "followers"}'::jsonb
-  ),
-  array['user_list_collab']
+reset role;
+insert into public.place_lists (
+  id,
+  owner_user_id,
+  name,
+  description,
+  visibility
+)
+values (
+  '44000000-0000-0000-0000-000000000001',
+  'user_list_owner',
+  'Saturday plan',
+  'Shared shortlist',
+  'followers'
+);
+
+insert into public.place_list_members (
+  list_id,
+  user_id,
+  role
+)
+values (
+  '44000000-0000-0000-0000-000000000001',
+  'user_list_collab',
+  'collaborator'
 );
 
 select is(
@@ -258,13 +290,17 @@ values (
   'manual'
 );
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_list_owner', true);
-select public.add_place_list_item(
-  (select id from public.place_lists where owner_user_id = 'user_list_owner' and name = 'Saturday plan' limit 1),
+insert into public.place_list_items (
+  list_id,
+  place_id,
+  owner_user_place_id,
+  added_by_user_id
+)
+values (
+  '44000000-0000-0000-0000-000000000001',
   '40000000-0000-0000-0000-000000000001',
   '41000000-0000-0000-0000-000000000002',
-  null
+  'user_list_owner'
 );
 
 select is(
@@ -276,12 +312,10 @@ select is(
 reset role;
 delete from public.notification_events;
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_list_owner', true);
-select public.set_place_list_collaborators(
-  (select id from public.place_lists where owner_user_id = 'user_list_owner' and name = 'Saturday plan' limit 1),
-  array[]::text[]
-);
+update public.place_list_members
+set deleted_at = now()
+where list_id = '44000000-0000-0000-0000-000000000001'
+  and user_id = 'user_list_collab';
 
 select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_list_collab'),

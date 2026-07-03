@@ -18,7 +18,10 @@ create table if not exists public.notification_device_tokens (
   platform text not null default 'ios' check (platform = 'ios'),
   environment text not null check (environment in ('sandbox', 'production')),
   app_bundle_id text not null default 'com.grayline.wander',
-  device_token text not null check (device_token ~ '^[A-Fa-f0-9]{32,512}$'),
+  device_token text not null check (
+    length(device_token) between 32 and 512
+    and device_token ~ '^[A-Fa-f0-9]+$'
+  ),
   token_hash text generated always as (encode(digest(device_token, 'sha256'), 'hex')) stored,
   is_active boolean not null default true,
   last_registered_at timestamptz not null default now(),
@@ -700,7 +703,8 @@ begin
     raise exception 'invalid_push_environment';
   end if;
 
-  if normalized_token !~ '^[a-f0-9]{32,512}$' then
+  if length(normalized_token) not between 32 and 512
+     or normalized_token !~ '^[a-f0-9]+$' then
     raise exception 'invalid_push_token';
   end if;
 

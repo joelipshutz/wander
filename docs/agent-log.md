@@ -8750,3 +8750,24 @@ Plan:
 - Run `supabase/tests/notifications.sql` against the strongest available Supabase environment.
 - If validation fails because of SQL defects, fix the migration/test and rerun.
 - Update PR/Linear/log with the final validation result.
+
+Outcome 2026-07-03 03:35 PDT:
+
+- Local Supabase still cannot run here because Docker is not installed (`docker: command not found`), but the bundled Node/pnpm runtime can run Supabase CLI `2.109.0`.
+- Linked this worktree to hosted project `rugmtlgufrhlxwfkumhw` (`wander`) and verified hosted migration state. After merging current `origin/main`, only `20260701190000_push_notifications.sql` remained local-only.
+- `supabase db push --linked --include-all --dry-run --yes` showed it would apply exactly `20260701190000_push_notifications.sql`.
+- A persistent hosted `supabase db push --linked --include-all --yes` was not performed; approval was blocked because it would deploy a shared hosted schema change. REC-60 remains local-only in `supabase migration list --linked` until explicitly approved/applied.
+- Ran a hosted rollback harness that applies the REC-60 migration and `supabase/tests/notifications.sql` inside one transaction, then rolls back.
+- Hosted validation exposed and fixed:
+  - Postgres regex repetition bound issue in push token validation (`{32,512}` is invalid on hosted Postgres); replaced with separate length and hex-character checks.
+  - pgTAP plan count was `22` but the file has `23` assertions.
+  - Hosted pgTAP did not expose `like(text, pattern, description)`; rewrote that assertion with `ok(value like pattern, description)`.
+  - Existing list/follow/save public RPC permission or visibility behavior made notification tests depend on unrelated setup side effects; rewrote those setup paths to direct service-role rows while still exercising the REC-60 triggers.
+- Final hosted rollback diagnostic result: all 23 pgTAP assertions passed, covering token registration, preference defaults, preference suppression, no-token suppression, follow/mutual-follow queueing, block suppression, social-save payload safety, shared-list collaborator/item queueing, collaborator removal no-push, capture-ready queueing/dedupe, and service worker claim/result updates.
+- Final plain hosted rollback query exited 0.
+- Confirmed hosted migration list remains unchanged after rollback: REC-60 is still pending locally and not applied to hosted.
+- Additional validation:
+  - `git diff --check` passed.
+  - `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
+  - `xcodebuild -list -project Wander.xcodeproj` passed and resolved packages.
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-postmerge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
