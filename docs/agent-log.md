@@ -8733,3 +8733,14 @@ Known limits:
 
 - V1 is deterministic and local-only. It does not use reviews/internet/OpenAI for smart tag/label suggestions; that is tracked separately in REC-77.
 - Local custom options currently reappear only after the user saves them on one of their own places, because this branch intentionally avoids a new custom-suggestion persistence table.
+
+Outcome, 2026-07-08 12:01 PDT:
+
+- Implementation commit: `7bf83cdbc` (`Implement REC-75 v1 default tags and labels`).
+- Pushed branch `codex/rec-75-v1-defaults` to origin.
+- Opened ready PR #65: https://github.com/joelipshutz/wander/pull/65
+- Added Linear REC-75 implementation note, attached PR #65, and moved REC-75 to `In Review`.
+
+Next:
+
+- Ryan should test PR #65 in Xcode before merge, with emphasis on edit-place category/subcategory/status changes, Restaurants & Food cuisine/subcategory combinations, and custom tag/label reuse after saving a custom option once.
