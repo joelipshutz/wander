@@ -310,11 +310,7 @@ final class WanderStore: ObservableObject {
     func visiblePlaces(in list: LocalPlaceList) -> [VisiblePlace] {
         let candidates = visiblePlaces()
         return listItems(for: list).compactMap { item in
-            candidates.first { visiblePlace in
-                visiblePlace.userPlace.id == item.ownerUserPlaceID
-                    || visiblePlace.userPlace.id == item.sourceUserPlaceID
-                    || visiblePlace.place.id == item.placeID
-            }
+            visiblePlace(for: item, candidates: candidates)
         }
     }
 
@@ -441,8 +437,14 @@ final class WanderStore: ObservableObject {
         if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
             placeLists[index].updatedAt = .now
             placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue
+            placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
+
+        if let backend {
+            await syncPlaceListItem(localOrServerID: item.id, listID: list.id, backend: backend)
+        }
+
         return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
     }
 
@@ -560,6 +562,228 @@ final class WanderStore: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func removePlace(placeID: String, from list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
+        let remoteListID = remoteID(list.serverID ?? list.id)
+        let remoteItemID = placeListItems.first { item in
+            item.listID == list.id
+                && item.placeID == placeID
+                && item.deletedAt == nil
+        }.flatMap { remoteID($0.serverID) }
+
+        let removed = removePlace(placeID: placeID, from: list)
+        guard removed, let backend, let remoteListID, let remoteItemID else {
+            return removed
+        }
+
+        do {
+            try await backend.removePlaceListItem(listID: remoteListID, itemID: remoteItemID)
+            if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
+                placeListItems[index].syncStateRaw = SyncState.tombstoned.rawValue
+            }
+            lastRemoteError = nil
+            await refreshRemotePlaceLists(backend: backend)
+        } catch {
+            if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
+                placeListItems[index].syncStateRaw = SyncState.failed.rawValue
+            }
+            lastRemoteError = remoteErrorMessage(error)
+            persist()
+        }
+
+        return removed
+    }
+
+    @discardableResult
+    func syncPendingPlaceLists(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+
+        let listIDs = placeLists
+            .filter { list in
+                list.ownerUserID == currentUser.id
+                    && (list.syncState == .pendingCreate
+                        || list.syncState == .pendingUpdate
+                        || list.syncState == .pendingDelete
+                        || list.syncState == .failed)
+            }
+            .map(\.id)
+
+        var syncedCount = 0
+        for listID in listIDs {
+            if await syncPlaceList(localOrServerID: listID, backend: backend) {
+                syncedCount += 1
+            }
+        }
+
+        return syncedCount
+    }
+
+    @discardableResult
+    private func syncPlaceList(localOrServerID: String, backend: WanderBackend) async -> Bool {
+        guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }),
+              canManage(placeLists[index])
+        else { return false }
+
+        let list = placeLists[index]
+        let previousID = list.id
+
+        if list.deletedAt != nil || list.syncState == .pendingDelete {
+            guard let remoteListID = remoteID(list.serverID ?? list.id) else {
+                placeLists[index].syncStateRaw = SyncState.tombstoned.rawValue
+                persist()
+                return true
+            }
+
+            do {
+                try await backend.deletePlaceList(listID: remoteListID)
+                if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
+                    placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
+                }
+                lastRemoteError = nil
+                persist()
+                return true
+            } catch {
+                if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
+                    placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
+                }
+                lastRemoteError = remoteErrorMessage(error)
+                persist()
+                return false
+            }
+        }
+
+        let collaboratorUserIDs = placeListMembers
+            .filter { $0.listID == previousID && $0.deletedAt == nil }
+            .map(\.userID)
+            .filter { $0 != currentUser.id }
+            .sorted()
+        let draft = PlaceListUpsertDraft(
+            id: remoteID(list.serverID ?? list.id),
+            name: list.name,
+            description: list.description,
+            visibility: list.visibility
+        )
+
+        do {
+            let remoteListID = try await backend.upsertPlaceList(draft)
+            if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
+                placeLists[currentIndex].serverID = remoteListID
+                placeLists[currentIndex].syncStateRaw = SyncState.synced.rawValue
+                replaceListIDReferences(previousID: previousID, canonicalID: placeLists[currentIndex].id)
+                placeLists[currentIndex].cachedItemCount = listItems(for: placeLists[currentIndex]).count
+            }
+
+            try await backend.setPlaceListCollaborators(listID: remoteListID, userIDs: collaboratorUserIDs)
+
+            let itemIDs = placeListItems
+                .filter { $0.listID == remoteListID && $0.deletedAt == nil && $0.syncState != .synced }
+                .map(\.id)
+            for itemID in itemIDs {
+                await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
+            }
+
+            lastRemoteError = nil
+            persist()
+            return true
+        } catch {
+            if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID }) {
+                placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
+            }
+            lastRemoteError = remoteErrorMessage(error)
+            persist()
+            return false
+        }
+    }
+
+    private func syncPlaceListItem(localOrServerID: String, listID: String, backend: WanderBackend) async {
+        guard let initialItem = placeListItems.first(where: { item in
+            item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
+        }) else {
+            return
+        }
+
+        if remoteID(initialItem.listID) == nil {
+            _ = await syncPlaceList(localOrServerID: listID, backend: backend)
+        }
+
+        guard let itemIndex = placeListItems.firstIndex(where: { item in
+            item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
+        }),
+              placeListItems[itemIndex].deletedAt == nil,
+              placeListItems[itemIndex].syncState != .synced,
+              let draft = remoteItemDraft(for: placeListItems[itemIndex])
+        else {
+            return
+        }
+
+        do {
+            let remoteItemID = try await backend.addPlaceListItem(draft)
+            placeListItems[itemIndex].serverID = remoteItemID
+            placeListItems[itemIndex].syncStateRaw = SyncState.synced.rawValue
+            if let listIndex = placeLists.firstIndex(where: { $0.id == draft.listID || $0.serverID == draft.listID }) {
+                placeLists[listIndex].syncStateRaw = SyncState.synced.rawValue
+                placeLists[listIndex].cachedItemCount = listItems(for: placeLists[listIndex]).count
+                placeLists[listIndex].updatedAt = .now
+            }
+            lastRemoteError = nil
+            persist()
+        } catch {
+            placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
+            lastRemoteError = remoteErrorMessage(error)
+            persist()
+        }
+    }
+
+    private func remoteItemDraft(for item: LocalPlaceListItem) -> PlaceListItemDraft? {
+        guard let listID = remoteID(item.listID),
+              let placeID = remotePlaceID(for: item.placeID)
+        else {
+            return nil
+        }
+
+        let ownerUserPlaceID = item.ownerUserPlaceID.flatMap(remoteUserPlaceID)
+        let sourceUserPlaceID = item.sourceUserPlaceID.flatMap(remoteUserPlaceID)
+        guard ownerUserPlaceID != nil || sourceUserPlaceID != nil else {
+            return nil
+        }
+
+        return PlaceListItemDraft(
+            listID: listID,
+            placeID: placeID,
+            ownerUserPlaceID: ownerUserPlaceID,
+            sourceUserPlaceID: sourceUserPlaceID
+        )
+    }
+
+    private func remotePlaceID(for localOrServerID: String) -> String? {
+        if let remoteID = remoteID(localOrServerID) {
+            return remoteID
+        }
+
+        return places.first { place in
+            place.id == localOrServerID || place.localID == localOrServerID || place.serverID == localOrServerID
+        }.flatMap { place in
+            remoteID(place.serverID ?? place.id)
+        }
+    }
+
+    private func remoteUserPlaceID(for localOrServerID: String) -> String? {
+        if let remoteID = remoteID(localOrServerID) {
+            return remoteID
+        }
+
+        return userPlaces.first { userPlace in
+            userPlace.id == localOrServerID || userPlace.localID == localOrServerID || userPlace.serverID == localOrServerID
+        }.flatMap { userPlace in
+            remoteID(userPlace.serverID ?? userPlace.id)
+        }
+    }
+
+    private func remoteID(_ value: String?) -> String? {
+        guard let value, UUID(uuidString: value) != nil else { return nil }
+        return value
+    }
+
     private func canRead(_ list: LocalPlaceList) -> Bool {
         guard !isBlockedBetweenCurrentUser(and: list.ownerUserID) else { return false }
         if list.ownerUserID == currentUser.id { return true }
@@ -610,6 +834,77 @@ final class WanderStore: ObservableObject {
         placeListItems
             .filter { $0.listID == list.id && $0.deletedAt == nil }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func visiblePlace(for item: LocalPlaceListItem, candidates: [VisiblePlace]) -> VisiblePlace? {
+        if let matched = candidates.first(where: { visiblePlace in
+            listItem(item, matches: visiblePlace)
+        }) {
+            return matched
+        }
+
+        return fallbackVisiblePlace(for: item)
+    }
+
+    private func listItem(_ item: LocalPlaceListItem, matches visiblePlace: VisiblePlace) -> Bool {
+        let userPlaceIDs = Set([item.ownerUserPlaceID, item.sourceUserPlaceID].compactMap { $0 })
+        if userPlaceIDs.contains(visiblePlace.userPlace.id)
+            || userPlaceIDs.contains(visiblePlace.userPlace.localID)
+            || visiblePlace.userPlace.serverID.map(userPlaceIDs.contains) == true {
+            return true
+        }
+
+        let placeIDs = matchingPlaceIDs(item.placeID)
+        return placeIDs.contains(visiblePlace.place.id)
+            || placeIDs.contains(visiblePlace.place.localID)
+            || visiblePlace.place.serverID.map(placeIDs.contains) == true
+    }
+
+    private func fallbackVisiblePlace(for item: LocalPlaceListItem) -> VisiblePlace? {
+        let placeIDs = matchingPlaceIDs(item.placeID)
+        guard let place = places.first(where: { place in
+            placeIDs.contains(place.id)
+                || placeIDs.contains(place.localID)
+                || place.serverID.map(placeIDs.contains) == true
+        }) else {
+            return nil
+        }
+
+        let preferredUserPlaceIDs = [item.ownerUserPlaceID, item.sourceUserPlaceID].compactMap { $0 }
+        let samePlaceUserPlaces = userPlaces.filter { userPlace in
+            userPlace.deletedAt == nil
+                && placeIDs.contains(userPlace.placeID)
+        }
+        let preferredUserPlace = preferredUserPlaceIDs.compactMap { userPlaceID in
+            samePlaceUserPlaces.first { userPlace in
+                userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID
+            }
+        }.first
+        let currentUserPlace = samePlaceUserPlaces.first { $0.userID == currentUser.id }
+        let visibleSocialPlace = samePlaceUserPlaces.first { userPlace in
+            guard let owner = profiles.first(where: { $0.id == userPlace.userID }) else { return false }
+            return visibilityPolicy.canSeePlace(
+                viewerID: currentUser.id,
+                ownerID: owner.id,
+                visibility: userPlace.visibility,
+                relationship: relationship(to: owner.id),
+                isBlocked: isBlockedBetweenCurrentUser(and: owner.id)
+            )
+        }
+
+        guard let userPlace = preferredUserPlace ?? currentUserPlace ?? visibleSocialPlace,
+              let owner = profiles.first(where: { $0.id == userPlace.userID })
+        else {
+            return nil
+        }
+
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner,
+            attributes: attributes(for: userPlace.id)
+        )
     }
 
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
@@ -1656,6 +1951,31 @@ final class WanderStore: ObservableObject {
         await refreshRemoteVisiblePlaces(in: Self.defaultRemoteViewport, backend: backend)
     }
 
+    func refreshRemotePlaceLists(backend: WanderBackend?) async {
+        guard let backend else {
+            return
+        }
+
+        do {
+            let summaries = try await backend.visiblePlaceLists()
+            upsertRemotePlaceListSummaries(summaries)
+
+            let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
+            for ownerID in ownerIDs.sorted() {
+                await refreshRemoteProfileVisiblePlaces(profileID: ownerID, backend: backend)
+            }
+
+            for summary in summaries where UUID(uuidString: summary.list.id) != nil {
+                if let detail = try await backend.placeListDetail(listID: summary.list.id) {
+                    upsertRemotePlaceListDetail(detail)
+                }
+            }
+            lastRemoteError = nil
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
     func refreshRemoteSocialSurfaces(backend: WanderBackend?) async {
         await refreshRemoteSocialSurfaces(in: Self.defaultRemoteViewport, backend: backend)
     }
@@ -1688,7 +2008,9 @@ final class WanderStore: ObservableObject {
             remoteVisiblePlaceCache.removeAll { $0.owner.id == profileID }
             remoteVisiblePlaceCache.append(contentsOf: visiblePlaces)
             hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
-            try await refreshRemoteRelationship(to: profileID, backend: backend)
+            if profileID != currentUser.id {
+                try await refreshRemoteRelationship(to: profileID, backend: backend)
+            }
             lastRemoteError = nil
         } catch {
             lastRemoteError = remoteErrorMessage(error)
@@ -2225,6 +2547,132 @@ final class WanderStore: ObservableObject {
         }
 
         return (placeID, sourceUserPlaceID)
+    }
+
+    private func upsertRemotePlaceListSummaries(_ summaries: [RemotePlaceListSummary]) {
+        let ownerShells = summaries.map(\.owner)
+        let collaboratorShells = summaries.flatMap { summary in
+            summary.collaborators.map(\.profileShell)
+        }
+        upsertRemoteProfileShells(ownerShells + collaboratorShells)
+
+        for summary in summaries {
+            upsertRemotePlaceList(summary.list)
+            replaceRemoteCollaborators(listID: summary.list.id, collaborators: summary.collaborators)
+        }
+
+        objectWillChange.send()
+        persist()
+    }
+
+    private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
+        upsertRemotePlaceList(detail.list)
+        replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
+        replaceRemoteItems(listID: detail.list.id, items: detail.items)
+
+        if let index = placeLists.firstIndex(where: { $0.id == detail.list.id || $0.serverID == detail.list.id }) {
+            placeLists[index].cachedItemCount = detail.items.filter { $0.deletedAt == nil }.count
+        }
+
+        objectWillChange.send()
+        persist()
+    }
+
+    private func upsertRemotePlaceList(_ remoteList: LocalPlaceList) {
+        guard let serverID = remoteList.serverID else { return }
+
+        if let index = placeLists.firstIndex(where: { list in
+            list.serverID == serverID || list.localID == remoteList.localID || list.id == serverID
+        }) {
+            let previousID = placeLists[index].id
+            placeLists[index].serverID = serverID
+            placeLists[index].ownerUserID = remoteList.ownerUserID
+            placeLists[index].name = remoteList.name
+            placeLists[index].description = remoteList.description
+            placeLists[index].visibilityRaw = remoteList.visibilityRaw
+            placeLists[index].syncStateRaw = SyncState.synced.rawValue
+            placeLists[index].cachedItemCount = remoteList.cachedItemCount
+            placeLists[index].createdAt = remoteList.createdAt
+            placeLists[index].updatedAt = remoteList.updatedAt
+            placeLists[index].deletedAt = remoteList.deletedAt
+            replaceListIDReferences(previousID: previousID, canonicalID: placeLists[index].id)
+        } else {
+            placeLists.append(remoteList)
+        }
+    }
+
+    private func replaceRemoteCollaborators(listID: String, collaborators: [PlaceListCollaboratorRecord]) {
+        let incomingUserIDs = Set(collaborators.map(\.userID))
+        placeListMembers.removeAll { member in
+            member.listID == listID
+                && member.localID.hasPrefix("remote_list_member_")
+                && !incomingUserIDs.contains(member.userID)
+        }
+
+        for collaborator in collaborators {
+            let localID = "remote_list_member_\(slug(listID))_\(slug(collaborator.userID))"
+            if let index = placeListMembers.firstIndex(where: { member in
+                member.serverID == localID
+                    || (member.listID == listID && member.userID == collaborator.userID)
+            }) {
+                placeListMembers[index].serverID = nil
+                placeListMembers[index].listID = listID
+                placeListMembers[index].userID = collaborator.userID
+                placeListMembers[index].roleRaw = collaborator.role.rawValue
+                placeListMembers[index].deletedAt = nil
+            } else {
+                placeListMembers.append(
+                    LocalPlaceListMember(
+                        localID: localID,
+                        listID: listID,
+                        userID: collaborator.userID,
+                        role: collaborator.role
+                    )
+                )
+            }
+        }
+    }
+
+    private func replaceRemoteItems(listID: String, items: [LocalPlaceListItem]) {
+        let incomingIDs = Set(items.map(\.id))
+        placeListItems.removeAll { item in
+            item.listID == listID
+                && item.localID.hasPrefix("remote_list_item_")
+                && !incomingIDs.contains(item.id)
+        }
+
+        for item in items {
+            if let index = placeListItems.firstIndex(where: { existing in
+                existing.serverID == item.serverID
+                    || existing.id == item.id
+                    || (existing.listID == listID && existing.placeID == item.placeID && existing.deletedAt == nil)
+            }) {
+                placeListItems[index].serverID = item.serverID
+                placeListItems[index].listID = listID
+                placeListItems[index].placeID = item.placeID
+                placeListItems[index].ownerUserPlaceID = item.ownerUserPlaceID
+                placeListItems[index].sourceUserPlaceID = item.sourceUserPlaceID
+                placeListItems[index].addedByUserID = item.addedByUserID
+                placeListItems[index].syncStateRaw = SyncState.synced.rawValue
+                placeListItems[index].createdAt = item.createdAt
+                placeListItems[index].updatedAt = item.updatedAt
+                placeListItems[index].deletedAt = item.deletedAt
+            } else {
+                placeListItems.append(item)
+            }
+        }
+    }
+
+    private func replaceListIDReferences(previousID: String, canonicalID: String) {
+        guard previousID != canonicalID else { return }
+
+        for index in placeListMembers.indices where placeListMembers[index].listID == previousID {
+            placeListMembers[index].listID = canonicalID
+        }
+
+        for index in placeListItems.indices where placeListItems[index].listID == previousID {
+            placeListItems[index].listID = canonicalID
+        }
     }
 
     private func hydrateRemoteVisiblePlaceMetadata(_ visiblePlaces: [VisiblePlace]) {

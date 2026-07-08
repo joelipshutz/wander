@@ -11,6 +11,7 @@ final class WanderBackend: ObservableObject {
     let userPlaceRepository: (any UserPlaceRepository)?
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
     let extractionRepository: (any ExtractionRepository)?
+    let placeListRepository: (any PlaceListRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
@@ -27,6 +28,7 @@ final class WanderBackend: ObservableObject {
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
+            self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
         } else {
             self.profileRepository = nil
@@ -37,6 +39,7 @@ final class WanderBackend: ObservableObject {
             self.userPlaceRepository = nil
             self.socialPlaceSaveRepository = nil
             self.extractionRepository = nil
+            self.placeListRepository = nil
             self.listSuggestionRepository = nil
         }
     }
@@ -56,6 +59,7 @@ final class WanderBackend: ObservableObject {
         userPlaceRepository: (any UserPlaceRepository)? = nil,
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
+        placeListRepository: (any PlaceListRepository)? = nil,
         listSuggestionRepository: (any ListSuggestionRepository)? = nil
     ) {
         self.configuration = configuration
@@ -67,6 +71,7 @@ final class WanderBackend: ObservableObject {
         self.userPlaceRepository = userPlaceRepository
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
         self.extractionRepository = extractionRepository
+        self.placeListRepository = placeListRepository
         self.listSuggestionRepository = listSuggestionRepository
     }
 
@@ -79,6 +84,7 @@ final class WanderBackend: ObservableObject {
             || userPlaceRepository != nil
             || socialPlaceSaveRepository != nil
             || extractionRepository != nil
+            || placeListRepository != nil
             || listSuggestionRepository != nil
     }
 
@@ -239,6 +245,62 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await extractionRepository.result(jobID: jobID)
+    }
+
+    func visiblePlaceLists() async throws -> [RemotePlaceListSummary] {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.visibleLists()
+    }
+
+    func placeListDetail(listID: String) async throws -> RemotePlaceListDetail? {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.detail(listID: listID)
+    }
+
+    func upsertPlaceList(_ draft: PlaceListUpsertDraft) async throws -> String {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.upsert(draft)
+    }
+
+    func deletePlaceList(listID: String) async throws {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await placeListRepository.delete(listID: listID)
+    }
+
+    func setPlaceListCollaborators(listID: String, userIDs: [String]) async throws {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await placeListRepository.setCollaborators(listID: listID, userIDs: userIDs)
+    }
+
+    func addPlaceListItem(_ draft: PlaceListItemDraft) async throws -> String {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.addItem(draft)
+    }
+
+    func removePlaceListItem(listID: String, itemID: String) async throws {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await placeListRepository.removeItem(listID: listID, itemID: itemID)
     }
 
     func listSuggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {

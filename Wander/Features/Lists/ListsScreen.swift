@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ListsScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
     private let scenario: ListsScreenScenario
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
@@ -119,6 +120,7 @@ struct ListsScreen: View {
         if mapList?.id == list.id {
             mapList = nil
         }
+        syncLists()
     }
 
     private func saveList(_ draft: ListEditorDraft, presentation: ListEditorPresentation) {
@@ -134,6 +136,7 @@ struct ListsScreen: View {
                 collaboratorUserIDs: collaboratorUserIDs
             )
             selectedScopeID = ListsScope.mine.rawValue
+            syncLists()
         case .edit(let list):
             guard let sourceListID = list.sourceListID else { return }
             _ = store.updatePlaceList(
@@ -144,6 +147,7 @@ struct ListsScreen: View {
                 collaboratorUserIDs: collaboratorUserIDs
             )
             refreshOpenList(sourceListID: sourceListID)
+            syncLists()
         }
     }
 
@@ -154,6 +158,14 @@ struct ListsScreen: View {
             collaboratorUserIDs: collaborators.map(\.id)
         )
         refreshOpenList(sourceListID: sourceListID)
+        syncLists()
+    }
+
+    private func syncLists() {
+        Task {
+            _ = await store.syncPendingPlaceLists(backend: backend)
+            await store.refreshRemotePlaceLists(backend: backend)
+        }
     }
 
     private func refreshOpenList(sourceListID: String) {
@@ -186,6 +198,9 @@ struct ListsScreen: View {
             .padding(.bottom, WanderTheme.spacing16)
         }
         .wanderScreen()
+        .task {
+            await store.refreshRemotePlaceLists(backend: backend)
+        }
     }
 
     private var header: some View {
@@ -549,12 +564,13 @@ private struct ListDetailScreen: View {
                         isAddingPlaces = true
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 17, weight: .black))
-                            .frame(width: 40, height: 40)
+                            .font(.system(size: 15, weight: .black))
+                            .frame(width: 34, height: 34)
                             .background(WanderTheme.textInk.color)
                             .foregroundStyle(WanderTheme.textOnAction.color)
                             .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
                 }
 
@@ -563,17 +579,19 @@ private struct ListDetailScreen: View {
                         onEdit(displayList)
                     } label: {
                         Image(systemName: "pencil")
-                            .font(.system(size: 16, weight: .black))
-                            .frame(width: 40, height: 40)
+                            .font(.system(size: 14, weight: .black))
+                            .frame(width: 34, height: 34)
                             .background(WanderTheme.surfaceSand.color)
                             .foregroundStyle(WanderTheme.textInk.color)
                             .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
                 }
             }
         }
         .task(id: sourceList?.id ?? list.id) {
+            await store.refreshRemotePlaceLists(backend: backend)
             await loadSuggestions()
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
@@ -670,7 +688,7 @@ private struct ListDetailScreen: View {
                     .accessibilityHint(collaboratorAccessibilityHint)
                 }
                 Spacer()
-                Text("\(visiblePlaces.count) places")
+                Text("\(displayList.itemCount) places")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracottaDark.color)
             }
@@ -694,7 +712,7 @@ private struct ListDetailScreen: View {
                 .font(.system(size: 18, weight: .black))
 
             if visiblePlaces.isEmpty {
-                Text("No places in this list yet.")
+                Text(displayList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -801,7 +819,9 @@ private struct ListDetailScreen: View {
     @MainActor
     private func removePlace(_ place: ListPlaceMock) {
         if let sourceList, let placeID = place.placeID {
-            _ = store.removePlace(placeID: placeID, from: sourceList)
+            Task {
+                _ = await store.removePlace(placeID: placeID, from: sourceList, backend: backend)
+            }
         } else {
             removedPlaceIDs.insert(place.id)
         }
@@ -2420,11 +2440,13 @@ private struct PlaceListMock: Identifiable, Hashable {
     let isStealth: Bool
     let collaborators: [ListCollaboratorMock]
     let places: [ListPlaceMock]
+    var itemCountOverride: Int? = nil
     var sourceListID: String? = nil
     var ownerUserID: String = "you"
     var canManage: Bool = true
 
     var previewPlaces: [ListPlaceMock] { places }
+    var itemCount: Int { itemCountOverride ?? places.count }
     var isOwnedByCurrentUser: Bool { ownerName == "You" }
     var isCollaborative: Bool { !collaborators.isEmpty }
 
@@ -2437,10 +2459,10 @@ private struct PlaceListMock: Identifiable, Hashable {
 
     var subtitle: String {
         if ownerName == "You" {
-            return "\(places.count) places"
+            return "\(itemCount) places"
         }
 
-        return "\(ownerName) - \(places.count) places"
+        return "\(ownerName) - \(itemCount) places"
     }
 
     var collaboratorSummary: String {
@@ -2473,6 +2495,7 @@ private extension PlaceListMock {
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
         self.places = store.visiblePlaces(in: list).map(ListPlaceMock.init(visiblePlace:))
+        self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)

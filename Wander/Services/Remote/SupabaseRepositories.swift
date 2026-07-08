@@ -286,6 +286,65 @@ struct SupabaseExtractionRepository: ExtractionRepository {
     }
 }
 
+struct SupabasePlaceListRepository: PlaceListRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func visibleLists() async throws -> [RemotePlaceListSummary] {
+        let rows: [RemotePlaceListSummaryDTO] = try await rpc.call(
+            "visible_place_lists",
+            params: EmptyParams()
+        )
+        return rows.map { $0.summary() }
+    }
+
+    func detail(listID: String) async throws -> RemotePlaceListDetail? {
+        let detail: RemotePlaceListDetailDTO? = try await rpc.call(
+            "place_list_detail",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+        return detail?.detail()
+    }
+
+    func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        try await rpc.call(
+            "upsert_place_list",
+            params: UpsertPlaceListParams(draft: draft)
+        )
+    }
+
+    func delete(listID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "delete_place_list",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
+    func setCollaborators(listID: String, userIDs: [String]) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "set_place_list_collaborators",
+            params: SetPlaceListCollaboratorsParams(inputListID: listID, collaboratorUserIDs: userIDs)
+        )
+    }
+
+    func addItem(_ draft: PlaceListItemDraft) async throws -> String {
+        try await rpc.call(
+            "add_place_list_item",
+            params: AddPlaceListItemParams(draft: draft)
+        )
+    }
+
+    func removeItem(listID: String, itemID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "remove_place_list_item",
+            params: RemovePlaceListItemParams(inputListID: listID, inputItemID: itemID)
+        )
+    }
+}
+
 struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
     private let functions: RemoteFunctionCalling
 
@@ -344,6 +403,81 @@ private struct SearchProfilesParams: Encodable {
 }
 
 private struct EmptyParams: Encodable {}
+
+private struct PlaceListIDParams: Encodable {
+    let inputListID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputListID = "input_list_id"
+    }
+}
+
+private struct UpsertPlaceListParams: Encodable {
+    let inputList: UpsertPlaceListBody
+
+    init(draft: PlaceListUpsertDraft) {
+        self.inputList = UpsertPlaceListBody(draft: draft)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputList = "input_list"
+    }
+}
+
+private struct UpsertPlaceListBody: Encodable {
+    let id: String?
+    let name: String
+    let description: String
+    let visibility: String
+
+    init(draft: PlaceListUpsertDraft) {
+        self.id = draft.id
+        self.name = draft.name
+        self.description = draft.description
+        self.visibility = draft.visibility.rawValue
+    }
+}
+
+private struct SetPlaceListCollaboratorsParams: Encodable {
+    let inputListID: String
+    let collaboratorUserIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case inputListID = "input_list_id"
+        case collaboratorUserIDs = "collaborator_user_ids"
+    }
+}
+
+private struct AddPlaceListItemParams: Encodable {
+    let inputListID: String
+    let inputPlaceID: String
+    let inputOwnerUserPlaceID: String?
+    let inputSourceUserPlaceID: String?
+
+    init(draft: PlaceListItemDraft) {
+        self.inputListID = draft.listID
+        self.inputPlaceID = draft.placeID
+        self.inputOwnerUserPlaceID = draft.ownerUserPlaceID
+        self.inputSourceUserPlaceID = draft.sourceUserPlaceID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputListID = "input_list_id"
+        case inputPlaceID = "input_place_id"
+        case inputOwnerUserPlaceID = "input_owner_user_place_id"
+        case inputSourceUserPlaceID = "input_source_user_place_id"
+    }
+}
+
+private struct RemovePlaceListItemParams: Encodable {
+    let inputListID: String
+    let inputItemID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputListID = "input_list_id"
+        case inputItemID = "input_item_id"
+    }
+}
 
 private struct UpdateProfileAvatarParams: Encodable {
     let avatarURL: String?

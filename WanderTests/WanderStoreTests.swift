@@ -2377,6 +2377,92 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.placeListItems.map(\.id), firstStore.placeListItems.map(\.id))
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
     }
+
+    func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {
+        let store = makeStore()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced,
+                        cachedItemCount: 1
+                    ),
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 1
+                )
+            ],
+            details: [
+                listID: RemotePlaceListDetail(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced,
+                        cachedItemCount: 1
+                    ),
+                    collaborators: [],
+                    items: [
+                        LocalPlaceListItem(
+                            localID: "remote_list_item_1",
+                            serverID: "22222222-2222-4222-8222-222222222222",
+                            listID: listID,
+                            placeID: "place_bar_nido",
+                            sourceUserPlaceID: "up_ryan_bar_nido",
+                            addedByUserID: "user_ryan",
+                            syncState: .synced
+                        )
+                    ]
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        let remoteList = store.visiblePlaceLists(scope: .friends).first { $0.id == listID }
+        XCTAssertEqual(remoteList?.cachedItemCount, 1)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertTrue(remoteList.map { store.visiblePlaces(in: $0).contains { $0.place.canonicalName == "Bar Nido" } } ?? false)
+    }
+
+    func testSyncPendingPlaceListsCreatesRemoteListAndCollaborators() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID)
+        let backend = WanderBackend(placeListRepository: repository)
+        let created = store.createPlaceList(
+            name: "LA patios",
+            description: "sunny tables",
+            visibility: .followers,
+            collaboratorUserIDs: ["user_ryan"]
+        )!
+
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["LA patios"])
+        XCTAssertEqual(repository.collaboratorRequests, [FakePlaceListRepository.CollaboratorRequest(listID: remoteListID, userIDs: ["user_ryan"])])
+        XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.serverID, remoteListID)
+        XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.syncState, .synced)
+    }
 }
 
 @MainActor
@@ -2641,6 +2727,72 @@ private final class FakeExtractionRepository: ExtractionRepository {
             errorCode: nil,
             errorMessage: nil
         )
+    }
+}
+
+@MainActor
+private final class FakePlaceListRepository: PlaceListRepository {
+    struct CollaboratorRequest: Equatable {
+        let listID: String
+        let userIDs: [String]
+    }
+
+    struct ItemRequest: Equatable {
+        let draft: PlaceListItemDraft
+    }
+
+    private let visibleListsResult: [RemotePlaceListSummary]
+    private let detailsByListID: [String: RemotePlaceListDetail]
+    private let upsertResult: String
+    private let itemResult: String
+    private(set) var detailListIDs: [String] = []
+    private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
+    private(set) var deletedListIDs: [String] = []
+    private(set) var collaboratorRequests: [CollaboratorRequest] = []
+    private(set) var itemRequests: [ItemRequest] = []
+    private(set) var removedItems: [(listID: String, itemID: String)] = []
+
+    init(
+        visibleLists: [RemotePlaceListSummary] = [],
+        details: [String: RemotePlaceListDetail] = [:],
+        upsertResult: String = "11111111-1111-4111-8111-111111111111",
+        itemResult: String = "22222222-2222-4222-8222-222222222222"
+    ) {
+        self.visibleListsResult = visibleLists
+        self.detailsByListID = details
+        self.upsertResult = upsertResult
+        self.itemResult = itemResult
+    }
+
+    func visibleLists() async throws -> [RemotePlaceListSummary] {
+        visibleListsResult
+    }
+
+    func detail(listID: String) async throws -> RemotePlaceListDetail? {
+        detailListIDs.append(listID)
+        return detailsByListID[listID]
+    }
+
+    func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        upsertedDrafts.append(draft)
+        return upsertResult
+    }
+
+    func delete(listID: String) async throws {
+        deletedListIDs.append(listID)
+    }
+
+    func setCollaborators(listID: String, userIDs: [String]) async throws {
+        collaboratorRequests.append(CollaboratorRequest(listID: listID, userIDs: userIDs))
+    }
+
+    func addItem(_ draft: PlaceListItemDraft) async throws -> String {
+        itemRequests.append(ItemRequest(draft: draft))
+        return itemResult
+    }
+
+    func removeItem(listID: String, itemID: String) async throws {
+        removedItems.append((listID: listID, itemID: itemID))
     }
 }
 
