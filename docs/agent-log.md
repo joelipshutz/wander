@@ -8684,3 +8684,52 @@ Known issues:
 Next:
 
 - Test build 60 from TestFlight for REC-69 and REC-72 flows: map tap-away/search clearing, long-press dropped-pin coordinate saves, half-step ratings, wanna-go rating clearing, and profile/Discover average ratings.
+## 2026-07-08 11:33 PDT - Codex - REC-75 V1 Default Tags And Labels
+
+Agent: Codex
+Branch: `codex/rec-75-v1-defaults`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Linear: `REC-75` (`Update default tags and labels when category changes`)
+
+Goal: Implement the v1 deterministic version of REC-75 on a new branch: category/subcategory-driven default tags and personal labels, preserving user/custom selections and keeping the defaults tied to the shared taxonomy.
+
+Starting status:
+
+- Ran `git fetch origin` from the root checkout, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty on stale branch `codex/profile-pictures` with modified `docs/agent-log.md`; do not use it for this implementation.
+- Created isolated worktree `/private/tmp/recme-rec-75-v1-defaults` from `origin/main` on `codex/rec-75-v1-defaults`.
+- Worktree status is clean and tracking `origin/main` at `65e34776a`.
+
+Expected files:
+
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderPlaceCategoryTests.swift`
+- `WanderTests/WanderStoreTests.swift` if store-level persistence coverage is needed
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-08 11:59 PDT:
+
+- Implemented deterministic v1 tag/label defaults in the shared category service via `PlaceMemoryDefaultCatalog`.
+- Updated Add question templates to use primary category, subcategory, optional cuisine, status, and local user custom options when building tag chips/defaults.
+- Updated the map edit/save sheet so category/subcategory/status changes seed new defaults without deleting previously selected tag-like values.
+- Added local-only custom suggestion reuse by reading the current user's own saved tag and personal-label attributes for exact/similar category combinations.
+- Made personal label defaults combo-specific first, with locality labels such as `LA favorite` still offered as options rather than always auto-selected.
+- Added taxonomy coverage tests for every editable category/subcategory and concrete combo tests for Thai restaurants, taco trucks, cocktail bars, waterfalls, and chocolate lounges.
+
+Validation:
+
+- Initial sandboxed `xcodebuild build` failed before app compilation because CoreSimulator access was blocked and SwiftPM attempted network fetches without DNS; reran with elevated Xcode access and the existing `/private/tmp/SourcePackages-rec72-postrebase` package cache.
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec75-v1-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused REC-75 tests passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec75-v1-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts -only-testing:WanderTests/WanderStoreTests/testSaveQuestionTemplatesUseSliderRatingAndMultiBestFor`
+- Full XCTest suite passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec75-v1-full -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Latest full result bundle: `/private/tmp/DerivedData-rec75-v1-full/Logs/Test/Test-Wander-2026.07.08_11-58-03--0700.xcresult`
+- `git diff --check` passed.
+
+Known limits:
+
+- V1 is deterministic and local-only. It does not use reviews/internet/OpenAI for smart tag/label suggestions; that is tracked separately in REC-77.
+- Local custom options currently reappear only after the user saves them on one of their own places, because this branch intentionally avoids a new custom-suggestion persistence table.

@@ -21,58 +21,94 @@ struct AddQuestionBlock: Identifiable, Equatable {
 
 enum AddQuestionTemplates {
     static func blocks(category: String, status: PlaceStatus) -> [AddQuestionBlock] {
-        let normalizedCategory = WanderPlaceCategory.questionCategory(for: category)
+        let assignment = WanderPlaceCategory.assignment(forRawCategory: category)
+        return blocks(
+            primaryCategory: assignment.primaryCategory,
+            subcategory: assignment.subcategory,
+            cuisine: WanderPlaceCategory.cuisineGuess(forRawValue: category),
+            status: status
+        )
+    }
+
+    static func blocks(
+        primaryCategory: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus,
+        localTagOptions: [String] = []
+    ) -> [AddQuestionBlock] {
+        let primary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
+        let assignment = PlaceCategoryAssignment(primaryCategory: primary, subcategory: subcategory)
+        let normalizedCategory = WanderPlaceCategory.questionCategory(for: assignment)
+        let suggestions = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: primary,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            status: status,
+            localTagOptions: localTagOptions
+        )
         var blocks: [AddQuestionBlock] = []
 
         if status == .wannaGo {
             blocks.append(interestBlock())
-            blocks.append(contentsOf: wannaGoBlocks(category: normalizedCategory))
+            blocks.append(contentsOf: wannaGoBlocks(
+                category: normalizedCategory,
+                primaryCategory: primary,
+                suggestions: suggestions
+            ))
             return blocks
         }
 
         switch normalizedCategory {
         case "coffee":
-            blocks.append(contentsOf: coffeeBlocks)
+            blocks.append(contentsOf: coffeeBlocks(suggestions: suggestions))
         case "hike":
-            blocks.append(contentsOf: hikeBlocks)
+            blocks.append(contentsOf: hikeBlocks(suggestions: suggestions))
         case "restaurant":
-            blocks.append(contentsOf: restaurantBlocks)
+            blocks.append(contentsOf: restaurantBlocks(suggestions: suggestions))
         case "bar":
-            blocks.append(contentsOf: barBlocks)
+            blocks.append(contentsOf: barBlocks(suggestions: suggestions))
         case "park":
-            blocks.append(contentsOf: parkBlocks)
+            blocks.append(contentsOf: parkBlocks(suggestions: suggestions))
         default:
-            blocks.append(contentsOf: defaultBlocks(category: normalizedCategory))
+            blocks.append(contentsOf: defaultBlocks(category: primary, suggestions: suggestions))
         }
 
         return blocks
     }
 
-    private static func wannaGoBlocks(category: String) -> [AddQuestionBlock] {
+    private static func wannaGoBlocks(
+        category: String,
+        primaryCategory: String,
+        suggestions: PlaceMemoryDefaultSuggestions
+    ) -> [AddQuestionBlock] {
+        func tagBlock(key: String, title: String, minimumOptionWidth: CGFloat) -> AddQuestionBlock {
+            AddQuestionBlock(
+                key: key,
+                title: title,
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: minimumOptionWidth
+            )
+        }
+
         switch category {
         case "coffee":
             return [
-                AddQuestionBlock(
+                tagBlock(
                     key: "coffee_tags",
                     title: "why save it?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["work maybe", "cute", "food maybe", "nearby", "recommended"],
-                    defaultValues: [],
                     minimumOptionWidth: 108
                 )
             ]
         case "hike":
             return [
-                AddQuestionBlock(
+                tagBlock(
                     key: "hike_tags",
                     title: "why save it?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["sunset", "views", "easy maybe", "dog friendly", "recommended"],
-                    defaultValues: [],
                     minimumOptionWidth: 112
                 )
             ]
@@ -88,14 +124,9 @@ enum AddQuestionTemplates {
                     defaultValues: [],
                     minimumOptionWidth: 104
                 ),
-                AddQuestionBlock(
+                tagBlock(
                     key: "restaurant_tags",
                     title: "why save it?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["looks cozy", "good table", "share plates", "recommended"],
-                    defaultValues: [],
                     minimumOptionWidth: 112
                 )
             ]
@@ -111,42 +142,27 @@ enum AddQuestionTemplates {
                     defaultValues: [],
                     minimumOptionWidth: 98
                 ),
-                AddQuestionBlock(
+                tagBlock(
                     key: "bar_tags",
                     title: "why save it?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["patio", "good music", "not too loud", "walk-in"],
-                    defaultValues: [],
                     minimumOptionWidth: 104
                 )
             ]
         case "park":
             return [
-                AddQuestionBlock(
+                tagBlock(
                     key: "best_for",
                     title: "planning for?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["walk", "picnic", "views", "reset"],
-                    defaultValues: [],
                     minimumOptionWidth: 84
                 )
             ]
         default:
-            let keyPrefix = normalizedKeyPrefix(for: category)
+            let keyPrefix = normalizedKeyPrefix(for: primaryCategory)
 
             return [
-                AddQuestionBlock(
+                tagBlock(
                     key: "\(keyPrefix)_tags",
                     title: "why save it?",
-                    tag: "multi",
-                    kind: .multiTag,
-                    valueType: "multi_tag",
-                    options: ["looks useful", "easy maybe", "cozy", "bring friends"],
-                    defaultValues: [],
                     minimumOptionWidth: 112
                 )
             ]
@@ -166,132 +182,145 @@ enum AddQuestionTemplates {
         )
     }
 
-    private static let coffeeBlocks = [
-        AddQuestionBlock(
-            key: "work_setup",
-            title: "good for working?",
-            tag: "yes/no",
-            kind: .singleChoice,
-            valueType: "single_choice",
-            options: ["yes", "sometimes", "nope"],
-            defaultValues: ["yes"],
-            minimumOptionWidth: 96
-        ),
-        AddQuestionBlock(
-            key: "coffee_tags",
-            title: "tags",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["wifi solid", "outlets", "quiet", "cute", "food on point"],
-            defaultValues: ["wifi solid", "quiet"],
-            minimumOptionWidth: 102
-        )
-    ]
+    private static func coffeeBlocks(suggestions: PlaceMemoryDefaultSuggestions) -> [AddQuestionBlock] {
+        [
+            AddQuestionBlock(
+                key: "work_setup",
+                title: "good for working?",
+                tag: "yes/no",
+                kind: .singleChoice,
+                valueType: "single_choice",
+                options: ["yes", "sometimes", "nope"],
+                defaultValues: ["yes"],
+                minimumOptionWidth: 96
+            ),
+            AddQuestionBlock(
+                key: "coffee_tags",
+                title: "tags",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: 102
+            )
+        ]
+    }
 
-    private static let hikeBlocks = [
-        AddQuestionBlock(
-            key: "strenuousness",
-            title: "how strenuous?",
-            tag: "scale",
-            kind: .singleChoice,
-            valueType: "single_choice",
-            options: ["easy", "moderate", "hard"],
-            defaultValues: ["easy"],
-            minimumOptionWidth: 94
-        ),
-        AddQuestionBlock(
-            key: "hike_tags",
-            title: "tags",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["sunset", "views", "shade", "dog friendly", "crowded"],
-            defaultValues: ["sunset", "views"],
-            minimumOptionWidth: 98
-        )
-    ]
+    private static func hikeBlocks(suggestions: PlaceMemoryDefaultSuggestions) -> [AddQuestionBlock] {
+        [
+            AddQuestionBlock(
+                key: "strenuousness",
+                title: "how strenuous?",
+                tag: "scale",
+                kind: .singleChoice,
+                valueType: "single_choice",
+                options: ["easy", "moderate", "hard"],
+                defaultValues: ["easy"],
+                minimumOptionWidth: 94
+            ),
+            AddQuestionBlock(
+                key: "hike_tags",
+                title: "tags",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: 98
+            )
+        ]
+    }
 
-    private static let restaurantBlocks = [
-        AddQuestionBlock(
-            key: "price",
-            title: "price feel?",
-            tag: "price",
-            kind: .singleChoice,
-            valueType: "price_scale",
-            options: ["$", "$$", "$$$"],
-            defaultValues: ["$$"],
-            minimumOptionWidth: 64
-        ),
-        AddQuestionBlock(
-            key: "occasion",
-            title: "best for?",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["quick bite", "date night", "group", "rainy night"],
-            defaultValues: ["date night", "rainy night"],
-            minimumOptionWidth: 104
-        ),
-        AddQuestionBlock(
-            key: "restaurant_tags",
-            title: "tags",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["cozy", "good table", "share plates", "worth it"],
-            defaultValues: ["cozy", "worth it"],
-            minimumOptionWidth: 104
-        )
-    ]
+    private static func restaurantBlocks(suggestions: PlaceMemoryDefaultSuggestions) -> [AddQuestionBlock] {
+        [
+            AddQuestionBlock(
+                key: "price",
+                title: "price feel?",
+                tag: "price",
+                kind: .singleChoice,
+                valueType: "price_scale",
+                options: ["$", "$$", "$$$"],
+                defaultValues: ["$$"],
+                minimumOptionWidth: 64
+            ),
+            AddQuestionBlock(
+                key: "occasion",
+                title: "best for?",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: ["quick bite", "date night", "group", "rainy night"],
+                defaultValues: ["date night", "rainy night"],
+                minimumOptionWidth: 104
+            ),
+            AddQuestionBlock(
+                key: "restaurant_tags",
+                title: "tags",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: 104
+            )
+        ]
+    }
 
-    private static let barBlocks = [
-        AddQuestionBlock(
-            key: "occasion",
-            title: "best for?",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["first drink", "date", "group", "late"],
-            defaultValues: ["first drink", "date"],
-            minimumOptionWidth: 98
-        ),
-        AddQuestionBlock(
-            key: "bar_tags",
-            title: "tags",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["patio", "good music", "not too loud", "walk-in"],
-            defaultValues: ["patio"],
-            minimumOptionWidth: 104
-        )
-    ]
+    private static func barBlocks(suggestions: PlaceMemoryDefaultSuggestions) -> [AddQuestionBlock] {
+        [
+            AddQuestionBlock(
+                key: "occasion",
+                title: "best for?",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: ["first drink", "date", "group", "late"],
+                defaultValues: ["first drink", "date"],
+                minimumOptionWidth: 98
+            ),
+            AddQuestionBlock(
+                key: "bar_tags",
+                title: "tags",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: 104
+            )
+        ]
+    }
 
-    private static let parkBlocks = [
-        AddQuestionBlock(
-            key: "best_for",
-            title: "best for?",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["walk", "picnic", "views", "reset"],
-            defaultValues: ["walk", "reset"],
-            minimumOptionWidth: 84
-        ),
-        AddQuestionBlock(
-            key: "park_tags",
-            title: "tags",
-            tag: "multi",
-            kind: .multiTag,
-            valueType: "multi_tag",
-            options: ["shade", "sunny", "quiet", "dog friendly"],
-            defaultValues: ["quiet"],
-            minimumOptionWidth: 96
-        )
-    ]
+    private static func parkBlocks(suggestions: PlaceMemoryDefaultSuggestions) -> [AddQuestionBlock] {
+        [
+            AddQuestionBlock(
+                key: "best_for",
+                title: "best for?",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
+                minimumOptionWidth: 84
+            ),
+            AddQuestionBlock(
+                key: "park_tags",
+                title: "tags",
+                tag: "multi",
+                kind: .multiTag,
+                valueType: "multi_tag",
+                options: suggestions.tagOptions,
+                defaultValues: Array(suggestions.defaultTags.prefix(1)),
+                minimumOptionWidth: 96
+            )
+        ]
+    }
 
-    private static func defaultBlocks(category: String) -> [AddQuestionBlock] {
+    private static func defaultBlocks(
+        category: String,
+        suggestions: PlaceMemoryDefaultSuggestions
+    ) -> [AddQuestionBlock] {
         let keyPrefix = normalizedKeyPrefix(for: category)
 
         return [
@@ -301,8 +330,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: ["worth it", "easy", "cozy", "bring friends"],
-                defaultValues: ["worth it"],
+                options: suggestions.tagOptions,
+                defaultValues: suggestions.defaultTags,
                 minimumOptionWidth: 104
             )
         ]
