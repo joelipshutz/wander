@@ -96,6 +96,9 @@ struct ListsScreen: View {
             onOpenMap: { list in
                 mapList = list
             },
+            onListChanged: { sourceListID in
+                refreshOpenList(sourceListID: sourceListID)
+            },
             initialSelectedPlace: initialSelectedPlace
         )
     }
@@ -169,15 +172,18 @@ struct ListsScreen: View {
     }
 
     private func refreshOpenList(sourceListID: String) {
-        guard let localList = store.visiblePlaceLists.first(where: { $0.id == sourceListID }) else { return }
+        guard let localList = store.visiblePlaceLists.first(where: {
+            $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
+        }) else { return }
+        let sourceIDs = Set([localList.id, localList.localID, localList.serverID, sourceListID].compactMap { $0 })
         let refreshed = PlaceListMock(list: localList, store: store)
-        if selectedList?.sourceListID == sourceListID {
+        if selectedList?.sourceListID.map(sourceIDs.contains) == true {
             selectedList = refreshed
         }
-        if collaboratorList?.sourceListID == sourceListID {
+        if collaboratorList?.sourceListID.map(sourceIDs.contains) == true {
             collaboratorList = refreshed
         }
-        if mapList?.sourceListID == sourceListID {
+        if mapList?.sourceListID.map(sourceIDs.contains) == true {
             mapList = refreshed
         }
     }
@@ -491,17 +497,8 @@ private struct ListPreviewMosaic: View {
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 2) {
-            ForEach(Array(list.previewPlaces.prefix(4).enumerated()), id: \.offset) { _, place in
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .fill(place.tint)
-
-                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                        .font(.system(size: 20, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color.opacity(0.72))
-                }
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
+            ForEach(0..<4, id: \.self) { index in
+                mosaicTile(place: list.previewPlaces.indices.contains(index) ? list.previewPlaces[index] : nil)
             }
         }
         .padding(3)
@@ -512,6 +509,19 @@ private struct ListPreviewMosaic: View {
                 .stroke(WanderTheme.borderHairline.color.opacity(0.75), lineWidth: 1)
         )
     }
+
+    private func mosaicTile(place: ListPlaceMock?) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .fill(place?.tint ?? WanderTheme.surfaceSand.color)
+
+            Image(systemName: place.map { WanderPlaceCategory.symbolName(for: $0.category) } ?? "plus")
+                .font(.system(size: place == nil ? 16 : 20, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(place == nil ? 0.22 : 0.72))
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+    }
 }
 
 private struct ListDetailScreen: View {
@@ -521,6 +531,7 @@ private struct ListDetailScreen: View {
     var onEdit: (PlaceListMock) -> Void
     var onCollaborators: (PlaceListMock) -> Void
     var onOpenMap: (PlaceListMock) -> Void
+    var onListChanged: (String) -> Void
     @State private var removedPlaceIDs = Set<String>()
     @State private var selectedPlace: ListPlaceMock?
     @State private var isAddingPlaces = false
@@ -534,12 +545,14 @@ private struct ListDetailScreen: View {
         onEdit: @escaping (PlaceListMock) -> Void = { _ in },
         onCollaborators: @escaping (PlaceListMock) -> Void = { _ in },
         onOpenMap: @escaping (PlaceListMock) -> Void = { _ in },
+        onListChanged: @escaping (String) -> Void = { _ in },
         initialSelectedPlace: ListPlaceMock? = nil
     ) {
         self.list = list
         self.onEdit = onEdit
         self.onCollaborators = onCollaborators
         self.onOpenMap = onOpenMap
+        self.onListChanged = onListChanged
         _selectedPlace = State(initialValue: initialSelectedPlace)
     }
 
@@ -601,6 +614,10 @@ private struct ListDetailScreen: View {
             if let sourceList {
                 ListAddPlacesScreen(list: sourceList) { result in
                     handleAddResult(result)
+                    onListChanged(sourceList.id)
+                    Task {
+                        await loadSuggestions()
+                    }
                 }
             } else {
                 ListAddPlacesUnavailableScreen()
@@ -760,7 +777,9 @@ private struct ListDetailScreen: View {
 
     private var sourceList: LocalPlaceList? {
         guard let sourceListID = list.sourceListID else { return nil }
-        return store.placeLists.first { $0.id == sourceListID }
+        return store.placeLists.first {
+            $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
+        }
     }
 
     private var displayList: PlaceListMock {
@@ -772,12 +791,12 @@ private struct ListDetailScreen: View {
     }
 
     private var canAddPlaces: Bool {
-        canManageList && sourceList != nil
+        sourceList.map(store.canAddPlaces(to:)) ?? displayList.canAddPlaces
     }
 
     @MainActor
     private func loadSuggestions() async {
-        guard let sourceList, canManageList else {
+        guard let sourceList, canAddPlaces else {
             suggestions = []
             return
         }
@@ -792,6 +811,7 @@ private struct ListDetailScreen: View {
         guard let sourceList else { return }
         let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend)
         handleAddResult(result)
+        onListChanged(sourceList.id)
         await loadSuggestions()
     }
 
@@ -821,6 +841,9 @@ private struct ListDetailScreen: View {
         if let sourceList, let placeID = place.placeID {
             Task {
                 _ = await store.removePlace(placeID: placeID, from: sourceList, backend: backend)
+                await MainActor.run {
+                    onListChanged(sourceList.id)
+                }
             }
         } else {
             removedPlaceIDs.insert(place.id)
@@ -900,7 +923,7 @@ private struct ListAddPlacesScreen: View {
     let onAdded: (ListPlaceAddResult) -> Void
     @State private var query = ""
     @State private var suggestions: [ListPlaceSuggestion] = []
-    @State private var searchGroups: [VisiblePlaceGroup] = []
+    @State private var searchCandidates: [PlaceCandidate] = []
     @State private var isLoadingSuggestions = false
     @State private var isSearching = false
     @State private var selectedPlace: ListPlaceMock?
@@ -1011,9 +1034,9 @@ private struct ListAddPlacesScreen: View {
                 .font(.system(size: 18, weight: .black))
 
             if isSearching {
-                ListLoadingRow(title: "Searching visible places")
-            } else if addableSearchGroups.isEmpty {
-                Text("No addable places match that search.")
+                ListLoadingRow(title: "Searching places")
+            } else if addableSearchCandidates.isEmpty {
+                Text("No places match that search.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1022,17 +1045,13 @@ private struct ListAddPlacesScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
                 VStack(spacing: WanderTheme.spacing2) {
-                    ForEach(addableSearchGroups) { group in
-                        let visiblePlace = group.primary
-                        ListVisiblePlaceAddRow(
-                            visiblePlace: visiblePlace,
-                            supportingText: searchSupportingText(for: group),
-                            onOpen: {
-                                selectedPlace = ListPlaceMock(visiblePlace: visiblePlace)
-                            },
+                    ForEach(addableSearchCandidates) { candidate in
+                        ListPlaceCandidateAddRow(
+                            candidate: candidate,
+                            supportingText: searchSupportingText(for: candidate),
                             onAdd: {
                                 Task {
-                                    await add(visiblePlace)
+                                    await add(candidate)
                                 }
                             }
                         )
@@ -1050,8 +1069,8 @@ private struct ListAddPlacesScreen: View {
         suggestions.filter { !store.hasPlace($0.visiblePlace, in: list) }
     }
 
-    private var addableSearchGroups: [VisiblePlaceGroup] {
-        searchGroups.filter { !store.hasPlace($0.primary, in: list) }
+    private var addableSearchCandidates: [PlaceCandidate] {
+        searchCandidates.filter { !store.hasCandidate($0, in: list) }
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -1085,14 +1104,17 @@ private struct ListAddPlacesScreen: View {
     private func runSearch() async {
         let query = normalizedQuery
         guard !query.isEmpty else {
-            searchGroups = []
+            searchCandidates = []
             isSearching = false
             return
         }
 
         isSearching = true
-        let results = await store.discover(query: query, scope: .everyone, backend: backend)
-        searchGroups = VisiblePlaceGrouping.groups(from: results.places, currentUserID: store.currentUser.id)
+        do {
+            searchCandidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
+        } catch {
+            searchCandidates = []
+        }
         isSearching = false
     }
 
@@ -1128,13 +1150,22 @@ private struct ListAddPlacesScreen: View {
         }
     }
 
-    private func searchSupportingText(for group: VisiblePlaceGroup) -> String {
-        let place = group.primary.place
+    @MainActor
+    private func add(_ candidate: PlaceCandidate) async {
+        let result = await store.addCandidate(candidate, to: list, backend: backend)
+        onAdded(result)
+        handleAddResult(result)
+        await loadSuggestions()
+        if !normalizedQuery.isEmpty {
+            await runSearch()
+        }
+    }
+
+    private func searchSupportingText(for candidate: PlaceCandidate) -> String {
         let parts: [String?] = [
-            group.recommendedScore.map { String(format: "%.1f avg", $0) },
-            group.saveCount > 1 ? "\(group.saveCount) saves" : nil,
-            place.category,
-            place.locality
+            candidate.category,
+            candidate.locality,
+            candidate.region
         ]
         return parts
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1257,6 +1288,66 @@ private struct ListVisiblePlaceAddRow: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Add \(place.name) to list")
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.70), lineWidth: 1)
+        )
+    }
+}
+
+private struct ListPlaceCandidateAddRow: View {
+    let candidate: PlaceCandidate
+    let supportingText: String
+    let onAdd: () -> Void
+
+    private var subtitle: String {
+        if !supportingText.isEmpty {
+            return supportingText
+        }
+
+        return [candidate.address, candidate.locality, candidate.region]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " - ")
+    }
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
+                    Image(systemName: WanderPlaceCategory.symbolName(for: candidate.primaryCategory))
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                }
+                .frame(width: 48, height: 48)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(candidate.name)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                    Text(subtitle.isEmpty ? "Map search" : subtitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: WanderTheme.spacing2)
+            }
+
+            Button(action: onAdd) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Add \(candidate.name) to list")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -2444,6 +2535,7 @@ private struct PlaceListMock: Identifiable, Hashable {
     var sourceListID: String? = nil
     var ownerUserID: String = "you"
     var canManage: Bool = true
+    var canAddPlaces: Bool = true
 
     var previewPlaces: [ListPlaceMock] { places }
     var itemCount: Int { itemCountOverride ?? places.count }
@@ -2499,6 +2591,7 @@ private extension PlaceListMock {
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
+        self.canAddPlaces = store.canAddPlaces(to: list)
     }
 }
 
@@ -2578,7 +2671,7 @@ private struct ListPlaceMock: Identifiable {
         )
     }
 
-    private static func tint(for category: String) -> Color {
+    static func tint(for category: String) -> Color {
         switch WanderPlaceCategory.primary(for: nil, name: category) ?? category.lowercased() {
         case "coffee":
             return WanderTheme.terracottaTint.color

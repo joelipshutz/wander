@@ -299,6 +299,10 @@ final class WanderStore: ObservableObject {
         list.ownerUserID == currentUser.id
     }
 
+    func canAddPlaces(to list: LocalPlaceList) -> Bool {
+        canManage(list) || isMember(of: list, userID: currentUser.id)
+    }
+
     func collaborators(for list: LocalPlaceList) -> [LocalProfile] {
         placeListMembers
             .filter { $0.listID == list.id && $0.deletedAt == nil }
@@ -319,6 +323,14 @@ final class WanderStore: ObservableObject {
             item.placeID == visiblePlace.place.id
                 || item.ownerUserPlaceID == visiblePlace.userPlace.id
                 || item.sourceUserPlaceID == visiblePlace.userPlace.id
+        }
+    }
+
+    func hasCandidate(_ candidate: PlaceCandidate, in list: LocalPlaceList) -> Bool {
+        guard let place = matchingPlace(for: candidate) else { return false }
+        let placeIDs = Set([place.id, place.localID, place.serverID].compactMap { $0 })
+        return listItems(for: list).contains { item in
+            placeIDs.contains(item.placeID)
         }
     }
 
@@ -406,7 +418,7 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func addVisiblePlace(_ visiblePlace: VisiblePlace, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
-        guard canManage(list) else {
+        guard canAddPlaces(to: list) else {
             return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
         }
         guard !hasPlace(visiblePlace, in: list) else {
@@ -436,7 +448,9 @@ final class WanderStore: ObservableObject {
         placeListItems.append(item)
         if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
             placeLists[index].updatedAt = .now
-            placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue
+            if canManage(placeLists[index]) {
+                placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue
+            }
             placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
@@ -446,6 +460,40 @@ final class WanderStore: ObservableObject {
         }
 
         return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
+    }
+
+    func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
+        guard canAddPlaces(to: list) else {
+            return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
+        }
+
+        if let existingVisiblePlace = matchingCurrentUserVisiblePlace(for: candidate) {
+            return await addVisiblePlace(existingVisiblePlace, to: list, backend: backend)
+        }
+
+        if hasCandidate(candidate, in: list) {
+            return ListPlaceAddResult(outcome: .alreadyInList, createdWantSave: false, shouldExplainAutoSave: false)
+        }
+
+        let saveResult = await saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: effectiveDefaultVisibility,
+            note: nil,
+            sourceType: .manual,
+            backend: backend
+        )
+
+        guard let savedVisiblePlace = visiblePlaceForCurrentUser(userPlaceID: saveResult.userPlaceID) else {
+            return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: true, shouldExplainAutoSave: true)
+        }
+
+        let result = await addVisiblePlace(savedVisiblePlace, to: list, backend: backend)
+        return ListPlaceAddResult(
+            outcome: result.outcome,
+            createdWantSave: true,
+            shouldExplainAutoSave: result.outcome == .added
+        )
     }
 
     @discardableResult
@@ -800,7 +848,8 @@ final class WanderStore: ObservableObject {
                 .filter { userID in profiles.contains { $0.id == userID } }
         )
         let listID = list.id
-        for memberIndex in placeListMembers.indices where placeListMembers[memberIndex].listID == listID {
+        let listIDs = listReferenceIDs(for: list)
+        for memberIndex in placeListMembers.indices where listIDs.contains(placeListMembers[memberIndex].listID) {
             let memberUserID = placeListMembers[memberIndex].userID
             if allowedUserIDs.contains(memberUserID) {
                 placeListMembers[memberIndex].deletedAt = nil
@@ -810,7 +859,7 @@ final class WanderStore: ObservableObject {
             }
         }
 
-        let existingUserIDs = Set(placeListMembers.filter { $0.listID == listID }.map(\.userID))
+        let existingUserIDs = Set(placeListMembers.filter { listIDs.contains($0.listID) }.map(\.userID))
         for userID in allowedUserIDs where !existingUserIDs.contains(userID) {
             placeListMembers.append(
                 LocalPlaceListMember(
@@ -825,15 +874,21 @@ final class WanderStore: ObservableObject {
     }
 
     private func isMember(of list: LocalPlaceList, userID: String) -> Bool {
-        placeListMembers.contains { member in
-            member.listID == list.id && member.userID == userID && member.deletedAt == nil
+        let listIDs = listReferenceIDs(for: list)
+        return placeListMembers.contains { member in
+            listIDs.contains(member.listID) && member.userID == userID && member.deletedAt == nil
         }
     }
 
     private func listItems(for list: LocalPlaceList) -> [LocalPlaceListItem] {
-        placeListItems
-            .filter { $0.listID == list.id && $0.deletedAt == nil }
+        let listIDs = listReferenceIDs(for: list)
+        return placeListItems
+            .filter { listIDs.contains($0.listID) && $0.deletedAt == nil }
             .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func listReferenceIDs(for list: LocalPlaceList) -> Set<String> {
+        Set([list.id, list.localID, list.serverID].compactMap { $0 })
     }
 
     private func visiblePlace(for item: LocalPlaceListItem, candidates: [VisiblePlace]) -> VisiblePlace? {
@@ -844,6 +899,54 @@ final class WanderStore: ObservableObject {
         }
 
         return fallbackVisiblePlace(for: item)
+    }
+
+    private func matchingCurrentUserVisiblePlace(for candidate: PlaceCandidate) -> VisiblePlace? {
+        currentUserVisiblePlaces.first { visiblePlace in
+            candidateMatches(candidate, place: visiblePlace.place)
+        }
+    }
+
+    private func matchingPlace(for candidate: PlaceCandidate) -> LocalPlace? {
+        places.first { place in
+            candidateMatches(candidate, place: place)
+        }
+    }
+
+    private func candidateMatches(_ candidate: PlaceCandidate, place: LocalPlace) -> Bool {
+        if place.id == candidate.id || place.localID == candidate.id || place.serverID == candidate.id {
+            return true
+        }
+
+        if let candidateProviderPlaceID = candidate.sourceProviderPlaceID,
+           place.sourceProvider == candidate.sourceProvider,
+           place.sourceProviderPlaceID == candidateProviderPlaceID {
+            return true
+        }
+
+        return normalizedPlaceLookupKey(place.canonicalName) == normalizedPlaceLookupKey(candidate.name)
+    }
+
+    private func visiblePlaceForCurrentUser(userPlaceID: String) -> VisiblePlace? {
+        guard let userPlace = userPlaces.first(where: { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID)
+        }),
+              let place = places.first(where: { place in
+                  place.id == userPlace.placeID || place.localID == userPlace.placeID || place.serverID == userPlace.placeID
+              })
+        else { return nil }
+
+        return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: currentUser)
+    }
+
+    private func normalizedPlaceLookupKey(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     private func listItem(_ item: LocalPlaceListItem, matches visiblePlace: VisiblePlace) -> Bool {

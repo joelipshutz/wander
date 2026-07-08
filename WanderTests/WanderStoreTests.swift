@@ -2463,6 +2463,110 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.serverID, remoteListID)
         XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.syncState, .synced)
     }
+
+    func testCollaboratorCanAddPlaceToSharedList() async {
+        let joe = LocalProfile(localID: "local_joe", serverID: "user_joe", handle: "joe", displayName: "Joe", syncState: .synced)
+        let ryan = LocalProfile(localID: "local_ryan", serverID: "user_ryan", handle: "ryan", displayName: "Ryan", syncState: .synced)
+        let placeID = "33333333-3333-4333-8333-333333333333"
+        let userPlaceID = "44444444-4444-4444-8444-444444444444"
+        let listID = "55555555-5555-4555-8555-555555555555"
+        let place = LocalPlace(
+            localID: "local_place_tsubaki",
+            serverID: placeID,
+            canonicalName: "Tsubaki",
+            category: "restaurant",
+            latitude: 34.077,
+            longitude: -118.261,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_tsubaki",
+            serverID: userPlaceID,
+            userID: joe.id,
+            placeID: place.id,
+            status: .wannaGo,
+            visibility: .followers,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let sharedList = LocalPlaceList(
+            localID: "local_list_ryan_dinner",
+            serverID: listID,
+            ownerUserID: ryan.id,
+            name: "Ryan dinner",
+            description: "shared ideas",
+            visibility: .followers,
+            syncState: .synced
+        )
+        let membership = LocalPlaceListMember(
+            localID: "local_member_ryan_dinner_joe",
+            listID: sharedList.id,
+            userID: joe.id,
+            role: .collaborator
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [place],
+                userPlaces: [userPlace],
+                placeAttributes: [],
+                follows: [],
+                blocks: [],
+                placeLists: [sharedList],
+                placeListMembers: [membership],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+        let repository = FakePlaceListRepository(itemResult: "66666666-6666-4666-8666-666666666666")
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let result = await store.addVisiblePlace(store.currentUserVisiblePlaces[0], to: sharedList, backend: backend)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertTrue(store.canAddPlaces(to: sharedList))
+        XCTAssertFalse(store.canManage(sharedList))
+        XCTAssertEqual(repository.itemRequests.map(\.draft.listID), [listID])
+        XCTAssertEqual(repository.itemRequests.map(\.draft.placeID), [placeID])
+        XCTAssertEqual(repository.itemRequests.map(\.draft.ownerUserPlaceID), [userPlaceID])
+        XCTAssertEqual(store.visiblePlaceLists(scope: .collabs).first?.cachedItemCount, 1)
+    }
+
+    func testAddingUnsavedCandidateToListCreatesWantSaveAndListItem() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let remotePlaceID = "22222222-2222-4222-8222-222222222222"
+        let remoteUserPlaceID = "33333333-3333-4333-8333-333333333333"
+        let remoteItemID = "44444444-4444-4444-8444-444444444444"
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: remoteUserPlaceID, syncState: .synced, placeID: remotePlaceID)
+        )
+        let placeListRepository = FakePlaceListRepository(upsertResult: remoteListID, itemResult: remoteItemID)
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository, placeListRepository: placeListRepository)
+        let list = store.createPlaceList(name: "New coffee", description: "work blocks", visibility: .followers)!
+        let candidate = PlaceCandidate(
+            id: "map_blue_bottle",
+            name: "Blue Bottle Coffee",
+            category: "Coffee Shop",
+            latitude: 34.051,
+            longitude: -118.245,
+            sourceProviderPlaceID: "mapkit_blue_bottle",
+            confidence: 0.93
+        )
+
+        let result = await store.addCandidate(candidate, to: list, backend: backend)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertTrue(result.createdWantSave)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.status), [.wannaGo])
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.place.canonicalName), ["Blue Bottle Coffee"])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.listID), [remoteListID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.placeID), [remotePlaceID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.ownerUserPlaceID), [remoteUserPlaceID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.sourceUserPlaceID), [remoteUserPlaceID])
+        XCTAssertEqual(store.visiblePlaceLists(scope: .mine).first { $0.serverID == remoteListID }?.cachedItemCount, 1)
+    }
 }
 
 @MainActor

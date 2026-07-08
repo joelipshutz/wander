@@ -8736,3 +8736,28 @@ Implementation checkpoint, 2026-07-08 10:50 PDT:
 - Broad simulator build passed:
   `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-fix-build CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Known limitation: hosted `place_list_detail` currently returns list item IDs, not full place metadata, so iOS hydrates detail rows from visible-place/profile caches. This is workable for now, but a follow-up Supabase migration should enrich the detail RPC with place/user-place fields to make list detail rendering independent of cache warmup.
+
+Follow-up checkpoint, 2026-07-08 11:05 PDT:
+
+- Joe tested PR #64 on device and reported remaining list issues before merge:
+  - Adding places inside list detail does not update My Lists after navigating back.
+  - List thumbnails break when the list has fewer than four places.
+  - Add-to-list should search/add any place, not only places already in been/wanna visible data.
+  - Collaborators should be allowed to add places.
+- Continuing on branch `codex/lists-fixes` in `/private/tmp/recme-lists-fix`; current PR remains unmerged.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, list tests, `docs/agent-log.md`.
+
+Follow-up outcome, 2026-07-08 14:50 PDT:
+
+- Fixed list add refresh propagation so adding/removing places from list detail refreshes the open list mock and My Lists count/thumbnail data when navigating back.
+- Fixed list mosaics with fewer than four places by rendering stable four-slot thumbnails with quiet empty placeholders instead of shrinking/breaking the layout.
+- Reworked add-to-list search to use manual place candidates, so users can add any searched place to a list. Unsaved places are saved as wanna-go first, then added to the list, matching the existing auto-save behavior.
+- Changed list permissions so collaborators can add places, while owner-only controls still gate list metadata/collaborator management.
+- Added Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` so collaborators can add list items server-side through the existing list item RPC path.
+- Added tests for collaborator item adds and unsaved-candidate adds.
+- `git diff --check` passed.
+- Focused tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCollaboratorCanAddPlaceToSharedList -only-testing:WanderTests/WanderStoreTests/testAddingUnsavedCandidateToListCreatesWantSaveAndListItem -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+- Broad simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: commit and push branch `codex/lists-fixes`; do not merge PR #64 until Joe retests.
