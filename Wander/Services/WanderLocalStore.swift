@@ -418,10 +418,14 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func addVisiblePlace(_ visiblePlace: VisiblePlace, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
+        WanderDebugLog.sync.debug("list add visible requested list=\(WanderDebugLog.shortID(list.id), privacy: .public) server=\(WanderDebugLog.shortID(list.serverID), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public) source_user_place=\(WanderDebugLog.shortID(visiblePlace.userPlace.id), privacy: .public) backend_available=\((backend != nil), privacy: .public) existing_count=\(self.listItems(for: list).count, privacy: .public)")
+
         guard canAddPlaces(to: list) else {
+            WanderDebugLog.sync.error("list add visible denied reason=permission list=\(WanderDebugLog.shortID(list.id), privacy: .public) owner=\(WanderDebugLog.shortID(list.ownerUserID), privacy: .public) current_user=\(WanderDebugLog.shortID(self.currentUser.id), privacy: .public)")
             return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
         }
         guard !hasPlace(visiblePlace, in: list) else {
+            WanderDebugLog.sync.debug("list add visible skipped reason=already_in_list list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public)")
             return ListPlaceAddResult(outcome: .alreadyInList, createdWantSave: false, shouldExplainAutoSave: false)
         }
 
@@ -431,9 +435,11 @@ final class WanderStore: ObservableObject {
         var ownerUserPlaceID = existingOwnSave?.userPlace.id
         var createdWantSave = false
         if ownerUserPlaceID == nil && autoSaveListAddsToWant {
+            WanderDebugLog.sync.debug("list add visible autosave start list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public)")
             let result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
             ownerUserPlaceID = result.userPlaceID
             createdWantSave = true
+            WanderDebugLog.sync.debug("list add visible autosave finished list=\(WanderDebugLog.shortID(list.id), privacy: .public) user_place=\(WanderDebugLog.shortID(result.userPlaceID), privacy: .public)")
         }
 
         let item = LocalPlaceListItem(
@@ -454,27 +460,36 @@ final class WanderStore: ObservableObject {
             placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
         persist()
+        WanderDebugLog.sync.debug("list add visible local item created item=\(WanderDebugLog.shortID(item.id), privacy: .public) list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public) created_want=\(createdWantSave, privacy: .public) new_count=\(self.listItems(for: list).count, privacy: .public)")
 
         if let backend {
             await syncPlaceListItem(localOrServerID: item.id, listID: list.id, backend: backend)
+        } else {
+            WanderDebugLog.sync.debug("list add visible remote skipped reason=missing_backend item=\(WanderDebugLog.shortID(item.id), privacy: .public) list=\(WanderDebugLog.shortID(list.id), privacy: .public)")
         }
 
         return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
     }
 
     func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
+        WanderDebugLog.sync.debug("list add candidate requested list=\(WanderDebugLog.shortID(list.id), privacy: .public) name=\(WanderDebugLog.clean(candidate.name), privacy: .public) category=\(candidate.category, privacy: .public) backend_available=\((backend != nil), privacy: .public)")
+
         guard canAddPlaces(to: list) else {
+            WanderDebugLog.sync.error("list add candidate denied reason=permission list=\(WanderDebugLog.shortID(list.id), privacy: .public) owner=\(WanderDebugLog.shortID(list.ownerUserID), privacy: .public) current_user=\(WanderDebugLog.shortID(self.currentUser.id), privacy: .public)")
             return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
         }
 
         if let existingVisiblePlace = matchingCurrentUserVisiblePlace(for: candidate) {
+            WanderDebugLog.sync.debug("list add candidate matched existing save list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(existingVisiblePlace.place.id), privacy: .public)")
             return await addVisiblePlace(existingVisiblePlace, to: list, backend: backend)
         }
 
         if hasCandidate(candidate, in: list) {
+            WanderDebugLog.sync.debug("list add candidate skipped reason=already_in_list list=\(WanderDebugLog.shortID(list.id), privacy: .public) name=\(WanderDebugLog.clean(candidate.name), privacy: .public)")
             return ListPlaceAddResult(outcome: .alreadyInList, createdWantSave: false, shouldExplainAutoSave: false)
         }
 
+        WanderDebugLog.sync.debug("list add candidate autosave start list=\(WanderDebugLog.shortID(list.id), privacy: .public) name=\(WanderDebugLog.clean(candidate.name), privacy: .public)")
         let saveResult = await saveCandidate(
             candidate,
             status: .wannaGo,
@@ -483,12 +498,15 @@ final class WanderStore: ObservableObject {
             sourceType: .manual,
             backend: backend
         )
+        WanderDebugLog.sync.debug("list add candidate autosave finished list=\(WanderDebugLog.shortID(list.id), privacy: .public) user_place=\(WanderDebugLog.shortID(saveResult.userPlaceID), privacy: .public)")
 
         guard let savedVisiblePlace = visiblePlaceForCurrentUser(userPlaceID: saveResult.userPlaceID) else {
+            WanderDebugLog.sync.error("list add candidate failed reason=saved_visible_place_missing list=\(WanderDebugLog.shortID(list.id), privacy: .public) user_place=\(WanderDebugLog.shortID(saveResult.userPlaceID), privacy: .public)")
             return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: true, shouldExplainAutoSave: true)
         }
 
         let result = await addVisiblePlace(savedVisiblePlace, to: list, backend: backend)
+        WanderDebugLog.sync.debug("list add candidate completed list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(savedVisiblePlace.place.id), privacy: .public) outcome=\(String(describing: result.outcome), privacy: .public)")
         return ListPlaceAddResult(
             outcome: result.outcome,
             createdWantSave: true,
@@ -644,7 +662,10 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func syncPendingPlaceLists(backend: WanderBackend?) async -> Int {
-        guard let backend else { return 0 }
+        guard let backend else {
+            WanderDebugLog.sync.debug("list sync pending skipped reason=missing_backend")
+            return 0
+        }
 
         let listIDs = placeLists
             .filter { list in
@@ -656,6 +677,8 @@ final class WanderStore: ObservableObject {
             }
             .map(\.id)
 
+        WanderDebugLog.sync.debug("list sync pending started count=\(listIDs.count, privacy: .public) ids=\(listIDs.map(WanderDebugLog.shortID).joined(separator: ","), privacy: .public)")
+
         var syncedCount = 0
         for listID in listIDs {
             if await syncPlaceList(localOrServerID: listID, backend: backend) {
@@ -663,32 +686,42 @@ final class WanderStore: ObservableObject {
             }
         }
 
+        WanderDebugLog.sync.debug("list sync pending completed requested=\(listIDs.count, privacy: .public) synced=\(syncedCount, privacy: .public)")
         return syncedCount
     }
 
     @discardableResult
     private func syncPlaceList(localOrServerID: String, backend: WanderBackend) async -> Bool {
-        guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }),
-              canManage(placeLists[index])
-        else { return false }
+        guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }) else {
+            WanderDebugLog.sync.error("list sync skipped reason=list_not_found requested=\(WanderDebugLog.shortID(localOrServerID), privacy: .public)")
+            return false
+        }
+        guard canManage(placeLists[index]) else {
+            WanderDebugLog.sync.error("list sync skipped reason=not_manager list=\(WanderDebugLog.shortID(self.placeLists[index].id), privacy: .public) owner=\(WanderDebugLog.shortID(self.placeLists[index].ownerUserID), privacy: .public) current_user=\(WanderDebugLog.shortID(self.currentUser.id), privacy: .public)")
+            return false
+        }
 
         let list = placeLists[index]
         let previousID = list.id
+        WanderDebugLog.sync.debug("list sync attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) server=\(WanderDebugLog.shortID(list.serverID), privacy: .public) state=\(list.syncState.rawValue, privacy: .public) item_count=\(self.listItems(for: list).count, privacy: .public)")
 
         if list.deletedAt != nil || list.syncState == .pendingDelete {
             guard let remoteListID = remoteID(list.serverID ?? list.id) else {
                 placeLists[index].syncStateRaw = SyncState.tombstoned.rawValue
                 persist()
+                WanderDebugLog.sync.debug("list sync delete tombstoned locally reason=missing_remote_id list=\(WanderDebugLog.shortID(previousID), privacy: .public)")
                 return true
             }
 
             do {
+                WanderDebugLog.sync.debug("list sync delete remote attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(remoteListID), privacy: .public)")
                 try await backend.deletePlaceList(listID: remoteListID)
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
                 }
                 lastRemoteError = nil
                 persist()
+                WanderDebugLog.sync.debug("list sync delete remote success list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(remoteListID), privacy: .public)")
                 return true
             } catch {
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
@@ -696,6 +729,7 @@ final class WanderStore: ObservableObject {
                 }
                 lastRemoteError = remoteErrorMessage(error)
                 persist()
+                WanderDebugLog.sync.error("list sync delete remote failed list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(remoteListID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
                 return false
             }
         }
@@ -713,6 +747,7 @@ final class WanderStore: ObservableObject {
         )
 
         do {
+            WanderDebugLog.sync.debug("list sync upsert remote attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(draft.id), privacy: .public) collaborators=\(collaboratorUserIDs.count, privacy: .public)")
             let remoteListID = try await backend.upsertPlaceList(draft)
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
                 placeLists[currentIndex].serverID = remoteListID
@@ -726,12 +761,14 @@ final class WanderStore: ObservableObject {
             let itemIDs = placeListItems
                 .filter { $0.listID == remoteListID && $0.deletedAt == nil && $0.syncState != .synced }
                 .map(\.id)
+            WanderDebugLog.sync.debug("list sync upsert remote success list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(remoteListID), privacy: .public) pending_items=\(itemIDs.count, privacy: .public)")
             for itemID in itemIDs {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
             }
 
             lastRemoteError = nil
             persist()
+            WanderDebugLog.sync.debug("list sync completed list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote=\(WanderDebugLog.shortID(remoteListID), privacy: .public)")
             return true
         } catch {
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID }) {
@@ -739,6 +776,7 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = remoteErrorMessage(error)
             persist()
+            WanderDebugLog.sync.error("list sync failed list=\(WanderDebugLog.shortID(previousID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
             return false
         }
     }
@@ -747,24 +785,36 @@ final class WanderStore: ObservableObject {
         guard let initialItem = placeListItems.first(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
         }) else {
+            WanderDebugLog.sync.error("list item sync skipped reason=item_not_found requested=\(WanderDebugLog.shortID(localOrServerID), privacy: .public) list=\(WanderDebugLog.shortID(listID), privacy: .public)")
             return
         }
 
         if remoteID(initialItem.listID) == nil {
+            WanderDebugLog.sync.debug("list item sync needs remote list first item=\(WanderDebugLog.shortID(initialItem.id), privacy: .public) list=\(WanderDebugLog.shortID(initialItem.listID), privacy: .public)")
             _ = await syncPlaceList(localOrServerID: listID, backend: backend)
         }
 
         guard let itemIndex = placeListItems.firstIndex(where: { item in
             item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
-        }),
-              placeListItems[itemIndex].deletedAt == nil,
-              placeListItems[itemIndex].syncState != .synced,
-              let draft = remoteItemDraft(for: placeListItems[itemIndex])
-        else {
+        }) else {
+            WanderDebugLog.sync.error("list item sync skipped reason=item_missing_after_list_sync requested=\(WanderDebugLog.shortID(localOrServerID), privacy: .public) list=\(WanderDebugLog.shortID(listID), privacy: .public)")
+            return
+        }
+        guard placeListItems[itemIndex].deletedAt == nil else {
+            WanderDebugLog.sync.debug("list item sync skipped reason=deleted item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) list=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].listID), privacy: .public)")
+            return
+        }
+        guard placeListItems[itemIndex].syncState != .synced else {
+            WanderDebugLog.sync.debug("list item sync skipped reason=already_synced item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) list=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].listID), privacy: .public)")
+            return
+        }
+        guard let draft = remoteItemDraft(for: placeListItems[itemIndex]) else {
+            WanderDebugLog.sync.error("list item sync skipped reason=missing_remote_draft item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) list=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].listID), privacy: .public) place=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].placeID), privacy: .public)")
             return
         }
 
         do {
+            WanderDebugLog.sync.debug("list item sync remote attempt item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) list=\(WanderDebugLog.shortID(draft.listID), privacy: .public) place=\(WanderDebugLog.shortID(draft.placeID), privacy: .public)")
             let remoteItemID = try await backend.addPlaceListItem(draft)
             placeListItems[itemIndex].serverID = remoteItemID
             placeListItems[itemIndex].syncStateRaw = SyncState.synced.rawValue
@@ -775,10 +825,12 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = nil
             persist()
+            WanderDebugLog.sync.debug("list item sync remote success item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) remote_item=\(WanderDebugLog.shortID(remoteItemID), privacy: .public) list=\(WanderDebugLog.shortID(draft.listID), privacy: .public)")
         } catch {
             placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
             lastRemoteError = remoteErrorMessage(error)
             persist()
+            WanderDebugLog.sync.error("list item sync remote failed item=\(WanderDebugLog.shortID(self.placeListItems[itemIndex].id), privacy: .public) list=\(WanderDebugLog.shortID(draft.listID), privacy: .public) place=\(WanderDebugLog.shortID(draft.placeID), privacy: .public) error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
         }
     }
 
@@ -2056,11 +2108,14 @@ final class WanderStore: ObservableObject {
 
     func refreshRemotePlaceLists(backend: WanderBackend?) async {
         guard let backend else {
+            WanderDebugLog.sync.debug("list refresh skipped reason=missing_backend")
             return
         }
 
+        WanderDebugLog.sync.debug("list refresh started local_lists=\(self.placeLists.count, privacy: .public) local_items=\(self.placeListItems.count, privacy: .public)")
         do {
             let summaries = try await backend.visiblePlaceLists()
+            WanderDebugLog.sync.debug("list refresh summaries received count=\(summaries.count, privacy: .public) owners=\(Set(summaries.map { $0.list.ownerUserID }).count, privacy: .public)")
             upsertRemotePlaceListSummaries(summaries)
 
             let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
@@ -2068,14 +2123,23 @@ final class WanderStore: ObservableObject {
                 await refreshRemoteProfileVisiblePlaces(profileID: ownerID, backend: backend)
             }
 
+            var detailCount = 0
+            var detailItemCount = 0
             for summary in summaries where UUID(uuidString: summary.list.id) != nil {
                 if let detail = try await backend.placeListDetail(listID: summary.list.id) {
                     upsertRemotePlaceListDetail(detail)
+                    detailCount += 1
+                    detailItemCount += detail.items.count
+                    WanderDebugLog.sync.debug("list refresh detail received list=\(WanderDebugLog.shortID(summary.list.id), privacy: .public) items=\(detail.items.count, privacy: .public) collaborators=\(detail.collaborators.count, privacy: .public)")
+                } else {
+                    WanderDebugLog.sync.debug("list refresh detail empty list=\(WanderDebugLog.shortID(summary.list.id), privacy: .public)")
                 }
             }
             lastRemoteError = nil
+            WanderDebugLog.sync.debug("list refresh completed summaries=\(summaries.count, privacy: .public) details=\(detailCount, privacy: .public) detail_items=\(detailItemCount, privacy: .public) local_lists=\(self.placeLists.count, privacy: .public) local_items=\(self.placeListItems.count, privacy: .public)")
         } catch {
             lastRemoteError = remoteErrorMessage(error)
+            WanderDebugLog.sync.error("list refresh failed error_kind=\(self.remoteErrorKind(error), privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
         }
     }
 

@@ -8797,3 +8797,37 @@ Known issues:
 Next:
 
 - Test build 61 from TestFlight for REC-59 flows: create a list, add places, add unsaved searched places, verify My Lists counts/thumbnails after navigating back, verify 0-3 place thumbnails, and verify collaborator list-item adds.
+
+## 2026-07-08 18:35 PDT - Codex - REC-78 List Debug Logging
+
+Agent: Codex
+Branch: `codex/rec-78-list-debug-logging`
+Worktree: `/private/tmp/recme-lists-fix`
+Linear: `REC-78` (`Add list sync debug logging for Xcode QA`)
+
+Goal: add high-signal Xcode console logs for list refresh, add-to-list, unsaved candidate adds, list item sync, and visible list counts before simulator/device QA.
+
+Starting status:
+
+- Created branch from latest `origin/main` at `7b47d4c`.
+- `git status --short --branch`: clean before edits.
+- Mission Control `localhost:4000` was not reachable from this shell, so Linear + this log are the durable trackers.
+- Expected files: `Wander/Services/WanderLocalStore.swift`, `Wander/Features/Lists/ListsScreen.swift`, `docs/agent-log.md`.
+
+Checkpoint, 2026-07-09 14:35 PDT:
+
+- Added high-signal `WanderDebugLog.sync` logging for list add, unsaved candidate add, pending list sync, list-item sync, list refresh, list UI refresh, add-sheet search, and visible list counts.
+- First simulator build surfaced Swift 6 `OSLog` interpolation capture errors from the new logs; fixed by qualifying store state with `self`.
+- `git diff --check` passed.
+- Simulator build passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec78-list-debug-run CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Focused list regression tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec78-list-debug-test CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCollaboratorCanAddPlaceToSharedList -only-testing:WanderTests/WanderStoreTests/testAddingUnsavedCandidateToListCreatesWantSaveAndListItem -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+  Result: 4 tests executed, 0 failures.
+- Installed and launched `/private/tmp/DerivedData-rec78-list-debug-run/Build/Products/Debug-iphonesimulator/Wander.app` on simulator `2AA54510-9701-425A-9E60-42C20BB8F8E7`.
+- Launch smoke screenshot: `/private/tmp/rec78-launch-smoke.png`; app rendered the map and selected place preview without crashing.
+
+Known issues:
+
+- This branch adds debug instrumentation only; it does not change list sync behavior.
+- Manual live-backend list QA still needs Joe/Ryan device testing with the new logs visible in Xcode.

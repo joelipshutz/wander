@@ -109,6 +109,7 @@ struct ListsScreen: View {
     }
 
     private func deleteList(_ list: PlaceListMock) {
+        WanderDebugLog.sync.debug("lists ui delete requested list=\(WanderDebugLog.shortID(list.sourceListID ?? list.id), privacy: .public) name=\(WanderDebugLog.clean(list.name), privacy: .public)")
         if let sourceListID = list.sourceListID {
             _ = store.deletePlaceList(id: sourceListID)
         }
@@ -132,6 +133,7 @@ struct ListsScreen: View {
 
         switch presentation {
         case .create:
+            WanderDebugLog.sync.debug("lists ui create requested title=\(WanderDebugLog.clean(draft.title), privacy: .public) collaborators=\(collaboratorUserIDs.count, privacy: .public) visibility=\(visibility.rawValue, privacy: .public)")
             _ = store.createPlaceList(
                 name: draft.title,
                 description: draft.description,
@@ -142,6 +144,7 @@ struct ListsScreen: View {
             syncLists()
         case .edit(let list):
             guard let sourceListID = list.sourceListID else { return }
+            WanderDebugLog.sync.debug("lists ui edit requested list=\(WanderDebugLog.shortID(sourceListID), privacy: .public) title=\(WanderDebugLog.clean(draft.title), privacy: .public) collaborators=\(collaboratorUserIDs.count, privacy: .public) visibility=\(visibility.rawValue, privacy: .public)")
             _ = store.updatePlaceList(
                 id: sourceListID,
                 name: draft.title,
@@ -156,6 +159,7 @@ struct ListsScreen: View {
 
     private func saveCollaborators(_ collaborators: [ListCollaboratorMock], for list: PlaceListMock) {
         guard let sourceListID = list.sourceListID else { return }
+        WanderDebugLog.sync.debug("lists ui collaborators save requested list=\(WanderDebugLog.shortID(sourceListID), privacy: .public) collaborators=\(collaborators.count, privacy: .public)")
         _ = store.setPlaceListCollaborators(
             listID: sourceListID,
             collaboratorUserIDs: collaborators.map(\.id)
@@ -166,26 +170,47 @@ struct ListsScreen: View {
 
     private func syncLists() {
         Task {
-            _ = await store.syncPendingPlaceLists(backend: backend)
+            WanderDebugLog.sync.debug("lists ui sync started scope=\(selectedScopeID, privacy: .public)")
+            let syncedCount = await store.syncPendingPlaceLists(backend: backend)
             await store.refreshRemotePlaceLists(backend: backend)
+            logVisibleLists(context: "sync_complete")
+            WanderDebugLog.sync.debug("lists ui sync completed synced=\(syncedCount, privacy: .public) scope=\(selectedScopeID, privacy: .public)")
         }
     }
 
     private func refreshOpenList(sourceListID: String) {
         guard let localList = store.visiblePlaceLists.first(where: {
             $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
-        }) else { return }
+        }) else {
+            WanderDebugLog.sync.error("lists ui refresh open list skipped reason=not_found source=\(WanderDebugLog.shortID(sourceListID), privacy: .public)")
+            return
+        }
         let sourceIDs = Set([localList.id, localList.localID, localList.serverID, sourceListID].compactMap { $0 })
         let refreshed = PlaceListMock(list: localList, store: store)
+        var updatedSurfaces: [String] = []
         if selectedList?.sourceListID.map(sourceIDs.contains) == true {
             selectedList = refreshed
+            updatedSurfaces.append("detail")
         }
         if collaboratorList?.sourceListID.map(sourceIDs.contains) == true {
             collaboratorList = refreshed
+            updatedSurfaces.append("collaborators")
         }
         if mapList?.sourceListID.map(sourceIDs.contains) == true {
             mapList = refreshed
+            updatedSurfaces.append("map")
         }
+        WanderDebugLog.sync.debug("lists ui refresh open list completed source=\(WanderDebugLog.shortID(sourceListID), privacy: .public) count=\(refreshed.itemCount, privacy: .public) updated=\(updatedSurfaces.joined(separator: ","), privacy: .public)")
+    }
+
+    private func logVisibleLists(context: String) {
+        let visibleLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
+        let countSummary = visibleLists
+            .map { list in
+                "\(WanderDebugLog.shortID(list.id)):\(list.cachedItemCount ?? store.visiblePlaces(in: list).count)"
+            }
+            .joined(separator: ",")
+        WanderDebugLog.sync.debug("lists ui visible lists context=\(context, privacy: .public) scope=\(selectedScopeID, privacy: .public) count=\(visibleLists.count, privacy: .public) counts=\(countSummary, privacy: .public)")
     }
 
     private var homeScreen: some View {
@@ -205,7 +230,9 @@ struct ListsScreen: View {
         }
         .wanderScreen()
         .task {
+            WanderDebugLog.sync.debug("lists ui home task started scope=\(selectedScopeID, privacy: .public)")
             await store.refreshRemotePlaceLists(backend: backend)
+            logVisibleLists(context: "home_task")
         }
     }
 
@@ -331,6 +358,7 @@ struct ListsScreen: View {
         ) {
             ForEach(activeLists) { list in
                 Button {
+                    WanderDebugLog.sync.debug("lists ui open list list=\(WanderDebugLog.shortID(list.sourceListID ?? list.id), privacy: .public) name=\(WanderDebugLog.clean(list.name), privacy: .public) count=\(list.itemCount, privacy: .public)")
                     selectedList = list
                 } label: {
                     ListTile(list: list, showsCollaborators: selectedScope != .mine)
@@ -1111,16 +1139,21 @@ private struct ListAddPlacesScreen: View {
 
         isSearching = true
         do {
+            WanderDebugLog.sync.debug("lists ui add search started list=\(WanderDebugLog.shortID(list.id), privacy: .public) query=\(WanderDebugLog.clean(query), privacy: .public)")
             searchCandidates = try await store.manualCandidates(name: query, areaHint: nil, category: nil)
+            WanderDebugLog.sync.debug("lists ui add search completed list=\(WanderDebugLog.shortID(list.id), privacy: .public) query=\(WanderDebugLog.clean(query), privacy: .public) candidates=\(searchCandidates.count, privacy: .public)")
         } catch {
             searchCandidates = []
+            WanderDebugLog.sync.error("lists ui add search failed list=\(WanderDebugLog.shortID(list.id), privacy: .public) query=\(WanderDebugLog.clean(query), privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
         }
         isSearching = false
     }
 
     @MainActor
     private func add(_ visiblePlace: VisiblePlace) async {
+        WanderDebugLog.sync.debug("lists ui add visible tapped list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public) name=\(WanderDebugLog.clean(visiblePlace.place.canonicalName), privacy: .public)")
         let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        WanderDebugLog.sync.debug("lists ui add visible result list=\(WanderDebugLog.shortID(list.id), privacy: .public) place=\(WanderDebugLog.shortID(visiblePlace.place.id), privacy: .public) outcome=\(String(describing: result.outcome), privacy: .public) created_want=\(result.createdWantSave, privacy: .public)")
         onAdded(result)
         handleAddResult(result)
         await loadSuggestions()
@@ -1152,7 +1185,9 @@ private struct ListAddPlacesScreen: View {
 
     @MainActor
     private func add(_ candidate: PlaceCandidate) async {
+        WanderDebugLog.sync.debug("lists ui add candidate tapped list=\(WanderDebugLog.shortID(list.id), privacy: .public) name=\(WanderDebugLog.clean(candidate.name), privacy: .public) category=\(candidate.category, privacy: .public)")
         let result = await store.addCandidate(candidate, to: list, backend: backend)
+        WanderDebugLog.sync.debug("lists ui add candidate result list=\(WanderDebugLog.shortID(list.id), privacy: .public) name=\(WanderDebugLog.clean(candidate.name), privacy: .public) outcome=\(String(describing: result.outcome), privacy: .public) created_want=\(result.createdWantSave, privacy: .public)")
         onAdded(result)
         handleAddResult(result)
         await loadSuggestions()
