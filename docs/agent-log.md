@@ -9214,3 +9214,31 @@ Known issues:
 Next:
 
 - Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
+
+## 2026-07-09 16:16 PDT - Codex - REC-80 Rating Editing Plan
+
+Agent: Codex
+Branch: `codex/rec-80-rating-edit-plan`
+Worktree: `/private/tmp/recme-rec-80-rating-edit-plan`
+Linear: `REC-80` (`Rework place rating editing for multiple visits`)
+
+Goal: inspect REC-80, spec the implementation approach for per-visit rating editing, run `/plan-eng-review`, and attempt `/ios-design-review`.
+
+Starting status:
+
+- Created isolated worktree from latest `origin/main` at `450b90809` because the root checkout is on `codex/rec-81-collab-visibility` and this planning work touches shared coordination artifacts.
+- Root checkout is clean but behind its remote by 1 commit; REC-80 planning is isolated from REC-81 work.
+- Linear `REC-80` moved from `Backlog` to `In Progress`.
+- `git status --short --branch` in the worktree: `## codex/rec-80-rating-edit-plan...origin/main`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Potential local gstack artifacts under `~/.gstack/projects/...`
+- No app-code edits planned in this pass unless the user explicitly asks to implement.
+
+Initial plan:
+
+- Trace the current place detail/edit flow, rating slider state, visit model/storage, and existing tests.
+- Produce a concrete implementation spec with data flow, scope boundaries, test plan, and design implications.
+- Run the requested engineering review and iOS design review as far as local/device tooling allows.
