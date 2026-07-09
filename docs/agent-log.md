@@ -9268,3 +9268,10 @@ Known issues / next:
 - Run `supabase test db supabase/tests/place_visits_visit_photos.sql` in a Docker/local-Supabase-capable environment before applying the migration.
 - Do not push this migration to hosted Supabase until the pgTAP file runs cleanly or a rollback-wrapped hosted verification is intentionally prepared.
 - Follow-up implementation should add Swift `LocalPlaceVisit` / `LocalVisitPhoto`, remote DTO/repository sync, and UI wiring. This branch intentionally does not wire UI.
+
+Completion, 2026-07-09 15:16 PDT:
+
+- Committed implementation as `06afb434b` (`Add visit photo backend foundation`) and pushed branch `codex/rec-xx-visits-storage`.
+- Opened draft PR #67: https://github.com/joelipshutz/wander/pull/67
+- PR is intentionally draft because pgTAP could not be executed successfully in this environment.
+- No hosted Supabase migration was applied.
