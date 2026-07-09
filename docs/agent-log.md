@@ -8761,3 +8761,39 @@ Follow-up outcome, 2026-07-08 14:50 PDT:
 - Broad simulator build passed:
   `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Next: commit and push branch `codex/lists-fixes`; do not merge PR #64 until Joe retests.
+
+Release completion, 2026-07-08 17:25 PDT:
+
+- Joe asked to push the Lists fixes to TestFlight, so PR #64 was squash-merged to `main`.
+- PR #64 merge commit on `main`: `a71818e` (`Fix Supabase place list sync`).
+- Bumped `CURRENT_PROJECT_VERSION` from `60` to `61` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `20e8195` (`chore: bump TestFlight build 61`), and pushed it to `main`.
+- Applied hosted Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` with `npx supabase db push --linked --yes`; dry run first showed this was the only pending migration.
+- Fixed stale test expectation after the collaborator-add product decision changed: `f0807bd` (`test: update list collaborator permission expectation`) updates the old collaborator-denied test to cover a non-member denial case instead.
+- Pushed final release state to `main` at `f0807bd`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full test suite passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 225 tests executed, 0 failures.
+- Archived build `0.1 (61)` at `/private/tmp/Wander-0.1-build61.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build61.xcarchive -derivedDataPath /private/tmp/DerivedData-build61-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `61`.
+- Export options: `/private/tmp/WanderExportUpload61.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Uploaded build `0.1 (61)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build61.xcarchive -exportPath /private/tmp/WanderTestFlightUpload61 -exportOptionsPlist /private/tmp/WanderExportUpload61.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `node scripts/testflight-release.mjs --build-number 61 --archive-path /private/tmp/Wander-0.1-build61.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build61-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (61)` id `c618ceca-5bcb-4977-9861-4af052be2310`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783556652280249
+- Linear `REC-59` moved to `Done`; added release comment `7f526dfd-a7fb-419e-bebe-c53f3ae65fa5`.
+- Linear `REC-60` left open/In Review; added comment `66444f01-40e4-43d5-93db-e5bb673e99e6` noting that build 61 shipped the live list-write dependency, but not the notification feature itself.
+
+Known issues:
+
+- List suggestion relevance is still early and may need tuning.
+- List notification work remains tracked separately in `REC-60`.
+
+Next:
+
+- Test build 61 from TestFlight for REC-59 flows: create a list, add places, add unsaved searched places, verify My Lists counts/thumbnails after navigating back, verify 0-3 place thumbnails, and verify collaborator list-item adds.
