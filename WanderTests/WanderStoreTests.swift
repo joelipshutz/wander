@@ -2295,16 +2295,16 @@ final class WanderStoreTests: XCTestCase {
         })
     }
 
-    func testCollaboratorCannotAddPlaceToSomeoneElsesList() async {
+    func testNonMemberCannotAddPlaceToSomeoneElsesList() async {
         let store = makeStore()
-        let collabList = store.placeLists.first { $0.id == "list_launch" }!
+        let friendList = store.placeLists.first { $0.id == "list_maya_sunset" }!
         let place = store.visiblePlaces().first { $0.place.canonicalName == "Bar Nido" }!
-        let initialCount = store.visiblePlaces(in: collabList).count
+        let initialCount = store.visiblePlaces(in: friendList).count
 
-        let result = await store.addVisiblePlace(place, to: collabList, backend: nil)
+        let result = await store.addVisiblePlace(place, to: friendList, backend: nil)
 
         XCTAssertEqual(result.outcome, .permissionDenied)
-        XCTAssertEqual(store.visiblePlaces(in: collabList).count, initialCount)
+        XCTAssertEqual(store.visiblePlaces(in: friendList).count, initialCount)
     }
 
     func testOwnerRemoveListPlacePersistsLocally() {
