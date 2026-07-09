@@ -216,6 +216,191 @@ struct RemotePlaceAttributeDTO: Codable, Equatable {
     }
 }
 
+struct RemotePlaceListCollaboratorDTO: Codable, Equatable {
+    let userID: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+    let role: String?
+
+    enum CodingKeys: String, CodingKey {
+        case userID = "user_id"
+        case handle
+        case displayName = "display_name"
+        case avatarURL = "avatar_url"
+        case role
+    }
+
+    var record: PlaceListCollaboratorRecord {
+        PlaceListCollaboratorRecord(
+            userID: userID,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL,
+            role: role.flatMap(PlaceListRole.init(rawValue:)) ?? .collaborator
+        )
+    }
+}
+
+struct RemotePlaceListRowDTO: Codable, Equatable {
+    let id: String
+    let ownerUserID: String
+    let ownerHandle: String?
+    let ownerDisplayName: String?
+    let ownerAvatarURL: String?
+    let name: String
+    let description: String
+    let visibility: String
+    let createdAt: Date
+    let updatedAt: Date
+    let deletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerUserID = "owner_user_id"
+        case ownerHandle = "owner_handle"
+        case ownerDisplayName = "owner_display_name"
+        case ownerAvatarURL = "owner_avatar_url"
+        case name
+        case description
+        case visibility
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+    }
+
+    func localList(itemCount: Int? = nil) -> LocalPlaceList {
+        LocalPlaceList(
+            localID: "remote_list_\(id)",
+            serverID: id,
+            ownerUserID: ownerUserID,
+            name: name,
+            description: description,
+            visibility: PlaceListVisibility(rawValue: visibility) ?? .followers,
+            syncState: .synced,
+            cachedItemCount: itemCount,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt
+        )
+    }
+
+    var ownerShell: ProfileShell {
+        ProfileShell(
+            id: ownerUserID,
+            handle: ownerHandle ?? ownerUserID,
+            displayName: ownerDisplayName ?? ownerHandle ?? "Friend",
+            avatarURL: ownerAvatarURL,
+            bio: nil,
+            relationship: .nonFollower
+        )
+    }
+}
+
+struct RemotePlaceListSummaryDTO: Codable, Equatable {
+    let id: String
+    let ownerUserID: String
+    let ownerHandle: String
+    let ownerDisplayName: String
+    let name: String
+    let description: String
+    let visibility: String
+    let createdAt: Date
+    let updatedAt: Date
+    let collaborators: [RemotePlaceListCollaboratorDTO]
+    let itemCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerUserID = "owner_user_id"
+        case ownerHandle = "owner_handle"
+        case ownerDisplayName = "owner_display_name"
+        case name
+        case description
+        case visibility
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case collaborators
+        case itemCount = "item_count"
+    }
+
+    func summary() -> RemotePlaceListSummary {
+        let row = RemotePlaceListRowDTO(
+            id: id,
+            ownerUserID: ownerUserID,
+            ownerHandle: ownerHandle,
+            ownerDisplayName: ownerDisplayName,
+            ownerAvatarURL: nil,
+            name: name,
+            description: description,
+            visibility: visibility,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: nil
+        )
+        return RemotePlaceListSummary(
+            list: row.localList(itemCount: itemCount),
+            owner: row.ownerShell,
+            collaborators: collaborators.map(\.record),
+            itemCount: itemCount
+        )
+    }
+}
+
+struct RemotePlaceListItemDTO: Codable, Equatable {
+    let id: String
+    let listID: String
+    let placeID: String
+    let ownerUserPlaceID: String?
+    let sourceUserPlaceID: String?
+    let addedByUserID: String
+    let createdAt: Date
+    let updatedAt: Date
+    let deletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case listID = "list_id"
+        case placeID = "place_id"
+        case ownerUserPlaceID = "owner_user_place_id"
+        case sourceUserPlaceID = "source_user_place_id"
+        case addedByUserID = "added_by_user_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+    }
+
+    var localItem: LocalPlaceListItem {
+        LocalPlaceListItem(
+            localID: "remote_list_item_\(id)",
+            serverID: id,
+            listID: listID,
+            placeID: placeID,
+            ownerUserPlaceID: ownerUserPlaceID,
+            sourceUserPlaceID: sourceUserPlaceID,
+            addedByUserID: addedByUserID,
+            syncState: .synced,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt
+        )
+    }
+}
+
+struct RemotePlaceListDetailDTO: Codable, Equatable {
+    let list: RemotePlaceListRowDTO
+    let collaborators: [RemotePlaceListCollaboratorDTO]
+    let items: [RemotePlaceListItemDTO]
+
+    func detail() -> RemotePlaceListDetail {
+        RemotePlaceListDetail(
+            list: list.localList(itemCount: items.filter { $0.deletedAt == nil }.count),
+            collaborators: collaborators.map(\.record),
+            items: items.map(\.localItem)
+        )
+    }
+}
+
 enum JSONValue: Codable, Equatable {
     case string(String)
     case number(Double)

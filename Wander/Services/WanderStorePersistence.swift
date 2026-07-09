@@ -521,6 +521,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let description: String
         let visibilityRaw: String
         let syncStateRaw: String
+        let cachedItemCount: Int?
         let createdAt: Date
         let updatedAt: Date
         let deletedAt: Date?
@@ -533,6 +534,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             description = list.description
             visibilityRaw = list.visibilityRaw
             syncStateRaw = list.syncStateRaw
+            cachedItemCount = list.cachedItemCount
             createdAt = list.createdAt
             updatedAt = list.updatedAt
             deletedAt = list.deletedAt
@@ -547,6 +549,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 description: description,
                 visibility: PlaceListVisibility(rawValue: visibilityRaw) ?? .followers,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                cachedItemCount: cachedItemCount,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt

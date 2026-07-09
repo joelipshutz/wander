@@ -8744,3 +8744,141 @@ Outcome, 2026-07-08 12:01 PDT:
 Next:
 
 - Ryan should test PR #65 in Xcode before merge, with emphasis on edit-place category/subcategory/status changes, Restaurants & Food cuisine/subcategory combinations, and custom tag/label reuse after saving a custom option once.
+
+## 2026-07-08 09:52 PDT - Codex - Lists REC-59 / REC-60 Plan Eng Review
+
+Agent: Codex
+Branch: `codex/lists-fixes`
+Worktree: `/private/tmp/recme-lists-fix`
+Linear: `REC-59` (`lists are not saving right now`), `REC-60` (`Add push notifications for follower and list activity`)
+
+Goal: review the collaboration lists architecture and current bugs before implementation: list detail top navigation clipping, My Lists showing zero places after additions, REC-59 list persistence, and REC-60 list notification coupling.
+
+Starting status:
+
+- Created/using fresh worktree from latest `origin/main` at `65e3477`.
+- `git status --short --branch`: clean before this log entry.
+- Root checkout remains on stale deleted branch `codex/rating-score-reset`; do not use it for Lists edits.
+- Fetched PR #60 into local inspect ref `codex/rec-60-notifications-inspect` without switching this worktree.
+
+Initial findings:
+
+- iOS has local list models, local persistence, list suggestions, owner-only list add/manage checks, and shipped UI flows.
+- iOS does not currently have a `PlaceListRepository` or list create/update/add/remove/detail sync path, even though Supabase list tables/RPCs exist in `20260628112000_place_lists.sql`.
+- `REC-60` depends on server-side list writes for list notifications, so its list notification producers should be treated as blocked or inert until `REC-59`/list backend sync is implemented.
+- Reported UI bugs map to `Wander/Features/Lists/ListsScreen.swift`, especially toolbar sizing and stale/list-item-to-visible-place projection.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/reviews/2026-07-08-lists-collab-rec59-rec60-plan-eng-review.md`
+- Potential later implementation files: `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/RepositoryProtocols.swift`, `Wander/Services/Remote/SupabaseRepositories.swift`, `Wander/App/WanderBackend.swift`, `WanderTests/WanderStoreTests.swift`, `WanderTests/RemoteRepositoryTests.swift`, and Supabase list notification tests if REC-60 is adjusted.
+
+Review checkpoint:
+
+- Completed `/plan-eng-review` artifact: `docs/reviews/2026-07-08-lists-collab-rec59-rec60-plan-eng-review.md`.
+- Wrote gstack QA test-plan artifact: `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/joelipshutz-codex-lists-fixes-eng-review-test-plan-20260708-095918.md`.
+- Logged gstack review metadata after adding `~/.bun/bin` to `PATH`; current review status is `issues_open` with 3 critical gaps.
+- Recommendation: use `REC-59` as the active implementation ticket; fix toolbar clipping, deterministic list item projection/counts, and list repository/Supabase sync before treating `REC-60` list notifications as live.
+- Correction from investigation: PR #60 already guards collaborator-removal notifications correctly; the remaining REC-60 concern is dependency on server-backed list writes, not trigger correctness.
+
+Implementation checkpoint, 2026-07-08 10:50 PDT:
+
+- Implemented the missing iOS list backend path for `REC-59`: added `PlaceListRepository`, Supabase RPC DTOs/repository methods, `WanderBackend` wiring, store sync for create/update/delete/collaborators/items, and remote list refresh/hydration.
+- Fixed list count/row projection issues by caching server item counts on `LocalPlaceList` and resolving list items through local place/user-place state when the row is not currently in the visible-place candidate set.
+- Wired Lists screens to refresh remote lists on entry/detail load and to sync pending list changes after create/edit/delete/collaborator saves.
+- Tightened list detail toolbar buttons to avoid top-right nav clipping.
+- Added richer followed-user/demo fixture lists so non-owner list states are testable with demo data.
+- Added tests covering Supabase list RPC fetch/write behavior and store-level remote list hydration/sync.
+- `git diff --check` passed before the final build.
+- Focused tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-fix CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests/testPlaceListRepositoryFetchesVisibleListsAndDetail -only-testing:WanderTests/RemoteRepositoryTests/testPlaceListRepositoryWritesExpectedRPCs -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+- Broad simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-fix-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Known limitation: hosted `place_list_detail` currently returns list item IDs, not full place metadata, so iOS hydrates detail rows from visible-place/profile caches. This is workable for now, but a follow-up Supabase migration should enrich the detail RPC with place/user-place fields to make list detail rendering independent of cache warmup.
+
+Follow-up checkpoint, 2026-07-08 11:05 PDT:
+
+- Joe tested PR #64 on device and reported remaining list issues before merge:
+  - Adding places inside list detail does not update My Lists after navigating back.
+  - List thumbnails break when the list has fewer than four places.
+  - Add-to-list should search/add any place, not only places already in been/wanna visible data.
+  - Collaborators should be allowed to add places.
+- Continuing on branch `codex/lists-fixes` in `/private/tmp/recme-lists-fix`; current PR remains unmerged.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, list tests, `docs/agent-log.md`.
+
+Follow-up outcome, 2026-07-08 14:50 PDT:
+
+- Fixed list add refresh propagation so adding/removing places from list detail refreshes the open list mock and My Lists count/thumbnail data when navigating back.
+- Fixed list mosaics with fewer than four places by rendering stable four-slot thumbnails with quiet empty placeholders instead of shrinking/breaking the layout.
+- Reworked add-to-list search to use manual place candidates, so users can add any searched place to a list. Unsaved places are saved as wanna-go first, then added to the list, matching the existing auto-save behavior.
+- Changed list permissions so collaborators can add places, while owner-only controls still gate list metadata/collaborator management.
+- Added Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` so collaborators can add list items server-side through the existing list item RPC path.
+- Added tests for collaborator item adds and unsaved-candidate adds.
+- `git diff --check` passed.
+- Focused tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCollaboratorCanAddPlaceToSharedList -only-testing:WanderTests/WanderStoreTests/testAddingUnsavedCandidateToListCreatesWantSaveAndListItem -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+- Broad simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: commit and push branch `codex/lists-fixes`; do not merge PR #64 until Joe retests.
+
+Release completion, 2026-07-08 17:25 PDT:
+
+- Joe asked to push the Lists fixes to TestFlight, so PR #64 was squash-merged to `main`.
+- PR #64 merge commit on `main`: `a71818e` (`Fix Supabase place list sync`).
+- Bumped `CURRENT_PROJECT_VERSION` from `60` to `61` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `20e8195` (`chore: bump TestFlight build 61`), and pushed it to `main`.
+- Applied hosted Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` with `npx supabase db push --linked --yes`; dry run first showed this was the only pending migration.
+- Fixed stale test expectation after the collaborator-add product decision changed: `f0807bd` (`test: update list collaborator permission expectation`) updates the old collaborator-denied test to cover a non-member denial case instead.
+- Pushed final release state to `main` at `f0807bd`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full test suite passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 225 tests executed, 0 failures.
+- Archived build `0.1 (61)` at `/private/tmp/Wander-0.1-build61.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build61.xcarchive -derivedDataPath /private/tmp/DerivedData-build61-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `61`.
+- Export options: `/private/tmp/WanderExportUpload61.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Uploaded build `0.1 (61)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build61.xcarchive -exportPath /private/tmp/WanderTestFlightUpload61 -exportOptionsPlist /private/tmp/WanderExportUpload61.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `node scripts/testflight-release.mjs --build-number 61 --archive-path /private/tmp/Wander-0.1-build61.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build61-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (61)` id `c618ceca-5bcb-4977-9861-4af052be2310`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783556652280249
+- Linear `REC-59` moved to `Done`; added release comment `7f526dfd-a7fb-419e-bebe-c53f3ae65fa5`.
+- Linear `REC-60` left open/In Review; added comment `66444f01-40e4-43d5-93db-e5bb673e99e6` noting that build 61 shipped the live list-write dependency, but not the notification feature itself.
+
+Known issues:
+
+- List suggestion relevance is still early and may need tuning.
+- List notification work remains tracked separately in `REC-60`.
+
+Next:
+
+- Test build 61 from TestFlight for REC-59 flows: create a list, add places, add unsaved searched places, verify My Lists counts/thumbnails after navigating back, verify 0-3 place thumbnails, and verify collaborator list-item adds.
+
+## 2026-07-08 23:45 PDT - Codex - REC-75 Merge And TestFlight Build 62
+
+Agent: Codex
+Branch: `codex/rec-75-v1-defaults`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Linear: `REC-75` (`Update default tags and labels when category changes`)
+
+Goal: squash-merge PR #65 to `main`, package latest `main` into a new TestFlight build, attach it to the public TestFlight group, update Linear, and post the required tester-facing Slack note.
+
+Starting status:
+
+- User explicitly requested a squash-merge to `main` and a new TestFlight build.
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains dirty on stale branch `codex/profile-pictures` with modified `docs/agent-log.md`; release work is using the isolated REC-75 worktree.
+- Ran `git fetch origin`, inspected worktrees and status, and reviewed recent `docs/agent-log.md`.
+- PR #65 is open, ready, targets `main`, and has no GitHub checks reported.
+- Branch was 2 commits ahead and 4 commits behind `origin/main`; merged latest `origin/main` into the branch before landing. The only conflict was `docs/agent-log.md`; resolved by preserving both the REC-75 entry and the build 61/lists release history.
+- Latest completed TestFlight build in the log is build 61, so this release should bump `CURRENT_PROJECT_VERSION` from `61` to `62`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
