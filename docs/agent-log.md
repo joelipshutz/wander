@@ -9214,3 +9214,57 @@ Known issues:
 Next:
 
 - Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
+
+## 2026-07-09 14:51 PDT - Codex - REC-XX Multiple Visits And Visit Photos Backend Plan
+
+Agent: Codex
+Branch: `codex/rec-xx-visits-storage`
+Worktree: `/private/tmp/recme-rec-xx-visits-storage`
+Linear: `REC-XX` / likely REC-79 durable multiple visits and visit photos
+
+Goal: design the persisted multiple-visits/photo-storage implementation plan, then implement only the Supabase migrations/tests for `place_visits`, `visit_photos`, the visit-photo storage bucket, RLS, grants, and backfill strategy. No UI wiring in this pass.
+
+Starting status:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is on stale branch `codex/profile-pictures` with an uncommitted `docs/agent-log.md` entry from REC-60, so this work uses an isolated worktree from latest `origin/main`.
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md` before editing.
+- New worktree status is clean on `codex/rec-xx-visits-storage` tracking `origin/main`.
+- `/plan-eng-review` was invoked for the backend data/RLS/storage plan. No branch-specific design doc existed, so the design plan is being produced as part of this task and reviewed against existing Supabase migrations, tests, docs, and current Supabase storage/RLS docs.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/plans/*multiple-visits*` or equivalent durable plan artifact
+- `supabase/migrations/*place_visits*.sql`
+- `supabase/tests/*place_visits*.sql`
+- `supabase/tests/*visit_photos*.sql` if split from the visit test
+
+Coordination notes:
+
+- High-conflict root `docs/agent-log.md` remains untouched in the stale root checkout.
+- Existing REC-70/REC-71 UI work explicitly left durable `place_visits` / `visit_photos` persistence and storage as the next backend slice.
+
+Implementation checkpoint, 2026-07-09 15:09 PDT:
+
+- Added backend plan artifact `docs/plans/2026-07-09-rec-xx-multiple-visits-photo-storage-plan.md` with the Supabase schema/RLS/storage design, local Swift follow-up model plan, sync behavior, backfill strategy, visit-based rating aggregation semantics, UI impact, failure modes, and not-in-scope list.
+- Added migration `supabase/migrations/20260709220000_place_visits_visit_photos.sql`:
+  - Creates `public.place_visits` under `public.user_places`, with half-step `rating_score`, soft delete, timestamps, and one partial-unique `backfilled_from_user_place` row per legacy save.
+  - Creates `public.visit_photos` metadata rows under visits, with private `visit-photos` storage paths shaped as `owner_user_id/visit_id/photo_id.ext`.
+  - Creates private Supabase Storage bucket `visit-photos`.
+  - Adds RLS and grants for visit/photo metadata and `storage.objects`, with reads flowing through existing `app.can_read_user_place` social visibility.
+  - Adds current-user-scoped helpers `app.can_read_place_visit`, `app.owns_place_visit`, and `app.place_visit_rating_summary`.
+  - Adds security-definer trigger `app.sync_backfilled_place_visit_for_user_place` so current `user_places` writes create/update/soft-delete the first legacy visit without iOS UI wiring.
+- Added pgTAP coverage in `supabase/tests/place_visits_visit_photos.sql` with 45 assertions covering schema, bucket config, policies, grants, helper security posture, trigger backfill behavior, RLS visibility, photo metadata path checks, and visit-based rating summary.
+- Verification:
+  - `git diff --check` passed.
+  - `supabase test db` failed because `supabase` was not on PATH.
+  - Bundled `pnpm dlx supabase test db supabase/tests/place_visits_visit_photos.sql` downloaded/ran the Supabase CLI after approval, but failed with `LegacyDbConnectError` because no local Postgres/Supabase DB was reachable.
+  - Bundled `pnpm dlx supabase test db --linked ...` from the isolated worktree failed because the worktree is not linked.
+  - Retried linked `supabase test db --linked ...` from the linked root checkout with approval; it produced no output for roughly a minute and was interrupted to avoid leaving a hung CLI process. No pgTAP pass should be claimed from this environment.
+  - gstack review metadata logging was attempted with approval but skipped by the local script because its JSON validation depends on `bun`, which is unavailable in this host PATH. The structured `## GSTACK REVIEW REPORT` is present at the bottom of the plan artifact instead.
+
+Known issues / next:
+
+- Run `supabase test db supabase/tests/place_visits_visit_photos.sql` in a Docker/local-Supabase-capable environment before applying the migration.
+- Do not push this migration to hosted Supabase until the pgTAP file runs cleanly or a rollback-wrapped hosted verification is intentionally prepared.
+- Follow-up implementation should add Swift `LocalPlaceVisit` / `LocalVisitPhoto`, remote DTO/repository sync, and UI wiring. This branch intentionally does not wire UI.
