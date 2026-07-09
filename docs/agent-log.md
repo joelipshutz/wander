@@ -9363,3 +9363,11 @@ Completion, 2026-07-09 16:34 PDT:
   - Run pgTAP against a working local/linked Supabase test database before applying the migration to hosted Supabase.
   - Run live-device `/ios-qa` and `/ios-design-review` after intentionally installing debug-only `DebugBridge` / `StateServer` instrumentation.
   - Keep PR #67 draft until the backend pgTAP gap and live visual QA gap are closed or explicitly accepted.
+
+XcodeGen follow-up, 2026-07-09 16:34 PDT:
+
+- Ryan asked to push Xcode project state to this branch.
+- Ran `git fetch origin`, `xcodegen generate`, and regenerated `Wander.xcodeproj/project.pbxproj`.
+- Verification after regeneration:
+  - `git diff --check` passed.
+  - Elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/recme-recxx-xcodegen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 237 tests, 0 failures.
