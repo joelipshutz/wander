@@ -516,6 +516,150 @@ struct PlaceAttributeDraft: Equatable {
     }
 }
 
+struct VisitAttributeAnswer: Codable, Equatable {
+    let questionKey: String
+    let valueType: String
+    let value: JSONValue
+
+    enum CodingKeys: String, CodingKey {
+        case questionKey = "question_key"
+        case valueType = "value_type"
+        case value
+    }
+}
+
+enum VisitAttributeAnswers {
+    static func encoded(from attributes: [PlaceAttributeDraft]) -> String {
+        let answers = attributes.map { attribute in
+            VisitAttributeAnswer(
+                questionKey: attribute.questionKey,
+                valueType: attribute.valueType,
+                value: decodedJSONValue(attribute.valueJSON)
+            )
+        }
+
+        guard let data = try? JSONEncoder().encode(answers),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+
+        return encoded
+    }
+
+    static func tags(from attributes: [PlaceAttributeDraft]) -> [String] {
+        normalizedTags(
+            attributes
+                .filter { $0.valueType == "multi_tag" }
+                .flatMap { stringValues(from: $0.valueJSON) }
+        )
+    }
+
+    static func tags(fromAttributeAnswersJSON attributeAnswersJSON: String) -> [String] {
+        guard let data = attributeAnswersJSON.data(using: .utf8),
+              let answers = try? JSONDecoder().decode([VisitAttributeAnswer].self, from: data)
+        else {
+            return []
+        }
+
+        return normalizedTags(
+            answers
+                .filter { $0.valueType == "multi_tag" }
+                .flatMap { answer -> [String] in
+                    guard case .array(let values) = answer.value else { return [] }
+                    return values.compactMap { value in
+                        guard case .string(let string) = value else { return nil }
+                        return string
+                    }
+                }
+        )
+    }
+
+    private static func decodedJSONValue(_ json: String) -> JSONValue {
+        guard let data = json.data(using: .utf8),
+              let value = try? JSONDecoder().decode(JSONValue.self, from: data)
+        else {
+            return .null
+        }
+
+        return value
+    }
+
+    private static func stringValues(from json: String) -> [String] {
+        guard let data = json.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return []
+        }
+
+        return values
+    }
+
+    private static func normalizedTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+
+        for tag in tags {
+            let value = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !value.isEmpty, !seen.contains(value) else { continue }
+            seen.insert(value)
+            normalized.append(value)
+        }
+
+        return normalized.sorted()
+    }
+}
+
+struct PlaceVisitDraft: Equatable {
+    let id: String?
+    let userPlaceID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswersJSON: String
+    let backfilledFromUserPlace: Bool
+}
+
+struct PlaceVisitResult: Equatable {
+    let visitID: String
+    let userPlaceID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let tags: [String]
+    let backfilledFromUserPlace: Bool
+}
+
+struct VisitPhotoDraft: Equatable {
+    let id: String?
+    let visitID: String
+    let storageBucket: String
+    let storagePath: String
+    let remoteURLString: String?
+    let contentType: String?
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+    let uploadState: VisitPhotoUploadState
+}
+
+struct VisitPhotoResult: Equatable {
+    let photoID: String
+    let visitID: String
+    let storageBucket: String
+    let storagePath: String
+    let remoteURLString: String?
+    let contentType: String?
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+    let uploadState: VisitPhotoUploadState
+}
+
 struct SaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
@@ -669,6 +813,17 @@ protocol UserPlaceRepository {
 @MainActor
 protocol SocialPlaceSaveRepository {
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult
+}
+
+@MainActor
+protocol VisitRepository {
+    func visits(for userPlaceID: String) async throws -> [PlaceVisitResult]
+    func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult
+    func deleteVisit(visitID: String) async throws
+    func photos(for visitID: String) async throws -> [VisitPhotoResult]
+    func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL
+    func deletePhoto(photoID: String, bucket: String, path: String) async throws
 }
 
 @MainActor

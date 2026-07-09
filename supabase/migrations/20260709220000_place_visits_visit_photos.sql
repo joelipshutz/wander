@@ -242,6 +242,16 @@ begin
     return new;
   end if;
 
+  if exists (
+    select 1
+    from public.place_visits pv
+    where pv.user_place_id = new.id
+      and not pv.backfilled_from_user_place
+      and pv.deleted_at is null
+  ) then
+    return new;
+  end if;
+
   insert into public.place_visits (
     user_place_id,
     visited_at,
@@ -296,7 +306,14 @@ begin
   set attribute_answers = app.user_place_attribute_answers(affected_user_place_id),
       updated_at = now()
   where user_place_id = affected_user_place_id
-    and backfilled_from_user_place;
+    and backfilled_from_user_place
+    and not exists (
+      select 1
+      from public.place_visits explicit_visit
+      where explicit_visit.user_place_id = affected_user_place_id
+        and not explicit_visit.backfilled_from_user_place
+        and explicit_visit.deleted_at is null
+    );
 
   if tg_op = 'DELETE' then
     return old;

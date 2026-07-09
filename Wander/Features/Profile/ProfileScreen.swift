@@ -1242,6 +1242,7 @@ private struct SavedPlacesListScreen: View {
 
     @MainActor
     private func saveProfileFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
             let result = await store.saveCandidate(
@@ -1254,11 +1255,19 @@ private struct SavedPlacesListScreen: View {
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
+            )
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
             return result
         case .edit(let visiblePlace):
+            let explicitVisit = createExplicitVisitIfNeeded(for: submission, store: store)
             let result = await store.saveCandidate(
                 submission.candidate,
                 status: submission.status,
@@ -1268,6 +1277,13 @@ private struct SavedPlacesListScreen: View {
                 ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            let targetVisit = explicitVisit ?? (submission.status == .been ? store.visits(for: result.userPlaceID).first : nil)
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)

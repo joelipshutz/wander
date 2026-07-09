@@ -914,6 +914,7 @@ struct MapScreen: View {
 
     @MainActor
     private func saveMapFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
@@ -932,6 +933,13 @@ struct MapScreen: View {
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
+            )
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
             selectSavedResult(result)
@@ -944,6 +952,7 @@ struct MapScreen: View {
 
             return result
         case .edit(let visiblePlace):
+            let explicitVisit = createExplicitVisitIfNeeded(for: submission, store: store)
             let result = await store.saveCandidate(
                 submission.candidate,
                 status: submission.status,
@@ -953,6 +962,13 @@ struct MapScreen: View {
                 ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            let targetVisit = explicitVisit ?? (submission.status == .been ? store.visits(for: result.userPlaceID).first : nil)
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             selectedSearchCandidateID = nil
             selectSavedResult(result)
@@ -2440,6 +2456,139 @@ struct MapPlaceSaveSubmission {
     let ratingScore: Double?
     let note: String?
     let attributes: [PlaceAttributeDraft]
+    let photoAttachments: [MapPlaceSavePhotoAttachment]
+}
+
+struct MapPlaceSavePhotoAttachment: Identifiable {
+    let id: UUID
+    let image: UIImage
+    let data: Data
+    let contentType: String
+    let localAssetRef: String?
+
+    var width: Int? {
+        image.cgImage?.width
+    }
+
+    var height: Int? {
+        image.cgImage?.height
+    }
+
+    static func make(
+        image: UIImage,
+        data: Data? = nil,
+        contentType: String = "image/jpeg",
+        fallbackAssetRef: String? = nil
+    ) -> MapPlaceSavePhotoAttachment? {
+        guard let payload = data ?? image.jpegData(compressionQuality: 0.86) else {
+            return nil
+        }
+
+        let id = UUID()
+        let fileRef = VisitPhotoLocalFileStore.save(data: payload, id: id, contentType: contentType)
+        return MapPlaceSavePhotoAttachment(
+            id: id,
+            image: image,
+            data: payload,
+            contentType: contentType,
+            localAssetRef: fileRef ?? fallbackAssetRef
+        )
+    }
+}
+
+enum VisitPhotoLocalFileStore {
+    private static let prefix = "local_file:"
+    private static let directoryName = "VisitPhotos"
+
+    static func save(data: Data, id: UUID, contentType: String) -> String? {
+        guard let directory = directoryURL() else { return nil }
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            let filename = "\(id.uuidString.lowercased()).\(fileExtension(for: contentType))"
+            try data.write(to: directory.appendingPathComponent(filename), options: [.atomic])
+            return "\(prefix)\(filename)"
+        } catch {
+            return nil
+        }
+    }
+
+    static func image(from localAssetRef: String?) -> UIImage? {
+        guard let filename = filename(from: localAssetRef),
+              let directory = directoryURL()
+        else {
+            return nil
+        }
+
+        return UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
+    }
+
+    private static func filename(from localAssetRef: String?) -> String? {
+        guard let localAssetRef,
+              localAssetRef.hasPrefix(prefix)
+        else {
+            return nil
+        }
+
+        return String(localAssetRef.dropFirst(prefix.count))
+    }
+
+    private static func directoryURL() -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    private static func fileExtension(for contentType: String) -> String {
+        switch contentType.lowercased() {
+        case "image/png":
+            "png"
+        case "image/heic", "image/heif":
+            "heic"
+        default:
+            "jpg"
+        }
+    }
+}
+
+@MainActor
+func createExplicitVisitIfNeeded(
+    for submission: MapPlaceSaveSubmission,
+    store: WanderStore
+) -> LocalPlaceVisit? {
+    guard case .edit(let visiblePlace) = submission.context.mode,
+          submission.status == .been
+    else {
+        return nil
+    }
+
+    return store.createVisit(
+        userPlaceID: visiblePlace.userPlace.id,
+        note: submission.note,
+        ratingScore: submission.ratingScore,
+        attributes: submission.attributes
+    )
+}
+
+@MainActor
+func persistVisitPhotoAttachments(
+    _ attachments: [MapPlaceSavePhotoAttachment],
+    to visit: LocalPlaceVisit?,
+    store: WanderStore,
+    backend: WanderBackend?
+) async {
+    guard let visit, !attachments.isEmpty else { return }
+
+    for attachment in attachments {
+        _ = await store.createVisitPhoto(
+            visitID: visit.id,
+            data: attachment.data,
+            localAssetRef: attachment.localAssetRef,
+            contentType: attachment.contentType,
+            width: attachment.width,
+            height: attachment.height,
+            backend: backend
+        )
+    }
 }
 
 private enum MapPlaceSaveStep {
@@ -2473,7 +2622,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isSaving = false
     @State private var isRemoving = false
     @State private var isShowingRemoveConfirmation = false
-    @State private var editVisitPhotos: [UIImage] = []
+    @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var errorMessage: String?
 
     init(
@@ -2718,12 +2867,10 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
 
-            if context.isEditing {
-                MapSaveVisitPhotoSection(
-                    canAddPhotos: selectedStatus == .been,
-                    photos: $editVisitPhotos
-                )
-            }
+            MapSaveVisitPhotoSection(
+                canAddPhotos: selectedStatus == .been,
+                photos: $visitPhotoAttachments
+            )
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("a note for future you")
@@ -3128,7 +3275,8 @@ struct MapPlaceSaveFlowSheet: View {
             visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
-            attributes: attributeDrafts()
+            attributes: attributeDrafts(),
+            photoAttachments: visitPhotoAttachments
         )
 
         Task {
@@ -3170,7 +3318,7 @@ struct MapPlaceSaveFlowSheet: View {
 
 private struct MapSaveVisitPhotoSection: View {
     let canAddPhotos: Bool
-    @Binding var photos: [UIImage]
+    @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -3197,9 +3345,9 @@ private struct MapSaveVisitPhotoSection: View {
             if !photos.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(Array(photos.enumerated()), id: \.offset) { index, image in
+                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, attachment in
                             ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
+                                Image(uiImage: attachment.image)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 82, height: 82)
@@ -3273,7 +3421,9 @@ private struct MapSaveVisitPhotoSection: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                photos.append(image)
+                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                    photos.append(attachment)
+                }
                 isShowingPhotoMenu = false
             }
             .ignoresSafeArea()
@@ -3293,7 +3443,7 @@ private struct MapSaveVisitPhotoSection: View {
     }
 
     private func importPhotos(from items: [PhotosPickerItem]) async {
-        var imported: [UIImage] = []
+        var imported: [MapPlaceSavePhotoAttachment] = []
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
@@ -3301,7 +3451,14 @@ private struct MapSaveVisitPhotoSection: View {
                 else {
                     continue
                 }
-                imported.append(image)
+                let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    data: data,
+                    fallbackAssetRef: assetRef
+                ) {
+                    imported.append(attachment)
+                }
             } catch {
                 await MainActor.run {
                     photoError = "Could not use one of those photos."
@@ -4831,9 +4988,10 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
 
 struct PlaceActivityEntry: Identifiable {
     let summary: PlaceSaveSummary
+    let visit: LocalPlaceVisit?
     let currentUserID: String
 
-    var id: String { summary.id }
+    var id: String { visit?.id ?? summary.id }
 
     var owner: LocalProfile {
         summary.visiblePlace.owner
@@ -4852,7 +5010,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var timestamp: Date {
-        userPlace.visitedAt ?? userPlace.updatedAt
+        visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.updatedAt
     }
 
     var timestampText: String {
@@ -4863,22 +5021,26 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var note: String? {
-        let trimmed = userPlace.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = (visit?.note ?? userPlace.note)?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     var ratingText: String? {
-        guard userPlace.status == .been, let ratingScore = userPlace.ratingScore else {
+        guard userPlace.status == .been, let ratingScore = visit?.ratingScore ?? userPlace.ratingScore else {
             return nil
         }
         return "\(PlaceRating.display(ratingScore))/5"
     }
 
     var canAddPhotos: Bool {
-        isCurrentUser && userPlace.status == .been
+        isCurrentUser && userPlace.status == .been && visit != nil
     }
 
     var tags: [String] {
+        if let visit, !visit.tags.isEmpty {
+            return uniqueTags(visit.tags)
+        }
+
         var seen = Set<String>()
         return summary.attributes
             .flatMap(PlaceProfileTagParser.tags(from:))
@@ -4893,26 +5055,41 @@ struct PlaceActivityEntry: Identifiable {
         if isCurrentUser { return WanderTheme.terracotta.color }
         return owner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
     }
+
+    private func uniqueTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.compactMap { tag in
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let normalized = trimmed.lowercased()
+            guard !seen.contains(normalized) else { return nil }
+            seen.insert(normalized)
+            return trimmed
+        }
+    }
 }
 
 struct PlaceActivityPhoto: Identifiable {
-    let id = UUID()
+    let metadata: LocalVisitPhoto
     let entryID: String
-    let image: UIImage
-    let createdAt = Date()
+
+    var id: String { metadata.id }
+    var localImage: UIImage? { VisitPhotoLocalFileStore.image(from: metadata.localAssetRef) }
+    var remoteURL: URL? { metadata.remoteURLString.flatMap { URL(string: $0) } }
+    var uploadState: VisitPhotoUploadState { metadata.uploadState }
 }
 
 private struct PlaceActivityPhotoViewerRoute: Identifiable {
-    let photoID: UUID
+    let photoID: String
 
-    var id: UUID { photoID }
+    var id: String { photoID }
 }
 
 struct PlaceActivitySection: View {
+    @EnvironmentObject private var store: WanderStore
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     @State private var filter: PlaceActivityFilter = .all
-    @State private var photos: [PlaceActivityPhoto] = []
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
 
     var body: some View {
@@ -4932,13 +5109,7 @@ struct PlaceActivitySection: View {
                     ForEach(filteredEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,
-                            photos: Binding(
-                                get: { photos.filter { $0.entryID == entry.id } },
-                                set: { nextPhotos in
-                                    photos.removeAll { $0.entryID == entry.id }
-                                    photos.append(contentsOf: nextPhotos)
-                                }
-                            ),
+                            photos: photos(for: entry),
                             onOpenPhoto: { photo in
                                 viewerRoute = PlaceActivityPhotoViewerRoute(photoID: photo.id)
                             }
@@ -4949,7 +5120,7 @@ struct PlaceActivitySection: View {
         }
         .fullScreenCover(item: $viewerRoute) { route in
             PlaceActivityPhotoViewer(
-                photos: $photos,
+                photos: allPhotos,
                 initialPhotoID: route.photoID,
                 entriesByID: entriesByID
             )
@@ -4958,7 +5129,16 @@ struct PlaceActivitySection: View {
 
     private var entries: [PlaceActivityEntry] {
         saves
-            .map { PlaceActivityEntry(summary: $0, currentUserID: currentUserID) }
+            .flatMap { summary -> [PlaceActivityEntry] in
+                let visits = store.visits(for: summary.visiblePlace.userPlace.id)
+                if summary.visiblePlace.userPlace.status == .been, !visits.isEmpty {
+                    return visits.map { visit in
+                        PlaceActivityEntry(summary: summary, visit: visit, currentUserID: currentUserID)
+                    }
+                }
+
+                return [PlaceActivityEntry(summary: summary, visit: nil, currentUserID: currentUserID)]
+            }
             .sorted { lhs, rhs in
                 if lhs.timestamp != rhs.timestamp {
                     return lhs.timestamp > rhs.timestamp
@@ -4981,6 +5161,17 @@ struct PlaceActivitySection: View {
 
     private var entriesByID: [String: PlaceActivityEntry] {
         Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+    }
+
+    private var allPhotos: [PlaceActivityPhoto] {
+        entries.flatMap(photos(for:))
+    }
+
+    private func photos(for entry: PlaceActivityEntry) -> [PlaceActivityPhoto] {
+        guard let visit = entry.visit else { return [] }
+        return store.photos(for: visit.id).map { photo in
+            PlaceActivityPhoto(metadata: photo, entryID: entry.id)
+        }
     }
 
     private var emptyStateText: String {
@@ -5047,8 +5238,11 @@ private struct PlaceActivityEmptyState: View {
 }
 
 private struct PlaceActivityCard: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let entry: PlaceActivityEntry
-    @Binding var photos: [PlaceActivityPhoto]
+    let photos: [PlaceActivityPhoto]
     let onOpenPhoto: (PlaceActivityPhoto) -> Void
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
@@ -5100,7 +5294,11 @@ private struct PlaceActivityCard: View {
         )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                addPhoto(image)
+                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                    Task {
+                        await addPhoto(attachment)
+                    }
+                }
             }
             .ignoresSafeArea()
         }
@@ -5145,11 +5343,7 @@ private struct PlaceActivityCard: View {
                         Button {
                             onOpenPhoto(photo)
                         } label: {
-                            Image(uiImage: photo.image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 76, height: 76)
-                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
                     }
@@ -5190,15 +5384,22 @@ private struct PlaceActivityCard: View {
         }
     }
 
-    @MainActor
-    private func addPhoto(_ image: UIImage) {
+    private func addPhoto(_ attachment: MapPlaceSavePhotoAttachment) async {
+        guard let visit = entry.visit else { return }
         photoError = nil
         isShowingPhotoMenu = false
-        photos.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+        _ = await store.createVisitPhoto(
+            visitID: visit.id,
+            data: attachment.data,
+            localAssetRef: attachment.localAssetRef,
+            contentType: attachment.contentType,
+            width: attachment.width,
+            height: attachment.height,
+            backend: auth.isSignedIn ? backend : nil
+        )
     }
 
     private func importPhotos(from items: [PhotosPickerItem]) async {
-        var imported: [PlaceActivityPhoto] = []
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
@@ -5206,7 +5407,14 @@ private struct PlaceActivityCard: View {
                 else {
                     continue
                 }
-                imported.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+                let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    data: data,
+                    fallbackAssetRef: assetRef
+                ) {
+                    await addPhoto(attachment)
+                }
             } catch {
                 await MainActor.run {
                     photoError = "Could not use one of those photos."
@@ -5215,24 +5423,79 @@ private struct PlaceActivityCard: View {
         }
 
         await MainActor.run {
-            photos.append(contentsOf: imported)
             selectedPhotoItems = []
         }
     }
 }
 
+private struct VisitPhotoThumbnail: View {
+    let photo: PlaceActivityPhoto
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            if let image = photo.localImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let remoteURL = photo.remoteURL {
+                AsyncImage(url: remoteURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        placeholder(systemImage: "exclamationmark.triangle.fill")
+                    case .empty:
+                        placeholder(systemImage: "arrow.triangle.2.circlepath")
+                    @unknown default:
+                        placeholder(systemImage: "photo")
+                    }
+                }
+            } else {
+                placeholder(systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo")
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(alignment: .bottomTrailing) {
+            if photo.uploadState != .uploaded {
+                Image(systemName: photo.uploadState == .failed ? "exclamationmark.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(photo.uploadState == .failed ? WanderTheme.stateError.color : WanderTheme.pinSocial.color)
+                    .padding(4)
+                    .background(WanderTheme.surfaceRaised.color, in: Circle())
+                    .padding(5)
+            }
+        }
+    }
+
+    private func placeholder(systemImage: String) -> some View {
+        ZStack {
+            WanderTheme.surfaceSand.color
+            Image(systemName: systemImage)
+                .font(.system(size: max(18, size * 0.28), weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+    }
+}
+
 private struct PlaceActivityPhotoViewer: View {
-    @Binding var photos: [PlaceActivityPhoto]
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let photos: [PlaceActivityPhoto]
     let entriesByID: [String: PlaceActivityEntry]
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedPhotoID: UUID
+    @State private var selectedPhotoID: String
 
     init(
-        photos: Binding<[PlaceActivityPhoto]>,
-        initialPhotoID: UUID,
+        photos: [PlaceActivityPhoto],
+        initialPhotoID: String,
         entriesByID: [String: PlaceActivityEntry]
     ) {
-        _photos = photos
+        self.photos = photos
         self.entriesByID = entriesByID
         _selectedPhotoID = State(initialValue: initialPhotoID)
     }
@@ -5254,9 +5517,7 @@ private struct PlaceActivityPhotoViewer: View {
 
                 TabView(selection: $selectedPhotoID) {
                     ForEach(photos) { photo in
-                        Image(uiImage: photo.image)
-                            .resizable()
-                            .scaledToFit()
+                        VisitPhotoFullScreenImage(photo: photo)
                             .tag(photo.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(.horizontal, WanderTheme.spacing2)
@@ -5308,12 +5569,55 @@ private struct PlaceActivityPhotoViewer: View {
 
     private func deleteSelectedPhoto() {
         guard let selectedPhoto else { return }
-        photos.removeAll { $0.id == selectedPhoto.id }
-        if let nextPhoto = photos.first {
-            selectedPhotoID = nextPhoto.id
-        } else {
-            dismiss()
+        Task {
+            _ = await store.deleteVisitPhoto(
+                photoID: selectedPhoto.id,
+                backend: auth.isSignedIn ? backend : nil
+            )
         }
+    }
+}
+
+private struct VisitPhotoFullScreenImage: View {
+    let photo: PlaceActivityPhoto
+
+    var body: some View {
+        if let image = photo.localImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+        } else if let remoteURL = photo.remoteURL {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    fullScreenPlaceholder(systemImage: "exclamationmark.triangle.fill", title: "Photo unavailable")
+                case .empty:
+                    fullScreenPlaceholder(systemImage: "arrow.triangle.2.circlepath", title: "Loading photo")
+                @unknown default:
+                    fullScreenPlaceholder(systemImage: "photo", title: "Photo")
+                }
+            }
+        } else {
+            fullScreenPlaceholder(
+                systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo",
+                title: photo.uploadState == .failed ? "Upload failed" : "Waiting to upload"
+            )
+        }
+    }
+
+    private func fullScreenPlaceholder(systemImage: String, title: String) -> some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .black))
+            Text(title)
+                .font(.system(size: 15, weight: .black))
+        }
+        .foregroundStyle(.white.opacity(0.76))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

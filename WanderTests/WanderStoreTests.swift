@@ -723,6 +723,251 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags"])
     }
 
+    func testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_visit_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "window table",
+            sourceType: .manual,
+            ratingScore: 5,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
+            ]
+        )
+
+        let visit = firstStore.visits(for: result.userPlaceID).first
+        XCTAssertEqual(firstStore.visits(for: result.userPlaceID).count, 1)
+        XCTAssertEqual(visit?.note, "window table")
+        XCTAssertEqual(visit?.ratingScore, 5)
+        XCTAssertEqual(visit?.tags, ["quiet", "wifi solid"])
+        XCTAssertEqual(visit?.backfilledFromUserPlace, true)
+
+        let photo = firstStore.createVisitPhoto(
+            visitID: visit?.id ?? "",
+            localAssetRef: "ph://asset-1",
+            remoteURLString: "https://storage.example/visit-photos/user_live/photo.jpg",
+            contentType: "image/jpeg",
+            byteSize: 42_000,
+            width: 1200,
+            height: 900
+        )
+        XCTAssertEqual(photo?.uploadState, .uploaded)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let restoredVisit = relaunchedStore.visits(for: result.userPlaceID).first
+        let restoredPhoto = restoredVisit.flatMap { relaunchedStore.photos(for: $0.id).first }
+
+        XCTAssertEqual(restoredVisit?.ratingScore, 5)
+        XCTAssertEqual(restoredVisit?.tags, ["quiet", "wifi solid"])
+        XCTAssertEqual(restoredPhoto?.localAssetRef, "ph://asset-1")
+        XCTAssertEqual(restoredPhoto?.remoteURLString, "https://storage.example/visit-photos/user_live/photo.jpg")
+        XCTAssertEqual(restoredPhoto?.byteSize, 42_000)
+        XCTAssertEqual(restoredPhoto?.width, 1200)
+        XCTAssertEqual(restoredPhoto?.height, 900)
+    }
+
+    func testMultipleVisitsAverageRatingsAndIgnoreUnratedVisits() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_multi_visit",
+                name: "Multiple Visit Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+
+        XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "second visit", ratingScore: 5))
+        XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "unrated visit", ratingScore: nil))
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        XCTAssertEqual(store.visits(for: result.userPlaceID).count, 3)
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4.5)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, 4.5)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 2)
+    }
+
+    func testBackfilledVisitDoesNotMutateAfterExplicitVisitExists() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_backfill_stable",
+            name: "Backfill Stable Cafe",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        let result = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 3,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"])
+            ]
+        )
+        XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "second visit", ratingScore: 5))
+
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "latest parent note",
+            sourceType: .manual,
+            ratingScore: 2,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["loud"])
+            ]
+        )
+
+        let visits = store.visits(for: result.userPlaceID)
+        let backfilled = visits.first { $0.backfilledFromUserPlace }
+        let explicit = visits.first { !$0.backfilledFromUserPlace }
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+
+        XCTAssertEqual(visits.count, 2)
+        XCTAssertEqual(backfilled?.note, "first visit")
+        XCTAssertEqual(backfilled?.ratingScore, 3)
+        XCTAssertEqual(backfilled?.tags, ["quiet"])
+        XCTAssertEqual(explicit?.note, "second visit")
+        XCTAssertEqual(explicit?.ratingScore, 5)
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 2)
+    }
+
+    func testStatusTransitionToWannaDeletesVisitsAndClearsRatingSummary() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_status_visit",
+            name: "Status Visit Cafe",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        let result = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "been here",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        XCTAssertEqual(store.visits(for: result.userPlaceID).count, 1)
+
+        let updated = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "want later",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == updated.userPlaceID }
+        XCTAssertEqual(saved?.userPlace.status, .wannaGo)
+        XCTAssertNil(saved?.userPlace.ratingScore)
+        XCTAssertNil(saved?.userPlace.recommendedScore)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 0)
+        XCTAssertTrue(store.visits(for: updated.userPlaceID).isEmpty)
+    }
+
+    func testOldSnapshotWithoutVisitsBackfillsExistingBeenSaves() throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_old_snapshot",
+                name: "Old Snapshot Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "legacy save",
+            sourceType: .manual,
+            ratingScore: 4,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"])
+            ]
+        )
+
+        let encoder = JSONEncoder()
+        let snapshotData = try encoder.encode(WanderStoreSnapshot(store: firstStore))
+        var snapshotObject = try XCTUnwrap(JSONSerialization.jsonObject(with: snapshotData) as? [String: Any])
+        snapshotObject.removeValue(forKey: "placeVisits")
+        snapshotObject.removeValue(forKey: "visitPhotos")
+        let oldSnapshotData = try JSONSerialization.data(withJSONObject: snapshotObject, options: [.prettyPrinted, .sortedKeys])
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true, attributes: nil)
+        try oldSnapshotData.write(to: fixture.directory.appendingPathComponent("store.json"), options: [.atomic])
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let restoredVisit = relaunchedStore.visits(for: result.userPlaceID).first
+
+        XCTAssertEqual(relaunchedStore.visits(for: result.userPlaceID).count, 1)
+        XCTAssertEqual(restoredVisit?.backfilledFromUserPlace, true)
+        XCTAssertEqual(restoredVisit?.note, "legacy save")
+        XCTAssertEqual(restoredVisit?.ratingScore, 4)
+        XCTAssertEqual(restoredVisit?.tags, ["quiet"])
+    }
+
+    func testDeletingOnlyVisitUnsavesPlaceWithoutWannaFallback() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_delete_visit",
+                name: "Delete Visit Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "only visit",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = store.visits(for: result.userPlaceID).first
+
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.status, .been)
+        XCTAssertTrue(store.deleteVisit(visitID: visit?.id ?? ""))
+
+        XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+    }
+
     func testFilePersistenceRestoresPrivateProfileModeAfterRelaunch() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -1740,6 +1985,112 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.ratingScore, 4)
         XCTAssertEqual(saved?.userPlace.syncState, .synced)
         XCTAssertEqual(store.attributes(for: "up_remote_maru").map(\.questionKey), ["coffee_tags"])
+    }
+
+    func testSyncPendingVisitsSyncsParentThenExplicitVisit() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: "up_remote_maru", syncState: .synced, placeID: "place_remote_maru"))
+        let visitRepository = FakeVisitRepository(
+            visitsByUserPlaceID: [
+                "up_remote_maru": [
+                    PlaceVisitResult(
+                        visitID: "visit_backfill_remote",
+                        userPlaceID: "up_remote_maru",
+                        visitedAt: Date(timeIntervalSince1970: 10),
+                        note: "first visit",
+                        ratingScore: 4,
+                        tags: [],
+                        backfilledFromUserPlace: true
+                    )
+                ]
+            ]
+        )
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository, visitRepository: visitRepository)
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_visit_sync",
+                name: "Visit Sync Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let explicitVisit = store.createVisit(userPlaceID: result.userPlaceID, note: "second visit", ratingScore: 5)
+
+        let syncedCount = await store.syncPendingVisits(backend: backend)
+
+        XCTAssertEqual(syncedCount, 2)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
+        XCTAssertEqual(visitRepository.visitRequests, ["up_remote_maru"])
+        XCTAssertEqual(visitRepository.upsertedVisitDrafts.count, 1)
+        XCTAssertEqual(visitRepository.upsertedVisitDrafts[0].userPlaceID, "up_remote_maru")
+        XCTAssertEqual(visitRepository.upsertedVisitDrafts[0].note, "second visit")
+        XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.backfilledFromUserPlace }?.serverID, "visit_backfill_remote")
+        XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.id == explicitVisit?.id || $0.localID == explicitVisit?.localID }?.syncState, .synced)
+    }
+
+    func testVisitPhotoUploadCreatesMetadataBeforeUploadAndMarksUploaded() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: "up_remote_maru", syncState: .synced, placeID: "place_remote_maru"))
+        let visitRepository = FakeVisitRepository(
+            visitsByUserPlaceID: [
+                "up_remote_maru": [
+                    PlaceVisitResult(
+                        visitID: "visit_backfill_remote",
+                        userPlaceID: "up_remote_maru",
+                        visitedAt: Date(timeIntervalSince1970: 10),
+                        note: "first visit",
+                        ratingScore: 4,
+                        tags: [],
+                        backfilledFromUserPlace: true
+                    )
+                ]
+            ]
+        )
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository, visitRepository: visitRepository)
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_sync",
+                name: "Photo Sync Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let explicitVisit = store.createVisit(userPlaceID: result.userPlaceID, note: "photo visit", ratingScore: 5)
+        _ = await store.syncPendingVisits(backend: backend)
+        let photo = store.createVisitPhoto(
+            visitID: explicitVisit?.id ?? "",
+            localAssetRef: "ph://asset-1",
+            contentType: "image/jpeg",
+            byteSize: 10_000,
+            width: 1200,
+            height: 900
+        )
+
+        let uploadedPhoto = await store.uploadVisitPhoto(photoID: photo?.id ?? "", data: Data([0xFF, 0xD8, 0xFF]), backend: backend)
+
+        XCTAssertEqual(uploadedPhoto?.uploadState, .uploaded)
+        XCTAssertEqual(uploadedPhoto?.syncState, .synced)
+        XCTAssertEqual(visitRepository.photoEvents, ["metadata:pending_upload", "upload", "metadata:uploaded"])
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.map(\.uploadState), [.pendingUpload, .uploaded])
+        XCTAssertEqual(visitRepository.uploads.first?.bucket, "visit-photos")
+        XCTAssertTrue(visitRepository.uploads.first?.path.contains("/\(uploadedPhoto?.serverID ?? "")") == true)
+        XCTAssertEqual(uploadedPhoto?.remoteURLString?.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/"), true)
     }
 
     func testRemoteOwnPlaceSaveRefreshesVisiblePlaceCache() async {
@@ -2766,6 +3117,109 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
 
     func delete(userPlaceID: String) async throws {
         deletedUserPlaceIDs.append(userPlaceID)
+        if let error {
+            throw error
+        }
+    }
+}
+
+@MainActor
+private final class FakeVisitRepository: VisitRepository {
+    struct Upload: Equatable {
+        let bucket: String
+        let path: String
+        let data: Data
+        let contentType: String
+    }
+
+    private let visitsByUserPlaceID: [String: [PlaceVisitResult]]
+    private let error: Error?
+    private(set) var visitRequests: [String] = []
+    private(set) var upsertedVisitDrafts: [PlaceVisitDraft] = []
+    private(set) var deletedVisitIDs: [String] = []
+    private(set) var photoRequests: [String] = []
+    private(set) var upsertedPhotoDrafts: [VisitPhotoDraft] = []
+    private(set) var uploads: [Upload] = []
+    private(set) var deletedPhotos: [(photoID: String, bucket: String, path: String)] = []
+    private(set) var photoEvents: [String] = []
+
+    init(visitsByUserPlaceID: [String: [PlaceVisitResult]] = [:], error: Error? = nil) {
+        self.visitsByUserPlaceID = visitsByUserPlaceID
+        self.error = error
+    }
+
+    func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
+        visitRequests.append(userPlaceID)
+        if let error {
+            throw error
+        }
+        return visitsByUserPlaceID[userPlaceID] ?? []
+    }
+
+    func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult {
+        upsertedVisitDrafts.append(draft)
+        if let error {
+            throw error
+        }
+        return PlaceVisitResult(
+            visitID: draft.id ?? "visit_remote_\(upsertedVisitDrafts.count)",
+            userPlaceID: draft.userPlaceID,
+            visitedAt: draft.visitedAt,
+            note: draft.note,
+            ratingScore: draft.ratingScore,
+            tags: VisitAttributeAnswers.tags(fromAttributeAnswersJSON: draft.attributeAnswersJSON),
+            backfilledFromUserPlace: draft.backfilledFromUserPlace
+        )
+    }
+
+    func deleteVisit(visitID: String) async throws {
+        deletedVisitIDs.append(visitID)
+        if let error {
+            throw error
+        }
+    }
+
+    func photos(for visitID: String) async throws -> [VisitPhotoResult] {
+        photoRequests.append(visitID)
+        if let error {
+            throw error
+        }
+        return []
+    }
+
+    func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
+        upsertedPhotoDrafts.append(draft)
+        photoEvents.append("metadata:\(draft.uploadState.rawValue)")
+        if let error {
+            throw error
+        }
+        return VisitPhotoResult(
+            photoID: draft.id ?? "photo_remote_\(upsertedPhotoDrafts.count)",
+            visitID: draft.visitID,
+            storageBucket: draft.storageBucket,
+            storagePath: draft.storagePath,
+            remoteURLString: draft.remoteURLString,
+            contentType: draft.contentType,
+            byteSize: draft.byteSize,
+            width: draft.width,
+            height: draft.height,
+            capturedAt: draft.capturedAt,
+            sortOrder: draft.sortOrder,
+            uploadState: draft.uploadState
+        )
+    }
+
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+        photoEvents.append("upload")
+        uploads.append(Upload(bucket: bucket, path: path, data: data, contentType: contentType))
+        if let error {
+            throw error
+        }
+        return URL(string: "https://example.supabase.co/storage/v1/object/public/\(bucket)/\(path)?v=test")!
+    }
+
+    func deletePhoto(photoID: String, bucket: String, path: String) async throws {
+        deletedPhotos.append((photoID: photoID, bucket: bucket, path: path))
         if let error {
             throw error
         }

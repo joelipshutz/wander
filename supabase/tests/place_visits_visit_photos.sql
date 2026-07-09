@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(60);
+select plan(61);
 
 select ok(
   exists (
@@ -517,6 +517,24 @@ select is(
   ),
   2,
   'explicit visits can coexist with the synced backfilled visit'
+);
+
+update public.user_places
+set note = 'parent changed after explicit visit',
+    rating_score = 1
+where id = '20000000-0000-0000-0000-000000000101';
+
+select results_eq(
+  $$
+    select note, rating_score
+    from public.place_visits
+    where user_place_id = '20000000-0000-0000-0000-000000000101'
+      and backfilled_from_user_place
+  $$,
+  $$
+    values ('resurrected first visit'::text, 4.0::numeric)
+  $$,
+  'backfilled visit remains stable after explicit visits exist'
 );
 
 select lives_ok(

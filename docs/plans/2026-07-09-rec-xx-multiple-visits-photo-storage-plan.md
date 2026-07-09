@@ -126,6 +126,7 @@ Then an `AFTER INSERT OR UPDATE` trigger on `user_places` keeps the legacy visit
 - `wanna_go` or deleted save soft-deletes the backfilled visit.
 - Switching back to `been` resurrects the same backfilled visit.
 - `place_attributes` inserts, updates, or deletes resync `attribute_answers` and derived `tags` onto the backfilled visit.
+- Once an explicit non-backfilled active visit exists for the save, parent `user_places` and `place_attributes` updates stop mutating the legacy backfilled row. That row remains the first historical visit while new check-ins append independent rows.
 
 This keeps current app builds compatible because they still write only `user_places`. Future UI can add explicit non-backfilled `place_visits` rows without changing the legacy row contract first.
 
@@ -210,7 +211,7 @@ CODE PATHS                                                   USER FLOWS
   |-- [GAP] update been -> same visit updated                  |-- [GAP] owner can upload/delete own object
   |-- [GAP] wanna/deleted -> visit soft-deleted                `-- [GAP] visible followers can read object
   |-- [GAP] place_attributes -> synced visit answers/tags
-  `-- [GAP] explicit visits do not conflict
+  `-- [GAP] explicit visits freeze legacy backfill sync
 
 [+] RLS visibility                                          [+] Rating display future flow
   |-- [GAP] owner reads own visits/photos                      |-- [GAP] own rating averages visits
@@ -242,6 +243,7 @@ COVERAGE TARGET THIS PR: 27/27 backend paths tested with pgTAP
 | Rating | Required rating blocks photo/tag-only visits | pgTAP insert without rating | `rating_score` remains nullable |
 | Tags | Derived tags drift from structured answers | pgTAP trigger test | Trigger derives normalized tags from `attribute_answers` |
 | Sync | Current app saves do not populate visits | pgTAP trigger test through `user_places` writes | Trigger keeps legacy first visit warm |
+| Sync | New check-ins rewrite the legacy first visit | pgTAP explicit-visit regression | Backfill triggers no-op once an explicit active visit exists |
 | Delete | Last visit leaves a fake `been` save | pgTAP delete fallback test | Parent `user_places` is marked deleted when no active visit remains |
 | Delete | Switching `been` to `wanna_go` accidentally unsaves the parent | pgTAP status transition test | Parent-trigger soft-delete of backfilled visit does not run the last-visit delete fallback |
 

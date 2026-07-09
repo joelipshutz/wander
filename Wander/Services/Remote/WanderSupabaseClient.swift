@@ -56,6 +56,50 @@ protocol RemoteStorageCalling {
 }
 
 @MainActor
+protocol RemoteTableCalling {
+    func select<Value: Decodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        decoder: JSONDecoder
+    ) async throws -> Value
+    func upsert<Value: Decodable, Body: Encodable>(
+        table: String,
+        body: Body,
+        onConflict: String?,
+        decoder: JSONDecoder
+    ) async throws -> Value
+    func update<Value: Decodable, Body: Encodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        body: Body,
+        decoder: JSONDecoder
+    ) async throws -> Value
+    func delete(table: String, queryItems: [URLQueryItem]) async throws
+}
+
+extension RemoteTableCalling {
+    func select<Value: Decodable>(table: String, queryItems: [URLQueryItem]) async throws -> Value {
+        try await select(table: table, queryItems: queryItems, decoder: RemoteDecoding.decoder)
+    }
+
+    func upsert<Value: Decodable, Body: Encodable>(
+        table: String,
+        body: Body,
+        onConflict: String? = nil
+    ) async throws -> Value {
+        try await upsert(table: table, body: body, onConflict: onConflict, decoder: RemoteDecoding.decoder)
+    }
+
+    func update<Value: Decodable, Body: Encodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        body: Body
+    ) async throws -> Value {
+        try await update(table: table, queryItems: queryItems, body: body, decoder: RemoteDecoding.decoder)
+    }
+}
+
+@MainActor
 protocol RemoteUserPlaceDeleting {
     func deleteUserPlace(userPlaceID: String) async throws
 }
@@ -68,8 +112,16 @@ enum RemoteDecoding {
     }()
 }
 
+enum RemoteEncoding {
+    static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+}
+
 @MainActor
-final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteUserPlaceDeleting {
+final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteTableCalling, RemoteUserPlaceDeleting {
     let configuration: WanderBackendConfiguration
     private let authSession: AuthSessionProviding
     private let urlSession: URLSession
@@ -279,6 +331,141 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         } catch {
             #if DEBUG
             WanderDebugLog.remote.error("function decode failed name=\(name, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
+            #endif
+            throw error
+        }
+    }
+
+    func select<Value: Decodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        decoder: JSONDecoder = RemoteDecoding.decoder
+    ) async throws -> Value {
+        var request = try await tableRequest(table: table, queryItems: queryItems)
+        request.httpMethod = "GET"
+        return try await performTableRequest(request, table: table, decoder: decoder)
+    }
+
+    func upsert<Value: Decodable, Body: Encodable>(
+        table: String,
+        body: Body,
+        onConflict: String? = nil,
+        decoder: JSONDecoder = RemoteDecoding.decoder
+    ) async throws -> Value {
+        var queryItems: [URLQueryItem] = []
+        if let onConflict {
+            queryItems.append(URLQueryItem(name: "on_conflict", value: onConflict))
+        }
+
+        var request = try await tableRequest(table: table, queryItems: queryItems)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("resolution=merge-duplicates,return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try RemoteEncoding.encoder.encode(body)
+        return try await performTableRequest(request, table: table, decoder: decoder)
+    }
+
+    func update<Value: Decodable, Body: Encodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        body: Body,
+        decoder: JSONDecoder = RemoteDecoding.decoder
+    ) async throws -> Value {
+        var request = try await tableRequest(table: table, queryItems: queryItems)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = try RemoteEncoding.encoder.encode(body)
+        return try await performTableRequest(request, table: table, decoder: decoder)
+    }
+
+    func delete(table: String, queryItems: [URLQueryItem]) async throws {
+        var request = try await tableRequest(table: table, queryItems: queryItems)
+        request.httpMethod = "DELETE"
+        request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        let _: EmptyRPCResponse = try await performTableRequest(request, table: table, decoder: RemoteDecoding.decoder)
+    }
+
+    private func tableRequest(table: String, queryItems: [URLQueryItem]) async throws -> URLRequest {
+        guard let supabaseURL = self.configuration.supabaseURL else {
+            #if DEBUG
+            WanderDebugLog.remote.error("table request skipped table=\(table, privacy: .public) reason=missing_supabase_url")
+            #endif
+            throw WanderRemoteError.notConfigured
+        }
+
+        var components = URLComponents(
+            url: supabaseURL
+                .appendingPathComponent("rest")
+                .appendingPathComponent("v1")
+                .appendingPathComponent(table),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = queryItems.isEmpty ? nil : queryItems
+
+        guard let endpoint = components?.url else {
+            throw WanderRemoteError.invalidResponse("Invalid table URL for \(table)")
+        }
+
+        let headers = try await authenticatedHeaders()
+        var request = URLRequest(url: endpoint)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        return request
+    }
+
+    private func performTableRequest<Value: Decodable>(
+        _ request: URLRequest,
+        table: String,
+        decoder: JSONDecoder
+    ) async throws -> Value {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await self.urlSession.data(for: request)
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("table transport failed table=\(table, privacy: .public) method=\(request.httpMethod ?? "unknown", privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
+            #endif
+            throw error
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            #if DEBUG
+            WanderDebugLog.remote.error("table invalid response table=\(table, privacy: .public) reason=missing_http_response")
+            #endif
+            throw WanderRemoteError.invalidResponse("Missing HTTP response for table \(table)")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            #if DEBUG
+            WanderDebugLog.remote.error("table failed table=\(table, privacy: .public) method=\(request.httpMethod ?? "unknown", privacy: .public) status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            #endif
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw WanderRemoteError.notAuthenticated
+            }
+            throw WanderRemoteError.invalidResponse("Table \(table) failed with \(httpResponse.statusCode): \(body)")
+        }
+
+        if Value.self == EmptyRPCResponse.self {
+            return EmptyRPCResponse() as! Value
+        }
+
+        guard !data.isEmpty else {
+            #if DEBUG
+            WanderDebugLog.remote.error("table invalid response table=\(table, privacy: .public) reason=empty_data")
+            #endif
+            throw WanderRemoteError.invalidResponse("Table \(table) returned no data")
+        }
+
+        do {
+            return try decoder.decode(Value.self, from: data)
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("table decode failed table=\(table, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
             #endif
             throw error
         }

@@ -9293,3 +9293,64 @@ Follow-up outcome, 2026-07-09 15:26 PDT:
 - Verification: `git diff --check` passed; `supabase/tests/place_visits_visit_photos.sql` declares 60 assertions and has 60 assertion calls.
 - pgTAP was not rerun in this environment because earlier Supabase CLI attempts could not reach a local/linked test database. Draft PR remains the right status until `supabase test db supabase/tests/place_visits_visit_photos.sql` passes in a Docker/local-Supabase-capable environment.
 - No hosted Supabase migration was applied.
+
+## 2026-07-09 15:30 PDT - Codex - REC-XX Visits/Photos App Wiring
+
+Agent: Codex
+Branch: `codex/rec-xx-visits-storage`
+Worktree: `/private/tmp/recme-rec-xx-visits-storage`
+PR: #67 draft
+
+Goal: continue the visit/photo branch beyond backend schema by implementing local persisted visit/photo metadata models and snapshots, repository/sync behavior with offline/pending states, production save/check-in and Latest Activity UI wiring to real visits/photos, then run iOS QA/design review and push the branch for Xcode testing.
+
+Starting status:
+
+- Ran `git fetch origin`, `git status --short --branch`, `git worktree list`, and reviewed recent `docs/agent-log.md`.
+- Worktree is clean on `codex/rec-xx-visits-storage`, four commits ahead of `origin/main`.
+- Existing separate worktrees are present, but none are on this branch. Root checkout remains separate on stale `codex/profile-pictures`.
+- `/ios-qa` and `/ios-design-review` skills were selected for the final QA/design phase because the requested step 4 explicitly asks for iOS QA/design review; their instructions were read before implementation.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Models/*`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Services/*Repository*` or existing sync/provider files
+- `Wander/Features/Add/*`
+- `Wander/Features/Map/*`
+- `Wander/Features/Profile/*`
+- `WanderTests/*`
+- Possibly `project.yml` / `Wander.xcodeproj/project.pbxproj` only if new source files require project generation.
+
+Coordination notes:
+
+- `Wander/Services/WanderLocalStore.swift` and `docs/agent-log.md` are high-conflict files; this isolated worktree prevents local overlap, but the final diff should be inspected carefully before push.
+- No hosted Supabase migration should be applied during this app-wiring pass unless explicitly requested.
+
+Checkpoint, 2026-07-09 16:08 PDT:
+
+- Implemented local persisted visit/photo metadata models, snapshot persistence, legacy `.been` save backfill, visit-based rating aggregation, and local mutation APIs.
+- Implemented repository/sync contracts for visit CRUD and visit photo metadata/storage upload/delete, including pending/offline sync states.
+- Focused iOS tests passed on `iPhone 17, OS 26.5` with temp derived data:
+  - `WanderTests/WanderStoreTests/testSyncUnsyncedOwnPlacesSkipsSocialSavesAndTerminalRows`
+  - `WanderTests/WanderStoreTests/testSyncPendingVisitsSyncsParentThenExplicitVisit`
+  - `WanderTests/WanderStoreTests/testVisitPhotoUploadCreatesMetadataBeforeUploadAndMarksUploaded`
+  - `WanderTests/RemoteRepositoryTests/testVisitRepositoryUpsertsVisitViaPostgRESTTable`
+  - `WanderTests/RemoteRepositoryTests/testVisitRepositoryUploadsAndDeletesVisitPhotoStorage`
+- Earlier local persistence tests also passed as part of the focused `WanderStoreTests` run on `iPhone 17, OS 26.5`.
+- Next: wire production check-in/save UI and Latest Activity/photo carousel to persisted visits/photos.
+
+Checkpoint, 2026-07-09 16:28 PDT:
+
+- Wired production save/check-in flows in Map, Discover, Profile, and Add so `.been` submissions create persisted visit rows, new check-ins append explicit visits instead of rewriting the legacy backfilled row, and imported/captured photos persist as visit photo metadata before upload.
+- Wired Latest Activity cards and the full-screen carousel to stored visit photos, including local-file thumbnails, remote URLs, upload pending state, and user-owned photo deletion.
+- Updated the Supabase backfill trigger and pgTAP coverage so once an explicit active visit exists, parent `user_places` / `place_attributes` writes no longer mutate the legacy backfilled first visit.
+- Verification:
+  - `git diff --check` passed.
+  - Focused UI/sync regression tests passed on `iPhone 17, OS 26.5`: `testBackfilledVisitDoesNotMutateAfterExplicitVisitExists`, `testMultipleVisitsAverageRatingsAndIgnoreUnratedVisits`, `testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata`, `testVisitPhotoUploadCreatesMetadataBeforeUploadAndMarksUploaded`, and `testVisitRepositoryUploadsAndDeletesVisitPhotoStorage`.
+  - Full elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/recme-recxx-dd-focused CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 237 tests, 0 failures.
+- iOS QA/design review status:
+  - `/ios-qa` and `/ios-design-review` require a debug-only `DebugBridge` / `StateServer` installed in the app and a running `gstack-ios-qa-daemon`.
+  - `xcrun devicectl list devices` with approval found `Ry’s iPhone` connected, but this checkout has no `DebugBridge`, `StateServer`, or `DebugOverlay` wiring.
+  - I did not add QA instrumentation to this production feature branch at the end of the pass. Live-device visual QA remains blocked until the debug bridge is installed intentionally, ideally in a separate instrumentation pass or with explicit approval.
+- pgTAP was still not rerun because the local/linked Supabase test database was unavailable earlier in this environment. The branch remains draft-worthy until `supabase test db supabase/tests/place_visits_visit_photos.sql` passes in a Docker/local-Supabase-capable environment.

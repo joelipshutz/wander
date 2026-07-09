@@ -433,6 +433,7 @@ struct DiscoverScreen: View {
 
     @MainActor
     private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
@@ -447,8 +448,16 @@ struct DiscoverScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: sourceType,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             await refreshPlaces()
             await refreshMembers()
@@ -458,14 +467,23 @@ struct DiscoverScreen: View {
             }
             return result
         case .edit(let visiblePlace):
+            let explicitVisit = createExplicitVisitIfNeeded(for: submission, store: store)
             let result = await store.saveCandidate(
                 submission.candidate,
                 status: submission.status,
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            let targetVisit = explicitVisit ?? (submission.status == .been ? store.visits(for: result.userPlaceID).first : nil)
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             await refreshPlaces()
             await refreshMembers()
