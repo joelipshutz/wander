@@ -55,6 +55,10 @@ create table if not exists public.notification_events (
   skip_reason text,
   not_before timestamptz not null default now(),
   claimed_at timestamptz,
+  claim_expires_at timestamptz,
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  max_attempts integer not null default 5 check (max_attempts between 1 and 20),
+  last_attempted_at timestamptz,
   delivered_at timestamptz,
   failed_at timestamptz,
   error_message text,
@@ -73,6 +77,10 @@ create index if not exists notification_events_recipient_created_idx
 create index if not exists notification_events_pending_idx
   on public.notification_events(status, not_before, created_at)
   where status = 'pending';
+
+create index if not exists notification_events_claim_expiry_idx
+  on public.notification_events(status, claim_expires_at, created_at)
+  where status = 'claimed';
 
 create unique index if not exists notification_events_pending_dedupe_idx
   on public.notification_events(dedupe_key)
@@ -780,11 +788,30 @@ declare
   bounded_limit integer := least(greatest(coalesce(input_limit, 10), 1), 100);
   output_payload jsonb;
 begin
-  with claimed as (
+  with exhausted_claims as (
+    update public.notification_events event
+    set status = 'failed',
+        failed_at = now(),
+        claim_expires_at = null,
+        error_message = coalesce(nullif(event.error_message, ''), 'push_claim_expired_max_attempts')
+    where event.status = 'claimed'
+      and event.claim_expires_at is not null
+      and event.claim_expires_at <= now()
+      and event.attempt_count >= event.max_attempts
+    returning event.id
+  ),
+  claimable as (
     select event.id
     from public.notification_events event
-    where event.status = 'pending'
-      and event.not_before <= now()
+    where (
+        (event.status = 'pending' and event.not_before <= now())
+        or (
+          event.status = 'claimed'
+          and event.claim_expires_at is not null
+          and event.claim_expires_at <= now()
+        )
+      )
+      and event.attempt_count < event.max_attempts
       and exists (
         select 1
         from public.notification_device_tokens token
@@ -798,9 +825,12 @@ begin
   updated as (
     update public.notification_events event
     set status = 'claimed',
-        claimed_at = now()
-    from claimed
-    where event.id = claimed.id
+        claimed_at = now(),
+        claim_expires_at = now() + interval '10 minutes',
+        attempt_count = event.attempt_count + 1,
+        last_attempted_at = now()
+    from claimable
+    where event.id = claimable.id
     returning event.*
   )
   select coalesce(
@@ -814,6 +844,9 @@ begin
         'body', updated.body,
         'deeplink_url', updated.deeplink_url,
         'data', updated.data,
+        'attempt_count', updated.attempt_count,
+        'max_attempts', updated.max_attempts,
+        'claim_expires_at', updated.claim_expires_at,
         'tokens', coalesce(
           (
             select jsonb_agg(
@@ -855,23 +888,60 @@ $$;
 create or replace function app.mark_push_notification_result(
   input_event_id uuid,
   input_status text,
-  input_error_message text default null
+  input_error_message text default null,
+  input_retryable boolean default false
 )
 returns void
 language plpgsql
 security definer
 set search_path = public, app
 as $$
+declare
+  event_row public.notification_events;
+  should_retry boolean;
+  retry_delay_seconds integer;
 begin
   if input_status not in ('sent', 'failed', 'skipped') then
     raise exception 'invalid_push_result_status';
   end if;
 
+  select *
+    into event_row
+  from public.notification_events
+  where id = input_event_id
+    and status = 'claimed'
+  for update;
+
+  if event_row.id is null then
+    return;
+  end if;
+
+  should_retry := input_status = 'failed'
+    and coalesce(input_retryable, false)
+    and event_row.attempt_count < event_row.max_attempts;
+  retry_delay_seconds := least(3600, greatest(30, event_row.attempt_count * 300));
+
   update public.notification_events
-  set status = input_status,
+  set status = case when should_retry then 'pending' else input_status end,
+      not_before = case
+        when should_retry then now() + make_interval(secs => retry_delay_seconds)
+        else not_before
+      end,
+      claimed_at = case when should_retry then null else claimed_at end,
+      claim_expires_at = null,
       delivered_at = case when input_status = 'sent' then now() else delivered_at end,
-      failed_at = case when input_status in ('failed', 'skipped') then now() else failed_at end,
-      error_message = nullif(input_error_message, '')
+      failed_at = case
+        when input_status in ('failed', 'skipped') and not should_retry then now()
+        else failed_at
+      end,
+      skip_reason = case
+        when input_status = 'skipped' then nullif(input_error_message, '')
+        else skip_reason
+      end,
+      error_message = case
+        when input_status = 'sent' then null
+        else nullif(input_error_message, '')
+      end
   where id = input_event_id
     and status = 'claimed';
 end;
@@ -914,14 +984,15 @@ $$;
 create or replace function public.mark_push_notification_result(
   input_event_id uuid,
   input_status text,
-  input_error_message text default null
+  input_error_message text default null,
+  input_retryable boolean default false
 )
 returns void
 language sql
 security definer
 set search_path = app, public
 as $$
-  select app.mark_push_notification_result(input_event_id, input_status, input_error_message);
+  select app.mark_push_notification_result(input_event_id, input_status, input_error_message, input_retryable);
 $$;
 
 comment on table public.notification_preferences is 'Per-user push notification preference buckets. Direct social/list/recommendation/capture notifications default on; discovery digest defaults off.';
@@ -933,7 +1004,7 @@ comment on function public.unregister_push_token(text, text) is 'Authenticated R
 comment on function public.get_notification_preferences() is 'Authenticated RPC returning the current user notification preferences, creating defaults if needed.';
 comment on function public.update_notification_preferences(jsonb) is 'Authenticated RPC for updating the current user notification preference buckets.';
 comment on function public.claim_pending_push_notifications(integer) is 'Service-role RPC used by the push notification worker to claim pending notification events and active APNs tokens.';
-comment on function public.mark_push_notification_result(uuid, text, text) is 'Service-role RPC used by the push notification worker to mark a claimed event sent, failed, or skipped.';
+comment on function public.mark_push_notification_result(uuid, text, text, boolean) is 'Service-role RPC used by the push notification worker to mark a claimed event sent, failed, skipped, or retryable failed.';
 comment on function public.deactivate_push_tokens(uuid[], text) is 'Service-role RPC used by the push notification worker to deactivate APNs tokens rejected permanently by Apple.';
 
 revoke all on public.notification_preferences from anon;
@@ -952,14 +1023,14 @@ revoke all on function app.notify_social_save_insert() from public, anon, authen
 revoke all on function app.notify_place_list_member_active() from public, anon, authenticated;
 revoke all on function app.notify_place_list_item_insert() from public, anon, authenticated;
 revoke all on function app.claim_pending_push_notifications(integer) from public, anon, authenticated;
-revoke all on function app.mark_push_notification_result(uuid, text, text) from public, anon, authenticated;
+revoke all on function app.mark_push_notification_result(uuid, text, text, boolean) from public, anon, authenticated;
 revoke all on function app.deactivate_push_tokens(uuid[], text) from public, anon, authenticated;
 revoke all on function public.get_notification_preferences() from public, anon;
 revoke all on function public.update_notification_preferences(jsonb) from public, anon;
 revoke all on function public.register_push_token(text, text, text) from public, anon;
 revoke all on function public.unregister_push_token(text, text) from public, anon;
 revoke all on function public.claim_pending_push_notifications(integer) from public, anon, authenticated;
-revoke all on function public.mark_push_notification_result(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.mark_push_notification_result(uuid, text, text, boolean) from public, anon, authenticated;
 revoke all on function public.deactivate_push_tokens(uuid[], text) from public, anon, authenticated;
 
 grant execute on function public.get_notification_preferences() to authenticated;
@@ -968,8 +1039,8 @@ grant execute on function public.register_push_token(text, text, text) to authen
 grant execute on function public.unregister_push_token(text, text) to authenticated;
 grant execute on function app.claim_pending_push_notifications(integer) to service_role;
 grant execute on function public.claim_pending_push_notifications(integer) to service_role;
-grant execute on function app.mark_push_notification_result(uuid, text, text) to service_role;
-grant execute on function public.mark_push_notification_result(uuid, text, text) to service_role;
+grant execute on function app.mark_push_notification_result(uuid, text, text, boolean) to service_role;
+grant execute on function public.mark_push_notification_result(uuid, text, text, boolean) to service_role;
 grant execute on function app.deactivate_push_tokens(uuid[], text) to service_role;
 grant execute on function public.deactivate_push_tokens(uuid[], text) to service_role;
 

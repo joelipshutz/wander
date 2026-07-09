@@ -16,6 +16,9 @@ type PushEvent = {
   body: string;
   deeplink_url?: string | null;
   data: Record<string, unknown>;
+  attempt_count?: number;
+  max_attempts?: number;
+  claim_expires_at?: string | null;
   tokens: PushToken[];
 };
 
@@ -30,6 +33,17 @@ type TokenSendResult = {
   tokenId: string;
   status: "sent" | "failed";
   permanentFailure: boolean;
+  error?: string;
+};
+
+type ProcessedEvent = {
+  event_id: string;
+  status: "sent" | "failed" | "skipped" | "retrying";
+  sent_count?: number;
+  failed_count?: number;
+  deactivated_token_count?: number;
+  retryable?: boolean;
+  reason?: string;
   error?: string;
 };
 
@@ -64,13 +78,14 @@ async function handleRequest(req: Request): Promise<Response> {
   );
 
   const config = apnsConfig();
-  const processed = [];
+  const processed: ProcessedEvent[] = [];
   for (const event of events) {
     processed.push(await processEvent(event, config));
   }
 
   return Response.json({
     claimed_count: events.length,
+    summary: processingSummary(processed),
     processed,
   });
 }
@@ -78,7 +93,7 @@ async function handleRequest(req: Request): Promise<Response> {
 async function processEvent(
   event: PushEvent,
   config: APNsConfig | null,
-): Promise<Record<string, unknown>> {
+): Promise<ProcessedEvent> {
   if (event.tokens.length === 0) {
     await markEvent(event.event_id, "skipped", "no_active_tokens");
     return { event_id: event.event_id, status: "skipped", reason: "no_active_tokens" };
@@ -113,19 +128,44 @@ async function processEvent(
       status: "sent",
       sent_count: sentCount,
       failed_count: failedCount,
+      deactivated_token_count: inactiveTokenIds.length,
     };
   }
 
   const error = results.map((result) => result.error).filter(Boolean).join("; ") ||
     "all_tokens_failed";
-  await markEvent(event.event_id, "failed", error);
+  const retryable = results.some((result) => !result.permanentFailure);
+  await markEvent(event.event_id, "failed", error, retryable);
   return {
     event_id: event.event_id,
-    status: "failed",
+    status: retryable ? "retrying" : "failed",
     sent_count: 0,
     failed_count: failedCount,
+    deactivated_token_count: inactiveTokenIds.length,
+    retryable,
     error,
   };
+}
+
+function processingSummary(processed: ProcessedEvent[]): Record<string, number> {
+  return processed.reduce(
+    (summary, event) => {
+      summary[event.status] += 1;
+      summary.sent_tokens += event.sent_count ?? 0;
+      summary.failed_tokens += event.failed_count ?? 0;
+      summary.deactivated_tokens += event.deactivated_token_count ?? 0;
+      return summary;
+    },
+    {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      retrying: 0,
+      sent_tokens: 0,
+      failed_tokens: 0,
+      deactivated_tokens: 0,
+    },
+  );
 }
 
 async function sendToToken(
@@ -192,11 +232,13 @@ async function markEvent(
   eventId: string,
   status: "sent" | "failed" | "skipped",
   errorMessage: string | null,
+  retryable = false,
 ): Promise<void> {
   await serviceRpc<null>("mark_push_notification_result", {
     input_event_id: eventId,
     input_status: status,
     input_error_message: errorMessage,
+    input_retryable: retryable,
   });
 }
 

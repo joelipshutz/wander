@@ -9244,3 +9244,21 @@ Plan:
 - Update the worker response/error handling to expose useful processing metrics.
 - Extend SQL tests to cover retry/attempt behavior.
 - Add a practical notification extension checklist for future triggers.
+
+Hardening checkpoint, 2026-07-09 16:37 PDT:
+
+- Merged latest `origin/main` into `codex/rec-60-notifications` before the hardening edits; conflict resolution preserved main's place-list repository work and REC-60's notification repository wiring.
+- Added push event claim leases, attempt counting, max-attempt terminal failure, retryable failure backoff, and expired-claim reclaiming to `20260701190000_push_notifications.sql`.
+- Updated `push-notification-worker` to return per-run summary counts, distinguish retryable all-token failures as `retrying`, pass retryability into `mark_push_notification_result`, and include token deactivation counts.
+- Extended `supabase/tests/notifications.sql` from 23 to 31 assertions covering attempt increments, claim expiry, reclaiming expired claims, retryable failures, backoff, and retry claims.
+- Added `docs/notifications-platform.md` with the baseline testing checklist and producer checklist for future notification triggers.
+- Validation passed:
+  - `git diff --check`
+  - `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts`
+  - Hosted rollback harness applying the updated migration plus `supabase/tests/notifications.sql` in one transaction: 31/31 assertions passed and rolled back.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-hardening-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Focused notification XCTest run on available local simulator `iPhone 17 Pro, OS 26.5`: `testNotificationRepositoryCallsPreferenceAndTokenRPCs` and `testPushNotificationDeviceTokenHexEncoding` passed.
+- Validation gaps/caveats:
+  - Docker is not installed on this machine, so `supabase test db` and a true local Supabase stack could not run.
+  - `supabase db push --linked --include-all --dry-run --yes` is blocked by remote-only hosted migration `20260709160829`; no migration repair or pull was performed because that would change hosted migration history/workspace state.
+  - REC-60 remains not persistently applied to hosted; hosted validation was rollback-only.

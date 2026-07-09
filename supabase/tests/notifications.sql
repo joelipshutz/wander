@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(23);
+select plan(31);
 
 insert into public.profiles (id, handle, display_name)
 values
@@ -416,6 +416,67 @@ select is(
   (select status from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
   'claimed',
   'claiming marks the event claimed'
+);
+
+select is(
+  (select attempt_count from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  1,
+  'claiming increments the push attempt count'
+);
+
+select ok(
+  (select claim_expires_at is not null from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  'claiming sets a claim expiry lease'
+);
+
+update public.notification_events
+set claim_expires_at = now() - interval '1 minute'
+where recipient_user_id = 'user_capture_owner';
+
+select is(
+  jsonb_array_length(public.claim_pending_push_notifications(10)),
+  1,
+  'expired claimed pushes can be reclaimed'
+);
+
+select is(
+  (select attempt_count from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  2,
+  'reclaiming increments the attempt count again'
+);
+
+select public.mark_push_notification_result(
+  (select id from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  'failed',
+  'temporary_apns_transport_error',
+  true
+);
+
+select is(
+  (select status from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  'pending',
+  'retryable worker failures return the event to pending'
+);
+
+select ok(
+  (select not_before > now() from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  'retryable worker failures apply a backoff window'
+);
+
+update public.notification_events
+set not_before = now()
+where recipient_user_id = 'user_capture_owner';
+
+select is(
+  jsonb_array_length(public.claim_pending_push_notifications(10)),
+  1,
+  'retryable pushes become claimable after backoff'
+);
+
+select is(
+  (select attempt_count from public.notification_events where recipient_user_id = 'user_capture_owner' limit 1),
+  3,
+  'retry claim increments the attempt count'
 );
 
 select public.mark_push_notification_result(
