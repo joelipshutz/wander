@@ -9250,7 +9250,7 @@ Completion, 2026-07-09 16:30 PDT:
   - `docs/qa/2026-07-09-rec-80-rating-editing-test-plan.md`
 - Draft PR: https://github.com/joelipshutz/wander/pull/68
 - Commit: `e779cb754` (`docs: spec rec-80 rating visit editing`)
-- Linear `REC-80` remains `In Progress`; a planning comment will be added with the PR and artifact links.
+- Linear `REC-80` remains `In Progress`; planning comment `bd94e22c-ead9-4300-8aeb-689362c4f5dc` links the PR and artifact paths.
 - `/plan-eng-review` completed as a planning review and logged metadata under `~/.gstack` using the bundled Node runtime because `bun` is not on PATH.
 - `/ios-design-review` could not run live: no `~/.gstack/ios-qa-session.json` cache exists, no `DebugBridge`/`StateServer` wiring was present in this checkout, and sandboxed process inspection was blocked. The plan-stage iOS design critique is included in the review doc.
 - Validation: `git diff --cached --check` passed before commit. No app code changed, so no Xcode build or test command was run.
