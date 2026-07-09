@@ -166,9 +166,13 @@ struct ListsScreen: View {
 
     private func syncLists() {
         Task {
-            _ = await store.syncPendingPlaceLists(backend: backend)
-            await store.refreshRemotePlaceLists(backend: backend)
+            await syncAndRefreshLists()
         }
+    }
+
+    private func syncAndRefreshLists() async {
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        await store.refreshRemotePlaceLists(backend: backend)
     }
 
     private func refreshOpenList(sourceListID: String) {
@@ -205,7 +209,7 @@ struct ListsScreen: View {
         }
         .wanderScreen()
         .task {
-            await store.refreshRemotePlaceLists(backend: backend)
+            await syncAndRefreshLists()
         }
     }
 
@@ -350,6 +354,8 @@ struct ListsScreen: View {
             .filter { !deletedListIDs.contains($0.id) }
 
         guard !storeLists.isEmpty else {
+            guard scenario.usesMockData else { return [] }
+
             switch selectedScope {
             case .mine:
                 return PlaceListMock.mine.filter { !deletedListIDs.contains($0.id) }
@@ -391,6 +397,7 @@ enum ListsScope: String, CaseIterable {
 }
 
 enum ListsScreenScenario: String {
+    case live
     case populated
     case empty
     case friends
@@ -427,14 +434,23 @@ enum ListsScreenScenario: String {
         }
     }
 
+    var usesMockData: Bool {
+        switch self {
+        case .live, .empty:
+            false
+        default:
+            true
+        }
+    }
+
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> ListsScreenScenario {
         guard let flagIndex = arguments.firstIndex(of: "-WanderListsScenario") else {
-            return .populated
+            return .live
         }
 
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return .populated
+            return .live
         }
 
         return ListsScreenScenario(rawValue: arguments[valueIndex]) ?? .populated
@@ -604,6 +620,7 @@ private struct ListDetailScreen: View {
             }
         }
         .task(id: sourceList?.id ?? list.id) {
+            _ = await store.syncPendingPlaceLists(backend: backend)
             await store.refreshRemotePlaceLists(backend: backend)
             await loadSuggestions()
         }

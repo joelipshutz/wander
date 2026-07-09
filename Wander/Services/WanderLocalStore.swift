@@ -644,7 +644,12 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func syncPendingPlaceLists(backend: WanderBackend?) async -> Int {
-        guard let backend else { return 0 }
+        guard let backend else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("place-list sync skipped reason=missing_backend")
+            #endif
+            return 0
+        }
 
         let listIDs = placeLists
             .filter { list in
@@ -652,9 +657,14 @@ final class WanderStore: ObservableObject {
                     && (list.syncState == .pendingCreate
                         || list.syncState == .pendingUpdate
                         || list.syncState == .pendingDelete
-                        || list.syncState == .failed)
+                        || list.syncState == .failed
+                        || shouldBackfillLegacyPlaceList(list))
             }
             .map(\.id)
+
+        #if DEBUG
+        WanderDebugLog.sync.debug("place-list sync candidates count=\(listIDs.count, privacy: .public)")
+        #endif
 
         var syncedCount = 0
         for listID in listIDs {
@@ -663,7 +673,18 @@ final class WanderStore: ObservableObject {
             }
         }
 
+        #if DEBUG
+        WanderDebugLog.sync.debug("place-list sync completed synced_count=\(syncedCount, privacy: .public)")
+        #endif
+
         return syncedCount
+    }
+
+    private func shouldBackfillLegacyPlaceList(_ list: LocalPlaceList) -> Bool {
+        persistence != nil
+            && list.deletedAt == nil
+            && list.syncState != .tombstoned
+            && remoteID(list.serverID ?? list.id) == nil
     }
 
     @discardableResult
@@ -712,6 +733,10 @@ final class WanderStore: ObservableObject {
             visibility: list.visibility
         )
 
+        #if DEBUG
+        WanderDebugLog.sync.debug("place-list sync attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) state=\(list.syncState.rawValue, privacy: .public) has_remote_id=\((draft.id != nil), privacy: .public) collaborator_count=\(collaboratorUserIDs.count, privacy: .public)")
+        #endif
+
         do {
             let remoteListID = try await backend.upsertPlaceList(draft)
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
@@ -731,6 +756,9 @@ final class WanderStore: ObservableObject {
             }
 
             lastRemoteError = nil
+            #if DEBUG
+            WanderDebugLog.sync.debug("place-list sync success local_list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote_list=\(WanderDebugLog.shortID(remoteListID), privacy: .public)")
+            #endif
             persist()
             return true
         } catch {
@@ -738,6 +766,9 @@ final class WanderStore: ObservableObject {
                 placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
             }
             lastRemoteError = remoteErrorMessage(error)
+            #if DEBUG
+            WanderDebugLog.sync.error("place-list sync failed list=\(WanderDebugLog.shortID(previousID), privacy: .public) error=\(WanderDebugLog.clean(self.lastRemoteError ?? String(describing: error)), privacy: .public)")
+            #endif
             persist()
             return false
         }

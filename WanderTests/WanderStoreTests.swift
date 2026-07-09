@@ -2465,6 +2465,66 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.syncState, .synced)
     }
 
+    func testSyncPendingPlaceListsBackfillsPersistentLegacyLocalList() async {
+        let fixture = makeTemporaryPersistence()
+        let joe = LocalProfile(localID: "local_joe", serverID: "user_joe", handle: "joe", displayName: "Joe", syncState: .synced)
+        let ryan = LocalProfile(localID: "local_ryan", serverID: "user_ryan", handle: "ryan", displayName: "Ryan", syncState: .synced)
+        let legacyList = LocalPlaceList(
+            localID: "local_list_la_coffeee",
+            ownerUserID: joe.id,
+            name: "LA Coffeee",
+            description: "coffee spots",
+            visibility: .followers,
+            syncState: .localOnly
+        )
+        let collaborator = LocalPlaceListMember(
+            localID: "local_member_la_coffeee_ryan",
+            listID: legacyList.id,
+            userID: ryan.id,
+            role: .collaborator
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [],
+                userPlaces: [],
+                placeAttributes: [],
+                follows: [],
+                blocks: [],
+                placeLists: [legacyList],
+                placeListMembers: [collaborator],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            ),
+            persistence: fixture.persistence
+        )
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID)
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["LA Coffeee"])
+        XCTAssertNil(repository.upsertedDrafts.first?.id)
+        XCTAssertEqual(repository.collaboratorRequests, [FakePlaceListRepository.CollaboratorRequest(listID: remoteListID, userIDs: ["user_ryan"])])
+        XCTAssertEqual(store.placeLists.first { $0.localID == legacyList.localID }?.serverID, remoteListID)
+        XCTAssertEqual(store.placeLists.first { $0.localID == legacyList.localID }?.syncState, .synced)
+    }
+
+    func testSyncPendingPlaceListsDoesNotBackfillNonPersistentDemoLists() async {
+        let store = makeStore()
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+
+        XCTAssertEqual(syncedCount, 0)
+        XCTAssertTrue(repository.upsertedDrafts.isEmpty)
+        XCTAssertTrue(repository.collaboratorRequests.isEmpty)
+    }
+
     func testCollaboratorCanAddPlaceToSharedList() async {
         let joe = LocalProfile(localID: "local_joe", serverID: "user_joe", handle: "joe", displayName: "Joe", syncState: .synced)
         let ryan = LocalProfile(localID: "local_ryan", serverID: "user_ryan", handle: "ryan", displayName: "Ryan", syncState: .synced)

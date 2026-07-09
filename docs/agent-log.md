@@ -9214,3 +9214,58 @@ Known issues:
 Next:
 
 - Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
+
+## 2026-07-09 14:55 PDT - Codex - REC-81 Collaborator Visibility Investigation
+
+Agent: Codex
+Branch: `codex/rec-81-collab-visibility`
+Worktree: `/private/tmp/recme-rec81-collab`
+Linear: `REC-81` (`Collaborator added to list does not see shared list on TestFlight build 63`)
+
+Goal: investigate why Ryan, on TestFlight build 63, does not see Joe's `LA Coffeee` list after Joe adds him as a collaborator.
+
+Starting status:
+
+- Created/claimed Linear `REC-81` and moved it to In Progress.
+- Fresh worktree created from latest `origin/main` at build 63 (`450b908`).
+- Root checkout remains on stale `codex/rating-score-reset`; REC-81 investigation is isolated in this worktree.
+- Diff from build 61 to build 63 does not include list/collaborator source files, so this is likely a live list sync or identity/backend issue rather than a build-63-specific list regression.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Potentially `Wander/Features/Lists/ListsScreen.swift`
+- Potentially `Wander/Services/WanderLocalStore.swift`
+- Potentially Supabase RPC/migration/test files if the bug is backend-side
+
+Initial investigation plan:
+
+- Trace collaborator save UI into local store mutation and pending sync.
+- Verify server RPC behavior for `set_place_list_collaborators` and `visible_place_lists`.
+- Check whether collaborator IDs from friend/profile data match hosted Supabase profile IDs.
+- Produce a concrete owner/collaborator TestFlight test matrix for Joe and Ryan.
+
+Checkpoint, 2026-07-09 15:30 PDT:
+
+- Hosted Supabase read-only checks found Joe's active profile as `jolipshutz`, Ryan as `ryan_lieblein`, and no hosted `place_lists` rows at all. `LA Coffeee` was not present server-side, so Ryan had no remote list to see on build 63.
+- Applied `plan-eng-review` reasoning to the defect. No product decision was needed; this was a sync/fixture leakage bug.
+- Root cause:
+  - Live Lists defaulted to static mock list data when the store had no real lists, so TestFlight could show fake local lists that had no Supabase `sourceListID`.
+  - Existing persistent local lists without a remote ID and with `localOnly` state were not candidates for list sync.
+  - Signed-in backfill synced places but did not sync/refresh place lists.
+- Fix:
+  - `ListsScreen` now defaults to a live scenario, only uses mock list data for explicit visual QA scenarios, and syncs pending lists before refreshing remote lists on list home/detail entry.
+  - `WanderRootView` now includes place-list sync and refresh in signed-in backfill.
+  - `WanderLocalStore.syncPendingPlaceLists` now backfills persistent legacy local lists with no remote ID, while avoiding uploads from non-persistent demo fixtures. Added debug logs for candidate count, sync attempt, success, and failure.
+  - Added regression coverage for live/default list scenarios and persistent legacy list backfill with collaborator upload.
+- Verification:
+  - Passed focused simulator tests on `iPhone 16 Plus, OS 18.6`:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsBackfillsPersistentLegacyLocalList -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsDoesNotBackfillNonPersistentDemoLists`
+    Result: 11 passed, 0 failed.
+  - A separate generic simulator build was started with a fresh DerivedData path but interrupted while still rebuilding third-party Swift packages; it did not reach app source or expose an app compile failure. The focused test run already built the app and test target successfully.
+
+Known issues / next:
+
+- Build 63 remains broken for this flow. The fix needs a new build.
+- If Joe's visible `LA Coffeee` was only static mock data, there is no real local list to upload. If it exists in persistent local storage, opening the fixed build signed in should backfill it to Supabase, then Ryan should see it under Collabs after refresh/relaunch.
+- Need decide whether to push/open a PR and then package a new TestFlight build.
