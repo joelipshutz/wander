@@ -8940,6 +8940,40 @@ Merge validation checkpoint, 2026-07-09 10:35 PDT:
   - `xcresulttool` summary for `/private/tmp/DerivedData-rec70-71-merge-build/Logs/Test/Test-Wander-2026.07.09_10-33-10--0700.xcresult`: 227 tests passed, 0 failed, 0 skipped.
 - Land step: squash-applied `codex/rec-70-rec-71-activity` onto clean `main` worktree `/private/tmp/recme-rec-75-v1-defaults` at `origin/main` (`881744441`).
 
+Release completion, 2026-07-09 11:37 PDT:
+
+- Squash-merged the REC-70/REC-71 activity work onto `main` as `1952f92b7` (`feat: add REC-70 REC-71 activity UI`).
+- Bumped `CURRENT_PROJECT_VERSION` from `62` to `63` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, kept the generated project diff scoped to the two build-number settings, committed `3a0d9c31b` (`chore: bump TestFlight build 63`), and pushed `main`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build63-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full test suite passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build63-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result from `/private/tmp/DerivedData-build63-build/Logs/Test/Test-Wander-2026.07.09_10-48-31--0700.xcresult`: 227 passed, 0 failed, 0 skipped.
+- Archived build `0.1 (63)` at `/private/tmp/Wander-0.1-build63.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build63.xcarchive -derivedDataPath /private/tmp/DerivedData-build63-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `63`.
+- Export options: `/private/tmp/WanderExportUpload63.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Uploaded build `0.1 (63)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build63.xcarchive -exportPath /private/tmp/WanderTestFlightUpload63 -exportOptionsPlist /private/tmp/WanderExportUpload63.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 63 --archive-path /private/tmp/Wander-0.1-build63.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build63-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (63)` id `8b87d38f-a601-4362-abb7-6058bbbf7702`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note was attempted for `#testflight-feedback`, but the Slack connector returned HTTP 401 `token_expired` / "Provided authentication token is expired. Please try signing in again." No Slack message was posted.
+- Linear release updates for `REC-70`, `REC-71`, and `REC-79` were attempted, but the Linear connector also returned HTTP 401 `token_expired`. No Linear comments or status changes were posted.
+
+Known issues:
+
+- Multiple visits and visit photos are still local UI/state only in build 63.
+- Durable `place_visits` / `visit_photos` persistence and storage remain tracked separately in `REC-79`.
+- Slack and Linear app connectors need re-authentication before release notes/comments can be posted.
+
+Next:
+
+- After Slack re-auth, post the prepared build 63 tester note to `#testflight-feedback`.
+- After Linear re-auth, add build 63 release comments to `REC-70` and `REC-71`; leave `REC-79` open for durable visits/photos persistence.
+- Test build 63 from TestFlight for quick search saved-state rings, plus-button behavior, collapsed card badges, the three-card rating slab, Latest Activity `ALL` / `MY VISITS`, native Add Photo gating, and photo carousel behavior.
+
 ## 2026-07-08 11:33 PDT - Codex - REC-75 V1 Default Tags And Labels
 
 Agent: Codex
