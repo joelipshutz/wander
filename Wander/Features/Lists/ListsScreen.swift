@@ -265,13 +265,13 @@ struct ListsScreen: View {
                         .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 16, x: 0, y: 8)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("Add places to your list")
+                        Text(emptyStateTitle)
                             .font(.system(size: 40, weight: .black, design: .rounded))
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
                             .foregroundStyle(WanderTheme.textInk.color)
 
-                        Text("Tap the save icon, then choose a list name to start adding places.")
+                        Text(emptyStateSubtitle)
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -298,6 +298,28 @@ struct ListsScreen: View {
             .accessibilityLabel("Create your first list")
 
             emptyHintRow
+        }
+    }
+
+    private var emptyStateTitle: String {
+        switch selectedScope {
+        case .mine:
+            "Make your first list"
+        case .friends:
+            "No friend lists yet"
+        case .collabs:
+            "Make a new list"
+        }
+    }
+
+    private var emptyStateSubtitle: String {
+        switch selectedScope {
+        case .mine:
+            "Create a plan, then add places from map or search."
+        case .friends:
+            "Lists from people you follow will show up here when they share them."
+        case .collabs:
+            "Create a list and add a friend to make it collaborative."
         }
     }
 

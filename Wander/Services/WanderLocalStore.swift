@@ -290,7 +290,8 @@ final class WanderStore: ObservableObject {
             case .friends:
                 return list.ownerUserID != currentUser.id && !isMember(of: list, userID: currentUser.id)
             case .collabs:
-                return list.ownerUserID != currentUser.id && isMember(of: list, userID: currentUser.id)
+                return isCollaborative(list)
+                    && (list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id))
             }
         }
     }
@@ -301,6 +302,12 @@ final class WanderStore: ObservableObject {
 
     func canAddPlaces(to list: LocalPlaceList) -> Bool {
         canManage(list) || isMember(of: list, userID: currentUser.id)
+    }
+
+    private func isCollaborative(_ list: LocalPlaceList) -> Bool {
+        placeListMembers.contains { member in
+            member.listID == list.id && member.deletedAt == nil
+        }
     }
 
     func collaborators(for list: LocalPlaceList) -> [LocalProfile] {

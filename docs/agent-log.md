@@ -9269,3 +9269,22 @@ Known issues / next:
 - Build 63 remains broken for this flow. The fix needs a new build.
 - If Joe's visible `LA Coffeee` was only static mock data, there is no real local list to upload. If it exists in persistent local storage, opening the fixed build signed in should backfill it to Supabase, then Ryan should see it under Collabs after refresh/relaunch.
 - Need decide whether to push/open a PR and then package a new TestFlight build.
+
+Checkpoint, 2026-07-09 15:55 PDT:
+
+- Joe reported creating real `hello` and `test` lists and adding Ryan, but Ryan still does not see them.
+- Re-checked hosted Supabase with service-role read-only REST queries:
+  - Profiles exist for Joe (`jolipshutz`) and Ryan (`ryan_lieblein`).
+  - `place_lists` is still empty.
+  - `place_list_members` is still empty.
+  - `place_list_items` is still empty.
+- Conclusion: the phone action is not successfully calling `upsert_place_list`; there is no server-side list/collaborator link to Ryan.
+- Product correction from Joe: Collabs should mean collaborative lists, including lists owned by the current user after they add a collaborator. Previous store behavior treated Collabs as only other-owned lists where the current user is a collaborator.
+- Applied app fix:
+  - `visiblePlaceLists(scope: .collabs)` now includes owner-created lists with collaborators, and excludes solo owner lists.
+  - Lists empty-state copy now uses scope-specific copy. Collabs says `Make a new list` with helper copy about adding a friend, not `Add places to your list`.
+- Verification:
+  - Passed focused simulator tests on `iPhone 16 Plus, OS 18.6`:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSeededPlaceListsRespectOwnerFriendAndCollabScopes -only-testing:WanderTests/WanderStoreTests/testOwnerCanCreateUpdateAndDeletePlaceListLocally -only-testing:WanderTests/NavigationContractTests`
+    Result: 11 passed, 0 failed.
+- Next debug step if it still fails on device: run from Xcode and check logs for `place-list sync candidates`, `rpc preparing name=upsert_place_list`, `rpc success name=upsert_place_list`, or `auth headers failed` / `rpc failed`.

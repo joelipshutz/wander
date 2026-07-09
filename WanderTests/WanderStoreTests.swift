@@ -2264,7 +2264,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == "list_laptop" })
         XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == "list_maya_sunset" })
         XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_launch" })
-        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_saturday" })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_saturday" })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_laptop" })
     }
 
     func testListSuggestionsExcludeExistingPlaces() {
@@ -2337,6 +2338,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(created.syncState, .pendingCreate)
         XCTAssertEqual(store.collaborators(for: created).map(\.id), ["user_ryan"])
         XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == created.id })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == created.id })
 
         XCTAssertTrue(
             store.updatePlaceList(
