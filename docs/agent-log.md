@@ -8974,6 +8974,16 @@ Next:
 - After Linear re-auth, add build 63 release comments to `REC-70` and `REC-71`; leave `REC-79` open for durable visits/photos persistence.
 - Test build 63 from TestFlight for quick search saved-state rings, plus-button behavior, collapsed card badges, the three-card rating slab, Latest Activity `ALL` / `MY VISITS`, native Add Photo gating, and photo carousel behavior.
 
+Connector follow-up, 2026-07-09 14:47 PDT:
+
+- Slack and Linear connectors were re-authenticated in Codex and responded successfully.
+- Posted the build 63 tester note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783633561942069
+- Added Linear release comments:
+  - `REC-70`: `f8ec8d8f-fdcb-4c8d-9f9a-fccf18d51c9a`
+  - `REC-71`: `9f939d09-e747-4218-918e-bc9bd2c0d70b`
+  - `REC-79`: `154f8f05-bdd6-4bb4-b2c6-ec23ba58f9d6`
+- Moved `REC-70` and `REC-71` to `Done`; left `REC-79` open for durable multiple-visit/photo persistence.
+
 ## 2026-07-08 11:33 PDT - Codex - REC-75 V1 Default Tags And Labels
 
 Agent: Codex
