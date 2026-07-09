@@ -9288,3 +9288,23 @@ Checkpoint, 2026-07-09 15:55 PDT:
     `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSeededPlaceListsRespectOwnerFriendAndCollabScopes -only-testing:WanderTests/WanderStoreTests/testOwnerCanCreateUpdateAndDeletePlaceListLocally -only-testing:WanderTests/NavigationContractTests`
     Result: 11 passed, 0 failed.
 - Next debug step if it still fails on device: run from Xcode and check logs for `place-list sync candidates`, `rpc preparing name=upsert_place_list`, `rpc success name=upsert_place_list`, or `auth headers failed` / `rpc failed`.
+
+Checkpoint, 2026-07-09 16:10 PDT:
+
+- Joe shared device/Xcode logs. The `default.csv` and telemetry lines are unrelated noise; the relevant logs show Clerk/Supabase auth working for profile and map RPCs, but hosted list RPCs failing with `403 permission denied for function upsert_place_list` and `403 permission denied for function visible_place_lists`.
+- Added an idempotent migration to repair authenticated execute grants for the public place-list RPC wrappers and the underlying `app` helper functions they call.
+- Process gap identified: local iOS tests did not catch hosted Supabase role/permission drift. Adding a lightweight hosted Supabase smoke-test harness plus AGENTS instructions so future database/RPC work must validate authenticated backend access, not just compile or local unit behavior.
+
+Checkpoint, 2026-07-09 16:35 PDT:
+
+- Applied hosted Supabase migration `20260709160829_fix_place_list_rpc_grants.sql`; remote migration history confirms local and remote `20260709160829`.
+- Added `scripts/supabase-smoke-test.mjs`, which seeds durable `codex_smoke` profiles/place fixtures, switches to the `authenticated` role with a smoke user claim, exercises the iOS-called place-list RPCs, and rolls back list mutations.
+- Hosted smoke test passed:
+  - `public.visible_place_lists`
+  - `public.upsert_place_list`
+  - `public.place_list_detail`
+  - `public.set_place_list_collaborators`
+  - `public.add_place_list_item`
+  - `public.remove_place_list_item`
+  - `public.delete_place_list`
+- Updated `AGENTS.md` to require `node scripts/supabase-smoke-test.mjs` before handoff for iOS-called Supabase RPC/grant/RLS changes, and to extend the script when coverage is missing.
