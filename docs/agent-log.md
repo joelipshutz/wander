@@ -8408,6 +8408,69 @@ Landing update, 2026-07-02 16:13 PDT:
   - PR comments/reviews scan returned no comments and no reviews.
   - Next: squash-merge PR #61 to `main`, update Linear `REC-30` to `Done`, and do not run a TestFlight release because Ryan did not request one.
 
+## 2026-07-07 11:56 PDT - Codex - REC-70/REC-71 Original-Style Mockups
+
+Agent: Codex
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+Linear: `REC-70`, `REC-71`
+
+Goal: revise the REC-70/REC-71 SwiftUI mockups so they look much closer to the current Wander UI and Ryan's original place-detail screenshot, rather than the earlier concept-board direction.
+
+Starting status:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty on stale `codex/profile-pictures`, so this pass uses an isolated worktree.
+- Previous `/private/tmp/recme-rec-70-71-activity` worktree was prunable, so stale worktree metadata was pruned and this fresh worktree was checked out on `codex/rec-70-rec-71-activity`.
+- Fast-forwarded the branch to latest `origin/main` before editing so the mockups reflect the current app baseline.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceActivityMockups.swift`
+- `Wander/App/WanderApp.swift`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Plan:
+
+- Recreate the mockups as DEBUG-only screens.
+- Match the original place-detail screenshot more closely: large map header, warm sheet, cream circular controls, terracotta directions pill, uppercase section labels, dashed prompts, and white trusted-note-style activity cards.
+- Capture refreshed simulator screenshots for review.
+
+Checkpoint, 2026-07-07 12:14 PDT:
+
+- Added DEBUG-only original-style REC-70/REC-71 SwiftUI mockups in `Wander/Features/Map/PlaceActivityMockups.swift`.
+- Wired the mockups behind the launch argument `-WanderPlaceActivityMockup` before the existing category mockups, without changing production place data/model/backend behavior.
+- Generated the Xcode project, then restored unrelated `Wander.xcodeproj/project.pbxproj` build-setting churn so the project diff only adds the mockup source.
+- Captured iPhone 17 simulator screenshots to `/private/tmp/rec70-71-original-ui-mockups/`:
+  - `quickSearch.png`
+  - `compactCard.png`
+  - `latestActivity.png`
+  - `myVisits.png`
+  - `addVisit.png`
+  - `photoMenu.png`
+  - `photoViewer.png`
+  - `friendView.png`
+- Verified `git diff --check`.
+- Verified build: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-original-ui CODE_SIGNING_ALLOWED=NO -jobs 1`.
+
+Known issues:
+
+- These are visual/design-review mockups only; no persistence, PhotosUI picker, visit model, rating aggregation, social visibility, or saved-card production wiring has been implemented yet.
+- The add-visit form is intentionally scrollable; the first screenshot shows the top of the form and the visibility control starting near the home indicator.
+
+Checkpoint, 2026-07-08 11:18 PDT:
+
+- Ryan approved the closer-to-original visual direction and requested a refinement pass before testing in Xcode.
+- Starting status: branch still has only the prior mockup files changed; root checkout remains dirty on unrelated `codex/profile-pictures`, so work continues in `/private/tmp/recme-rec-70-71-original-ui`.
+- Requested changes:
+  - Green check badge means the current user has a `been` save/check-in.
+  - Dotted green circle badge means the current user has only `wanna`; it changes to the green check as soon as there is a `been` check-in.
+  - Keep only one place-level plus and one photo-level upload affordance.
+  - Use native iOS photo upload action sheet behavior in the mockup.
+  - Full-screen photos page horizontally with right-to-left swipes; bottom note/context updates with the active photo/check-in.
+  - Your rating should be the average of all of the current user's visits; no visits should say `No visits yet`.
+  - Remove the separate `My visits` rating tile, rename trusted rating to `Rec.me rating`, and add fit rating so the rating strip matches the main UI pattern with three cards.
+
 ## 2026-07-02 17:01 PDT - Codex - REC-69 Map Tap Away And Coordinate Save
 
 Agent: Codex
@@ -8684,6 +8747,199 @@ Known issues:
 Next:
 
 - Test build 60 from TestFlight for REC-69 and REC-72 flows: map tap-away/search clearing, long-press dropped-pin coordinate saves, half-step ratings, wanna-go rating clearing, and profile/Discover average ratings.
+
+## 2026-07-08 11:25 PDT - Codex - REC-70/REC-71 Testing Handoff
+
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+
+Outcome:
+
+- Updated the DEBUG-only REC-70/REC-71 SwiftUI mockups with Ryan's latest requested behavior before implementation wiring:
+  - `been` saves/check-ins render a green check badge on the category icon.
+  - `wanna`-only saves render a dotted green circle in the same badge position.
+  - The badge states are mutually exclusive in the mockup data.
+  - Removed the extra activity-section plus button so the page shows one place-level add action and one photo-level upload affordance.
+  - The photo upload action uses native SwiftUI confirmation dialog behavior with Take Photo and Choose from Library actions.
+  - Full-screen photos use a horizontally paged SwiftUI `TabView`; the note/context card is driven by the selected photo/check-in.
+  - `Your rating` averages the current user's visits (`3.5/5 - 3 visits`) and shows `No visits yet` when the viewer has no `been` visits.
+  - Removed the separate my-visits rating card, renamed trusted rating to `Rec.me rating`, and added Fit so the three-card rating slab matches the main place profile pattern.
+- Rebuilt successfully with `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-original-ui CODE_SIGNING_ALLOWED=NO -jobs 1`.
+- Reinstalled the app on simulator `715A24C7-6462-44C7-9CDD-19CA13695109` and captured refreshed iPhone screenshots to `/private/tmp/rec70-71-original-ui-mockups-v3/`.
+
+Known issues:
+
+- This branch is still mockups only. Production persistence, PhotosUI/camera wiring, visit aggregation, social visibility, and saved-card behavior remain implementation follow-up.
+
+Checkpoint, 2026-07-08 17:10 PDT:
+
+- Ryan tested the real app map/search flow and correctly reported that the visible UI had not changed.
+- Root cause: the previous handoff validated the DEBUG `-WanderPlaceActivityMockup` screens, but the production `MapScreen` search/typeahead/card/pin components were not updated.
+- Corrective scope now moves from mockup-only to the production map UI for saved status badges and rating strip behavior.
+- Expected additional files: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `Wander/Models/PlaceProfilePresentation.swift` if the full-screen profile rating section needs the same naming/three-card behavior.
+
+Checkpoint, 2026-07-08 17:21 PDT:
+
+- Implemented production UI fixes:
+  - Real map typeahead saved rows no longer show the misleading trailing green check for every saved result.
+  - Saved rows now badge the category icon with a green check for `been` or a dotted green circle for `wanna_go`.
+  - Real map pins and selected place cards now use the same current-user saved-state category badge.
+  - `PlaceProfilePresenter.ownRating` averages all current-user `been` ratings present in the save summaries instead of taking only the first save.
+  - Trusted/overall rating copy is now `Rec.me rating`, with neutral `rating(s)` subtitles.
+  - Real map sheet and full-screen place profile rating sections now render three cards: `Your rating`, `Rec.me rating`, and `Fit`, with `No visits yet` shown when the current user has no `been` visit/rating.
+- Verification: `git diff --check` passed before build.
+- Verification: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Known issues:
+
+- This pass fixes the production UI surfaces Ryan was testing. It does not yet add the underlying multiple-visit persistence model, real PhotosUI/camera storage, or full-screen production photo carousel because those require data/storage changes beyond the visible UI correction.
+
+Checkpoint, 2026-07-08 19:07 PDT:
+
+- Ryan requested a production correction after testing quicksearch:
+  - Quicksearch saved-state marks should match map-pin ownership rings: `been` circles the whole category icon, `wanna_go` dotted-circles it, using current-user/social ring colors.
+  - The quicksearch blue plus should hide only when that result is already saved as `been` or `wanna_go`; it should not disappear because other people saved it.
+  - Real map icons should not show the small green check/dotted-circle badge on top of the existing ring.
+  - Rating slabs need centered headers/values, uniform numeric sizing, and equal-sized cards.
+  - Continue wiring the previously discussed Latest Activity/visits/photos surfaces where possible.
+- Current implementation constraint: the local model still has one `LocalUserPlace` per user/place, not a durable multi-visit/photo table. The next pass will wire visible activity UI against current save summaries and avoid overstating backend/photo persistence.
+
+Checkpoint, 2026-07-08 19:26 PDT:
+
+- Implemented Ryan's quicksearch/map/rating corrections in production views:
+  - Quicksearch saved results now draw a full category-icon ownership ring instead of a small corner saved badge.
+  - `been` quicksearch results use a solid ring; `wanna_go` results use a dotted ring.
+  - Quicksearch rings use `MapPinSaveOwnership` colors, so current-user saves use the You color and social-only saves use the Social color.
+  - Quicksearch blue `+` remains visible for social-only saved results and hides only when the current user already has that place saved.
+  - Real map pins no longer add the small green check/dotted saved badge on top of their ring.
+  - Full-screen place profile map header annotations no longer show the small saved badge.
+  - Bottom-sheet and full-screen rating slabs now show three equal cards: `Your rating`, `Rec.me rating`, and `Fit`.
+  - Rating card headers/values/subtitles are centered, numeric value sizing is uniform, and `Your rating` uses the same slab dimensions as the other cards.
+  - Any saved/social place now shows the three-card rating slab even without numeric ratings, so `Your rating` can display `No visits yet` instead of disappearing.
+- Added a production `Latest Activity` section on the expanded bottom sheet and full-screen place profile:
+  - Replaces separate `your note` and `friends' notes` blocks.
+  - Has `ALL` and `MY VISITS` toggle states.
+  - Shows timestamped activity cards from current `PlaceSaveSummary` data with status, rating, tags, notes, and owner context.
+  - Shows `No visits yet.` for `MY VISITS` when the current user has no `been` activity.
+  - Adds a native iOS photo action from the current user's activity card with `Take Photo` and `Choose from Library`.
+  - Adds a horizontal thumbnail rail, full-screen paged photo viewer, selected-photo note context, and delete action.
+- Important limitation: activity photos are currently local SwiftUI view state only. They demonstrate and compile the native interaction, but do not persist, sync, or attach to backend/storage yet.
+- Important limitation: true multi-visit persistence is still not implemented. The production activity section is backed by existing one-save-per-user/place summaries, so a durable `place_visits`/`visit_photos` model and save-flow behavior are still required.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed build failed before compiling app code due CoreSimulator/SwiftPM cache permissions, then escalated build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Verification: focused presenter tests passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests`
+  Result: 8 tests passed, 0 failed.
+- Verification after the final rating-slab visibility tweak: escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Checkpoint, 2026-07-08 21:50 PDT:
+
+- Agent/tool: Codex.
+- Goal: move durable multi-visit/photo storage leftovers into Linear, then apply Ryan's REC-71 post-testing UI refinements on branch `codex/rec-70-rec-71-activity`.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing changes in `Wander.xcodeproj/project.pbxproj`, `Wander/App/WanderApp.swift`, `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Models/PlaceProfilePresentation.swift`, `docs/agent-log.md`, and untracked `Wander/Features/Map/PlaceActivityMockups.swift`.
+- Worktree coordination: root checkout `/Users/ryanlieblein/Developer/wander` is on dirty branch `codex/profile-pictures`; continuing in the isolated `/private/tmp/recme-rec-70-71-original-ui` worktree.
+- Linear: created REC-79 `Persist multiple visits and visit photos`, assigned to Ryan, with the recommended prompt sequence and open decisions from Ryan's note.
+- Expected files for this pass: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 22:04 PDT:
+
+- Linear outcome: REC-79 `Persist multiple visits and visit photos` created and assigned to Ryan. It captures the durable `place_visits` / `visit_photos` / storage / sync / backfill work as a separate implementation sequence.
+- Implemented Ryan's REC-71 UI follow-ups on branch `codex/rec-70-rec-71-activity`:
+  - Latest Activity now keeps the `latest activity` header and moves the `ALL` / `MY VISITS` toggle into a full-width pill beneath it.
+  - The toggle now uses the beige unselected state and white selected segment with terracotta trim instead of the black selected segment.
+  - Rating slabs now label the third card `Fit Rating` on both the bottom-sheet and full-screen place profile surfaces.
+  - Quicksearch rows now carry grouped save states so a current-user wanna plus social wanna result can render two dotted ownership rings around the full category icon.
+  - Quicksearch saved category icons now use a black symbol on white background; unsaved category icons now use gray-on-light-gray instead of the prior blue treatment.
+  - Quicksearch `+` is always present and is now a real separate add action that opens the save flow for saved and unsaved suggestions.
+  - Latest Activity photos render below tags and above the add-photo button.
+  - Add Photo is only shown for the current user's `been` activity. Other people's visits can show photos but do not expose add-photo controls, and `wanna_go` activity does not expose add-photo controls.
+  - The Add Photo menu is now a local anchored popover under the Add Photo rectangle with a caret and title `Add photos to your visit.`; camera/library actions still use native iOS pickers.
+  - Full-screen photo deletion is only exposed for photos attached to the current user's activity.
+  - Edit-this-place now has a SwiftUI `photos` section under `my labels` and above `a note for future you`, with horizontal thumbnails, local removal, and the same anchored add-photo affordance when the save is `been`.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` failed before app compilation due CoreSimulator/package-network sandbox restrictions, as expected.
+- Verification: escalated build initially reached app compilation and failed on a Swift 6 actor isolation issue in the PhotosPicker menu label. Fixed by replacing the helper method with `PlaceActivityPhotoMenuRow`.
+- Verification: reran escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1`; build succeeded.
+- Tests: did not run the full test suite in this pass; this was UI wiring/polish and the build now compiles. Prior focused presenter tests remain from the previous checkpoint.
+- Known limitation: activity/edit photos are still local SwiftUI state only. Durable multi-visit rows, persistent visit photo metadata, Supabase storage, sync, and migration/backfill are intentionally tracked in REC-79.
+
+Checkpoint, 2026-07-08 23:30 PDT:
+
+- Agent/tool: Codex.
+- Goal: apply Ryan's second REC-71 visual follow-up on branch `codex/rec-70-rec-71-activity`.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing REC-70/71 edits in map/profile/presentation files and agent log; untracked `Wander/Features/Map/PlaceActivityMockups.swift` remains part of this branch's existing mockup work.
+- Worktree coordination: continuing in isolated `/private/tmp/recme-rec-70-71-original-ui`; root checkout remains separate on dirty branch `codex/profile-pictures`.
+- Requested follow-up: reduce double quicksearch rings so they do not clip, remove saved status badge from collapsed place-card category icon, make Add Photo menu use native iOS popover behavior with title `Add photos to your visit`, and increase rating-card header typography for better cohesion.
+- Expected files for this pass: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 23:37 PDT:
+
+- Implemented Ryan's second REC-71 visual follow-up:
+  - Double quicksearch ownership rings are slightly tighter and thinner so two rings stay inside the quicksearch row while single-ring results keep the prior sizing.
+  - Collapsed place cards now show the plain category icon without the small green check or dotted saved badge.
+  - The Add Photo menu now uses SwiftUI's native popover presentation anchored to the Add Photo button, with title text exactly `Add photos to your visit`.
+  - Rating-card header typography was increased on bottom-sheet and full-screen profile rating slabs to make the three squares feel more cohesive.
+- Verification: `git diff --check` passed.
+- Verification: escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Tests: did not rerun the full test suite for this small visual follow-up.
+
+Checkpoint, 2026-07-08 23:50 PDT:
+
+- Agent/tool: Codex.
+- Goal: correct the prior REC-71 follow-up after Ryan reported the visible app still shows the collapsed-card saved badge, non-native Add Photo behavior, and insufficient rating-header change.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing REC-70/71 edits in map/profile/presentation files and agent log; untracked `Wander/Features/Map/PlaceActivityMockups.swift` remains part of this branch's existing mockup work.
+- Worktree coordination: root checkout remains separate on dirty branch `codex/profile-pictures`; continuing in isolated worktree.
+- Investigation note: `compactContent` still rendered a separate `statusBadge` even though the prior patch removed status from `CategoryThumb`; the Add Photo menu was a custom SwiftUI popover rather than the native iOS action/dialog surface Ryan expected.
+- Expected files for this correction: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 23:57 PDT:
+
+- Corrected the missed visible paths:
+  - Removed the saved-status badge from the collapsed map place card title row.
+  - Removed the saved-status badge from the collapsed full-profile preview card category icon.
+  - Replaced the custom Add Photo popover/menu with native SwiftUI `confirmationDialog` surfaces titled exactly `Add photos to your visit`, while keeping native camera and `PhotosPicker` flows.
+  - Removed the dead custom `PlaceActivityPhotoMenu` and row components so the old menu cannot still render.
+  - Increased rating-card title/header typography and header band height on both the map sheet and full profile rating slabs.
+  - Updated the DEBUG mockup Add Photo dialog title to the same exact copy for consistency.
+- Verification: `rg` confirmed no `PlaceActivityPhotoMenu`, `PlaceActivityPhotoMenuRow`, or `.popover(` remains in the production map/profile files.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed build failed before app compilation due CoreSimulator/SwiftPM cache permissions; escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+## 2026-07-09 10:21 PDT - Codex - REC-70/REC-71 Main + TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+Linear: `REC-70`, `REC-71`, `REC-79`
+
+Goal: Ryan explicitly requested landing the REC-70/REC-71 branch to `main`, packaging a new TestFlight build, and posting the tester-facing Slack update.
+
+Starting status:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains dirty on unrelated branch `codex/profile-pictures`; release work continues in isolated worktrees.
+- REC-70/REC-71 worktree status before staging: branch `codex/rec-70-rec-71-activity`, tracking `origin/main`, behind current `origin/main` by 7 commits, with intended edits in `Wander.xcodeproj/project.pbxproj`, `Wander/App/WanderApp.swift`, `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Models/PlaceProfilePresentation.swift`, `Wander/Features/Map/PlaceActivityMockups.swift`, and `docs/agent-log.md`.
+- Current `origin/main` is already at TestFlight build 62 (`4a15db308` bump, `881744441` release log), so this requested release should bump to build 63 after the REC-70/REC-71 merge lands.
+
+Plan:
+
+- Commit the REC-70/REC-71 branch work.
+- Update the branch from latest `origin/main`, resolve conflicts, inspect the diff, and run build/tests.
+- Land the change to `main`.
+- Bump `CURRENT_PROJECT_VERSION` to 63, regenerate XcodeGen output, build/test, archive/upload, run the TestFlight helper, update `docs/agent-log.md`, and post the required Slack note to `#testflight-feedback`.
+
+Merge validation checkpoint, 2026-07-09 10:35 PDT:
+
+- Committed the REC-70/REC-71 branch snapshot as `938362af4` (`feat: add latest activity visit UI`).
+- Merged current `origin/main` into the branch as `a010b3fb9`; only `docs/agent-log.md` conflicted, and the resolution kept both the REC-70/REC-71 entries and the current main REC-75/build 61/build 62 history.
+- Ran `xcodegen generate` on the merged branch, then discarded unrelated generated Xcode project settings churn so the project diff remains scoped to the REC-70/REC-71 file membership and build-number changes already present.
+- Verification on merged branch:
+  - `git diff --check` passed.
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-merge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec70-71-merge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec70-71-merge-build/Logs/Test/Test-Wander-2026.07.09_10-33-10--0700.xcresult`: 227 tests passed, 0 failed, 0 skipped.
+- Land step: squash-applied `codex/rec-70-rec-71-activity` onto clean `main` worktree `/private/tmp/recme-rec-75-v1-defaults` at `origin/main` (`881744441`).
+
 ## 2026-07-08 11:33 PDT - Codex - REC-75 V1 Default Tags And Labels
 
 Agent: Codex

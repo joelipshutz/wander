@@ -26,16 +26,16 @@ struct PlaceActualRating: Equatable {
         case .own:
             "Your rating"
         case .trusted:
-            "Overall rating"
+            "Rec.me rating"
         }
     }
 
     var subtitle: String {
         switch source {
         case .own:
-            "from your save"
+            count == 1 ? "1 visit" : "\(count) visits"
         case .trusted:
-            count == 1 ? "1 trusted rating" : "\(count) trusted ratings"
+            count == 1 ? "1 rating" : "\(count) ratings"
         }
     }
 }
@@ -105,18 +105,16 @@ enum PlaceProfilePresenter {
         from saves: [PlaceSaveSummary],
         currentUserID: String
     ) -> PlaceActualRating? {
-        if let ownRating = saves
-            .first(where: {
+        let ownScores = saves
+            .filter {
                 $0.visiblePlace.owner.id == currentUserID
                     && $0.visiblePlace.userPlace.status == .been
-            })?
-            .visiblePlace
-            .userPlace
-            .ratingScore {
-            return PlaceActualRating(score: Double(ownRating), count: 1, source: .own)
-        }
+            }
+            .compactMap(\.visiblePlace.userPlace.ratingScore)
 
-        return nil
+        guard !ownScores.isEmpty else { return nil }
+        let average = ownScores.reduce(0, +) / Double(ownScores.count)
+        return PlaceActualRating(score: average, count: ownScores.count, source: .own)
     }
 
     static func overallRating(

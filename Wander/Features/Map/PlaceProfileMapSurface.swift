@@ -284,8 +284,7 @@ private struct PlaceProfileFullView: View {
 
                         whyItFitsSection
                         bestForSection
-                        ownNoteSection
-                        trustedNotesSection
+                        PlaceActivitySection(saves: saves, currentUserID: currentUserID)
                         detailsSection
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -329,29 +328,34 @@ private struct PlaceProfileFullView: View {
 
     @ViewBuilder
     private var ratingSection: some View {
-        if presentation.fitRating != nil || displayRating != nil {
+        if hasRatingSection {
             HStack(spacing: WanderTheme.spacing2) {
-                if let fitRating = presentation.fitRating {
-                    PlaceProfileRatingTile(
-                        value: fitRating.displayScore,
-                        suffix: "/10",
-                        title: "Fit rating",
-                        subtitle: "based on places you like",
-                        systemImage: "sparkles",
-                        tint: WanderTheme.terracotta.color
-                    )
-                }
+                PlaceProfileRatingTile(
+                    value: presentation.ownRating?.displayScore ?? "No visits yet",
+                    suffix: presentation.ownRating == nil ? nil : "/5",
+                    title: "Your rating",
+                    subtitle: presentation.ownRating?.subtitle ?? "0 visits",
+                    systemImage: "star.fill",
+                    tint: WanderTheme.stateWarning.color
+                )
 
-                if let displayRating {
-                    PlaceProfileRatingTile(
-                        value: displayRating.displayScore,
-                        suffix: "/5",
-                        title: displayRating.title,
-                        subtitle: displayRating.subtitle,
-                        systemImage: "star.fill",
-                        tint: WanderTheme.stateWarning.color
-                    )
-                }
+                PlaceProfileRatingTile(
+                    value: presentation.overallRating?.displayScore ?? "No ratings yet",
+                    suffix: presentation.overallRating == nil ? nil : "/5",
+                    title: "Rec.me rating",
+                    subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
+                    systemImage: "person.2.fill",
+                    tint: WanderTheme.pinSocial.color
+                )
+
+                PlaceProfileRatingTile(
+                    value: presentation.fitRating?.displayScore ?? "Not enough yet",
+                    suffix: presentation.fitRating == nil ? nil : "/10",
+                    title: "Fit Rating",
+                    subtitle: presentation.fitRating == nil ? "keep saving" : "based on places you like",
+                    systemImage: "sparkles",
+                    tint: WanderTheme.terracotta.color
+                )
             }
         } else {
             PlaceProfileSubtleCard(
@@ -430,30 +434,6 @@ private struct PlaceProfileFullView: View {
         }
     }
 
-    private var ownNoteSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionLabel("Your note")
-            if let ownSave {
-                PlaceProfileSaveCard(summary: ownSave, currentUserID: currentUserID, emphasis: true)
-            } else {
-                PlaceProfileSubtleCard(text: "Tap + to add your rating, note, tags, and stealth setting.")
-            }
-        }
-    }
-
-    private var trustedNotesSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionLabel("Trusted notes")
-            if trustedSaves.isEmpty {
-                PlaceProfileSubtleCard(text: "No one you follow has a note here.")
-            } else {
-                ForEach(trustedSaves) { save in
-                    PlaceProfileSaveCard(summary: save, currentUserID: currentUserID, emphasis: false)
-                }
-            }
-        }
-    }
-
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             sectionLabel("Place details")
@@ -494,6 +474,10 @@ private struct PlaceProfileFullView: View {
             || presentation.ownRating != nil
             || !displayTags.isEmpty
             || trustedSaves.count >= 2
+    }
+
+    private var hasRatingSection: Bool {
+        !saves.isEmpty || presentation.fitRating != nil || displayRating != nil
     }
 
     private var actionItems: [PlaceExternalAction] {
@@ -721,64 +705,88 @@ private struct PlaceProfileMapFallback: View {
 
 private struct PlaceProfileCategoryThumb: View {
     let category: String
+    var status: PlaceStatus? = nil
     var size: CGFloat
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: category))
-            .font(.system(size: max(17, size * 0.34), weight: .black))
-            .frame(width: size, height: size)
-            .background(WanderTheme.terracottaTint.color)
-            .foregroundStyle(WanderTheme.terracotta.color)
-            .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
-            .overlay(
-                RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2)
-                    .stroke(WanderTheme.surfaceBone.color, lineWidth: size >= 70 ? 0 : 4)
-            )
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: WanderPlaceCategory.symbolName(for: category))
+                .font(.system(size: max(17, size * 0.34), weight: .black))
+                .frame(width: size, height: size)
+                .background(WanderTheme.terracottaTint.color)
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+                .overlay(
+                    RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2)
+                        .stroke(WanderTheme.surfaceBone.color, lineWidth: size >= 70 ? 0 : 4)
+                )
+
+            if let status {
+                SavedStatusBadge(status: status, size: max(20, size * 0.25))
+                    .offset(x: size >= 70 ? 7 : 5, y: size >= 70 ? -7 : -5)
+            }
+        }
     }
 }
 
 private struct PlaceProfileRatingTile: View {
     let value: String
-    let suffix: String
+    let suffix: String?
     let title: String
     let subtitle: String
     let systemImage: String
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        VStack(alignment: .center, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing1) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .black))
+                    .font(.system(size: 14, weight: .black))
                 Text(title)
-                    .font(.system(size: 11, weight: .black))
+                    .font(.system(size: 13, weight: .black))
                     .textCase(.uppercase)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.68)
             }
             .foregroundStyle(WanderTheme.textMuted.color)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 28, weight: .black))
+                    .font(.system(size: valueFontSize, weight: .black))
                     .foregroundStyle(tint)
-                Text(suffix)
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(suffix == nil ? 2 : 1)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.78)
+                if let suffix {
+                    Text(suffix)
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
             }
+            .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
 
             Text(subtitle)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .lineLimit(2)
+                .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
         }
         .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .center)
         .background(WanderTheme.surfaceSand.color)
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+    }
+
+    private var valueFontSize: CGFloat {
+        suffix == nil ? 13 : 24
     }
 }
 
