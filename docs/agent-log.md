@@ -8800,3 +8800,28 @@ Outcome 2026-07-03 03:48 PDT:
 - `git diff --check` passed.
 - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-xcode-sync-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
 - Next: commit and push the Xcode project sync to PR #60.
+
+## 2026-07-09 16:16 PDT - Codex - REC-60 Notification Platform Hardening
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` - Add push notifications for follower and list activity
+Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout is on active `codex/rec-81-collab-visibility` and is not used for REC-60 edits.
+
+Goal: implement the baseline hardening needed before relying broadly on REC-60 notifications: claim expiry/retry, attempt accounting, worker observability, and a concise internal guide for adding new notification producers.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Supabase notification migration/test files
+- `supabase/functions/push-notification-worker/index.ts`
+- Notification docs or implementation notes
+
+Plan:
+
+- Merge current `origin/main` into the REC-60 branch before edits.
+- Add retry-safe claim lifecycle fields and SQL behavior.
+- Update the worker response/error handling to expose useful processing metrics.
+- Extend SQL tests to cover retry/attempt behavior.
+- Add a practical notification extension checklist for future triggers.
