@@ -8882,3 +8882,35 @@ Expected files:
 - `project.yml`
 - `Wander.xcodeproj/project.pbxproj`
 - Temporary release notes/export artifacts outside the repo as needed.
+
+Release completion, 2026-07-09 00:51 PDT:
+
+- PR #65 was squash-merged to `main` with commit `5ee8cb9f1` (`Implement REC-75 v1 default tags and labels`), and the remote PR branch was deleted.
+- Bumped `CURRENT_PROJECT_VERSION` from `61` to `62` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `4a15db308` (`chore: bump TestFlight build 62`), and pushed `main`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build62-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The documented `iPhone 16 Plus, OS 18.6` simulator runtime was not installed in this Xcode environment, so the full suite was run on the available simulator.
+- Full test suite passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build62-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 227 passed, 0 failed, 0 skipped.
+- Archived build `0.1 (62)` at `/private/tmp/Wander-0.1-build62.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build62.xcarchive -derivedDataPath /private/tmp/DerivedData-build62-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `62`.
+- Export options: `/private/tmp/WanderExportUpload62.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Initial sandboxed export attempt failed before upload because Xcode could not load local provisioning profile/CoreSimulator state under sandbox restrictions; retried unsandboxed with the local App Store Connect API key.
+- Uploaded build `0.1 (62)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build62.xcarchive -exportPath /private/tmp/WanderTestFlightUpload62 -exportOptionsPlist /private/tmp/WanderExportUpload62.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 62 --archive-path /private/tmp/Wander-0.1-build62.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build62-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (62)` id `540d3db6-a699-4360-96d2-e85fbd4ba045`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783583260306739
+- Linear `REC-75` was already `Done`; added release comment `4b7280fc-d5e5-4702-9239-c5cfab5d5887`.
+
+Known issues:
+
+- v1 default tag/label suggestions are deterministic and local-only; smarter OpenAI/review/internet-driven suggestions remain deferred to a later REC.
+
+Next:
+
+- Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
