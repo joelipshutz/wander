@@ -9354,3 +9354,12 @@ Checkpoint, 2026-07-09 16:28 PDT:
   - `xcrun devicectl list devices` with approval found `Ry’s iPhone` connected, but this checkout has no `DebugBridge`, `StateServer`, or `DebugOverlay` wiring.
   - I did not add QA instrumentation to this production feature branch at the end of the pass. Live-device visual QA remains blocked until the debug bridge is installed intentionally, ideally in a separate instrumentation pass or with explicit approval.
 - pgTAP was still not rerun because the local/linked Supabase test database was unavailable earlier in this environment. The branch remains draft-worthy until `supabase test db supabase/tests/place_visits_visit_photos.sql` passes in a Docker/local-Supabase-capable environment.
+
+Completion, 2026-07-09 16:34 PDT:
+
+- Implementation commit: `8cd595620` (`Wire visit photo persistence`) on draft PR #67.
+- Ready for Xcode branch testing once pushed: local persistence, repository sync, production save/check-in creation, Latest Activity stored photos, and full-screen stored-photo carousel are wired.
+- Known follow-ups:
+  - Run pgTAP against a working local/linked Supabase test database before applying the migration to hosted Supabase.
+  - Run live-device `/ios-qa` and `/ios-design-review` after intentionally installing debug-only `DebugBridge` / `StateServer` instrumentation.
+  - Keep PR #67 draft until the backend pgTAP gap and live visual QA gap are closed or explicitly accepted.
