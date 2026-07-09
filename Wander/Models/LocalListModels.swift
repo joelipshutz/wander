@@ -26,6 +26,7 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
     var description: String
     var visibilityRaw: String
     var syncStateRaw: String
+    var cachedItemCount: Int?
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
@@ -38,6 +39,7 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
         description: String,
         visibility: PlaceListVisibility = .followers,
         syncState: SyncState = .localOnly,
+        cachedItemCount: Int? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil
@@ -49,6 +51,7 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
         self.description = description
         self.visibilityRaw = visibility.rawValue
         self.syncStateRaw = syncState.rawValue
+        self.cachedItemCount = cachedItemCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

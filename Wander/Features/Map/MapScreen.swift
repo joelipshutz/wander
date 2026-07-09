@@ -1,4 +1,5 @@
 @preconcurrency import MapKit
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -248,7 +249,8 @@ struct MapScreen: View {
                             MapTypeaheadList(
                                 suggestions: typeaheadSuggestions,
                                 isLoading: isLoadingTypeahead,
-                                onSelect: selectTypeaheadSuggestion
+                                onSelect: selectTypeaheadSuggestion,
+                                onAdd: addTypeaheadSuggestion
                             )
                             .padding(.horizontal, WanderTheme.spacing3)
                         } else if let mapSearchMessage {
@@ -1103,7 +1105,13 @@ struct MapScreen: View {
             currentUserID: store.currentUser.id
         )
             .map { group in
-                MapSearchSuggestion.saved(group.primary, saveCount: group.saveCount)
+                let saveStates = group.places.map { visiblePlace in
+                    MapPinSaveState(
+                        ownership: visiblePlace.owner.id == store.currentUser.id ? .currentUser : .social,
+                        status: visiblePlace.userPlace.status
+                    )
+                }
+                return MapSearchSuggestion.saved(group.primary, saveCount: group.saveCount, saveStates: saveStates)
             }
             .prefix(3)
             .map { $0 }
@@ -1135,7 +1143,7 @@ struct MapScreen: View {
         mapSearchMessage = nil
 
         switch suggestion.source {
-        case .saved(let visiblePlace):
+        case .saved(let visiblePlace, _):
             selectVisiblePlace(visiblePlace)
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
@@ -1146,6 +1154,40 @@ struct MapScreen: View {
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
             mapSearchMessage = "Map result. Tap + to add it."
+        }
+    }
+
+    private func addTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        dismissKeyboard()
+        typeaheadTask?.cancel()
+        isLoadingTypeahead = false
+        typeaheadSuggestions = []
+        clearNativeMapFeatureSelection()
+        suppressedTypeaheadQuery = Self.normalized(suggestion.title)
+        mapQuery = suggestion.title
+        mapSearchMessage = nil
+
+        switch suggestion.source {
+        case .saved(let visiblePlace, _):
+            selectVisiblePlace(visiblePlace)
+            selectedSearchCandidateID = nil
+            mapSearchCandidates = []
+            center(on: visiblePlace)
+            mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
+                visiblePlace,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
+            )
+        case .mapKit(let candidate):
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = candidate.id
+            mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
+            center(on: candidate)
+            mapSaveFlow = MapPlaceSaveContext.addCandidate(
+                candidate,
+                sourceType: .manual,
+                defaultVisibility: store.effectiveDefaultVisibility
+            )
         }
     }
 
@@ -1532,7 +1574,7 @@ enum MapFilterSelection {
 
 private struct MapSearchSuggestion: Identifiable {
     enum Source {
-        case saved(VisiblePlace)
+        case saved(VisiblePlace, saveStates: [MapPinSaveState])
         case mapKit(PlaceCandidate)
     }
 
@@ -1542,7 +1584,11 @@ private struct MapSearchSuggestion: Identifiable {
     let category: String
     let source: Source
 
-    static func saved(_ visiblePlace: VisiblePlace, saveCount: Int = 1) -> MapSearchSuggestion {
+    static func saved(
+        _ visiblePlace: VisiblePlace,
+        saveCount: Int = 1,
+        saveStates: [MapPinSaveState]
+    ) -> MapSearchSuggestion {
         let saveLabel: String
         if saveCount > 1 {
             saveLabel = "\(visiblePlace.owner.displayName) + \(saveCount - 1) \(saveCount == 2 ? "other" : "others") saved"
@@ -1566,7 +1612,7 @@ private struct MapSearchSuggestion: Identifiable {
             title: visiblePlace.place.canonicalName,
             subtitle: subtitle.isEmpty ? "saved on Wander" : subtitle,
             category: visiblePlace.effectiveCategory,
-            source: .saved(visiblePlace)
+            source: .saved(visiblePlace, saveStates: saveStates)
         )
     }
 
@@ -1633,16 +1679,20 @@ private struct MapTypeaheadList: View {
     let suggestions: [MapSearchSuggestion]
     let isLoading: Bool
     let onSelect: (MapSearchSuggestion) -> Void
+    let onAdd: (MapSearchSuggestion) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(suggestions) { suggestion in
-                Button {
-                    onSelect(suggestion)
-                } label: {
-                    MapTypeaheadRow(suggestion: suggestion)
-                }
-                .buttonStyle(.plain)
+                MapTypeaheadRow(
+                    suggestion: suggestion,
+                    onSelect: {
+                        onSelect(suggestion)
+                    },
+                    onAdd: {
+                        onAdd(suggestion)
+                    }
+                )
 
                 if suggestion.id != suggestions.last?.id {
                     Divider()
@@ -1678,32 +1728,46 @@ private struct MapTypeaheadList: View {
 
 private struct MapTypeaheadRow: View {
     let suggestion: MapSearchSuggestion
+    let onSelect: () -> Void
+    let onAdd: () -> Void
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: WanderPlaceCategory.symbolName(for: suggestion.category))
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(iconColor)
-                .frame(width: 34, height: 34)
-                .background(iconBackground)
-                .clipShape(Circle())
+            Button(action: onSelect) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: WanderPlaceCategory.symbolName(for: suggestion.category))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 38, height: 38)
+                        .background(iconBackground)
+                        .clipShape(Circle())
+                        .overlay(savedOutlineLayer)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(suggestion.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
-                Text(suggestion.subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(suggestion.title)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(1)
+                        Text(suggestion.subtitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
-            Spacer()
-
-            Image(systemName: isSavedSuggestion ? "checkmark.circle.fill" : "plus.circle.fill")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(isSavedSuggestion ? WanderTheme.stateSuccess.color : WanderTheme.pinSocial.color)
+            Button(action: onAdd) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.pinSocial.color)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 32, height: 38)
+            .accessibilityLabel("Add \(suggestion.title)")
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
@@ -1711,17 +1775,45 @@ private struct MapTypeaheadRow: View {
         .accessibilityLabel("\(suggestion.title), \(suggestion.subtitle)")
     }
 
+    @ViewBuilder
+    private var savedOutlineLayer: some View {
+        ForEach(Array(savedOutlines.indices), id: \.self) { index in
+            Circle()
+                .stroke(
+                    savedOutlines[index].color,
+                    style: StrokeStyle(
+                        lineWidth: savedOutlines.count > 1 ? 2.2 : 3,
+                        lineCap: .round,
+                        dash: savedOutlines[index].dashPattern
+                    )
+                )
+                .padding(typeaheadOutlinePadding(for: index))
+        }
+    }
+
+    private func typeaheadOutlinePadding(for index: Int) -> CGFloat {
+        guard savedOutlines.count > 1 else { return 0 }
+        return index == 0 ? 1.5 : -2.5
+    }
+
     private var isSavedSuggestion: Bool {
         if case .saved = suggestion.source { return true }
         return false
     }
 
+    private var savedOutlines: [MapPinOutline] {
+        if case let .saved(_, saveStates) = suggestion.source {
+            return MapPinOutlineBuilder.outlines(for: saveStates)
+        }
+        return []
+    }
+
     private var iconColor: Color {
-        isSavedSuggestion ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
+        isSavedSuggestion ? WanderTheme.textInk.color : Color(uiColor: .systemGray)
     }
 
     private var iconBackground: Color {
-        isSavedSuggestion ? WanderTheme.terracottaTint.color : WanderTheme.skyTint.color
+        isSavedSuggestion ? WanderTheme.surfaceRaised.color : Color(uiColor: .systemGray5)
     }
 }
 
@@ -2381,6 +2473,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isSaving = false
     @State private var isRemoving = false
     @State private var isShowingRemoveConfirmation = false
+    @State private var editVisitPhotos: [UIImage] = []
     @State private var errorMessage: String?
 
     init(
@@ -2404,8 +2497,11 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var questionBlocks: [AddQuestionBlock] {
         AddQuestionTemplates.blocks(
-            category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
-            status: selectedStatus
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine,
+            status: selectedStatus,
+            localTagOptions: localCustomTagOptions()
         )
     }
 
@@ -2430,11 +2526,20 @@ struct MapPlaceSaveFlowSheet: View {
             kind: .multiTag,
             valueType: "personal_label",
             options: PlacePersonalLabelSuggestions.options(
-                category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
+                category: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
+                status: selectedStatus,
+                locality: context.candidate.locality,
+                localOptions: localCustomPersonalLabelOptions()
+            ),
+            defaultValues: PlacePersonalLabelSuggestions.defaultValues(
+                category: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
                 status: selectedStatus,
                 locality: context.candidate.locality
             ),
-            defaultValues: [],
             minimumOptionWidth: 104
         )
     }
@@ -2498,6 +2603,9 @@ struct MapPlaceSaveFlowSheet: View {
             .onAppear {
                 if store.isPrivateProfile {
                     selectedVisibility = .selfOnly
+                }
+                if step == .details {
+                    syncAnswersForCurrentQuestions()
                 }
             }
             .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
@@ -2608,6 +2716,13 @@ struct MapPlaceSaveFlowSheet: View {
                 ) { option in
                     togglePersonalLabel(option)
                 }
+            }
+
+            if context.isEditing {
+                MapSaveVisitPhotoSection(
+                    canAddPhotos: selectedStatus == .been,
+                    photos: $editVisitPhotos
+                )
             }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -2799,14 +2914,20 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func syncAnswersForCurrentQuestions() {
-        let allowedKeys = Set(questionBlocks.map(\.key))
-        var nextAnswers = selectedAnswers.filter { allowedKeys.contains($0.key) }
+        var nextAnswers = selectedAnswers
 
-        for block in questionBlocks where nextAnswers[block.key] == nil {
-            nextAnswers[block.key] = Set(block.defaultValues)
+        for block in questionBlocks {
+            var values = nextAnswers[block.key] ?? []
+            if values.isEmpty {
+                values = Set(block.defaultValues)
+            } else if block.kind == .multiTag {
+                values.formUnion(block.defaultValues)
+            }
+            nextAnswers[block.key] = values
         }
 
         selectedAnswers = nextAnswers
+        personalLabels.formUnion(personalLabelBlock.defaultValues)
     }
 
     private func handlePlaceTypeSelection() {
@@ -2866,6 +2987,17 @@ struct MapPlaceSaveFlowSheet: View {
             )
         }
 
+        let currentKeys = Set(questionBlocks.map(\.key))
+        let preservedTagDrafts = selectedAnswers
+            .filter { key, values in
+                !currentKeys.contains(key) && shouldPreserveHiddenTagAttribute(key) && !values.isEmpty
+            }
+            .sorted { $0.key < $1.key }
+            .map { key, values in
+                PlaceAttributeDraft(questionKey: key, valueType: "multi_tag", stringValues: values.sorted())
+            }
+        drafts.append(contentsOf: preservedTagDrafts)
+
         if selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood,
            let selectedCuisine {
             drafts.append(
@@ -2889,6 +3021,88 @@ struct MapPlaceSaveFlowSheet: View {
             }
             .sorted()
         return optionSelections + customSelections
+    }
+
+    private func localCustomTagOptions() -> [String] {
+        localAttributeSuggestions { attribute in
+            attribute.valueType == "multi_tag" && shouldPreserveHiddenTagAttribute(attribute.questionKey)
+        }
+    }
+
+    private func localCustomPersonalLabelOptions() -> [String] {
+        localAttributeSuggestions { attribute in
+            attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels
+        }
+    }
+
+    private func localAttributeSuggestions(
+        matching predicate: (LocalPlaceAttribute) -> Bool
+    ) -> [String] {
+        let visiblePlaces = store.currentUserVisiblePlaces.filter { visiblePlace in
+            if case let .edit(currentPlace) = context.mode,
+               currentPlace.userPlace.id == visiblePlace.userPlace.id {
+                return false
+            }
+            return visiblePlace.effectiveCategory == selectedAssignment.primaryCategory
+        }
+        let exactSubcategory = selectedAssignment.subcategory.map { WanderPlaceCategory.normalizedCategoryText($0) }
+        let exactPlaces = visiblePlaces.filter { visiblePlace in
+            guard let exactSubcategory else { return true }
+            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) == exactSubcategory
+        }
+        let similarPlaces = visiblePlaces.filter { visiblePlace in
+            guard let exactSubcategory else { return false }
+            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) != exactSubcategory
+        }
+        let exactValues = attributeValues(from: exactPlaces, matching: predicate)
+        let similarValues = attributeValues(from: similarPlaces, matching: predicate)
+
+        return uniqueOptionValues(exactValues + similarValues, limit: 8)
+    }
+
+    private func attributeValues(
+        from visiblePlaces: [VisiblePlace],
+        matching predicate: (LocalPlaceAttribute) -> Bool
+    ) -> [String] {
+        visiblePlaces.flatMap { visiblePlace in
+            store.attributes(for: visiblePlace.userPlace.id)
+                .filter(predicate)
+                .flatMap(Self.stringValues(from:))
+        }
+    }
+
+    private func uniqueOptionValues(_ values: [String], limit: Int) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = WanderPlaceCategory.normalizedCategoryText(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+            if result.count == limit {
+                break
+            }
+        }
+
+        return result
+    }
+
+    private func shouldPreserveHiddenTagAttribute(_ key: String) -> Bool {
+        key.hasSuffix("_tags") || key == "best_for"
+    }
+
+    private static func stringValues(from attribute: LocalPlaceAttribute) -> [String] {
+        guard let data = attribute.valueJSON.data(using: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        if let values = try? decoder.decode([String].self, from: data) {
+            return values
+        }
+        if let value = try? decoder.decode(String.self, from: data) {
+            return [value]
+        }
+        return []
     }
 
     private func orderedPersonalLabelSelections() -> [String] {
@@ -2950,6 +3164,154 @@ struct MapPlaceSaveFlowSheet: View {
                     errorMessage = "Could not remove this save. Try again."
                 }
             }
+        }
+    }
+}
+
+private struct MapSaveVisitPhotoSection: View {
+    let canAddPhotos: Bool
+    @Binding var photos: [UIImage]
+    @State private var isShowingPhotoMenu = false
+    @State private var isShowingCamera = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var photoError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Text("photos")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+                if !photos.isEmpty {
+                    Text("\(photos.count)")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .padding(.vertical, 4)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Capsule())
+                }
+            }
+
+            if !photos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(Array(photos.enumerated()), id: \.offset) { index, image in
+                            ZStack(alignment: .topTrailing) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 82, height: 82)
+                                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                                Button {
+                                    photos.remove(at: index)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .black))
+                                        .foregroundStyle(WanderTheme.textInk.color)
+                                        .frame(width: 24, height: 24)
+                                        .background(WanderTheme.surfaceRaised.color)
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .padding(5)
+                                .accessibilityLabel("Remove photo")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if canAddPhotos {
+                VStack(spacing: WanderTheme.spacing1) {
+                    Button {
+                        isShowingPhotoMenu = true
+                    } label: {
+                        Label("Add photo", systemImage: "photo.badge.plus")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(WanderTheme.pinSocial.color)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(WanderTheme.skyTint.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                                    .stroke(WanderTheme.pinSocial.color, style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button("Take Photo") {
+                                isShowingCamera = true
+                            }
+                        }
+                        PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                        Button("Cancel", role: .cancel) {}
+                    }
+                }
+            } else {
+                Text("Photos can be added after this is saved as been.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            }
+
+            if let photoError {
+                Text(photoError)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .sheet(isPresented: $isShowingCamera) {
+            PlaceActivityCameraPicker { image in
+                photos.append(image)
+                isShowingPhotoMenu = false
+            }
+            .ignoresSafeArea()
+        }
+        .onChange(of: selectedPhotoItems) { _, items in
+            guard !items.isEmpty else { return }
+            isShowingPhotoMenu = false
+            Task {
+                await importPhotos(from: items)
+            }
+        }
+        .onChange(of: canAddPhotos) { _, nextCanAddPhotos in
+            if !nextCanAddPhotos {
+                isShowingPhotoMenu = false
+            }
+        }
+    }
+
+    private func importPhotos(from items: [PhotosPickerItem]) async {
+        var imported: [UIImage] = []
+        for item in items {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data)
+                else {
+                    continue
+                }
+                imported.append(image)
+            } catch {
+                await MainActor.run {
+                    photoError = "Could not use one of those photos."
+                }
+            }
+        }
+
+        await MainActor.run {
+            photos.append(contentsOf: imported)
+            selectedPhotoItems = []
         }
     }
 }
@@ -3987,7 +4349,6 @@ struct PlaceSheet: View {
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
-                        statusBadge
                     }
                     if let subtitle = compactSubtitle {
                         Text(subtitle)
@@ -4040,24 +4401,10 @@ struct PlaceSheet: View {
                 whyItFitsSection
             }
 
+            PlaceActivitySection(saves: saves, currentUserID: currentUserID)
+
             if !placeFacts.isEmpty {
                 factSection(title: "place", facts: placeFacts)
-            }
-
-            if let ownSave {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    sectionTitle("your note")
-                    SaveReviewCard(summary: ownSave, currentUserID: currentUserID, emphasis: true)
-                }
-            }
-
-            if !friendSaves.isEmpty {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    sectionTitle("friends' notes")
-                    ForEach(friendSaves) { summary in
-                        SaveReviewCard(summary: summary, currentUserID: currentUserID, emphasis: false)
-                    }
-                }
             }
         }
         .padding(.bottom, WanderTheme.spacing1)
@@ -4065,7 +4412,7 @@ struct PlaceSheet: View {
 
     private var expandedHeader: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: place.primaryCategory)
+            CategoryThumb(category: place.primaryCategory, status: ownSave?.visiblePlace.userPlace.status)
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(place.name)
                     .font(.system(size: 26, weight: .black))
@@ -4173,7 +4520,7 @@ struct PlaceSheet: View {
     }
 
     private var hasRatings: Bool {
-        presentation.fitRating != nil || presentation.overallRating != nil || presentation.ownRating != nil
+        !saves.isEmpty || presentation.fitRating != nil || presentation.overallRating != nil || presentation.ownRating != nil
     }
 
     private var whyItFitsSection: some View {
@@ -4365,29 +4712,35 @@ private struct PlaceProfileRatingStrip: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            if let fitRating = presentation.fitRating {
-                PlaceProfileMetricCard(
-                    title: "Fit",
-                    value: fitRating.displayScore,
-                    suffix: "/10",
-                    subtitle: compact ? "for you" : "compared to places you like",
-                    systemImage: "sparkles",
-                    tint: WanderTheme.terracotta.color,
-                    compact: compact
-                )
-            }
+            PlaceProfileMetricCard(
+                title: "Your rating",
+                value: presentation.ownRating?.displayScore ?? "No visits yet",
+                suffix: presentation.ownRating == nil ? nil : "/5",
+                subtitle: presentation.ownRating?.subtitle ?? "0 visits",
+                systemImage: "star.fill",
+                tint: WanderTheme.stateWarning.color,
+                compact: compact
+            )
 
-            if let actualRating = presentation.overallRating ?? presentation.ownRating {
-                PlaceProfileMetricCard(
-                    title: actualRating.title,
-                    value: actualRating.displayScore,
-                    suffix: "/5",
-                    subtitle: actualRating.subtitle,
-                    systemImage: "star.fill",
-                    tint: WanderTheme.stateWarning.color,
-                    compact: compact
-                )
-            }
+            PlaceProfileMetricCard(
+                title: "Rec.me rating",
+                value: presentation.overallRating?.displayScore ?? "No ratings yet",
+                suffix: presentation.overallRating == nil ? nil : "/5",
+                subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
+                systemImage: "person.2.fill",
+                tint: WanderTheme.pinSocial.color,
+                compact: compact
+            )
+
+            PlaceProfileMetricCard(
+                title: "Fit Rating",
+                value: presentation.fitRating?.displayScore ?? "Not enough yet",
+                suffix: presentation.fitRating == nil ? nil : "/10",
+                subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
+                systemImage: "sparkles",
+                tint: WanderTheme.terracotta.color,
+                compact: compact
+            )
         }
     }
 }
@@ -4395,51 +4748,656 @@ private struct PlaceProfileRatingStrip: View {
 private struct PlaceProfileMetricCard: View {
     let title: String
     let value: String
-    let suffix: String
+    let suffix: String?
     let subtitle: String
     let systemImage: String
     let tint: Color
     let compact: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: compact ? WanderTheme.spacing2 : WanderTheme.spacing3) {
+        VStack(alignment: .center, spacing: compact ? 4 : WanderTheme.spacing1) {
             Image(systemName: systemImage)
-                .font(.system(size: compact ? 13 : 15, weight: .black))
+                .font(.system(size: compact ? 12 : 15, weight: .black))
                 .foregroundStyle(tint)
-                .frame(width: compact ? 28 : 34, height: compact ? 28 : 34)
+                .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                 .background(tint.opacity(0.12))
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: compact ? 11 : 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(value)
-                        .font(.system(size: compact ? 20 : 24, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+            Text(title)
+                .font(.system(size: compact ? 11 : 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .textCase(.uppercase)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.68)
+                .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
+
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: valueFontSize, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(suffix == nil ? 2 : 1)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.62)
+                if let suffix {
                     Text(suffix)
                         .font(.system(size: compact ? 11 : 12, weight: .black))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
-                Text(subtitle)
-                    .font(.system(size: compact ? 10 : 11, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, minHeight: compact ? 25 : 30, alignment: .center)
+
+            Text(subtitle)
+                .font(.system(size: compact ? 9.5 : 11, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity, minHeight: compact ? 16 : 24, alignment: .center)
         }
-        .padding(.horizontal, compact ? WanderTheme.spacing2 : WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: compact ? 62 : 76, alignment: .leading)
+        .padding(.horizontal, compact ? 6 : WanderTheme.spacing2)
+        .padding(.vertical, compact ? 7 : WanderTheme.spacing2)
+        .frame(maxWidth: .infinity, minHeight: compact ? 118 : 136, alignment: .center)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+    }
+
+    private var valueFontSize: CGFloat {
+        if suffix != nil {
+            return compact ? 20 : 24
+        }
+
+        return compact ? 11 : 13
+    }
+}
+
+enum PlaceActivityFilter: String, CaseIterable, Identifiable {
+    case all
+    case myVisits
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "ALL"
+        case .myVisits: "MY VISITS"
+        }
+    }
+}
+
+struct PlaceActivityEntry: Identifiable {
+    let summary: PlaceSaveSummary
+    let currentUserID: String
+
+    var id: String { summary.id }
+
+    var owner: LocalProfile {
+        summary.visiblePlace.owner
+    }
+
+    var userPlace: LocalUserPlace {
+        summary.visiblePlace.userPlace
+    }
+
+    var isCurrentUser: Bool {
+        owner.id == currentUserID
+    }
+
+    var displayName: String {
+        isCurrentUser ? "You" : owner.displayName
+    }
+
+    var timestamp: Date {
+        userPlace.visitedAt ?? userPlace.updatedAt
+    }
+
+    var timestampText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: timestamp)
+    }
+
+    var note: String? {
+        let trimmed = userPlace.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    var ratingText: String? {
+        guard userPlace.status == .been, let ratingScore = userPlace.ratingScore else {
+            return nil
+        }
+        return "\(PlaceRating.display(ratingScore))/5"
+    }
+
+    var canAddPhotos: Bool {
+        isCurrentUser && userPlace.status == .been
+    }
+
+    var tags: [String] {
+        var seen = Set<String>()
+        return summary.attributes
+            .flatMap(PlaceProfileTagParser.tags(from:))
+            .compactMap { tag in
+                guard !seen.contains(tag.normalized) else { return nil }
+                seen.insert(tag.normalized)
+                return tag.displayTitle
+            }
+    }
+
+    var avatarColor: Color {
+        if isCurrentUser { return WanderTheme.terracotta.color }
+        return owner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
+    }
+}
+
+struct PlaceActivityPhoto: Identifiable {
+    let id = UUID()
+    let entryID: String
+    let image: UIImage
+    let createdAt = Date()
+}
+
+private struct PlaceActivityPhotoViewerRoute: Identifiable {
+    let photoID: UUID
+
+    var id: UUID { photoID }
+}
+
+struct PlaceActivitySection: View {
+    let saves: [PlaceSaveSummary]
+    let currentUserID: String
+    @State private var filter: PlaceActivityFilter = .all
+    @State private var photos: [PlaceActivityPhoto] = []
+    @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("latest activity")
+                .font(.system(size: 12, weight: .black))
+                .textCase(.uppercase)
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            PlaceActivityFilterControl(selection: $filter)
+                .frame(maxWidth: .infinity)
+
+            if filteredEntries.isEmpty {
+                PlaceActivityEmptyState(text: emptyStateText)
+            } else {
+                VStack(spacing: WanderTheme.spacing2) {
+                    ForEach(filteredEntries) { entry in
+                        PlaceActivityCard(
+                            entry: entry,
+                            photos: Binding(
+                                get: { photos.filter { $0.entryID == entry.id } },
+                                set: { nextPhotos in
+                                    photos.removeAll { $0.entryID == entry.id }
+                                    photos.append(contentsOf: nextPhotos)
+                                }
+                            ),
+                            onOpenPhoto: { photo in
+                                viewerRoute = PlaceActivityPhotoViewerRoute(photoID: photo.id)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        .fullScreenCover(item: $viewerRoute) { route in
+            PlaceActivityPhotoViewer(
+                photos: $photos,
+                initialPhotoID: route.photoID,
+                entriesByID: entriesByID
+            )
+        }
+    }
+
+    private var entries: [PlaceActivityEntry] {
+        saves
+            .map { PlaceActivityEntry(summary: $0, currentUserID: currentUserID) }
+            .sorted { lhs, rhs in
+                if lhs.timestamp != rhs.timestamp {
+                    return lhs.timestamp > rhs.timestamp
+                }
+                if lhs.isCurrentUser != rhs.isCurrentUser {
+                    return lhs.isCurrentUser
+                }
+                return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
+            }
+    }
+
+    private var filteredEntries: [PlaceActivityEntry] {
+        switch filter {
+        case .all:
+            entries
+        case .myVisits:
+            entries.filter { $0.isCurrentUser && $0.userPlace.status == .been }
+        }
+    }
+
+    private var entriesByID: [String: PlaceActivityEntry] {
+        Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+    }
+
+    private var emptyStateText: String {
+        switch filter {
+        case .all:
+            "No activity yet."
+        case .myVisits:
+            "No visits yet."
+        }
+    }
+}
+
+private struct PlaceActivityFilterControl: View {
+    @Binding var selection: PlaceActivityFilter
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(PlaceActivityFilter.allCases) { filter in
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        selection = filter
+                    }
+                } label: {
+                    Text(filter.title)
+                        .font(.system(size: 12, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .foregroundStyle(selection == filter ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
+                        .background(selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(selection == filter ? WanderTheme.terracotta.color : Color.clear, lineWidth: 1.5)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .frame(maxWidth: .infinity)
+        .background(WanderTheme.surfaceSand.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+    }
+}
+
+private struct PlaceActivityEmptyState: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(WanderTheme.textMuted.color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+    }
+}
+
+private struct PlaceActivityCard: View {
+    let entry: PlaceActivityEntry
+    @Binding var photos: [PlaceActivityPhoto]
+    let onOpenPhoto: (PlaceActivityPhoto) -> Void
+    @State private var isShowingPhotoMenu = false
+    @State private var isShowingCamera = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var photoError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            header
+
+            if let note = entry.note {
+                Text("\"\(note)\"")
+                    .font(.system(size: 14, weight: .medium))
+                    .italic()
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !entry.tags.isEmpty || entry.ratingText != nil {
+                MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
+                    if let ratingText = entry.ratingText {
+                        PlaceFactPill(title: "Rated \(ratingText)", systemImage: "star.fill")
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    ForEach(entry.tags.prefix(6), id: \.self) { tag in
+                        PlaceFactPill(title: tag, systemImage: "tag.fill")
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+            }
+
+            photoThumbnails
+
+            addPhotoControl
+
+            if let photoError {
+                Text(photoError)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(entry.isCurrentUser ? WanderTheme.surfaceSand.color : WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(entry.isCurrentUser ? WanderTheme.borderStrong.color.opacity(0.5) : WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .sheet(isPresented: $isShowingCamera) {
+            PlaceActivityCameraPicker { image in
+                addPhoto(image)
+            }
+            .ignoresSafeArea()
+        }
+        .onChange(of: selectedPhotoItems) { _, items in
+            guard !items.isEmpty else { return }
+            isShowingPhotoMenu = false
+            Task {
+                await importPhotos(from: items)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+            WanderAvatar(
+                initials: entry.owner.initials,
+                avatarURL: entry.owner.avatarURL,
+                size: 34,
+                color: entry.avatarColor
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("@\(entry.owner.handle) · \(entry.timestampText)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            Spacer()
+            StatusBadge(status: entry.userPlace.status)
+        }
+    }
+
+    @ViewBuilder
+    private var photoThumbnails: some View {
+        if !photos.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(photos) { photo in
+                        Button {
+                            onOpenPhoto(photo)
+                        } label: {
+                            Image(uiImage: photo.image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 76, height: 76)
+                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var addPhotoControl: some View {
+        if entry.canAddPhotos {
+            VStack(spacing: WanderTheme.spacing1) {
+                Button {
+                    isShowingPhotoMenu = true
+                } label: {
+                    Label("Add photo", systemImage: "photo.badge.plus")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.pinSocial.color)
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .background(WanderTheme.skyTint.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                                .stroke(WanderTheme.pinSocial.color, style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                        )
+                }
+                .buttonStyle(.plain)
+                .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button("Take Photo") {
+                            isShowingCamera = true
+                        }
+                    }
+                    PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                    Button("Cancel", role: .cancel) {}
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func addPhoto(_ image: UIImage) {
+        photoError = nil
+        isShowingPhotoMenu = false
+        photos.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+    }
+
+    private func importPhotos(from items: [PhotosPickerItem]) async {
+        var imported: [PlaceActivityPhoto] = []
+        for item in items {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data)
+                else {
+                    continue
+                }
+                imported.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+            } catch {
+                await MainActor.run {
+                    photoError = "Could not use one of those photos."
+                }
+            }
+        }
+
+        await MainActor.run {
+            photos.append(contentsOf: imported)
+            selectedPhotoItems = []
+        }
+    }
+}
+
+private struct PlaceActivityPhotoViewer: View {
+    @Binding var photos: [PlaceActivityPhoto]
+    let entriesByID: [String: PlaceActivityEntry]
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedPhotoID: UUID
+
+    init(
+        photos: Binding<[PlaceActivityPhoto]>,
+        initialPhotoID: UUID,
+        entriesByID: [String: PlaceActivityEntry]
+    ) {
+        _photos = photos
+        self.entriesByID = entriesByID
+        _selectedPhotoID = State(initialValue: initialPhotoID)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    viewerButton(systemImage: "xmark", action: dismiss.callAsFunction)
+                    Spacer()
+                    if canDeleteSelectedPhoto {
+                        viewerButton(systemImage: "trash", action: deleteSelectedPhoto)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing4)
+
+                TabView(selection: $selectedPhotoID) {
+                    ForEach(photos) { photo in
+                        Image(uiImage: photo.image)
+                            .resizable()
+                            .scaledToFit()
+                            .tag(photo.id)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.horizontal, WanderTheme.spacing2)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+
+                if let selectedEntry {
+                    PlaceActivityViewerContext(entry: selectedEntry)
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.bottom, WanderTheme.spacing4)
+                }
+            }
+        }
+        .onChange(of: photos.map(\.id)) { _, ids in
+            guard !ids.isEmpty else {
+                dismiss()
+                return
+            }
+            if !ids.contains(selectedPhotoID), let firstID = ids.first {
+                selectedPhotoID = firstID
+            }
+        }
+    }
+
+    private var selectedPhoto: PlaceActivityPhoto? {
+        photos.first { $0.id == selectedPhotoID } ?? photos.first
+    }
+
+    private var selectedEntry: PlaceActivityEntry? {
+        selectedPhoto.flatMap { entriesByID[$0.entryID] }
+    }
+
+    private var canDeleteSelectedPhoto: Bool {
+        selectedEntry?.isCurrentUser == true
+    }
+
+    private func viewerButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 42)
+                .background(Color.white.opacity(0.18))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func deleteSelectedPhoto() {
+        guard let selectedPhoto else { return }
+        photos.removeAll { $0.id == selectedPhoto.id }
+        if let nextPhoto = photos.first {
+            selectedPhotoID = nextPhoto.id
+        } else {
+            dismiss()
+        }
+    }
+}
+
+private struct PlaceActivityViewerContext: View {
+    let entry: PlaceActivityEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                WanderAvatar(
+                    initials: entry.owner.initials,
+                    avatarURL: entry.owner.avatarURL,
+                    size: 30,
+                    color: entry.avatarColor
+                )
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.displayName)
+                        .font(.system(size: 14, weight: .black))
+                    Text(entry.timestampText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                Spacer()
+                StatusBadge(status: entry.userPlace.status)
+            }
+
+            if let note = entry.note {
+                Text("\"\(note)\"")
+                    .font(.system(size: 14, weight: .medium))
+                    .italic()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .foregroundStyle(WanderTheme.textInk.color)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private struct PlaceActivityCameraPicker: UIViewControllerRepresentable {
+    let onImage: @MainActor (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImage: onImage) {
+            dismiss()
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let onImage: @MainActor (UIImage) -> Void
+        private let dismiss: () -> Void
+
+        init(onImage: @escaping @MainActor (UIImage) -> Void, dismiss: @escaping () -> Void) {
+            self.onImage = onImage
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = info[.originalImage] as? UIImage
+            if let image {
+                onImage(image)
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
     }
 }
 
@@ -4700,18 +5658,59 @@ private struct PlaceFactPill: View {
 
 private struct CategoryThumb: View {
     let category: String
+    var status: PlaceStatus? = nil
 
     var body: some View {
-        Image(systemName: imageName)
-            .font(.system(size: 19, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
-            .frame(width: 46, height: 46)
-            .background(WanderTheme.terracottaTint.color)
-            .clipShape(Circle())
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: imageName)
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(width: 46, height: 46)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Circle())
+
+            if let status {
+                SavedStatusBadge(status: status, size: 19)
+                    .offset(x: 4, y: -4)
+            }
+        }
     }
 
     private var imageName: String {
         WanderPlaceCategory.symbolName(for: category)
+    }
+}
+
+struct SavedStatusBadge: View {
+    let status: PlaceStatus
+    var size: CGFloat
+
+    var body: some View {
+        Group {
+            switch status {
+            case .been:
+                Circle()
+                    .fill(WanderTheme.stateSuccess.color)
+                    .overlay(
+                        Image(systemName: "checkmark")
+                            .font(.system(size: size * 0.56, weight: .black))
+                            .foregroundStyle(WanderTheme.surfaceRaised.color)
+                    )
+            case .wannaGo:
+                Circle()
+                    .fill(WanderTheme.surfaceRaised.color)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                WanderTheme.stateSuccess.color,
+                                style: StrokeStyle(lineWidth: max(2, size * 0.14), lineCap: .round, dash: [1.5, 3.4])
+                            )
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: max(2, size * 0.12)))
+        .accessibilityHidden(true)
     }
 }
 

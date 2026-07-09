@@ -562,6 +562,52 @@ struct ExtractionJobResult: Equatable {
     let errorMessage: String?
 }
 
+struct PlaceListCollaboratorRecord: Equatable {
+    let userID: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+    let role: PlaceListRole
+
+    var profileShell: ProfileShell {
+        ProfileShell(
+            id: userID,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL,
+            bio: nil,
+            relationship: .nonFollower
+        )
+    }
+}
+
+struct RemotePlaceListSummary: Equatable {
+    let list: LocalPlaceList
+    let owner: ProfileShell
+    let collaborators: [PlaceListCollaboratorRecord]
+    let itemCount: Int
+}
+
+struct RemotePlaceListDetail: Equatable {
+    let list: LocalPlaceList
+    let collaborators: [PlaceListCollaboratorRecord]
+    let items: [LocalPlaceListItem]
+}
+
+struct PlaceListUpsertDraft: Equatable {
+    let id: String?
+    let name: String
+    let description: String
+    let visibility: PlaceListVisibility
+}
+
+struct PlaceListItemDraft: Equatable {
+    let listID: String
+    let placeID: String
+    let ownerUserPlaceID: String?
+    let sourceUserPlaceID: String?
+}
+
 struct ProfileAvatarResult: Equatable {
     let avatarURL: String
     let storagePath: String
@@ -669,6 +715,17 @@ protocol ExtractionRepository {
     func enqueue(_ draft: ExtractionJobDraft) async throws -> ExtractionJobEnqueueResult
     func process(jobID: String) async throws -> ExtractionJobResult
     func result(jobID: String) async throws -> ExtractionJobResult
+}
+
+@MainActor
+protocol PlaceListRepository {
+    func visibleLists() async throws -> [RemotePlaceListSummary]
+    func detail(listID: String) async throws -> RemotePlaceListDetail?
+    func upsert(_ draft: PlaceListUpsertDraft) async throws -> String
+    func delete(listID: String) async throws
+    func setCollaborators(listID: String, userIDs: [String]) async throws
+    func addItem(_ draft: PlaceListItemDraft) async throws -> String
+    func removeItem(listID: String, itemID: String) async throws
 }
 
 @MainActor

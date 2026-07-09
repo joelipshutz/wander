@@ -979,15 +979,16 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
         XCTAssertEqual(restaurantBlocks.first { $0.key == "occasion" }?.title, "planning for?")
         XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, [])
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, ["recommended"])
 
         XCTAssertEqual(coffeeBlocks.map(\.key), ["interest_signal", "coffee_tags"])
         XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
         XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
+        XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.defaultValues, ["work maybe"])
 
         XCTAssertEqual(hikeBlocks.map(\.key), ["interest_signal", "hike_tags"])
         XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
-        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("easy maybe"), true)
+        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
     }
 
     func testFollowersAndFollowingUseGraphEdges() {
@@ -2295,16 +2296,16 @@ final class WanderStoreTests: XCTestCase {
         })
     }
 
-    func testCollaboratorCannotAddPlaceToSomeoneElsesList() async {
+    func testNonMemberCannotAddPlaceToSomeoneElsesList() async {
         let store = makeStore()
-        let collabList = store.placeLists.first { $0.id == "list_launch" }!
+        let friendList = store.placeLists.first { $0.id == "list_maya_sunset" }!
         let place = store.visiblePlaces().first { $0.place.canonicalName == "Bar Nido" }!
-        let initialCount = store.visiblePlaces(in: collabList).count
+        let initialCount = store.visiblePlaces(in: friendList).count
 
-        let result = await store.addVisiblePlace(place, to: collabList, backend: nil)
+        let result = await store.addVisiblePlace(place, to: friendList, backend: nil)
 
         XCTAssertEqual(result.outcome, .permissionDenied)
-        XCTAssertEqual(store.visiblePlaces(in: collabList).count, initialCount)
+        XCTAssertEqual(store.visiblePlaces(in: friendList).count, initialCount)
     }
 
     func testOwnerRemoveListPlacePersistsLocally() {
@@ -2376,6 +2377,196 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.placeLists.map(\.id), firstStore.placeLists.map(\.id))
         XCTAssertEqual(relaunchedStore.placeListItems.map(\.id), firstStore.placeListItems.map(\.id))
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
+    }
+
+    func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {
+        let store = makeStore()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced,
+                        cachedItemCount: 1
+                    ),
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 1
+                )
+            ],
+            details: [
+                listID: RemotePlaceListDetail(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced,
+                        cachedItemCount: 1
+                    ),
+                    collaborators: [],
+                    items: [
+                        LocalPlaceListItem(
+                            localID: "remote_list_item_1",
+                            serverID: "22222222-2222-4222-8222-222222222222",
+                            listID: listID,
+                            placeID: "place_bar_nido",
+                            sourceUserPlaceID: "up_ryan_bar_nido",
+                            addedByUserID: "user_ryan",
+                            syncState: .synced
+                        )
+                    ]
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        let remoteList = store.visiblePlaceLists(scope: .friends).first { $0.id == listID }
+        XCTAssertEqual(remoteList?.cachedItemCount, 1)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertTrue(remoteList.map { store.visiblePlaces(in: $0).contains { $0.place.canonicalName == "Bar Nido" } } ?? false)
+    }
+
+    func testSyncPendingPlaceListsCreatesRemoteListAndCollaborators() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID)
+        let backend = WanderBackend(placeListRepository: repository)
+        let created = store.createPlaceList(
+            name: "LA patios",
+            description: "sunny tables",
+            visibility: .followers,
+            collaboratorUserIDs: ["user_ryan"]
+        )!
+
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["LA patios"])
+        XCTAssertEqual(repository.collaboratorRequests, [FakePlaceListRepository.CollaboratorRequest(listID: remoteListID, userIDs: ["user_ryan"])])
+        XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.serverID, remoteListID)
+        XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.syncState, .synced)
+    }
+
+    func testCollaboratorCanAddPlaceToSharedList() async {
+        let joe = LocalProfile(localID: "local_joe", serverID: "user_joe", handle: "joe", displayName: "Joe", syncState: .synced)
+        let ryan = LocalProfile(localID: "local_ryan", serverID: "user_ryan", handle: "ryan", displayName: "Ryan", syncState: .synced)
+        let placeID = "33333333-3333-4333-8333-333333333333"
+        let userPlaceID = "44444444-4444-4444-8444-444444444444"
+        let listID = "55555555-5555-4555-8555-555555555555"
+        let place = LocalPlace(
+            localID: "local_place_tsubaki",
+            serverID: placeID,
+            canonicalName: "Tsubaki",
+            category: "restaurant",
+            latitude: 34.077,
+            longitude: -118.261,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_tsubaki",
+            serverID: userPlaceID,
+            userID: joe.id,
+            placeID: place.id,
+            status: .wannaGo,
+            visibility: .followers,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let sharedList = LocalPlaceList(
+            localID: "local_list_ryan_dinner",
+            serverID: listID,
+            ownerUserID: ryan.id,
+            name: "Ryan dinner",
+            description: "shared ideas",
+            visibility: .followers,
+            syncState: .synced
+        )
+        let membership = LocalPlaceListMember(
+            localID: "local_member_ryan_dinner_joe",
+            listID: sharedList.id,
+            userID: joe.id,
+            role: .collaborator
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [place],
+                userPlaces: [userPlace],
+                placeAttributes: [],
+                follows: [],
+                blocks: [],
+                placeLists: [sharedList],
+                placeListMembers: [membership],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+        let repository = FakePlaceListRepository(itemResult: "66666666-6666-4666-8666-666666666666")
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let result = await store.addVisiblePlace(store.currentUserVisiblePlaces[0], to: sharedList, backend: backend)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertTrue(store.canAddPlaces(to: sharedList))
+        XCTAssertFalse(store.canManage(sharedList))
+        XCTAssertEqual(repository.itemRequests.map(\.draft.listID), [listID])
+        XCTAssertEqual(repository.itemRequests.map(\.draft.placeID), [placeID])
+        XCTAssertEqual(repository.itemRequests.map(\.draft.ownerUserPlaceID), [userPlaceID])
+        XCTAssertEqual(store.visiblePlaceLists(scope: .collabs).first?.cachedItemCount, 1)
+    }
+
+    func testAddingUnsavedCandidateToListCreatesWantSaveAndListItem() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let remotePlaceID = "22222222-2222-4222-8222-222222222222"
+        let remoteUserPlaceID = "33333333-3333-4333-8333-333333333333"
+        let remoteItemID = "44444444-4444-4444-8444-444444444444"
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(userPlaceID: remoteUserPlaceID, syncState: .synced, placeID: remotePlaceID)
+        )
+        let placeListRepository = FakePlaceListRepository(upsertResult: remoteListID, itemResult: remoteItemID)
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository, placeListRepository: placeListRepository)
+        let list = store.createPlaceList(name: "New coffee", description: "work blocks", visibility: .followers)!
+        let candidate = PlaceCandidate(
+            id: "map_blue_bottle",
+            name: "Blue Bottle Coffee",
+            category: "Coffee Shop",
+            latitude: 34.051,
+            longitude: -118.245,
+            sourceProviderPlaceID: "mapkit_blue_bottle",
+            confidence: 0.93
+        )
+
+        let result = await store.addCandidate(candidate, to: list, backend: backend)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertTrue(result.createdWantSave)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.status), [.wannaGo])
+        XCTAssertEqual(userPlaceRepository.savedDrafts.map(\.place.canonicalName), ["Blue Bottle Coffee"])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.listID), [remoteListID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.placeID), [remotePlaceID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.ownerUserPlaceID), [remoteUserPlaceID])
+        XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.sourceUserPlaceID), [remoteUserPlaceID])
+        XCTAssertEqual(store.visiblePlaceLists(scope: .mine).first { $0.serverID == remoteListID }?.cachedItemCount, 1)
     }
 }
 
@@ -2641,6 +2832,72 @@ private final class FakeExtractionRepository: ExtractionRepository {
             errorCode: nil,
             errorMessage: nil
         )
+    }
+}
+
+@MainActor
+private final class FakePlaceListRepository: PlaceListRepository {
+    struct CollaboratorRequest: Equatable {
+        let listID: String
+        let userIDs: [String]
+    }
+
+    struct ItemRequest: Equatable {
+        let draft: PlaceListItemDraft
+    }
+
+    private let visibleListsResult: [RemotePlaceListSummary]
+    private let detailsByListID: [String: RemotePlaceListDetail]
+    private let upsertResult: String
+    private let itemResult: String
+    private(set) var detailListIDs: [String] = []
+    private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
+    private(set) var deletedListIDs: [String] = []
+    private(set) var collaboratorRequests: [CollaboratorRequest] = []
+    private(set) var itemRequests: [ItemRequest] = []
+    private(set) var removedItems: [(listID: String, itemID: String)] = []
+
+    init(
+        visibleLists: [RemotePlaceListSummary] = [],
+        details: [String: RemotePlaceListDetail] = [:],
+        upsertResult: String = "11111111-1111-4111-8111-111111111111",
+        itemResult: String = "22222222-2222-4222-8222-222222222222"
+    ) {
+        self.visibleListsResult = visibleLists
+        self.detailsByListID = details
+        self.upsertResult = upsertResult
+        self.itemResult = itemResult
+    }
+
+    func visibleLists() async throws -> [RemotePlaceListSummary] {
+        visibleListsResult
+    }
+
+    func detail(listID: String) async throws -> RemotePlaceListDetail? {
+        detailListIDs.append(listID)
+        return detailsByListID[listID]
+    }
+
+    func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        upsertedDrafts.append(draft)
+        return upsertResult
+    }
+
+    func delete(listID: String) async throws {
+        deletedListIDs.append(listID)
+    }
+
+    func setCollaborators(listID: String, userIDs: [String]) async throws {
+        collaboratorRequests.append(CollaboratorRequest(listID: listID, userIDs: userIDs))
+    }
+
+    func addItem(_ draft: PlaceListItemDraft) async throws -> String {
+        itemRequests.append(ItemRequest(draft: draft))
+        return itemResult
+    }
+
+    func removeItem(listID: String, itemID: String) async throws {
+        removedItems.append((listID: listID, itemID: itemID))
     }
 }
 

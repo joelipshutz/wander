@@ -53,8 +53,19 @@ struct AddScreen: View {
     }
 
     private var currentQuestionBlocks: [AddQuestionBlock] {
-        AddQuestionTemplates.blocks(
-            category: selectedCandidate?.category ?? manualCategory,
+        if let selectedCandidate {
+            return AddQuestionTemplates.blocks(
+                primaryCategory: selectedCandidate.primaryCategory,
+                subcategory: selectedCandidate.subcategory,
+                cuisine: WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.rawProviderType)
+                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.subcategory)
+                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.category),
+                status: selectedStatus
+            )
+        }
+
+        return AddQuestionTemplates.blocks(
+            category: manualCategory,
             status: selectedStatus
         )
     }
@@ -611,11 +622,16 @@ struct AddScreen: View {
 
     private func prepareDetails() {
         let blocks = currentQuestionBlocks
-        let allowedKeys = Set(blocks.map(\.key))
-        var nextAnswers = selectedAnswers.filter { allowedKeys.contains($0.key) }
+        var nextAnswers = selectedAnswers
 
-        for block in blocks where nextAnswers[block.key] == nil {
-            nextAnswers[block.key] = Set(block.defaultValues)
+        for block in blocks {
+            var values = nextAnswers[block.key] ?? []
+            if values.isEmpty {
+                values = Set(block.defaultValues)
+            } else if block.kind == .multiTag {
+                values.formUnion(block.defaultValues)
+            }
+            nextAnswers[block.key] = values
         }
 
         selectedAnswers = nextAnswers

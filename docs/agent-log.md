@@ -8408,6 +8408,69 @@ Landing update, 2026-07-02 16:13 PDT:
   - PR comments/reviews scan returned no comments and no reviews.
   - Next: squash-merge PR #61 to `main`, update Linear `REC-30` to `Done`, and do not run a TestFlight release because Ryan did not request one.
 
+## 2026-07-07 11:56 PDT - Codex - REC-70/REC-71 Original-Style Mockups
+
+Agent: Codex
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+Linear: `REC-70`, `REC-71`
+
+Goal: revise the REC-70/REC-71 SwiftUI mockups so they look much closer to the current Wander UI and Ryan's original place-detail screenshot, rather than the earlier concept-board direction.
+
+Starting status:
+
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty on stale `codex/profile-pictures`, so this pass uses an isolated worktree.
+- Previous `/private/tmp/recme-rec-70-71-activity` worktree was prunable, so stale worktree metadata was pruned and this fresh worktree was checked out on `codex/rec-70-rec-71-activity`.
+- Fast-forwarded the branch to latest `origin/main` before editing so the mockups reflect the current app baseline.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceActivityMockups.swift`
+- `Wander/App/WanderApp.swift`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+
+Plan:
+
+- Recreate the mockups as DEBUG-only screens.
+- Match the original place-detail screenshot more closely: large map header, warm sheet, cream circular controls, terracotta directions pill, uppercase section labels, dashed prompts, and white trusted-note-style activity cards.
+- Capture refreshed simulator screenshots for review.
+
+Checkpoint, 2026-07-07 12:14 PDT:
+
+- Added DEBUG-only original-style REC-70/REC-71 SwiftUI mockups in `Wander/Features/Map/PlaceActivityMockups.swift`.
+- Wired the mockups behind the launch argument `-WanderPlaceActivityMockup` before the existing category mockups, without changing production place data/model/backend behavior.
+- Generated the Xcode project, then restored unrelated `Wander.xcodeproj/project.pbxproj` build-setting churn so the project diff only adds the mockup source.
+- Captured iPhone 17 simulator screenshots to `/private/tmp/rec70-71-original-ui-mockups/`:
+  - `quickSearch.png`
+  - `compactCard.png`
+  - `latestActivity.png`
+  - `myVisits.png`
+  - `addVisit.png`
+  - `photoMenu.png`
+  - `photoViewer.png`
+  - `friendView.png`
+- Verified `git diff --check`.
+- Verified build: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-original-ui CODE_SIGNING_ALLOWED=NO -jobs 1`.
+
+Known issues:
+
+- These are visual/design-review mockups only; no persistence, PhotosUI picker, visit model, rating aggregation, social visibility, or saved-card production wiring has been implemented yet.
+- The add-visit form is intentionally scrollable; the first screenshot shows the top of the form and the visibility control starting near the home indicator.
+
+Checkpoint, 2026-07-08 11:18 PDT:
+
+- Ryan approved the closer-to-original visual direction and requested a refinement pass before testing in Xcode.
+- Starting status: branch still has only the prior mockup files changed; root checkout remains dirty on unrelated `codex/profile-pictures`, so work continues in `/private/tmp/recme-rec-70-71-original-ui`.
+- Requested changes:
+  - Green check badge means the current user has a `been` save/check-in.
+  - Dotted green circle badge means the current user has only `wanna`; it changes to the green check as soon as there is a `been` check-in.
+  - Keep only one place-level plus and one photo-level upload affordance.
+  - Use native iOS photo upload action sheet behavior in the mockup.
+  - Full-screen photos page horizontally with right-to-left swipes; bottom note/context updates with the active photo/check-in.
+  - Your rating should be the average of all of the current user's visits; no visits should say `No visits yet`.
+  - Remove the separate `My visits` rating tile, rename trusted rating to `Rec.me rating`, and add fit rating so the rating strip matches the main UI pattern with three cards.
+
 ## 2026-07-02 17:01 PDT - Codex - REC-69 Map Tap Away And Coordinate Save
 
 Agent: Codex
@@ -8685,121 +8748,472 @@ Next:
 
 - Test build 60 from TestFlight for REC-69 and REC-72 flows: map tap-away/search clearing, long-press dropped-pin coordinate saves, half-step ratings, wanna-go rating clearing, and profile/Discover average ratings.
 
-## 2026-07-01 11:48 PDT - Codex - REC-60 Push Notification Implementation
+## 2026-07-08 11:25 PDT - Codex - REC-70/REC-71 Testing Handoff
+
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+
+Outcome:
+
+- Updated the DEBUG-only REC-70/REC-71 SwiftUI mockups with Ryan's latest requested behavior before implementation wiring:
+  - `been` saves/check-ins render a green check badge on the category icon.
+  - `wanna`-only saves render a dotted green circle in the same badge position.
+  - The badge states are mutually exclusive in the mockup data.
+  - Removed the extra activity-section plus button so the page shows one place-level add action and one photo-level upload affordance.
+  - The photo upload action uses native SwiftUI confirmation dialog behavior with Take Photo and Choose from Library actions.
+  - Full-screen photos use a horizontally paged SwiftUI `TabView`; the note/context card is driven by the selected photo/check-in.
+  - `Your rating` averages the current user's visits (`3.5/5 - 3 visits`) and shows `No visits yet` when the viewer has no `been` visits.
+  - Removed the separate my-visits rating card, renamed trusted rating to `Rec.me rating`, and added Fit so the three-card rating slab matches the main place profile pattern.
+- Rebuilt successfully with `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-original-ui CODE_SIGNING_ALLOWED=NO -jobs 1`.
+- Reinstalled the app on simulator `715A24C7-6462-44C7-9CDD-19CA13695109` and captured refreshed iPhone screenshots to `/private/tmp/rec70-71-original-ui-mockups-v3/`.
+
+Known issues:
+
+- This branch is still mockups only. Production persistence, PhotosUI/camera wiring, visit aggregation, social visibility, and saved-card behavior remain implementation follow-up.
+
+Checkpoint, 2026-07-08 17:10 PDT:
+
+- Ryan tested the real app map/search flow and correctly reported that the visible UI had not changed.
+- Root cause: the previous handoff validated the DEBUG `-WanderPlaceActivityMockup` screens, but the production `MapScreen` search/typeahead/card/pin components were not updated.
+- Corrective scope now moves from mockup-only to the production map UI for saved status badges and rating strip behavior.
+- Expected additional files: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `Wander/Models/PlaceProfilePresentation.swift` if the full-screen profile rating section needs the same naming/three-card behavior.
+
+Checkpoint, 2026-07-08 17:21 PDT:
+
+- Implemented production UI fixes:
+  - Real map typeahead saved rows no longer show the misleading trailing green check for every saved result.
+  - Saved rows now badge the category icon with a green check for `been` or a dotted green circle for `wanna_go`.
+  - Real map pins and selected place cards now use the same current-user saved-state category badge.
+  - `PlaceProfilePresenter.ownRating` averages all current-user `been` ratings present in the save summaries instead of taking only the first save.
+  - Trusted/overall rating copy is now `Rec.me rating`, with neutral `rating(s)` subtitles.
+  - Real map sheet and full-screen place profile rating sections now render three cards: `Your rating`, `Rec.me rating`, and `Fit`, with `No visits yet` shown when the current user has no `been` visit/rating.
+- Verification: `git diff --check` passed before build.
+- Verification: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Known issues:
+
+- This pass fixes the production UI surfaces Ryan was testing. It does not yet add the underlying multiple-visit persistence model, real PhotosUI/camera storage, or full-screen production photo carousel because those require data/storage changes beyond the visible UI correction.
+
+Checkpoint, 2026-07-08 19:07 PDT:
+
+- Ryan requested a production correction after testing quicksearch:
+  - Quicksearch saved-state marks should match map-pin ownership rings: `been` circles the whole category icon, `wanna_go` dotted-circles it, using current-user/social ring colors.
+  - The quicksearch blue plus should hide only when that result is already saved as `been` or `wanna_go`; it should not disappear because other people saved it.
+  - Real map icons should not show the small green check/dotted-circle badge on top of the existing ring.
+  - Rating slabs need centered headers/values, uniform numeric sizing, and equal-sized cards.
+  - Continue wiring the previously discussed Latest Activity/visits/photos surfaces where possible.
+- Current implementation constraint: the local model still has one `LocalUserPlace` per user/place, not a durable multi-visit/photo table. The next pass will wire visible activity UI against current save summaries and avoid overstating backend/photo persistence.
+
+Checkpoint, 2026-07-08 19:26 PDT:
+
+- Implemented Ryan's quicksearch/map/rating corrections in production views:
+  - Quicksearch saved results now draw a full category-icon ownership ring instead of a small corner saved badge.
+  - `been` quicksearch results use a solid ring; `wanna_go` results use a dotted ring.
+  - Quicksearch rings use `MapPinSaveOwnership` colors, so current-user saves use the You color and social-only saves use the Social color.
+  - Quicksearch blue `+` remains visible for social-only saved results and hides only when the current user already has that place saved.
+  - Real map pins no longer add the small green check/dotted saved badge on top of their ring.
+  - Full-screen place profile map header annotations no longer show the small saved badge.
+  - Bottom-sheet and full-screen rating slabs now show three equal cards: `Your rating`, `Rec.me rating`, and `Fit`.
+  - Rating card headers/values/subtitles are centered, numeric value sizing is uniform, and `Your rating` uses the same slab dimensions as the other cards.
+  - Any saved/social place now shows the three-card rating slab even without numeric ratings, so `Your rating` can display `No visits yet` instead of disappearing.
+- Added a production `Latest Activity` section on the expanded bottom sheet and full-screen place profile:
+  - Replaces separate `your note` and `friends' notes` blocks.
+  - Has `ALL` and `MY VISITS` toggle states.
+  - Shows timestamped activity cards from current `PlaceSaveSummary` data with status, rating, tags, notes, and owner context.
+  - Shows `No visits yet.` for `MY VISITS` when the current user has no `been` activity.
+  - Adds a native iOS photo action from the current user's activity card with `Take Photo` and `Choose from Library`.
+  - Adds a horizontal thumbnail rail, full-screen paged photo viewer, selected-photo note context, and delete action.
+- Important limitation: activity photos are currently local SwiftUI view state only. They demonstrate and compile the native interaction, but do not persist, sync, or attach to backend/storage yet.
+- Important limitation: true multi-visit persistence is still not implemented. The production activity section is backed by existing one-save-per-user/place summaries, so a durable `place_visits`/`visit_photos` model and save-flow behavior are still required.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed build failed before compiling app code due CoreSimulator/SwiftPM cache permissions, then escalated build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Verification: focused presenter tests passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests`
+  Result: 8 tests passed, 0 failed.
+- Verification after the final rating-slab visibility tweak: escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-production-fix CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+Checkpoint, 2026-07-08 21:50 PDT:
+
+- Agent/tool: Codex.
+- Goal: move durable multi-visit/photo storage leftovers into Linear, then apply Ryan's REC-71 post-testing UI refinements on branch `codex/rec-70-rec-71-activity`.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing changes in `Wander.xcodeproj/project.pbxproj`, `Wander/App/WanderApp.swift`, `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Models/PlaceProfilePresentation.swift`, `docs/agent-log.md`, and untracked `Wander/Features/Map/PlaceActivityMockups.swift`.
+- Worktree coordination: root checkout `/Users/ryanlieblein/Developer/wander` is on dirty branch `codex/profile-pictures`; continuing in the isolated `/private/tmp/recme-rec-70-71-original-ui` worktree.
+- Linear: created REC-79 `Persist multiple visits and visit photos`, assigned to Ryan, with the recommended prompt sequence and open decisions from Ryan's note.
+- Expected files for this pass: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 22:04 PDT:
+
+- Linear outcome: REC-79 `Persist multiple visits and visit photos` created and assigned to Ryan. It captures the durable `place_visits` / `visit_photos` / storage / sync / backfill work as a separate implementation sequence.
+- Implemented Ryan's REC-71 UI follow-ups on branch `codex/rec-70-rec-71-activity`:
+  - Latest Activity now keeps the `latest activity` header and moves the `ALL` / `MY VISITS` toggle into a full-width pill beneath it.
+  - The toggle now uses the beige unselected state and white selected segment with terracotta trim instead of the black selected segment.
+  - Rating slabs now label the third card `Fit Rating` on both the bottom-sheet and full-screen place profile surfaces.
+  - Quicksearch rows now carry grouped save states so a current-user wanna plus social wanna result can render two dotted ownership rings around the full category icon.
+  - Quicksearch saved category icons now use a black symbol on white background; unsaved category icons now use gray-on-light-gray instead of the prior blue treatment.
+  - Quicksearch `+` is always present and is now a real separate add action that opens the save flow for saved and unsaved suggestions.
+  - Latest Activity photos render below tags and above the add-photo button.
+  - Add Photo is only shown for the current user's `been` activity. Other people's visits can show photos but do not expose add-photo controls, and `wanna_go` activity does not expose add-photo controls.
+  - The Add Photo menu is now a local anchored popover under the Add Photo rectangle with a caret and title `Add photos to your visit.`; camera/library actions still use native iOS pickers.
+  - Full-screen photo deletion is only exposed for photos attached to the current user's activity.
+  - Edit-this-place now has a SwiftUI `photos` section under `my labels` and above `a note for future you`, with horizontal thumbnails, local removal, and the same anchored add-photo affordance when the save is `been`.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` failed before app compilation due CoreSimulator/package-network sandbox restrictions, as expected.
+- Verification: escalated build initially reached app compilation and failed on a Swift 6 actor isolation issue in the PhotosPicker menu label. Fixed by replacing the helper method with `PlaceActivityPhotoMenuRow`.
+- Verification: reran escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1`; build succeeded.
+- Tests: did not run the full test suite in this pass; this was UI wiring/polish and the build now compiles. Prior focused presenter tests remain from the previous checkpoint.
+- Known limitation: activity/edit photos are still local SwiftUI state only. Durable multi-visit rows, persistent visit photo metadata, Supabase storage, sync, and migration/backfill are intentionally tracked in REC-79.
+
+Checkpoint, 2026-07-08 23:30 PDT:
+
+- Agent/tool: Codex.
+- Goal: apply Ryan's second REC-71 visual follow-up on branch `codex/rec-70-rec-71-activity`.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing REC-70/71 edits in map/profile/presentation files and agent log; untracked `Wander/Features/Map/PlaceActivityMockups.swift` remains part of this branch's existing mockup work.
+- Worktree coordination: continuing in isolated `/private/tmp/recme-rec-70-71-original-ui`; root checkout remains separate on dirty branch `codex/profile-pictures`.
+- Requested follow-up: reduce double quicksearch rings so they do not clip, remove saved status badge from collapsed place-card category icon, make Add Photo menu use native iOS popover behavior with title `Add photos to your visit`, and increase rating-card header typography for better cohesion.
+- Expected files for this pass: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 23:37 PDT:
+
+- Implemented Ryan's second REC-71 visual follow-up:
+  - Double quicksearch ownership rings are slightly tighter and thinner so two rings stay inside the quicksearch row while single-ring results keep the prior sizing.
+  - Collapsed place cards now show the plain category icon without the small green check or dotted saved badge.
+  - The Add Photo menu now uses SwiftUI's native popover presentation anchored to the Add Photo button, with title text exactly `Add photos to your visit`.
+  - Rating-card header typography was increased on bottom-sheet and full-screen profile rating slabs to make the three squares feel more cohesive.
+- Verification: `git diff --check` passed.
+- Verification: escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Tests: did not rerun the full test suite for this small visual follow-up.
+
+Checkpoint, 2026-07-08 23:50 PDT:
+
+- Agent/tool: Codex.
+- Goal: correct the prior REC-71 follow-up after Ryan reported the visible app still shows the collapsed-card saved badge, non-native Add Photo behavior, and insufficient rating-header change.
+- Current git status in `/private/tmp/recme-rec-70-71-original-ui`: branch `codex/rec-70-rec-71-activity`, behind `origin/main` by 4 commits, with existing REC-70/71 edits in map/profile/presentation files and agent log; untracked `Wander/Features/Map/PlaceActivityMockups.swift` remains part of this branch's existing mockup work.
+- Worktree coordination: root checkout remains separate on dirty branch `codex/profile-pictures`; continuing in isolated worktree.
+- Investigation note: `compactContent` still rendered a separate `statusBadge` even though the prior patch removed status from `CategoryThumb`; the Add Photo menu was a custom SwiftUI popover rather than the native iOS action/dialog surface Ryan expected.
+- Expected files for this correction: `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, and `docs/agent-log.md`.
+
+Outcome, 2026-07-08 23:57 PDT:
+
+- Corrected the missed visible paths:
+  - Removed the saved-status badge from the collapsed map place card title row.
+  - Removed the saved-status badge from the collapsed full-profile preview card category icon.
+  - Replaced the custom Add Photo popover/menu with native SwiftUI `confirmationDialog` surfaces titled exactly `Add photos to your visit`, while keeping native camera and `PhotosPicker` flows.
+  - Removed the dead custom `PlaceActivityPhotoMenu` and row components so the old menu cannot still render.
+  - Increased rating-card title/header typography and header band height on both the map sheet and full profile rating slabs.
+  - Updated the DEBUG mockup Add Photo dialog title to the same exact copy for consistency.
+- Verification: `rg` confirmed no `PlaceActivityPhotoMenu`, `PlaceActivityPhotoMenuRow`, or `.popover(` remains in the production map/profile files.
+- Verification: `git diff --check` passed.
+- Verification: sandboxed build failed before app compilation due CoreSimulator/SwiftPM cache permissions; escalated `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-followup CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+
+## 2026-07-09 10:21 PDT - Codex - REC-70/REC-71 Main + TestFlight Release
 
 Agent: Codex
-Branch: `codex/rec-60-notifications`
-Worktree: `/private/tmp/recme-rec-60-notifications`
-Linear: `REC-60` - Add push notifications for follower and list activity
-Starting status: clean branch created from `origin/main` at `7d709ceb2`; root checkout is on stale `codex/profile-pictures` with an unrelated agent-log planning edit and is not used for implementation.
+Branch: `codex/rec-70-rec-71-activity`
+Worktree: `/private/tmp/recme-rec-70-71-original-ui`
+Linear: `REC-70`, `REC-71`, `REC-79`
 
-Goal: implement the approved REC-60 notification push set in a new branch, including backend wiring for not-yet-fully-fledged app surfaces so notifications are ready when those features ship.
+Goal: Ryan explicitly requested landing the REC-70/REC-71 branch to `main`, packaging a new TestFlight build, and posting the tester-facing Slack update.
 
-Expected files:
+Starting status:
 
-- `docs/agent-log.md`
-- Supabase migrations and SQL tests for notification tokens/preferences/events/RPCs
-- Supabase Edge Function or shared backend notification helpers
-- iOS notification service/model wiring and Settings preferences
-- Focused unit/contract tests for notification routing and no-push guardrails
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains dirty on unrelated branch `codex/profile-pictures`; release work continues in isolated worktrees.
+- REC-70/REC-71 worktree status before staging: branch `codex/rec-70-rec-71-activity`, tracking `origin/main`, behind current `origin/main` by 7 commits, with intended edits in `Wander.xcodeproj/project.pbxproj`, `Wander/App/WanderApp.swift`, `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Models/PlaceProfilePresentation.swift`, `Wander/Features/Map/PlaceActivityMockups.swift`, and `docs/agent-log.md`.
+- Current `origin/main` is already at TestFlight build 62 (`4a15db308` bump, `881744441` release log), so this requested release should bump to build 63 after the REC-70/REC-71 merge lands.
 
 Plan:
 
-- Inspect current Supabase social/list/extraction RPCs, local store flows, and settings architecture.
-- Add durable backend contracts for device registration, notification preferences, event creation, push eligibility, and APNs dispatch readiness.
-- Wire currently available social flows and backend stubs for list/extraction notification scenarios, while preserving no-push cases for unfollow/block/removal/privacy edits.
-- Add tests for preference defaults, block/privacy guards, mutual-follow dedupe, shared-list notification creation, and notification payload safety.
+- Commit the REC-70/REC-71 branch work.
+- Update the branch from latest `origin/main`, resolve conflicts, inspect the diff, and run build/tests.
+- Land the change to `main`.
+- Bump `CURRENT_PROJECT_VERSION` to 63, regenerate XcodeGen output, build/test, archive/upload, run the TestFlight helper, update `docs/agent-log.md`, and post the required Slack note to `#testflight-feedback`.
 
-Checkpoint 2026-07-01 12:22 PDT:
+Merge validation checkpoint, 2026-07-09 10:35 PDT:
 
-- Implemented notification preferences, APNs device-token registration, push event queueing, service-role claim/result RPCs, and a Supabase Edge Function worker for APNs dispatch.
-- Wired event creation for approved push cases: followed you, mutual follow, collaborator added to list, place added to shared list, saved from your map, and capture/extraction ready. Discovery digest preference/type exists but has no producer yet by design.
-- Preserved no-push behavior for disabled preference buckets, missing active tokens, blocks, self-actions, collaborator removal, and private note payloads.
-- Added iOS APNs lifecycle wiring, notification settings UI, sign-in gate, sign-out token unregister, entitlements, and repository tests.
-- Validation: `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
-- Validation: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
-- Validation: focused `xcodebuild test` for `RemoteRepositoryTests/testNotificationRepositoryCallsPreferenceAndTokenRPCs` and `RemoteRepositoryTests/testPushNotificationDeviceTokenHexEncoding` passed on iPhone 17 Pro OS 26.5.
-- Validation: full `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec60-full-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
-- Validation gap: `pnpm dlx supabase test db supabase/tests/notifications.sql` could not connect to local Postgres (`LegacyDbConnectError`); SQL coverage is committed but local Supabase/Docker DB was not available in this session.
-
-Final 2026-07-01 12:24 PDT:
-
-- Outcome: implementation complete and opened ready PR https://github.com/joelipshutz/wander/pull/60.
-- Commit: `c9e6b4283` plus this agent-log handoff update.
-- Known issue: SQL pgTAP test file is committed but still needs a successful local or hosted Supabase test run before merge because the local DB was unreachable here.
-- Next steps: review PR, run/apply the Supabase migration in the target environment, configure APNs worker secrets (`WANDER_WORKER_SECRET`, Supabase service role key, APNs key/team/topic/private key), and schedule/invoke `push-notification-worker` after deployment.
-
-## 2026-07-03 03:16 PDT - Codex - REC-60 Supabase Validation
-
-Agent: Codex
-Branch: `codex/rec-60-notifications`
-Worktree: `/private/tmp/recme-rec-60-notifications`
-Linear: `REC-60` - Add push notifications for follower and list activity
-Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout remains on stale `codex/profile-pictures` with an unrelated agent-log edit and is not used for this validation pass.
-
-Goal: run the real local or hosted Supabase validation for `supabase/tests/notifications.sql` and record the outcome on PR #60 / Linear.
-
-Expected files:
-
-- `docs/agent-log.md`
-- Possibly the REC-60 migration/test files if validation exposes SQL fixes.
-
-Plan:
-
-- Check local Supabase/Docker/tooling state.
-- Run `supabase/tests/notifications.sql` against the strongest available Supabase environment.
-- If validation fails because of SQL defects, fix the migration/test and rerun.
-- Update PR/Linear/log with the final validation result.
-
-Outcome 2026-07-03 03:35 PDT:
-
-- Local Supabase still cannot run here because Docker is not installed (`docker: command not found`), but the bundled Node/pnpm runtime can run Supabase CLI `2.109.0`.
-- Linked this worktree to hosted project `rugmtlgufrhlxwfkumhw` (`wander`) and verified hosted migration state. After merging current `origin/main`, only `20260701190000_push_notifications.sql` remained local-only.
-- `supabase db push --linked --include-all --dry-run --yes` showed it would apply exactly `20260701190000_push_notifications.sql`.
-- A persistent hosted `supabase db push --linked --include-all --yes` was not performed; approval was blocked because it would deploy a shared hosted schema change. REC-60 remains local-only in `supabase migration list --linked` until explicitly approved/applied.
-- Ran a hosted rollback harness that applies the REC-60 migration and `supabase/tests/notifications.sql` inside one transaction, then rolls back.
-- Hosted validation exposed and fixed:
-  - Postgres regex repetition bound issue in push token validation (`{32,512}` is invalid on hosted Postgres); replaced with separate length and hex-character checks.
-  - pgTAP plan count was `22` but the file has `23` assertions.
-  - Hosted pgTAP did not expose `like(text, pattern, description)`; rewrote that assertion with `ok(value like pattern, description)`.
-  - Existing list/follow/save public RPC permission or visibility behavior made notification tests depend on unrelated setup side effects; rewrote those setup paths to direct service-role rows while still exercising the REC-60 triggers.
-- Final hosted rollback diagnostic result: all 23 pgTAP assertions passed, covering token registration, preference defaults, preference suppression, no-token suppression, follow/mutual-follow queueing, block suppression, social-save payload safety, shared-list collaborator/item queueing, collaborator removal no-push, capture-ready queueing/dedupe, and service worker claim/result updates.
-- Final plain hosted rollback query exited 0.
-- Confirmed hosted migration list remains unchanged after rollback: REC-60 is still pending locally and not applied to hosted.
-- Additional validation:
+- Committed the REC-70/REC-71 branch snapshot as `938362af4` (`feat: add latest activity visit UI`).
+- Merged current `origin/main` into the branch as `a010b3fb9`; only `docs/agent-log.md` conflicted, and the resolution kept both the REC-70/REC-71 entries and the current main REC-75/build 61/build 62 history.
+- Ran `xcodegen generate` on the merged branch, then discarded unrelated generated Xcode project settings churn so the project diff remains scoped to the REC-70/REC-71 file membership and build-number changes already present.
+- Verification on merged branch:
   - `git diff --check` passed.
-  - `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
-  - `xcodebuild -list -project Wander.xcodeproj` passed and resolved packages.
-  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-postmerge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec70-71-merge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec70-71-merge-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+  - `xcresulttool` summary for `/private/tmp/DerivedData-rec70-71-merge-build/Logs/Test/Test-Wander-2026.07.09_10-33-10--0700.xcresult`: 227 tests passed, 0 failed, 0 skipped.
+- Land step: squash-applied `codex/rec-70-rec-71-activity` onto clean `main` worktree `/private/tmp/recme-rec-75-v1-defaults` at `origin/main` (`881744441`).
 
-## 2026-07-03 03:42 PDT - Codex - REC-60 Xcode Project Sync
+Release completion, 2026-07-09 11:37 PDT:
+
+- Squash-merged the REC-70/REC-71 activity work onto `main` as `1952f92b7` (`feat: add REC-70 REC-71 activity UI`).
+- Bumped `CURRENT_PROJECT_VERSION` from `62` to `63` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, kept the generated project diff scoped to the two build-number settings, committed `3a0d9c31b` (`chore: bump TestFlight build 63`), and pushed `main`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build63-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full test suite passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build63-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result from `/private/tmp/DerivedData-build63-build/Logs/Test/Test-Wander-2026.07.09_10-48-31--0700.xcresult`: 227 passed, 0 failed, 0 skipped.
+- Archived build `0.1 (63)` at `/private/tmp/Wander-0.1-build63.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build63.xcarchive -derivedDataPath /private/tmp/DerivedData-build63-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `63`.
+- Export options: `/private/tmp/WanderExportUpload63.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Uploaded build `0.1 (63)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build63.xcarchive -exportPath /private/tmp/WanderTestFlightUpload63 -exportOptionsPlist /private/tmp/WanderExportUpload63.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 63 --archive-path /private/tmp/Wander-0.1-build63.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build63-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (63)` id `8b87d38f-a601-4362-abb7-6058bbbf7702`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note was attempted for `#testflight-feedback`, but the Slack connector returned HTTP 401 `token_expired` / "Provided authentication token is expired. Please try signing in again." No Slack message was posted.
+- Linear release updates for `REC-70`, `REC-71`, and `REC-79` were attempted, but the Linear connector also returned HTTP 401 `token_expired`. No Linear comments or status changes were posted.
+
+Known issues:
+
+- Multiple visits and visit photos are still local UI/state only in build 63.
+- Durable `place_visits` / `visit_photos` persistence and storage remain tracked separately in `REC-79`.
+- Slack and Linear app connectors need re-authentication before release notes/comments can be posted.
+
+Next:
+
+- After Slack re-auth, post the prepared build 63 tester note to `#testflight-feedback`.
+- After Linear re-auth, add build 63 release comments to `REC-70` and `REC-71`; leave `REC-79` open for durable visits/photos persistence.
+- Test build 63 from TestFlight for quick search saved-state rings, plus-button behavior, collapsed card badges, the three-card rating slab, Latest Activity `ALL` / `MY VISITS`, native Add Photo gating, and photo carousel behavior.
+
+Connector follow-up, 2026-07-09 14:47 PDT:
+
+- Slack and Linear connectors were re-authenticated in Codex and responded successfully.
+- Posted the build 63 tester note to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783633561942069
+- Added Linear release comments:
+  - `REC-70`: `f8ec8d8f-fdcb-4c8d-9f9a-fccf18d51c9a`
+  - `REC-71`: `9f939d09-e747-4218-918e-bc9bd2c0d70b`
+  - `REC-79`: `154f8f05-bdd6-4bb4-b2c6-ec23ba58f9d6`
+- Moved `REC-70` and `REC-71` to `Done`; left `REC-79` open for durable multiple-visit/photo persistence.
+
+## 2026-07-08 11:33 PDT - Codex - REC-75 V1 Default Tags And Labels
 
 Agent: Codex
-Branch: `codex/rec-60-notifications`
-Worktree: `/private/tmp/recme-rec-60-notifications`
-Linear: `REC-60` - Add push notifications for follower and list activity
-Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout remains on stale `codex/profile-pictures` with an unrelated agent-log edit and is not used.
+Branch: `codex/rec-75-v1-defaults`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Linear: `REC-75` (`Update default tags and labels when category changes`)
 
-Goal: regenerate the Xcode project for PR #60, push any generated project changes, and provide concrete test steps for Ryan.
+Goal: Implement the v1 deterministic version of REC-75 on a new branch: category/subcategory-driven default tags and personal labels, preserving user/custom selections and keeping the defaults tied to the shared taxonomy.
+
+Starting status:
+
+- Ran `git fetch origin` from the root checkout, inspected `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is dirty on stale branch `codex/profile-pictures` with modified `docs/agent-log.md`; do not use it for this implementation.
+- Created isolated worktree `/private/tmp/recme-rec-75-v1-defaults` from `origin/main` on `codex/rec-75-v1-defaults`.
+- Worktree status is clean and tracking `origin/main` at `65e34776a`.
+
+Expected files:
+
+- `Wander/Services/WanderPlaceCategory.swift`
+- `Wander/Features/Add/AddQuestionTemplates.swift`
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/WanderPlaceCategoryTests.swift`
+- `WanderTests/WanderStoreTests.swift` if store-level persistence coverage is needed
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-08 11:59 PDT:
+
+- Implemented deterministic v1 tag/label defaults in the shared category service via `PlaceMemoryDefaultCatalog`.
+- Updated Add question templates to use primary category, subcategory, optional cuisine, status, and local user custom options when building tag chips/defaults.
+- Updated the map edit/save sheet so category/subcategory/status changes seed new defaults without deleting previously selected tag-like values.
+- Added local-only custom suggestion reuse by reading the current user's own saved tag and personal-label attributes for exact/similar category combinations.
+- Made personal label defaults combo-specific first, with locality labels such as `LA favorite` still offered as options rather than always auto-selected.
+- Added taxonomy coverage tests for every editable category/subcategory and concrete combo tests for Thai restaurants, taco trucks, cocktail bars, waterfalls, and chocolate lounges.
+
+Validation:
+
+- Initial sandboxed `xcodebuild build` failed before app compilation because CoreSimulator access was blocked and SwiftPM attempted network fetches without DNS; reran with elevated Xcode access and the existing `/private/tmp/SourcePackages-rec72-postrebase` package cache.
+- `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec75-v1-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
+- Focused REC-75 tests passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec75-v1-build -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderPlaceCategoryTests -only-testing:WanderTests/WanderStoreTests/testWannaGoQuestionTemplatesAvoidVisitedOnlyPrompts -only-testing:WanderTests/WanderStoreTests/testSaveQuestionTemplatesUseSliderRatingAndMultiBestFor`
+- Full XCTest suite passed:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec75-v1-full -clonedSourcePackagesDirPath /private/tmp/SourcePackages-rec72-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Latest full result bundle: `/private/tmp/DerivedData-rec75-v1-full/Logs/Test/Test-Wander-2026.07.08_11-58-03--0700.xcresult`
+- `git diff --check` passed.
+
+Known limits:
+
+- V1 is deterministic and local-only. It does not use reviews/internet/OpenAI for smart tag/label suggestions; that is tracked separately in REC-77.
+- Local custom options currently reappear only after the user saves them on one of their own places, because this branch intentionally avoids a new custom-suggestion persistence table.
+
+Outcome, 2026-07-08 12:01 PDT:
+
+- Implementation commit: `7bf83cdbc` (`Implement REC-75 v1 default tags and labels`).
+- Pushed branch `codex/rec-75-v1-defaults` to origin.
+- Opened ready PR #65: https://github.com/joelipshutz/wander/pull/65
+- Added Linear REC-75 implementation note, attached PR #65, and moved REC-75 to `In Review`.
+
+Next:
+
+- Ryan should test PR #65 in Xcode before merge, with emphasis on edit-place category/subcategory/status changes, Restaurants & Food cuisine/subcategory combinations, and custom tag/label reuse after saving a custom option once.
+
+## 2026-07-08 09:52 PDT - Codex - Lists REC-59 / REC-60 Plan Eng Review
+
+Agent: Codex
+Branch: `codex/lists-fixes`
+Worktree: `/private/tmp/recme-lists-fix`
+Linear: `REC-59` (`lists are not saving right now`), `REC-60` (`Add push notifications for follower and list activity`)
+
+Goal: review the collaboration lists architecture and current bugs before implementation: list detail top navigation clipping, My Lists showing zero places after additions, REC-59 list persistence, and REC-60 list notification coupling.
+
+Starting status:
+
+- Created/using fresh worktree from latest `origin/main` at `65e3477`.
+- `git status --short --branch`: clean before this log entry.
+- Root checkout remains on stale deleted branch `codex/rating-score-reset`; do not use it for Lists edits.
+- Fetched PR #60 into local inspect ref `codex/rec-60-notifications-inspect` without switching this worktree.
+
+Initial findings:
+
+- iOS has local list models, local persistence, list suggestions, owner-only list add/manage checks, and shipped UI flows.
+- iOS does not currently have a `PlaceListRepository` or list create/update/add/remove/detail sync path, even though Supabase list tables/RPCs exist in `20260628112000_place_lists.sql`.
+- `REC-60` depends on server-side list writes for list notifications, so its list notification producers should be treated as blocked or inert until `REC-59`/list backend sync is implemented.
+- Reported UI bugs map to `Wander/Features/Lists/ListsScreen.swift`, especially toolbar sizing and stale/list-item-to-visible-place projection.
 
 Expected files:
 
 - `docs/agent-log.md`
-- Possibly `Wander.xcodeproj/project.pbxproj` if XcodeGen produces a project diff.
+- `docs/reviews/2026-07-08-lists-collab-rec59-rec60-plan-eng-review.md`
+- Potential later implementation files: `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/RepositoryProtocols.swift`, `Wander/Services/Remote/SupabaseRepositories.swift`, `Wander/App/WanderBackend.swift`, `WanderTests/WanderStoreTests.swift`, `WanderTests/RemoteRepositoryTests.swift`, and Supabase list notification tests if REC-60 is adjusted.
 
-Plan:
+Review checkpoint:
 
-- Run `xcodegen generate`.
-- Inspect and push any generated Xcode project changes to PR #60.
-- Re-run a basic build validation if project files changed.
-- Comment/finalize with hands-on test steps for notification behavior.
+- Completed `/plan-eng-review` artifact: `docs/reviews/2026-07-08-lists-collab-rec59-rec60-plan-eng-review.md`.
+- Wrote gstack QA test-plan artifact: `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/joelipshutz-codex-lists-fixes-eng-review-test-plan-20260708-095918.md`.
+- Logged gstack review metadata after adding `~/.bun/bin` to `PATH`; current review status is `issues_open` with 3 critical gaps.
+- Recommendation: use `REC-59` as the active implementation ticket; fix toolbar clipping, deterministic list item projection/counts, and list repository/Supabase sync before treating `REC-60` list notifications as live.
+- Correction from investigation: PR #60 already guards collaborator-removal notifications correctly; the remaining REC-60 concern is dependency on server-backed list writes, not trigger correctness.
 
-Outcome 2026-07-03 03:48 PDT:
+Implementation checkpoint, 2026-07-08 10:50 PDT:
 
-- Ran `xcodegen generate`; it updated `Wander.xcodeproj/project.pbxproj` by removing two generated `CODE_SIGN_IDENTITY = "iPhone Developer"` lines while preserving the REC-60 entitlements/APNs project settings and build number `60`.
+- Implemented the missing iOS list backend path for `REC-59`: added `PlaceListRepository`, Supabase RPC DTOs/repository methods, `WanderBackend` wiring, store sync for create/update/delete/collaborators/items, and remote list refresh/hydration.
+- Fixed list count/row projection issues by caching server item counts on `LocalPlaceList` and resolving list items through local place/user-place state when the row is not currently in the visible-place candidate set.
+- Wired Lists screens to refresh remote lists on entry/detail load and to sync pending list changes after create/edit/delete/collaborator saves.
+- Tightened list detail toolbar buttons to avoid top-right nav clipping.
+- Added richer followed-user/demo fixture lists so non-owner list states are testable with demo data.
+- Added tests covering Supabase list RPC fetch/write behavior and store-level remote list hydration/sync.
+- `git diff --check` passed before the final build.
+- Focused tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-fix CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/RemoteRepositoryTests/testPlaceListRepositoryFetchesVisibleListsAndDetail -only-testing:WanderTests/RemoteRepositoryTests/testPlaceListRepositoryWritesExpectedRPCs -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+- Broad simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-fix-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Known limitation: hosted `place_list_detail` currently returns list item IDs, not full place metadata, so iOS hydrates detail rows from visible-place/profile caches. This is workable for now, but a follow-up Supabase migration should enrich the detail RPC with place/user-place fields to make list detail rendering independent of cache warmup.
+
+Follow-up checkpoint, 2026-07-08 11:05 PDT:
+
+- Joe tested PR #64 on device and reported remaining list issues before merge:
+  - Adding places inside list detail does not update My Lists after navigating back.
+  - List thumbnails break when the list has fewer than four places.
+  - Add-to-list should search/add any place, not only places already in been/wanna visible data.
+  - Collaborators should be allowed to add places.
+- Continuing on branch `codex/lists-fixes` in `/private/tmp/recme-lists-fix`; current PR remains unmerged.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, list tests, `docs/agent-log.md`.
+
+Follow-up outcome, 2026-07-08 14:50 PDT:
+
+- Fixed list add refresh propagation so adding/removing places from list detail refreshes the open list mock and My Lists count/thumbnail data when navigating back.
+- Fixed list mosaics with fewer than four places by rendering stable four-slot thumbnails with quiet empty placeholders instead of shrinking/breaking the layout.
+- Reworked add-to-list search to use manual place candidates, so users can add any searched place to a list. Unsaved places are saved as wanna-go first, then added to the list, matching the existing auto-save behavior.
+- Changed list permissions so collaborators can add places, while owner-only controls still gate list metadata/collaborator management.
+- Added Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` so collaborators can add list items server-side through the existing list item RPC path.
+- Added tests for collaborator item adds and unsaved-candidate adds.
 - `git diff --check` passed.
-- `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-xcode-sync-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed.
-- Next: commit and push the Xcode project sync to PR #60.
+- Focused tests passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testCollaboratorCanAddPlaceToSharedList -only-testing:WanderTests/WanderStoreTests/testAddingUnsavedCandidateToListCreatesWantSaveAndListItem -only-testing:WanderTests/WanderStoreTests/testRemotePlaceListsHydrateVisibleScopesCountsAndItems -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsCreatesRemoteListAndCollaborators`
+- Broad simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Next: commit and push branch `codex/lists-fixes`; do not merge PR #64 until Joe retests.
+
+Release completion, 2026-07-08 17:25 PDT:
+
+- Joe asked to push the Lists fixes to TestFlight, so PR #64 was squash-merged to `main`.
+- PR #64 merge commit on `main`: `a71818e` (`Fix Supabase place list sync`).
+- Bumped `CURRENT_PROJECT_VERSION` from `60` to `61` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `20e8195` (`chore: bump TestFlight build 61`), and pushed it to `main`.
+- Applied hosted Supabase migration `20260708110500_place_list_collaborator_item_adds.sql` with `npx supabase db push --linked --yes`; dry run first showed this was the only pending migration.
+- Fixed stale test expectation after the collaborator-add product decision changed: `f0807bd` (`test: update list collaborator permission expectation`) updates the old collaborator-denied test to cover a non-member denial case instead.
+- Pushed final release state to `main` at `f0807bd`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-lists-followup-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full test suite passed on `iPhone 16 Plus, OS 18.6`:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-lists-followup CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 225 tests executed, 0 failures.
+- Archived build `0.1 (61)` at `/private/tmp/Wander-0.1-build61.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build61.xcarchive -derivedDataPath /private/tmp/DerivedData-build61-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `61`.
+- Export options: `/private/tmp/WanderExportUpload61.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Uploaded build `0.1 (61)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build61.xcarchive -exportPath /private/tmp/WanderTestFlightUpload61 -exportOptionsPlist /private/tmp/WanderExportUpload61.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `node scripts/testflight-release.mjs --build-number 61 --archive-path /private/tmp/Wander-0.1-build61.xcarchive --env /Users/joelipshutz/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build61-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (61)` id `c618ceca-5bcb-4977-9861-4af052be2310`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783556652280249
+- Linear `REC-59` moved to `Done`; added release comment `7f526dfd-a7fb-419e-bebe-c53f3ae65fa5`.
+- Linear `REC-60` left open/In Review; added comment `66444f01-40e4-43d5-93db-e5bb673e99e6` noting that build 61 shipped the live list-write dependency, but not the notification feature itself.
+
+Known issues:
+
+- List suggestion relevance is still early and may need tuning.
+- List notification work remains tracked separately in `REC-60`.
+
+Next:
+
+- Test build 61 from TestFlight for REC-59 flows: create a list, add places, add unsaved searched places, verify My Lists counts/thumbnails after navigating back, verify 0-3 place thumbnails, and verify collaborator list-item adds.
+
+## 2026-07-08 23:45 PDT - Codex - REC-75 Merge And TestFlight Build 62
+
+Agent: Codex
+Branch: `codex/rec-75-v1-defaults`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Linear: `REC-75` (`Update default tags and labels when category changes`)
+
+Goal: squash-merge PR #65 to `main`, package latest `main` into a new TestFlight build, attach it to the public TestFlight group, update Linear, and post the required tester-facing Slack note.
+
+Starting status:
+
+- User explicitly requested a squash-merge to `main` and a new TestFlight build.
+- Root checkout `/Users/ryanlieblein/Developer/wander` remains dirty on stale branch `codex/profile-pictures` with modified `docs/agent-log.md`; release work is using the isolated REC-75 worktree.
+- Ran `git fetch origin`, inspected worktrees and status, and reviewed recent `docs/agent-log.md`.
+- PR #65 is open, ready, targets `main`, and has no GitHub checks reported.
+- Branch was 2 commits ahead and 4 commits behind `origin/main`; merged latest `origin/main` into the branch before landing. The only conflict was `docs/agent-log.md`; resolved by preserving both the REC-75 entry and the build 61/lists release history.
+- Latest completed TestFlight build in the log is build 61, so this release should bump `CURRENT_PROJECT_VERSION` from `61` to `62`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- Temporary release notes/export artifacts outside the repo as needed.
+
+Release completion, 2026-07-09 00:51 PDT:
+
+- PR #65 was squash-merged to `main` with commit `5ee8cb9f1` (`Implement REC-75 v1 default tags and labels`), and the remote PR branch was deleted.
+- Bumped `CURRENT_PROJECT_VERSION` from `61` to `62` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `4a15db308` (`chore: bump TestFlight build 62`), and pushed `main`.
+- Build verification passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build62-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+- The documented `iPhone 16 Plus, OS 18.6` simulator runtime was not installed in this Xcode environment, so the full suite was run on the available simulator.
+- Full test suite passed on `iPhone 17 Pro, OS 26.5`:
+  `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build62-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  Result: 227 passed, 0 failed, 0 skipped.
+- Archived build `0.1 (62)` at `/private/tmp/Wander-0.1-build62.xcarchive`:
+  `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build62.xcarchive -derivedDataPath /private/tmp/DerivedData-build62-archive -allowProvisioningUpdates`
+- Archive metadata confirmed marketing version `0.1` and build `62`.
+- Export options: `/private/tmp/WanderExportUpload62.plist`, with `manageAppVersionAndBuildNumber=false`.
+- Initial sandboxed export attempt failed before upload because Xcode could not load local provisioning profile/CoreSimulator state under sandbox restrictions; retried unsandboxed with the local App Store Connect API key.
+- Uploaded build `0.1 (62)` with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build62.xcarchive -exportPath /private/tmp/WanderTestFlightUpload62 -exportOptionsPlist /private/tmp/WanderExportUpload62.plist -allowProvisioningUpdates ...`
+  Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- Ran:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 62 --archive-path /private/tmp/Wander-0.1-build62.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build62-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`
+- TestFlight helper result: build `0.1 (62)` id `540d3db6-a699-4360-96d2-e85fbd4ba045`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, attached to `Wander Alpha`, external review `APPROVED`.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783583260306739
+- Linear `REC-75` was already `Done`; added release comment `4b7280fc-d5e5-4702-9239-c5cfab5d5887`.
+
+Known issues:
+
+- v1 default tag/label suggestions are deterministic and local-only; smarter OpenAI/review/internet-driven suggestions remain deferred to a later REC.
+
+Next:
+
+- Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
 
 ## 2026-07-09 16:16 PDT - Codex - REC-60 Notification Platform Hardening
 
@@ -8807,9 +9221,15 @@ Agent: Codex
 Branch: `codex/rec-60-notifications`
 Worktree: `/private/tmp/recme-rec60-platform-audit`
 Linear: `REC-60` - Add push notifications for follower and list activity
-Starting status: clean branch tracking `origin/codex/rec-60-notifications`; root checkout is on active `codex/rec-81-collab-visibility` and is not used for REC-60 edits.
+Starting status: clean branch tracking `origin/codex/rec-60-notifications` at PR #60 head; root checkout is on active `codex/rec-81-collab-visibility` and is not used for REC-60 edits.
 
 Goal: implement the baseline hardening needed before relying broadly on REC-60 notifications: claim expiry/retry, attempt accounting, worker observability, and a concise internal guide for adding new notification producers.
+
+Context carried forward from PR #60:
+
+- REC-60 already includes APNs token registration, notification settings, notification event queueing, current follow/list/social-save/capture producers, and the APNs Edge Function worker.
+- Hosted rollback validation previously passed all 23 pgTAP assertions, but the REC-60 migration has not been persistently applied to hosted.
+- The branch has now merged latest `origin/main` through build 62 / current project build 63 before hardening edits.
 
 Expected files:
 
@@ -8820,7 +9240,6 @@ Expected files:
 
 Plan:
 
-- Merge current `origin/main` into the REC-60 branch before edits.
 - Add retry-safe claim lifecycle fields and SQL behavior.
 - Update the worker response/error handling to expose useful processing metrics.
 - Extend SQL tests to cover retry/attempt behavior.

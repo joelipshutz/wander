@@ -507,6 +507,140 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["input_job_id"] as? String, "job_remote")
     }
 
+    func testPlaceListRepositoryFetchesVisibleListsAndDetail() async throws {
+        let rpc = RecordingRPC()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let itemID = "22222222-2222-4222-8222-222222222222"
+        let placeID = "33333333-3333-4333-8333-333333333333"
+        let userPlaceID = "44444444-4444-4444-8444-444444444444"
+        rpc.responses["visible_place_lists"] = """
+        [
+          {
+            "id": "\(listID)",
+            "owner_user_id": "user_ryan",
+            "owner_handle": "ryan",
+            "owner_display_name": "Ryan",
+            "name": "Brooklyn tables",
+            "description": "Dinner ideas",
+            "visibility": "followers",
+            "created_at": "2026-07-08T16:00:00Z",
+            "updated_at": "2026-07-08T16:05:00Z",
+            "collaborators": [
+              {
+                "user_id": "user_joe",
+                "handle": "joe",
+                "display_name": "Joe",
+                "role": "collaborator"
+              }
+            ],
+            "item_count": 1
+          }
+        ]
+        """.data(using: .utf8)
+        rpc.responses["place_list_detail"] = """
+        {
+          "list": {
+            "id": "\(listID)",
+            "owner_user_id": "user_ryan",
+            "name": "Brooklyn tables",
+            "description": "Dinner ideas",
+            "visibility": "followers",
+            "created_at": "2026-07-08T16:00:00Z",
+            "updated_at": "2026-07-08T16:05:00Z",
+            "deleted_at": null
+          },
+          "collaborators": [
+            {
+              "user_id": "user_joe",
+              "handle": "joe",
+              "display_name": "Joe",
+              "role": "collaborator"
+            }
+          ],
+          "items": [
+            {
+              "id": "\(itemID)",
+              "list_id": "\(listID)",
+              "place_id": "\(placeID)",
+              "owner_user_place_id": "\(userPlaceID)",
+              "source_user_place_id": "\(userPlaceID)",
+              "added_by_user_id": "user_ryan",
+              "created_at": "2026-07-08T16:02:00Z",
+              "updated_at": "2026-07-08T16:02:00Z",
+              "deleted_at": null
+            }
+          ]
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlaceListRepository(rpc: rpc)
+
+        let summaries = try await repository.visibleLists()
+        let detail = try await repository.detail(listID: listID)
+
+        XCTAssertEqual(summaries.map(\.list.id), [listID])
+        XCTAssertEqual(summaries[0].list.cachedItemCount, 1)
+        XCTAssertEqual(summaries[0].owner.handle, "ryan")
+        XCTAssertEqual(summaries[0].collaborators.map(\.userID), ["user_joe"])
+        XCTAssertEqual(detail?.items.map(\.id), [itemID])
+        XCTAssertEqual(detail?.items[0].placeID, placeID)
+        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_lists", "place_list_detail"])
+        XCTAssertTrue(rpc.rawBodies[0].isEmpty)
+        XCTAssertEqual(rpc.calls[1].body["input_list_id"] as? String, listID)
+    }
+
+    func testPlaceListRepositoryWritesExpectedRPCs() async throws {
+        let rpc = RecordingRPC()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let itemID = "22222222-2222-4222-8222-222222222222"
+        let placeID = "33333333-3333-4333-8333-333333333333"
+        let userPlaceID = "44444444-4444-4444-8444-444444444444"
+        rpc.responses["upsert_place_list"] = "\"\(listID)\"".data(using: .utf8)
+        rpc.responses["add_place_list_item"] = "\"\(itemID)\"".data(using: .utf8)
+        let repository = SupabasePlaceListRepository(rpc: rpc)
+
+        let createdListID = try await repository.upsert(
+            PlaceListUpsertDraft(
+                id: nil,
+                name: "LA coffee",
+                description: "laptop mornings",
+                visibility: .followers
+            )
+        )
+        try await repository.setCollaborators(listID: listID, userIDs: ["user_ryan"])
+        let createdItemID = try await repository.addItem(
+            PlaceListItemDraft(
+                listID: listID,
+                placeID: placeID,
+                ownerUserPlaceID: userPlaceID,
+                sourceUserPlaceID: userPlaceID
+            )
+        )
+        try await repository.removeItem(listID: listID, itemID: itemID)
+        try await repository.delete(listID: listID)
+
+        XCTAssertEqual(createdListID, listID)
+        XCTAssertEqual(createdItemID, itemID)
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            [
+                "upsert_place_list",
+                "set_place_list_collaborators",
+                "add_place_list_item",
+                "remove_place_list_item",
+                "delete_place_list"
+            ]
+        )
+        let upsertBody = rpc.rawBodies[0]["input_list"] as? [String: Any]
+        XCTAssertEqual(upsertBody?["name"] as? String, "LA coffee")
+        XCTAssertEqual(upsertBody?["visibility"] as? String, "followers")
+        XCTAssertEqual(rpc.calls[1].body["input_list_id"] as? String, listID)
+        XCTAssertEqual(rpc.rawBodies[1]["collaborator_user_ids"] as? [String], ["user_ryan"])
+        XCTAssertEqual(rpc.calls[2].body["input_place_id"] as? String, placeID)
+        XCTAssertEqual(rpc.calls[2].body["input_owner_user_place_id"] as? String, userPlaceID)
+        XCTAssertEqual(rpc.calls[3].body["input_item_id"] as? String, itemID)
+        XCTAssertEqual(rpc.calls[4].body["input_list_id"] as? String, listID)
+    }
+
     func testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema() async throws {
         let rpc = RecordingRPC()
         rpc.responses["function:parse-discover-query"] = """
