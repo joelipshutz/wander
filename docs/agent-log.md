@@ -9275,3 +9275,12 @@ Completion, 2026-07-09 15:16 PDT:
 - Opened draft PR #67: https://github.com/joelipshutz/wander/pull/67
 - PR is intentionally draft because pgTAP could not be executed successfully in this environment.
 - No hosted Supabase migration was applied.
+
+Follow-up checkpoint, 2026-07-09 15:25 PDT:
+
+- Ryan answered the open REC-XX product questions:
+  - Visit ratings are optional; no rating is required.
+  - Visit photos inherit visit visibility in v1; no separate photo visibility.
+  - User-owned visits may be deleted. If deleting the last `been` visit, the save should fall back to `wanna_go` only when a separate wanna save exists; otherwise it becomes unsaved.
+  - Visit attributes should persist as flexible `attribute_answers` JSONB plus a derived `tags` array for display/search.
+- Updating the draft PR branch to encode these decisions in the backend plan, schema/tests where applicable, and this log. No UI wiring or hosted migration apply in this follow-up.

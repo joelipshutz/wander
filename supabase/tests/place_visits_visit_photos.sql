@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(45);
+select plan(60);
 
 select ok(
   exists (
@@ -22,6 +22,42 @@ select ok(
       and table_name = 'visit_photos'
   ),
   'visit_photos table exists'
+);
+
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'place_visits'
+      and column_name = 'attribute_answers'
+      and data_type = 'jsonb'
+  ),
+  'place_visits stores flexible attribute answers as jsonb'
+);
+
+select ok(
+  exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'place_visits'
+      and column_name = 'tags'
+      and udt_name = '_text'
+  ),
+  'place_visits stores derived tags as a text array'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'place_visits'
+      and indexname = 'place_visits_tags_idx'
+      and indexdef ilike '%using gin%'
+  ),
+  'place_visits has a gin index for derived tags'
 );
 
 select ok(
@@ -155,6 +191,21 @@ select ok(
   'authenticated can execute visit rating summary helper'
 );
 
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'app.user_place_attribute_answers(uuid)'::regprocedure
+  ),
+  true,
+  'user_place_attribute_answers runs as security definer'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'app.set_place_visit_derived_tags()', 'execute'),
+  'authenticated cannot directly execute the derived tags trigger function'
+);
+
 select ok(
   exists (
     select 1
@@ -164,6 +215,39 @@ select ok(
       and not tgisinternal
   ),
   'user_places trigger keeps backfilled visits in sync'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgname = 'place_visits_set_derived_tags'
+      and tgrelid = 'public.place_visits'::regclass
+      and not tgisinternal
+  ),
+  'place_visits trigger derives tags from attribute answers'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgname = 'place_attributes_sync_backfilled_visit_attributes'
+      and tgrelid = 'public.place_attributes'::regclass
+      and not tgisinternal
+  ),
+  'place_attributes trigger syncs legacy attributes into the backfilled visit'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgname = 'place_visits_sync_user_place_after_delete'
+      and tgrelid = 'public.place_visits'::regclass
+      and not tgisinternal
+  ),
+  'place_visits trigger syncs parent save state after visit delete'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -280,6 +364,40 @@ select results_eq(
   'updating legacy save syncs note and rating onto the backfilled visit'
 );
 
+insert into public.place_attributes (
+  user_place_id,
+  question_key,
+  value_type,
+  value
+)
+values (
+  '20000000-0000-0000-0000-000000000101',
+  'restaurant_tags',
+  'multi_tag',
+  '["Cozy", "date night", "cozy", " "]'::jsonb
+);
+
+select ok(
+  (
+    select attribute_answers @> '[{"question_key":"restaurant_tags","value_type":"multi_tag"}]'::jsonb
+    from public.place_visits
+    where user_place_id = '20000000-0000-0000-0000-000000000101'
+      and backfilled_from_user_place
+  ),
+  'place_attributes insert syncs flexible answers onto the backfilled visit'
+);
+
+select is(
+  (
+    select tags
+    from public.place_visits
+    where user_place_id = '20000000-0000-0000-0000-000000000101'
+      and backfilled_from_user_place
+  ),
+  array['cozy', 'date night']::text[],
+  'backfilled visit derives normalized tags from flexible answers'
+);
+
 update public.user_places
 set status = 'wanna_go'
 where id = '20000000-0000-0000-0000-000000000101';
@@ -305,6 +423,15 @@ select is(
   ),
   1,
   'wanna_go transition soft-deletes instead of duplicating the backfilled visit'
+);
+
+select ok(
+  (
+    select deleted_at is null
+    from public.user_places
+    where id = '20000000-0000-0000-0000-000000000101'
+  ),
+  'switching a save to wanna_go does not unsave the parent row'
 );
 
 set local role authenticated;
@@ -390,6 +517,50 @@ select is(
   ),
   2,
   'explicit visits can coexist with the synced backfilled visit'
+);
+
+select lives_ok(
+  $$
+    insert into public.place_visits (
+      id,
+      user_place_id,
+      visited_at,
+      note,
+      attribute_answers
+    )
+    values (
+      '40000000-0000-0000-0000-000000000102',
+      '20000000-0000-0000-0000-000000000101',
+      '2026-07-06T10:00:00Z',
+      'third explicit visit with no rating',
+      '[{"question_key":"restaurant_tags","value_type":"multi_tag","value":["Spicy","date night","spicy"]}]'::jsonb
+    )
+  $$,
+  'owner can insert an explicit visit without a rating'
+);
+
+select is(
+  (
+    select tags
+    from public.place_visits
+    where id = '40000000-0000-0000-0000-000000000102'
+  ),
+  array['date night', 'spicy']::text[],
+  'explicit visit derives normalized display tags from attribute answers'
+);
+
+update public.place_visits
+set tags = array['manual drift']::text[]
+where id = '40000000-0000-0000-0000-000000000102';
+
+select is(
+  (
+    select tags
+    from public.place_visits
+    where id = '40000000-0000-0000-0000-000000000102'
+  ),
+  array['date night', 'spicy']::text[],
+  'explicit visit tags stay derived even if a client tries to update tags directly'
 );
 
 select ok(
@@ -541,6 +712,69 @@ select is(
   app.owns_place_visit('40000000-0000-0000-0000-000000000101'),
   false,
   'owns_place_visit does not treat follower as owner'
+);
+
+reset role;
+
+insert into public.places (
+  id,
+  canonical_name,
+  category,
+  latitude,
+  longitude,
+  source_provider,
+  source_provider_place_id
+)
+values (
+  '10000000-0000-0000-0000-000000000105',
+  'Visit Delete Fallback Place',
+  'restaurants_food',
+  34.05,
+  -118.05,
+  'mapkit',
+  'visit-delete-fallback-place'
+);
+
+insert into public.user_places (
+  id,
+  user_id,
+  place_id,
+  status,
+  note,
+  rating_score,
+  visibility,
+  visited_at,
+  saved_at,
+  source_type
+)
+values (
+  '20000000-0000-0000-0000-000000000105',
+  'user_owner',
+  '10000000-0000-0000-0000-000000000105',
+  'been',
+  'last visit',
+  4,
+  'followers',
+  '2026-07-07T10:00:00Z',
+  '2026-07-07T10:01:00Z',
+  'manual'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_owner', true);
+
+delete from public.place_visits
+where user_place_id = '20000000-0000-0000-0000-000000000105';
+
+reset role;
+
+select ok(
+  (
+    select deleted_at is not null
+    from public.user_places
+    where id = '20000000-0000-0000-0000-000000000105'
+  ),
+  'deleting the last owned visit unsaves when no retained wanna state exists'
 );
 
 select * from finish();
