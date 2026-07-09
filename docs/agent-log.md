@@ -9242,3 +9242,25 @@ Initial plan:
 - Trace the current place detail/edit flow, rating slider state, visit model/storage, and existing tests.
 - Produce a concrete implementation spec with data flow, scope boundaries, test plan, and design implications.
 - Run the requested engineering review and iOS design review as far as local/device tooling allows.
+
+Completion, 2026-07-09 16:30 PDT:
+
+- Produced REC-80 planning artifacts:
+  - `docs/reviews/2026-07-09-rec-80-rating-editing-plan-eng-review.md`
+  - `docs/qa/2026-07-09-rec-80-rating-editing-test-plan.md`
+- Draft PR: https://github.com/joelipshutz/wander/pull/68
+- Commit: `e779cb754` (`docs: spec rec-80 rating visit editing`)
+- Linear `REC-80` remains `In Progress`; a planning comment will be added with the PR and artifact links.
+- `/plan-eng-review` completed as a planning review and logged metadata under `~/.gstack` using the bundled Node runtime because `bun` is not on PATH.
+- `/ios-design-review` could not run live: no `~/.gstack/ios-qa-session.json` cache exists, no `DebugBridge`/`StateServer` wiring was present in this checkout, and sandboxed process inspection was blocked. The plan-stage iOS design critique is included in the review doc.
+- Validation: `git diff --cached --check` passed before commit. No app code changed, so no Xcode build or test command was run.
+
+Recommendation:
+
+- Implement REC-80 by keeping `user_places` as the one-row saved-place shell and adding `place_visits` plus visit-scoped attributes as repeatable child records.
+- Do not drop the existing `unique (user_id, place_id)` contract in `user_places`; route repeat ratings through new visit RPC/store paths instead of `saveCandidate`.
+
+Next:
+
+- Start implementation with the Supabase schema/RLS/RPC lane, then local models/persistence and remote DTOs once table/RPC names are locked.
+- Keep `MapScreen.swift`, `WanderLocalStore.swift`, and Supabase migrations single-owner during implementation because they are high-conflict files.
