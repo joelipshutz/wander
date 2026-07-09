@@ -9284,3 +9284,12 @@ Follow-up checkpoint, 2026-07-09 15:25 PDT:
   - User-owned visits may be deleted. If deleting the last `been` visit, the save should fall back to `wanna_go` only when a separate wanna save exists; otherwise it becomes unsaved.
   - Visit attributes should persist as flexible `attribute_answers` JSONB plus a derived `tags` array for display/search.
 - Updating the draft PR branch to encode these decisions in the backend plan, schema/tests where applicable, and this log. No UI wiring or hosted migration apply in this follow-up.
+
+Follow-up outcome, 2026-07-09 15:26 PDT:
+
+- Committed the open-question refinements as `65b5804e5` (`Refine visit photo backend decisions`) on draft PR #67.
+- Updated the backend plan, Supabase migration, and pgTAP coverage for optional visit ratings, inherited photo visibility, flexible `attribute_answers` JSONB plus derived `tags[]`, backfilled attribute sync, direct-tag drift prevention, and last-visit delete semantics.
+- Current-schema delete behavior: deleting the last owned active visit marks the parent save unsaved because `user_places` cannot yet represent a separate retained wanna intent alongside visit history. The plan calls out the follow-up Swift/RPC retained-wanna model needed before fallback-to-`wanna_go` can be represented.
+- Verification: `git diff --check` passed; `supabase/tests/place_visits_visit_photos.sql` declares 60 assertions and has 60 assertion calls.
+- pgTAP was not rerun in this environment because earlier Supabase CLI attempts could not reach a local/linked test database. Draft PR remains the right status until `supabase test db supabase/tests/place_visits_visit_photos.sql` passes in a Docker/local-Supabase-capable environment.
+- No hosted Supabase migration was applied.
