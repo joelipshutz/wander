@@ -188,6 +188,85 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertTrue(cuisines.contains("Thai"))
     }
 
+    func testDefaultSuggestionsCoverEveryEditableTaxonomySubcategory() {
+        for category in WanderPlaceCategory.editableCategories {
+            for subcategory in WanderPlaceCategory.subcategorySuggestions(for: category) {
+                for status in [PlaceStatus.been, .wannaGo] {
+                    let suggestions = PlaceMemoryDefaultCatalog.suggestions(
+                        primaryCategory: category,
+                        subcategory: subcategory,
+                        status: status,
+                        locality: "Los Angeles"
+                    )
+
+                    XCTAssertGreaterThanOrEqual(suggestions.tagOptions.count, 5, "\(category) / \(subcategory) should have useful tag options")
+                    XCTAssertFalse(suggestions.defaultTags.isEmpty, "\(category) / \(subcategory) should seed at least one default tag")
+                    XCTAssertLessThanOrEqual(suggestions.defaultTags.count, 3, "\(category) / \(subcategory) should keep auto-selected tags light")
+                    XCTAssertGreaterThanOrEqual(suggestions.labelOptions.count, 5, "\(category) / \(subcategory) should have useful label options")
+                    XCTAssertLessThanOrEqual(suggestions.defaultLabels.count, 1, "\(category) / \(subcategory) should not over-select labels")
+
+                    for tag in suggestions.defaultTags {
+                        XCTAssertTrue(suggestions.tagOptions.contains(tag), "\(tag) should be shown as an option")
+                    }
+                    for label in suggestions.defaultLabels {
+                        XCTAssertTrue(suggestions.labelOptions.contains(label), "\(label) should be shown as an option")
+                    }
+                }
+            }
+        }
+    }
+
+    func testDefaultSuggestionsAreSpecificToCommonCombos() {
+        let thaiRestaurant = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Thai",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(thaiRestaurant.tagOptions.contains("Thai craving"))
+        XCTAssertTrue(thaiRestaurant.defaultTags.contains("Thai craving"))
+        XCTAssertTrue(thaiRestaurant.labelOptions.contains("craving list"))
+        XCTAssertTrue(thaiRestaurant.labelOptions.contains("LA favorite"))
+        XCTAssertEqual(thaiRestaurant.defaultLabels, ["craving list"])
+
+        let tacoTruck = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Taco truck",
+            cuisine: "Mexican",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(tacoTruck.tagOptions.contains("quick bite"))
+        XCTAssertTrue(tacoTruck.tagOptions.contains("Mexican craving"))
+        XCTAssertTrue(tacoTruck.defaultTags.contains("good value"))
+        XCTAssertTrue(tacoTruck.labelOptions.contains("lunch rotation"))
+
+        let cocktailBar = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.barsNightlife,
+            subcategory: "Cocktail bar",
+            status: .been
+        )
+        XCTAssertTrue(cocktailBar.tagOptions.contains("date drinks"))
+        XCTAssertTrue(cocktailBar.labelOptions.contains("after dinner"))
+
+        let waterfall = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.outdoorsNature,
+            subcategory: "Waterfall",
+            status: .wannaGo
+        )
+        XCTAssertTrue(waterfall.defaultTags.contains("views"))
+        XCTAssertTrue(waterfall.labelOptions.contains("outdoor shortlist"))
+
+        let chocolateLounge = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Chocolate lounge",
+            status: .been
+        )
+        XCTAssertTrue(chocolateLounge.defaultTags.contains("sweet treat"))
+        XCTAssertTrue(chocolateLounge.labelOptions.contains("dessert list"))
+    }
+
     func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
         let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
         XCTAssertEqual(suggestions.count, 25)

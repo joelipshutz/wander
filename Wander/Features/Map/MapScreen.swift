@@ -2404,8 +2404,11 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var questionBlocks: [AddQuestionBlock] {
         AddQuestionTemplates.blocks(
-            category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
-            status: selectedStatus
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine,
+            status: selectedStatus,
+            localTagOptions: localCustomTagOptions()
         )
     }
 
@@ -2430,11 +2433,20 @@ struct MapPlaceSaveFlowSheet: View {
             kind: .multiTag,
             valueType: "personal_label",
             options: PlacePersonalLabelSuggestions.options(
-                category: selectedAssignment.subcategory ?? selectedAssignment.primaryCategory,
+                category: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
+                status: selectedStatus,
+                locality: context.candidate.locality,
+                localOptions: localCustomPersonalLabelOptions()
+            ),
+            defaultValues: PlacePersonalLabelSuggestions.defaultValues(
+                category: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
                 status: selectedStatus,
                 locality: context.candidate.locality
             ),
-            defaultValues: [],
             minimumOptionWidth: 104
         )
     }
@@ -2498,6 +2510,9 @@ struct MapPlaceSaveFlowSheet: View {
             .onAppear {
                 if store.isPrivateProfile {
                     selectedVisibility = .selfOnly
+                }
+                if step == .details {
+                    syncAnswersForCurrentQuestions()
                 }
             }
             .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
@@ -2799,14 +2814,20 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func syncAnswersForCurrentQuestions() {
-        let allowedKeys = Set(questionBlocks.map(\.key))
-        var nextAnswers = selectedAnswers.filter { allowedKeys.contains($0.key) }
+        var nextAnswers = selectedAnswers
 
-        for block in questionBlocks where nextAnswers[block.key] == nil {
-            nextAnswers[block.key] = Set(block.defaultValues)
+        for block in questionBlocks {
+            var values = nextAnswers[block.key] ?? []
+            if values.isEmpty {
+                values = Set(block.defaultValues)
+            } else if block.kind == .multiTag {
+                values.formUnion(block.defaultValues)
+            }
+            nextAnswers[block.key] = values
         }
 
         selectedAnswers = nextAnswers
+        personalLabels.formUnion(personalLabelBlock.defaultValues)
     }
 
     private func handlePlaceTypeSelection() {
@@ -2866,6 +2887,17 @@ struct MapPlaceSaveFlowSheet: View {
             )
         }
 
+        let currentKeys = Set(questionBlocks.map(\.key))
+        let preservedTagDrafts = selectedAnswers
+            .filter { key, values in
+                !currentKeys.contains(key) && shouldPreserveHiddenTagAttribute(key) && !values.isEmpty
+            }
+            .sorted { $0.key < $1.key }
+            .map { key, values in
+                PlaceAttributeDraft(questionKey: key, valueType: "multi_tag", stringValues: values.sorted())
+            }
+        drafts.append(contentsOf: preservedTagDrafts)
+
         if selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood,
            let selectedCuisine {
             drafts.append(
@@ -2889,6 +2921,88 @@ struct MapPlaceSaveFlowSheet: View {
             }
             .sorted()
         return optionSelections + customSelections
+    }
+
+    private func localCustomTagOptions() -> [String] {
+        localAttributeSuggestions { attribute in
+            attribute.valueType == "multi_tag" && shouldPreserveHiddenTagAttribute(attribute.questionKey)
+        }
+    }
+
+    private func localCustomPersonalLabelOptions() -> [String] {
+        localAttributeSuggestions { attribute in
+            attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels
+        }
+    }
+
+    private func localAttributeSuggestions(
+        matching predicate: (LocalPlaceAttribute) -> Bool
+    ) -> [String] {
+        let visiblePlaces = store.currentUserVisiblePlaces.filter { visiblePlace in
+            if case let .edit(currentPlace) = context.mode,
+               currentPlace.userPlace.id == visiblePlace.userPlace.id {
+                return false
+            }
+            return visiblePlace.effectiveCategory == selectedAssignment.primaryCategory
+        }
+        let exactSubcategory = selectedAssignment.subcategory.map { WanderPlaceCategory.normalizedCategoryText($0) }
+        let exactPlaces = visiblePlaces.filter { visiblePlace in
+            guard let exactSubcategory else { return true }
+            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) == exactSubcategory
+        }
+        let similarPlaces = visiblePlaces.filter { visiblePlace in
+            guard let exactSubcategory else { return false }
+            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) != exactSubcategory
+        }
+        let exactValues = attributeValues(from: exactPlaces, matching: predicate)
+        let similarValues = attributeValues(from: similarPlaces, matching: predicate)
+
+        return uniqueOptionValues(exactValues + similarValues, limit: 8)
+    }
+
+    private func attributeValues(
+        from visiblePlaces: [VisiblePlace],
+        matching predicate: (LocalPlaceAttribute) -> Bool
+    ) -> [String] {
+        visiblePlaces.flatMap { visiblePlace in
+            store.attributes(for: visiblePlace.userPlace.id)
+                .filter(predicate)
+                .flatMap(Self.stringValues(from:))
+        }
+    }
+
+    private func uniqueOptionValues(_ values: [String], limit: Int) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = WanderPlaceCategory.normalizedCategoryText(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+            if result.count == limit {
+                break
+            }
+        }
+
+        return result
+    }
+
+    private func shouldPreserveHiddenTagAttribute(_ key: String) -> Bool {
+        key.hasSuffix("_tags") || key == "best_for"
+    }
+
+    private static func stringValues(from attribute: LocalPlaceAttribute) -> [String] {
+        guard let data = attribute.valueJSON.data(using: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        if let values = try? decoder.decode([String].self, from: data) {
+            return values
+        }
+        if let value = try? decoder.decode(String.self, from: data) {
+            return [value]
+        }
+        return []
     }
 
     private func orderedPersonalLabelSelections() -> [String] {

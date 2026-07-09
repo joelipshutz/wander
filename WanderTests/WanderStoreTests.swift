@@ -979,15 +979,16 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
         XCTAssertEqual(restaurantBlocks.first { $0.key == "occasion" }?.title, "planning for?")
         XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, [])
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, ["recommended"])
 
         XCTAssertEqual(coffeeBlocks.map(\.key), ["interest_signal", "coffee_tags"])
         XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
         XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
+        XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.defaultValues, ["work maybe"])
 
         XCTAssertEqual(hikeBlocks.map(\.key), ["interest_signal", "hike_tags"])
         XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
-        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("easy maybe"), true)
+        XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
     }
 
     func testFollowersAndFollowingUseGraphEdges() {

@@ -82,22 +82,536 @@ enum PlaceMemoryAttributeKeys {
     static let restaurantCuisine = "restaurant_cuisine"
 }
 
-enum PlacePersonalLabelSuggestions {
-    static func options(category: String, status: PlaceStatus, locality: String? = nil) -> [String] {
-        let normalized = WanderPlaceCategory.questionCategory(for: category)
-        let locationFavorite = favoriteLabel(for: locality)
-        let statusLabel = status == .wannaGo ? "shortlist" : "go-to"
+struct PlaceMemoryDefaultSuggestions: Equatable {
+    let tagOptions: [String]
+    let defaultTags: [String]
+    let labelOptions: [String]
+    let defaultLabels: [String]
+}
 
-        switch normalized {
-        case "coffee":
-            return [locationFavorite, "work rotation", "Joe rec", statusLabel, "neighborhood staple"]
-        case "hike", "park":
-            return [locationFavorite, "weekend list", "bring visitors", statusLabel, "reset spot"]
-        case "restaurant", "bar":
-            return [locationFavorite, "birthday list", "Joe rec", statusLabel, "client friendly"]
-        default:
-            return [locationFavorite, "Joe rec", "weekend list", statusLabel, "bring visitors"]
+enum PlaceMemoryDefaultCatalog {
+    static func suggestions(
+        primaryCategory: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus,
+        locality: String? = nil,
+        localTagOptions: [String] = [],
+        localLabelOptions: [String] = []
+    ) -> PlaceMemoryDefaultSuggestions {
+        let primary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
+        let subcategoryKey = WanderPlaceCategory.normalizedCategoryText(subcategory)
+        let cuisineKey = WanderPlaceCategory.normalizedCategoryText(cuisine)
+        let context = SuggestionContext(
+            primaryCategory: primary,
+            subcategory: subcategory,
+            subcategoryKey: subcategoryKey,
+            cuisine: cuisine,
+            cuisineKey: cuisineKey,
+            status: status,
+            locality: locality
+        )
+        let base = baseDefaults(for: context)
+
+        return PlaceMemoryDefaultSuggestions(
+            tagOptions: merged(base.tagOptions, localTagOptions),
+            defaultTags: base.defaultTags,
+            labelOptions: merged(base.labelOptions, localLabelOptions),
+            defaultLabels: base.defaultLabels
+        )
+    }
+
+    static func tagOptions(
+        primaryCategory: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus,
+        localOptions: [String] = []
+    ) -> [String] {
+        suggestions(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            status: status,
+            localTagOptions: localOptions
+        ).tagOptions
+    }
+
+    static func defaultTags(
+        primaryCategory: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus
+    ) -> [String] {
+        suggestions(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            status: status
+        ).defaultTags
+    }
+
+    private struct Defaults {
+        let tagOptions: [String]
+        let selectedTags: [String]
+        let wannaTagOptions: [String]?
+        let selectedWannaTags: [String]?
+        let labelOptions: [String]
+        let selectedLabels: [String]
+        let wannaLabelOptions: [String]?
+        let selectedWannaLabels: [String]?
+
+        init(
+            tagOptions: [String],
+            selectedTags: [String],
+            wannaTagOptions: [String]? = nil,
+            selectedWannaTags: [String]? = nil,
+            labelOptions: [String],
+            selectedLabels: [String],
+            wannaLabelOptions: [String]? = nil,
+            selectedWannaLabels: [String]? = nil
+        ) {
+            self.tagOptions = tagOptions
+            self.selectedTags = selectedTags
+            self.wannaTagOptions = wannaTagOptions
+            self.selectedWannaTags = selectedWannaTags
+            self.labelOptions = labelOptions
+            self.selectedLabels = selectedLabels
+            self.wannaLabelOptions = wannaLabelOptions
+            self.selectedWannaLabels = selectedWannaLabels
         }
+
+        func resolved(status: PlaceStatus) -> (tagOptions: [String], defaultTags: [String], labelOptions: [String], defaultLabels: [String]) {
+            if status == .wannaGo {
+                return (
+                    wannaTagOptions ?? tagOptions,
+                    selectedWannaTags ?? Array(selectedTags.prefix(1)),
+                    wannaLabelOptions ?? labelOptions,
+                    selectedWannaLabels ?? []
+                )
+            }
+
+            return (tagOptions, selectedTags, labelOptions, selectedLabels)
+        }
+    }
+
+    private struct SuggestionContext {
+        let primaryCategory: String
+        let subcategory: String?
+        let subcategoryKey: String
+        let cuisine: String?
+        let cuisineKey: String
+        let status: PlaceStatus
+        let locality: String?
+    }
+
+    private static func baseDefaults(for context: SuggestionContext) -> PlaceMemoryDefaultSuggestions {
+        let defaults = specificDefaults(for: context) ?? primaryDefaults(for: context.primaryCategory)
+        let resolved = defaults.resolved(status: context.status)
+        let localFavorite = favoriteLabel(for: context.locality)
+        let locationLabels = context.status == .wannaGo
+            ? [plannedLabel(for: context.locality), "shortlist"]
+            : [localFavorite]
+        let labelOptions = merged(locationLabels, resolved.labelOptions)
+        let defaultLabels = merged(resolved.defaultLabels, locationLabels).prefix(1)
+
+        return PlaceMemoryDefaultSuggestions(
+            tagOptions: unique(resolved.tagOptions),
+            defaultTags: unique(resolved.defaultTags).filter { resolved.tagOptions.containsCaseInsensitive($0) },
+            labelOptions: labelOptions,
+            defaultLabels: Array(defaultLabels).filter { labelOptions.containsCaseInsensitive($0) }
+        )
+    }
+
+    private static func specificDefaults(for context: SuggestionContext) -> Defaults? {
+        let key = context.subcategoryKey
+        let cuisineKey = context.cuisineKey
+
+        if context.primaryCategory == WanderPlaceCategory.restaurantsFood {
+            if containsAny(key, ["fast food", "food court", "takeout", "cafeteria", "taco stand", "taco truck", "burrito", "taco", "falafel", "gyro", "kebab", "shawarma", "snack bar"]) {
+                return Defaults(
+                    tagOptions: cuisineAware(["quick bite", "low lift", "counter order", "reliable", "good value"], cuisine: context.cuisine),
+                    selectedTags: ["quick bite", "good value"],
+                    wannaTagOptions: cuisineAware(["quick bite", "nearby", "good value", "easy stop", "recommended"], cuisine: context.cuisine),
+                    selectedWannaTags: ["quick bite"],
+                    labelOptions: ["lunch rotation", "easy dinner", "road stop", "solo bite", "neighborhood standby"],
+                    selectedLabels: ["lunch rotation"],
+                    wannaLabelOptions: ["try soon", "quick list", "nearby option", "solo shortlist", "backup plan"],
+                    selectedWannaLabels: ["try soon"]
+                )
+            }
+
+            if containsAny(key, ["fine dining", "steakhouse", "oyster bar", "seafood", "fondue"]) {
+                return Defaults(
+                    tagOptions: cuisineAware(["special occasion", "date night", "worth planning", "great service", "reservations"], cuisine: context.cuisine),
+                    selectedTags: ["special occasion", "worth planning"],
+                    wannaTagOptions: cuisineAware(["date night", "book ahead", "special occasion", "recommended", "splurge"], cuisine: context.cuisine),
+                    selectedWannaTags: ["date night"],
+                    labelOptions: ["celebration list", "birthday list", "date night", "client friendly", "splurge-worthy"],
+                    selectedLabels: ["celebration list"],
+                    wannaLabelOptions: ["reservation list", "date shortlist", "birthday idea", "client shortlist", "splurge list"],
+                    selectedWannaLabels: ["reservation list"]
+                )
+            }
+
+            if containsAny(key, ["breakfast", "brunch", "bagel", "sandwich", "deli", "bakery"]) {
+                return Defaults(
+                    tagOptions: cuisineAware(["morning stop", "casual", "good coffee", "quick bite", "weekend"], cuisine: context.cuisine),
+                    selectedTags: ["morning stop", "quick bite"],
+                    wannaTagOptions: cuisineAware(["breakfast idea", "weekend maybe", "nearby", "recommended", "easy"], cuisine: context.cuisine),
+                    selectedWannaTags: ["breakfast idea"],
+                    labelOptions: ["breakfast rotation", "weekend morning", "workday lunch", "bring visitors", "neighborhood staple"],
+                    selectedLabels: ["breakfast rotation"],
+                    wannaLabelOptions: ["breakfast shortlist", "weekend list", "nearby morning", "visitor idea", "try soon"],
+                    selectedWannaLabels: ["breakfast shortlist"]
+                )
+            }
+
+            if containsAny(key, ["pizza", "burgers", "hot dogs", "barbecue", "chicken", "wings"]) {
+                return Defaults(
+                    tagOptions: cuisineAware(["comfort food", "group order", "casual", "craveable", "good value"], cuisine: context.cuisine),
+                    selectedTags: ["comfort food", "craveable"],
+                    wannaTagOptions: cuisineAware(["comfort food", "group maybe", "recommended", "easy dinner", "good value"], cuisine: context.cuisine),
+                    selectedWannaTags: ["comfort food"],
+                    labelOptions: ["comfort rotation", "group dinner", "casual night", "takeout list", "neighborhood standby"],
+                    selectedLabels: ["comfort rotation"],
+                    wannaLabelOptions: ["comfort shortlist", "group idea", "takeout shortlist", "try soon", "casual list"],
+                    selectedWannaLabels: ["comfort shortlist"]
+                )
+            }
+
+            if containsAny(key, ["ramen", "noodles", "dumplings", "dim sum", "hot pot"]) || !cuisineKey.isEmpty {
+                let cuisineTag = context.cuisine.map { "\($0) craving" } ?? "craveable"
+                return Defaults(
+                    tagOptions: unique([cuisineTag, "comfort food", "worth a detour", "casual", "group-friendly"]),
+                    selectedTags: unique([cuisineTag, "worth a detour"]),
+                    wannaTagOptions: unique([cuisineTag, "recommended", "group maybe", "worth a detour", "try soon"]),
+                    selectedWannaTags: [cuisineTag],
+                    labelOptions: cuisineAware(["craving list", "dinner rotation", "bring friends", "neighborhood staple", "date night"], cuisine: context.cuisine),
+                    selectedLabels: ["craving list"],
+                    wannaLabelOptions: cuisineAware(["cuisine shortlist", "dinner shortlist", "friend rec", "try soon", "date idea"], cuisine: context.cuisine),
+                    selectedWannaLabels: ["cuisine shortlist"]
+                )
+            }
+
+            return nil
+        }
+
+        switch context.primaryCategory {
+        case WanderPlaceCategory.coffeeTeaSweets:
+            if containsAny(key, ["coffee", "cafe", "roastery", "tea"]) {
+                return Defaults(
+                    tagOptions: ["work-friendly", "quiet", "good coffee", "cozy", "outlets"],
+                    selectedTags: ["work-friendly", "quiet"],
+                    wannaTagOptions: ["work maybe", "cute", "good coffee", "nearby", "recommended"],
+                    selectedWannaTags: ["work maybe"],
+                    labelOptions: ["work rotation", "morning loop", "meeting spot", "neighborhood staple", "solo reset"],
+                    selectedLabels: ["work rotation"],
+                    wannaLabelOptions: ["coffee shortlist", "work maybe", "morning list", "try soon", "meeting idea"],
+                    selectedWannaLabels: ["coffee shortlist"]
+                )
+            }
+
+            if containsAny(key, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
+                return Defaults(
+                    tagOptions: ["sweet treat", "bring home", "cute", "shareable", "worth a detour"],
+                    selectedTags: ["sweet treat", "shareable"],
+                    wannaTagOptions: ["sweet treat", "bring home", "recommended", "cute", "try soon"],
+                    selectedWannaTags: ["sweet treat"],
+                    labelOptions: ["dessert list", "treat stop", "bring visitors", "giftable", "weekend sweet"],
+                    selectedLabels: ["dessert list"],
+                    wannaLabelOptions: ["dessert shortlist", "treat list", "visitor idea", "gift idea", "try soon"],
+                    selectedWannaLabels: ["dessert shortlist"]
+                )
+            }
+
+        case WanderPlaceCategory.barsNightlife:
+            if containsAny(key, ["cocktail", "wine", "lounge", "jazz", "hi fi"]) {
+                return Defaults(
+                    tagOptions: ["date drinks", "good music", "low light", "not too loud", "special night"],
+                    selectedTags: ["date drinks", "not too loud"],
+                    wannaTagOptions: ["date idea", "good music", "book ahead", "recommended", "late night"],
+                    selectedWannaTags: ["date idea"],
+                    labelOptions: ["date drinks", "night out", "client friendly", "birthday drinks", "after dinner"],
+                    selectedLabels: ["date drinks"],
+                    wannaLabelOptions: ["drinks shortlist", "date shortlist", "night-out list", "birthday idea", "after-dinner list"],
+                    selectedWannaLabels: ["drinks shortlist"]
+                )
+            }
+
+            if containsAny(key, ["brewery", "brewpub", "beer garden", "pub", "irish pub", "sports bar", "billiards", "bar and grill"]) {
+                return Defaults(
+                    tagOptions: ["group-friendly", "casual drinks", "patio", "games", "walk-in"],
+                    selectedTags: ["group-friendly", "walk-in"],
+                    wannaTagOptions: ["group maybe", "casual drinks", "patio", "recommended", "easy night"],
+                    selectedWannaTags: ["group maybe"],
+                    labelOptions: ["group drinks", "game night", "casual night", "neighborhood standby", "bring friends"],
+                    selectedLabels: ["group drinks"],
+                    wannaLabelOptions: ["group shortlist", "game-day list", "casual drinks", "friend rec", "try soon"],
+                    selectedWannaLabels: ["group shortlist"]
+                )
+            }
+
+            if containsAny(key, ["club", "disco", "nightclub", "karaoke", "live music", "comedy", "casino", "dance hall"]) {
+                return Defaults(
+                    tagOptions: ["late night", "high energy", "group-friendly", "tickets", "celebration"],
+                    selectedTags: ["late night", "group-friendly"],
+                    wannaTagOptions: ["late night", "group maybe", "tickets", "recommended", "special night"],
+                    selectedWannaTags: ["late night"],
+                    labelOptions: ["night out", "birthday list", "bring friends", "live night", "weekend plan"],
+                    selectedLabels: ["night out"],
+                    wannaLabelOptions: ["night-out shortlist", "birthday idea", "ticket list", "weekend list", "group plan"],
+                    selectedWannaLabels: ["night-out shortlist"]
+                )
+            }
+
+        case WanderPlaceCategory.outdoorsNature:
+            if containsAny(key, ["hike", "trail", "hiking", "mountain", "viewpoint", "overlook", "waterfall", "cave", "scenic", "nature preserve", "wildlife"]) {
+                return Defaults(
+                    tagOptions: ["views", "sunset", "good walk", "bring water", "weekend"],
+                    selectedTags: ["views", "weekend"],
+                    wannaTagOptions: ["views", "sunset", "weekend maybe", "dog friendly", "recommended"],
+                    selectedWannaTags: ["views"],
+                    labelOptions: ["weekend list", "reset spot", "bring visitors", "sunset list", "nature day"],
+                    selectedLabels: ["weekend list"],
+                    wannaLabelOptions: ["outdoor shortlist", "weekend plan", "sunset idea", "visitor idea", "reset list"],
+                    selectedWannaLabels: ["outdoor shortlist"]
+                )
+            }
+
+            if containsAny(key, ["beach", "lake", "river", "hot spring", "marina", "fishing"]) {
+                return Defaults(
+                    tagOptions: ["water day", "sunset", "low effort", "bring friends", "scenic"],
+                    selectedTags: ["water day", "scenic"],
+                    wannaTagOptions: ["water day", "sunset", "bring friends", "recommended", "weekend maybe"],
+                    selectedWannaTags: ["water day"],
+                    labelOptions: ["water day", "summer list", "bring visitors", "weekend reset", "photo spot"],
+                    selectedLabels: ["water day"],
+                    wannaLabelOptions: ["water shortlist", "summer list", "visitor idea", "weekend plan", "photo idea"],
+                    selectedWannaLabels: ["water shortlist"]
+                )
+            }
+
+            if containsAny(key, ["campground", "rv", "camping", "cabin", "cottage", "ski", "cycling", "skate", "off roading", "adventure"]) {
+                return Defaults(
+                    tagOptions: ["overnight", "gear needed", "group-friendly", "weekend", "worth planning"],
+                    selectedTags: ["weekend", "worth planning"],
+                    wannaTagOptions: ["book ahead", "gear needed", "group maybe", "weekend", "recommended"],
+                    selectedWannaTags: ["book ahead"],
+                    labelOptions: ["weekend trip", "camping list", "adventure list", "group trip", "seasonal"],
+                    selectedLabels: ["weekend trip"],
+                    wannaLabelOptions: ["trip shortlist", "camping shortlist", "gear list", "group idea", "seasonal list"],
+                    selectedWannaLabels: ["trip shortlist"]
+                )
+            }
+
+        case WanderPlaceCategory.shopping:
+            if containsAny(key, ["grocery", "supermarket", "market", "butcher", "health food", "liquor", "food store", "farmers", "asian grocery"]) {
+                return Defaults(
+                    tagOptions: ["weekly errand", "good selection", "fresh", "quick stop", "specialty find"],
+                    selectedTags: ["good selection", "quick stop"],
+                    wannaTagOptions: ["errand idea", "specialty find", "nearby", "recommended", "stock up"],
+                    selectedWannaTags: ["specialty find"],
+                    labelOptions: ["grocery rotation", "errand loop", "specialty run", "pantry stop", "neighborhood staple"],
+                    selectedLabels: ["grocery rotation"],
+                    wannaLabelOptions: ["errand shortlist", "specialty list", "pantry list", "nearby option", "try soon"],
+                    selectedWannaLabels: ["errand shortlist"]
+                )
+            }
+
+            if containsAny(key, ["book", "art", "craft", "gift", "toy", "jewelry", "cosmetic", "beauty", "thrift"]) {
+                return Defaults(
+                    tagOptions: ["giftable", "browse-worthy", "specialty find", "cute", "local shop"],
+                    selectedTags: ["browse-worthy", "specialty find"],
+                    wannaTagOptions: ["gift idea", "browse later", "specialty find", "recommended", "local shop"],
+                    selectedWannaTags: ["browse later"],
+                    labelOptions: ["gift list", "browse day", "local shop", "creative supplies", "visitor stop"],
+                    selectedLabels: ["gift list"],
+                    wannaLabelOptions: ["shopping shortlist", "gift idea", "creative list", "browse later", "visitor idea"],
+                    selectedWannaLabels: ["shopping shortlist"]
+                )
+            }
+
+        default:
+            break
+        }
+
+        return nil
+    }
+
+    private static func primaryDefaults(for primaryCategory: String) -> Defaults {
+        switch primaryCategory {
+        case WanderPlaceCategory.restaurantsFood:
+            return Defaults(
+                tagOptions: ["cozy", "worth it", "good table", "share plates", "great service"],
+                selectedTags: ["cozy", "worth it"],
+                wannaTagOptions: ["looks cozy", "recommended", "good table", "date idea", "share plates"],
+                selectedWannaTags: ["recommended"],
+                labelOptions: ["dinner rotation", "date night", "bring friends", "client friendly", "neighborhood staple"],
+                selectedLabels: ["dinner rotation"],
+                wannaLabelOptions: ["food shortlist", "date shortlist", "friend rec", "try soon", "group idea"],
+                selectedWannaLabels: ["food shortlist"]
+            )
+        case WanderPlaceCategory.coffeeTeaSweets:
+            return Defaults(
+                tagOptions: ["cozy", "quick stop", "sweet treat", "good coffee", "cute"],
+                selectedTags: ["cozy", "quick stop"],
+                wannaTagOptions: ["cute", "recommended", "nearby", "work maybe", "sweet treat"],
+                selectedWannaTags: ["recommended"],
+                labelOptions: ["morning loop", "treat stop", "work rotation", "meeting spot", "neighborhood staple"],
+                selectedLabels: ["morning loop"],
+                wannaLabelOptions: ["coffee shortlist", "treat list", "work maybe", "try soon", "nearby option"],
+                selectedWannaLabels: ["coffee shortlist"]
+            )
+        case WanderPlaceCategory.barsNightlife:
+            return Defaults(
+                tagOptions: ["good music", "not too loud", "group-friendly", "walk-in", "late night"],
+                selectedTags: ["good music", "not too loud"],
+                wannaTagOptions: ["date idea", "recommended", "good music", "group maybe", "late night"],
+                selectedWannaTags: ["date idea"],
+                labelOptions: ["night out", "date drinks", "group drinks", "birthday list", "after dinner"],
+                selectedLabels: ["night out"],
+                wannaLabelOptions: ["drinks shortlist", "night-out list", "date shortlist", "birthday idea", "try soon"],
+                selectedWannaLabels: ["drinks shortlist"]
+            )
+        case WanderPlaceCategory.outdoorsNature:
+            return Defaults(
+                tagOptions: ["views", "low effort", "reset spot", "dog friendly", "bring visitors"],
+                selectedTags: ["views", "reset spot"],
+                wannaTagOptions: ["views", "weekend maybe", "dog friendly", "recommended", "bring visitors"],
+                selectedWannaTags: ["views"],
+                labelOptions: ["weekend list", "reset spot", "bring visitors", "sunset list", "nature day"],
+                selectedLabels: ["weekend list"],
+                wannaLabelOptions: ["outdoor shortlist", "weekend plan", "visitor idea", "reset list", "sunset idea"],
+                selectedWannaLabels: ["outdoor shortlist"]
+            )
+        case WanderPlaceCategory.thingsToDo:
+            return Defaults(
+                tagOptions: ["bring visitors", "rainy day", "date idea", "kid-friendly", "tickets"],
+                selectedTags: ["bring visitors", "rainy day"],
+                wannaTagOptions: ["bring visitors", "tickets", "date idea", "recommended", "rainy day"],
+                selectedWannaTags: ["bring visitors"],
+                labelOptions: ["visitor list", "weekend plan", "culture day", "date idea", "rainy day"],
+                selectedLabels: ["visitor list"],
+                wannaLabelOptions: ["things-to-do shortlist", "visitor idea", "ticket list", "weekend plan", "date shortlist"],
+                selectedWannaLabels: ["things-to-do shortlist"]
+            )
+        case WanderPlaceCategory.shopping:
+            return Defaults(
+                tagOptions: ["browse-worthy", "good selection", "giftable", "local shop", "quick errand"],
+                selectedTags: ["browse-worthy", "good selection"],
+                wannaTagOptions: ["browse later", "gift idea", "recommended", "specialty find", "quick errand"],
+                selectedWannaTags: ["browse later"],
+                labelOptions: ["errand loop", "gift list", "local shop", "specialty run", "browse day"],
+                selectedLabels: ["errand loop"],
+                wannaLabelOptions: ["shopping shortlist", "gift idea", "errand idea", "browse later", "specialty list"],
+                selectedWannaLabels: ["shopping shortlist"]
+            )
+        case WanderPlaceCategory.wellnessFitness:
+            return Defaults(
+                tagOptions: ["routine", "recovery", "easy booking", "clean", "worth returning"],
+                selectedTags: ["routine", "worth returning"],
+                wannaTagOptions: ["try soon", "easy booking", "recommended", "routine", "recovery"],
+                selectedWannaTags: ["try soon"],
+                labelOptions: ["health routine", "recovery list", "fitness rotation", "self-care", "trusted care"],
+                selectedLabels: ["health routine"],
+                wannaLabelOptions: ["wellness shortlist", "fitness idea", "self-care list", "care option", "try soon"],
+                selectedWannaLabels: ["wellness shortlist"]
+            )
+        case WanderPlaceCategory.stays:
+            return Defaults(
+                tagOptions: ["good location", "quiet", "book again", "family-friendly", "worth the rate"],
+                selectedTags: ["good location", "book again"],
+                wannaTagOptions: ["book ahead", "good location", "recommended", "trip idea", "family-friendly"],
+                selectedWannaTags: ["book ahead"],
+                labelOptions: ["stay again", "trip base", "family stay", "weekend away", "work trip"],
+                selectedLabels: ["stay again"],
+                wannaLabelOptions: ["stay shortlist", "trip idea", "book later", "family option", "work trip"],
+                selectedWannaLabels: ["stay shortlist"]
+            )
+        case WanderPlaceCategory.servicesErrands:
+            return Defaults(
+                tagOptions: ["reliable", "fast", "fair price", "easy booking", "recommended"],
+                selectedTags: ["reliable", "easy booking"],
+                wannaTagOptions: ["recommended", "nearby", "easy booking", "fair price", "try soon"],
+                selectedWannaTags: ["recommended"],
+                labelOptions: ["trusted service", "errand loop", "home help", "life admin", "backup option"],
+                selectedLabels: ["trusted service"],
+                wannaLabelOptions: ["service shortlist", "errand idea", "backup option", "home help", "try soon"],
+                selectedWannaLabels: ["service shortlist"]
+            )
+        case WanderPlaceCategory.travelTransit:
+            return Defaults(
+                tagOptions: ["easy access", "reliable", "good parking", "fast stop", "useful"],
+                selectedTags: ["easy access", "useful"],
+                wannaTagOptions: ["trip planning", "easy access", "useful", "recommended", "near route"],
+                selectedWannaTags: ["trip planning"],
+                labelOptions: ["travel utility", "route stop", "parking note", "airport plan", "road trip"],
+                selectedLabels: ["travel utility"],
+                wannaLabelOptions: ["travel shortlist", "route idea", "parking option", "trip planning", "road trip"],
+                selectedWannaLabels: ["travel shortlist"]
+            )
+        case WanderPlaceCategory.workEducation:
+            return Defaults(
+                tagOptions: ["quiet", "productive", "good wifi", "meeting-friendly", "useful"],
+                selectedTags: ["productive", "useful"],
+                wannaTagOptions: ["work maybe", "learn more", "good wifi", "recommended", "quiet"],
+                selectedWannaTags: ["work maybe"],
+                labelOptions: ["work rotation", "learning list", "meeting spot", "research note", "quiet place"],
+                selectedLabels: ["work rotation"],
+                wannaLabelOptions: ["work shortlist", "learning idea", "meeting option", "research list", "try soon"],
+                selectedWannaLabels: ["work shortlist"]
+            )
+        case WanderPlaceCategory.civicFaith:
+            return Defaults(
+                tagOptions: ["important", "community", "quiet", "service info", "bring visitors"],
+                selectedTags: ["important", "community"],
+                wannaTagOptions: ["service info", "community", "bring visitors", "recommended", "quiet"],
+                selectedWannaTags: ["service info"],
+                labelOptions: ["community", "civic errand", "faith", "visitor context", "important place"],
+                selectedLabels: ["community"],
+                wannaLabelOptions: ["civic shortlist", "faith list", "visitor idea", "service info", "community"],
+                selectedWannaLabels: ["civic shortlist"]
+            )
+        case WanderPlaceCategory.areasAddresses:
+            return Defaults(
+                tagOptions: ["home base", "favorite area", "meet here", "remember address", "useful"],
+                selectedTags: ["useful", "remember address"],
+                wannaTagOptions: ["area to explore", "meet here", "remember address", "trip planning", "useful"],
+                selectedWannaTags: ["area to explore"],
+                labelOptions: ["area note", "address book", "meetup spot", "neighborhood", "trip area"],
+                selectedLabels: ["area note"],
+                wannaLabelOptions: ["area shortlist", "address note", "explore later", "trip planning", "meetup idea"],
+                selectedWannaLabels: ["area shortlist"]
+            )
+        case WanderPlaceCategory.facilitiesOther:
+            return Defaults(
+                tagOptions: ["useful", "quick stop", "hard to find", "clean", "backup option"],
+                selectedTags: ["useful", "quick stop"],
+                wannaTagOptions: ["useful", "near route", "backup option", "hard to find", "remember"],
+                selectedWannaTags: ["useful"],
+                labelOptions: ["useful facility", "route note", "backup option", "remember this", "practical"],
+                selectedLabels: ["useful facility"],
+                wannaLabelOptions: ["facility shortlist", "route note", "backup option", "remember this", "practical"],
+                selectedWannaLabels: ["facility shortlist"]
+            )
+        default:
+            return Defaults(
+                tagOptions: ["worth it", "useful", "bring friends", "easy", "remember this"],
+                selectedTags: ["worth it"],
+                wannaTagOptions: ["recommended", "useful", "try soon", "bring friends", "remember this"],
+                selectedWannaTags: ["recommended"],
+                labelOptions: ["Joe rec", "weekend list", "bring visitors", "go-to", "remember this"],
+                selectedLabels: ["remember this"],
+                wannaLabelOptions: ["shortlist", "try soon", "Joe rec", "weekend list", "remember this"],
+                selectedWannaLabels: ["shortlist"]
+            )
+        }
+    }
+
+    private static func cuisineAware(_ values: [String], cuisine: String?) -> [String] {
+        guard let cuisine, !cuisine.isEmpty else { return values }
+        return unique(["\(cuisine) craving"] + values)
     }
 
     private static func favoriteLabel(for locality: String?) -> String {
@@ -119,6 +633,81 @@ enum PlacePersonalLabelSuggestions {
         default:
             return "local favorite"
         }
+    }
+
+    private static func plannedLabel(for locality: String?) -> String {
+        let favorite = favoriteLabel(for: locality)
+        if favorite == "local favorite" {
+            return "local shortlist"
+        }
+        return favorite.replacingOccurrences(of: "favorite", with: "shortlist")
+    }
+
+    private static func containsAny(_ value: String, _ needles: [String]) -> Bool {
+        needles.contains { needle in
+            value.contains(WanderPlaceCategory.normalizedCategoryText(needle))
+        }
+    }
+
+    private static func merged(_ values: [String]...) -> [String] {
+        unique(values.flatMap { $0 })
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = WanderPlaceCategory.normalizedCategoryText(trimmed)
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+
+        return result
+    }
+}
+
+enum PlacePersonalLabelSuggestions {
+    static func options(
+        category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus,
+        locality: String? = nil,
+        localOptions: [String] = []
+    ) -> [String] {
+        PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: category,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            status: status,
+            locality: locality,
+            localLabelOptions: localOptions
+        ).labelOptions
+    }
+
+    static func defaultValues(
+        category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        status: PlaceStatus,
+        locality: String? = nil
+    ) -> [String] {
+        PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: category,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            status: status,
+            locality: locality
+        ).defaultLabels
+    }
+}
+
+private extension Array where Element == String {
+    func containsCaseInsensitive(_ value: String) -> Bool {
+        contains { $0.caseInsensitiveCompare(value) == .orderedSame }
     }
 }
 
