@@ -35,6 +35,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | MapKit-only v0.1 | Locked | Keep provider-extensible place IDs. |
 | Supabase RLS authoritative | Locked | Client policy is for UI behavior only. |
 | Repository/protocol boundaries | Locked | Views should not call Clerk/Supabase directly. |
+| Profile avatar identity contract | Locked | Any new UI surface that shows a profile photo must be wired from a stable user/profile id through the store's freshest profile/avatar state. Do not copy ad hoc avatar strings from lower-fidelity place, list, search, or graph payloads without preserving richer cached profile metadata. |
 | Backend extraction jobs | Locked | Link/photo extraction should run on backend, not fake client-only extraction. |
 | M2 extraction shells | Locked | Link/photo create unresolved drafts until backend jobs exist. |
 | Discover parser interface early | Locked | Deterministic local parser now; cheap swappable LLM parser in M5. |

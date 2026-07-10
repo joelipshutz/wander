@@ -9567,3 +9567,56 @@ Checkpoint, 2026-07-01 00:19 PDT:
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-avatar-persistence-tests CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Simulator check: installed the Debug build from `/private/tmp/DerivedData-avatar-persistence-tests/Build/Products/Debug-iphonesimulator/Wander.app` on iPhone 17 and iPhone 17e. The iPhone 17e Discover Members tab rendered correctly but this local session returned no `ry` member results and no Discover place results, so avatar rows could not be visually verified with populated live data. Screenshot: `/private/tmp/discover-avatar-member-empty-iphone17e.png`.
 - Known issue: visual verification still needs a seeded or signed-in test account with remote members/places containing avatar URLs. The regression tests cover the data-path bug directly.
+
+## 2026-07-09 23:51 PDT - Codex - REC-73 Profile Avatar Audit Follow-up
+
+Agent: Codex
+Branch: `codex/rec-73-avatar-audit-fix`
+Worktree: `/private/tmp/recme-rec73-avatar-audit`
+Linear: `REC-73` (`Fix profile avatars missing from Discover places, members, and place cards`)
+
+Goal: re-open the REC-73 avatar investigation after Ryan reported profile photos are still sporadic: self avatar usually appears, friend/followed avatars sometimes appear then disappear, and profile page may differ from Discover/place-card surfaces.
+
+Starting status:
+
+- Ran `git fetch origin`, checked root `git status --short --branch`, `git worktree list`, and recent `docs/agent-log.md`.
+- Root checkout is on `codex/rec-81-collab-visibility` and was left untouched.
+- Created isolated worktree `/private/tmp/recme-rec73-avatar-audit`.
+- Fetched PR #57 (`codex/profile-avatar-persistence`) and rebased it onto current `origin/main`; only `docs/agent-log.md` conflicted, resolved by preserving both main history and the prior REC-73 log.
+- Current branch status is clean after rebase at `4fde8dd1f`.
+- Linear `REC-73` moved from `In Review` back to `In Progress`.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Services/WanderLocalStore.swift`
+- `Wander/Features/Discover/DiscoverScreen.swift`
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- Shared avatar/profile UI components if the audit finds duplicated image URL logic
+- `WanderTests/WanderStoreTests.swift` and/or focused UI/data contract tests
+
+Initial plan:
+
+- Inventory every `WanderAvatar` / profile-photo use site for current user, friends, following, list collaborators, Discover members, Discover place cards, map/profile place surfaces, and settings/profile editing.
+- Trace where avatar URLs enter the store from auth, hosted profile search, visible-place hydration, following/follower hydration, list collaborators, local persistence, and profile photo updates.
+- Fix the shared data contract so any surface with a user/profile label resolves through the freshest profile/avatar cache instead of stale snapshots.
+- Add regression coverage for nil-overwrite, cache refresh, and new-avatar propagation across visible places and social people rows.
+
+Checkpoint, 2026-07-10 00:13 PDT:
+
+- Audited `WanderAvatar` surfaces in Discover, Map, place profile surfaces, Profile, Settings, Lists, and the shared design system avatar component.
+- Confirmed the prior PR fixed stale visible-place owner snapshots and Discover place-card rendering, but additional lower-fidelity hydration paths could still overwrite known friend avatars with `nil`.
+- Root cause for sporadic disappearance: `refreshRemoteSocialGraph` and remote place-list summary/detail hydration accepted `ProfileShell` values from graph/list payloads that may omit `avatarURL`; those shells updated canonical local profiles and erased richer avatar metadata that Discover/Profile/search had previously loaded.
+- Self-avatar edge case: `refreshRemoteCurrentProfile` could erase a local-only `file://` avatar after profile photo upload failed or had not synced yet, contradicting the UI message that the photo was saved on this phone.
+- Fixes:
+  - Preserve existing avatar/bio metadata when social graph and place-list owner/collaborator shells omit those fields.
+  - Decode `owner_avatar_url` from remote place-list summaries instead of hardcoding list owner avatars to `nil`.
+  - Upsert remote place-list detail collaborators through the same preserve-existing path.
+  - Preserve a local-only current-user file avatar when the remote profile omits an avatar, while still allowing hosted remote avatar deletion to clear the value.
+  - Added `docs/decisions.md` decision: new profile-photo UI surfaces must be wired by stable profile/user id through the freshest profile/avatar state.
+- Tests passed:
+  - `git diff --check`
+  - Focused elevated run on installed simulator: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec73-avatar CODE_SIGNING_ALLOWED=NO -jobs 1` with six targeted avatar/repository tests.
+  - Full elevated run on installed simulator: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec73-avatar-full CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Note: the repo-documented `iPhone 16 Plus, OS=18.6` simulator is not installed on Ryan's machine. The full suite was run on `iPhone 17 Pro, OS=26.5`.

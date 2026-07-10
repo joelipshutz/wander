@@ -602,6 +602,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "owner_user_id": "user_ryan",
             "owner_handle": "ryan",
             "owner_display_name": "Ryan",
+            "owner_avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=list",
             "name": "Brooklyn tables",
             "description": "Dinner ideas",
             "visibility": "followers",
@@ -612,6 +613,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 "user_id": "user_joe",
                 "handle": "joe",
                 "display_name": "Joe",
+                "avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_joe/avatar.jpg?v=list",
                 "role": "collaborator"
               }
             ],
@@ -662,7 +664,9 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(summaries.map(\.list.id), [listID])
         XCTAssertEqual(summaries[0].list.cachedItemCount, 1)
         XCTAssertEqual(summaries[0].owner.handle, "ryan")
+        XCTAssertEqual(summaries[0].owner.avatarURL, "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=list")
         XCTAssertEqual(summaries[0].collaborators.map(\.userID), ["user_joe"])
+        XCTAssertEqual(summaries[0].collaborators.map(\.avatarURL), ["https://example.supabase.co/storage/v1/object/public/profile-avatars/user_joe/avatar.jpg?v=list"])
         XCTAssertEqual(detail?.items.map(\.id), [itemID])
         XCTAssertEqual(detail?.items[0].placeID, placeID)
         XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_lists", "place_list_detail"])

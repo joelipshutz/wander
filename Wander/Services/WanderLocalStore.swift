@@ -3607,7 +3607,7 @@ final class WanderStore: ObservableObject {
         let collaboratorShells = summaries.flatMap { summary in
             summary.collaborators.map(\.profileShell)
         }
-        upsertRemoteProfileShells(ownerShells + collaboratorShells)
+        upsertRemoteProfileShells(ownerShells + collaboratorShells, preserveExistingProfileMetadataWhenMissing: true)
 
         for summary in summaries {
             upsertRemotePlaceList(summary.list)
@@ -3619,6 +3619,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
+        upsertRemoteProfileShells(detail.collaborators.map(\.profileShell), preserveExistingProfileMetadataWhenMissing: true)
         upsertRemotePlaceList(detail.list)
         replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
         replaceRemoteItems(listID: detail.list.id, items: detail.items)
@@ -3754,7 +3755,10 @@ final class WanderStore: ObservableObject {
         currentUser.handle = remoteProfile.handle
         currentUser.searchHandle = remoteProfile.handle.lowercased()
         currentUser.displayName = remoteProfile.displayName
-        currentUser.avatarURL = remoteProfile.avatarURL
+        currentUser.avatarURL = currentProfileAvatarURL(
+            incoming: remoteProfile.avatarURL,
+            existing: currentUser.avatarURL
+        )
         currentUser.bio = remoteProfile.bio
         currentUser.homeArea = remoteProfile.homeArea
         currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
@@ -3796,7 +3800,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemoteSocialGraph(userID: String, following: [ProfileShell], followers: [ProfileShell]) {
-        upsertRemoteProfileShells(following + followers)
+        upsertRemoteProfileShells(following + followers, preserveExistingProfileMetadataWhenMissing: true)
 
         let followingIDs = Set(following.map(\.id)).subtracting([userID])
         let followerIDs = Set(followers.map(\.id)).subtracting([userID])
@@ -3905,6 +3909,20 @@ final class WanderStore: ObservableObject {
         preserveExistingWhenMissing: Bool
     ) -> String? {
         nonEmpty(incoming) ?? (preserveExistingWhenMissing ? existing : nil)
+    }
+
+    private func currentProfileAvatarURL(incoming: String?, existing: String?) -> String? {
+        if let incoming = nonEmpty(incoming) {
+            return incoming
+        }
+
+        guard let existing = nonEmpty(existing),
+              URL(string: existing)?.isFileURL == true
+        else {
+            return nil
+        }
+
+        return existing
     }
 
     private func mergeProfileShells(_ shells: [ProfileShell]) -> [ProfileShell] {

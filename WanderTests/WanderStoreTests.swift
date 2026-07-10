@@ -188,6 +188,77 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
     }
 
+    func testRemoteCurrentProfileKeepsLocalOnlyAvatarWhenRemoteOmitsAvatar() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let localAvatarURL = "file:///tmp/wander-avatar.jpg"
+        store.updateCurrentUserAvatarURL(localAvatarURL)
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Local Joe",
+                    handle: "localjoe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+        let profileRepository = FakeProfileRepository(
+            currentProfile: LocalProfile(
+                localID: "local_profile_current",
+                serverID: "user_live",
+                handle: "joe",
+                displayName: "Joe",
+                avatarURL: nil,
+                bio: "places worth returning to",
+                homeArea: "Los Angeles",
+                defaultVisibility: .mutuals,
+                syncState: .synced
+            )
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        await store.refreshRemoteCurrentProfile(backend: backend)
+
+        XCTAssertEqual(store.currentUser.avatarURL, localAvatarURL)
+        XCTAssertEqual(store.profileState(for: "user_live")?.shell.avatarURL, localAvatarURL)
+        XCTAssertEqual(store.currentUser.defaultVisibility, .mutuals)
+    }
+
+    func testRemoteCurrentProfileClearsHostedAvatarWhenRemoteOmitsAvatar() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "user_live",
+                    displayName: "Local Joe",
+                    handle: "localjoe",
+                    email: "joe@example.com"
+                )
+            )
+        )
+        store.updateCurrentUserAvatarURL("https://example.supabase.co/storage/v1/object/public/profile-avatars/user_live/avatar.jpg?v=old")
+        let profileRepository = FakeProfileRepository(
+            currentProfile: LocalProfile(
+                localID: "local_profile_current",
+                serverID: "user_live",
+                handle: "joe",
+                displayName: "Joe",
+                avatarURL: nil,
+                bio: "places worth returning to",
+                homeArea: "Los Angeles",
+                defaultVisibility: .mutuals,
+                syncState: .synced
+            )
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        await store.refreshRemoteCurrentProfile(backend: backend)
+
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.profileState(for: "user_live")?.shell.avatarURL)
+        XCTAssertEqual(store.currentUser.defaultVisibility, .mutuals)
+    }
+
     func testSignedInSessionClaimsGuestSavedPlaces() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let result = store.saveCandidate(
@@ -2102,6 +2173,28 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(followRepository.followersUserIDs, ["user_live"])
     }
 
+    func testRemoteSocialGraphPreservesAvatarWhenGraphOmitsAvatar() async {
+        let store = makeStore()
+        let avatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=known"
+        store.profiles.first { $0.id == "user_ryan" }?.avatarURL = avatarURL
+        let ryan = ProfileShell(
+            id: "user_ryan",
+            handle: "ryan",
+            displayName: "Ryan Updated",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(following: [ryan])
+        let backend = WanderBackend(followRepository: followRepository)
+
+        await store.refreshRemoteSocialGraph(backend: backend)
+
+        XCTAssertEqual(store.following(of: store.currentUser.id).first { $0.id == "user_ryan" }?.displayName, "Ryan Updated")
+        XCTAssertEqual(store.following(of: store.currentUser.id).first { $0.id == "user_ryan" }?.avatarURL, avatarURL)
+        XCTAssertEqual(store.profileState(for: "user_ryan")?.shell.avatarURL, avatarURL)
+    }
+
     func testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -3156,6 +3249,57 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(remoteList?.cachedItemCount, 1)
         XCTAssertEqual(repository.detailListIDs, [listID])
         XCTAssertTrue(remoteList.map { store.visiblePlaces(in: $0).contains { $0.place.canonicalName == "Bar Nido" } } ?? false)
+    }
+
+    func testRemotePlaceListsPreserveKnownAvatarsWhenSummaryOmitsThem() async {
+        let store = makeStore()
+        let ryanAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=known"
+        let mayaAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=known"
+        store.profiles.first { $0.id == "user_ryan" }?.avatarURL = ryanAvatarURL
+        store.profiles.first { $0.id == "user_maya" }?.avatarURL = mayaAvatarURL
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced,
+                        cachedItemCount: 0
+                    ),
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan Updated",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [
+                        PlaceListCollaboratorRecord(
+                            userID: "user_maya",
+                            handle: "maya",
+                            displayName: "Maya Updated",
+                            avatarURL: nil,
+                            role: .collaborator
+                        )
+                    ],
+                    itemCount: 0
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(store.profileState(for: "user_ryan")?.shell.displayName, "Ryan Updated")
+        XCTAssertEqual(store.profileState(for: "user_ryan")?.shell.avatarURL, ryanAvatarURL)
+        XCTAssertEqual(store.profileState(for: "user_maya")?.shell.displayName, "Maya Updated")
+        XCTAssertEqual(store.profileState(for: "user_maya")?.shell.avatarURL, mayaAvatarURL)
     }
 
     func testSyncPendingPlaceListsCreatesRemoteListAndCollaborators() async {
