@@ -9472,3 +9472,11 @@ Checkpoint, 2026-07-09 23:53 PDT:
   - `git diff --check` passed.
   - Focused elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests` passed: 10 tests, 0 failures.
   - Full elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 247 tests, 0 failures.
+
+Checkpoint, 2026-07-09 23:59 PDT:
+
+- Reran XcodeGen after the final fix; it completed with no project drift.
+- Local Supabase pgTAP runner remains unavailable: direct `supabase` is not on PATH, bundled `pnpm dlx supabase test db supabase/tests/place_visits_visit_photos.sql` needed bundled Node on PATH and then failed with `LegacyDbConnectError` because no local Postgres/Supabase DB was reachable.
+- Created `/private/tmp/recme_visit_photo_rollback.sql`, a rollback-wrapped hosted verification harness that strips the migration/test transaction wrappers, applies `20260709220000_place_visits_visit_photos.sql`, runs `supabase/tests/place_visits_visit_photos.sql`, and rolls back.
+- Hosted rollback verification against linked project `rugmtlgufrhlxwfkumhw` passed through `supabase db query --linked --workdir /Users/ryanlieblein/Developer/wander --file /private/tmp/recme_visit_photo_rollback.sql`; returned pgTAP row `ok 61 - deleting the last owned visit unsaves when no retained wanna state exists`.
+- PR #67 metadata check: draft, mergeable, `mergeStateStatus=CLEAN`, no GitHub checks configured. Updated the PR body locally for the expanded end-to-end scope and verification before marking ready.
