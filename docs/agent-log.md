@@ -9446,3 +9446,29 @@ Completion, 2026-07-09 23:06 PDT:
 - Known gaps:
   - Historical wants are local/snapshot metadata on the single `LocalUserPlace`; Supabase still needs a durable server-side counterpart if this history must sync across devices.
   - Live visual QA for the photo picker and activity ordering has not been run on device in this pass.
+
+## 2026-07-10 00:00 PDT - Codex - Rating Card Visit Count And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-xx-visits-storage`
+Worktree: `/private/tmp/recme-rec-xx-visits-storage`
+PR: #67 draft
+
+Goal: fix Ryan's remaining rating-card issue where the profile "Your rating" square shows `1 visit` even after multiple persisted `been` visits, then squash-merge this branch to `main` and push a new TestFlight build.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected root checkout status/worktrees, confirmed root is on unrelated `codex/rec-81-collab-visibility`, and continued in `/private/tmp/recme-rec-xx-visits-storage`.
+- Feature worktree status before edits: branch `codex/rec-xx-visits-storage` is ahead of `origin/main` with only untracked generated `DerivedData-focused/`.
+- Read latest `docs/agent-log.md` and the repo `recme-pr-review-merge-release` skill because this request explicitly includes squash merge plus TestFlight release.
+- Expected files before merge/release: `Wander/Models/PlaceProfilePresentation.swift`, `WanderTests/PlaceProfilePresentationTests.swift`, this log, then release files on `main` (`project.yml`, `Wander.xcodeproj/project.pbxproj`, release notes/log updates) after branch verification and merge.
+
+Checkpoint, 2026-07-09 23:53 PDT:
+
+- Fixed the profile "Your rating" card count to use persisted aggregate visit counts instead of counting one grouped `PlaceSaveSummary` per place. A user-owned aggregate with `recommendedCount == 3` now renders `3 visits`.
+- Applied the same weighted-count handling to trusted ratings so aggregated friend/user saves still compute the rating average and count from persisted visit totals.
+- Added presenter tests for own aggregated visit counts and trusted aggregated rating counts.
+- Verification:
+  - `git diff --check` passed.
+  - Focused elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/PlaceProfilePresentationTests` passed: 10 tests, 0 failures.
+  - Full elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 247 tests, 0 failures.
