@@ -9620,3 +9620,12 @@ Checkpoint, 2026-07-10 00:13 PDT:
   - Focused elevated run on installed simulator: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec73-avatar CODE_SIGNING_ALLOWED=NO -jobs 1` with six targeted avatar/repository tests.
   - Full elevated run on installed simulator: `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec73-avatar-full CODE_SIGNING_ALLOWED=NO -jobs 1`
 - Note: the repo-documented `iPhone 16 Plus, OS=18.6` simulator is not installed on Ryan's machine. The full suite was run on `iPhone 17 Pro, OS=26.5`.
+
+Completion, 2026-07-10 00:21 PDT:
+
+- Code commit pushed: `3952e0f49` (`fix: preserve profile avatars across social surfaces`).
+- Branch pushed for Xcode testing: `codex/rec-73-avatar-audit-fix`.
+- Draft PR opened: https://github.com/joelipshutz/wander/pull/69.
+- Linear `REC-73` linked to PR #69, moved to `In Review`, and updated with root cause plus validation notes.
+- Known issue: this session validated the data paths with focused and full tests, but did not run manual visual verification against Ryan's live/signed-in friend data. Ryan should test the branch in Xcode with a friend/profile-photo account before making PR #69 ready.
+- No TestFlight release was requested or performed.
