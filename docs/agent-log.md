@@ -9230,6 +9230,13 @@ Progress:
 - Fast-forwarded this existing `main` worktree from `450b90809` to `48f9f73ea`.
 - Attempted `supabase db push --linked --dry-run`; Supabase blocked because hosted migration `20260709160829` existed remotely but not in local `main`.
 - Identified the remote-only migration as `fix_place_list_rpc_grants`, originally present on `origin/codex/rec-81-collab-visibility` commit `b5ff54927`. Added only `supabase/migrations/20260709160829_fix_place_list_rpc_grants.sql` to local `main` so repo migration history matches hosted Supabase before applying the new visit/photo migration.
+- Committed and pushed `d51826d81` (`Add applied place list grant migration`) so local `main` migration history mirrors hosted Supabase.
+- Copied ignored Supabase link metadata from the root checkout into this release worktree's `supabase/.temp` so CLI operations read this worktree's migrations against the linked project.
+- `supabase db push --linked --dry-run` then showed only `20260709220000_place_visits_visit_photos.sql`.
+- Applied hosted Supabase migration `20260709220000_place_visits_visit_photos.sql` with `supabase db push --linked --yes`.
+- Verified hosted migration history with `supabase migration list --linked`; local and remote both show `20260709160829` and `20260709220000`.
+- Ran hosted pgTAP via `supabase db query --linked --file supabase/tests/place_visits_visit_photos.sql`; returned `ok 61 - deleting the last owned visit unsaves when no retained wanna state exists`.
+- Latest completed TestFlight build is 63, so this release is bumping `CURRENT_PROJECT_VERSION` from `63` to `64`.
 
 ## 2026-07-09 14:51 PDT - Codex - REC-XX Multiple Visits And Visit Photos Backend Plan
 
