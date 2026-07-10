@@ -876,11 +876,7 @@ struct MapScreen: View {
     }
 
     private func action(for visiblePlace: VisiblePlace) -> PlaceSheetAction {
-        if currentUserSave(matching: visiblePlace) != nil {
-            return .edit
-        }
-
-        return .add
+        PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: visiblePlace))
     }
 
     private func performAction(for visiblePlace: VisiblePlace) {
@@ -891,11 +887,12 @@ struct MapScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
-        case .edit:
+        case .addVisit:
             let placeToEdit = currentUserSave(matching: visiblePlace) ?? visiblePlace
-            mapSaveFlow = MapPlaceSaveContext.editVisiblePlace(
+            mapSaveFlow = MapPlaceSaveContext.addVisitVisiblePlace(
                 placeToEdit,
-                attributes: store.attributes(for: placeToEdit.userPlace.id)
+                attributes: store.attributes(for: placeToEdit.userPlace.id),
+                latestVisit: store.visits(for: placeToEdit.userPlace.id).first
             )
         case .none:
             break
@@ -951,19 +948,13 @@ struct MapScreen: View {
             }
 
             return result
-        case .edit(let visiblePlace):
-            let explicitVisit = createExplicitVisitIfNeeded(for: submission, store: store)
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
+        case .addVisit, .editVisit, .editWant:
+            let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+                submission,
+                store: store,
                 backend: auth.isSignedIn ? backend : nil
             )
-            let targetVisit = explicitVisit ?? (submission.status == .been ? store.visits(for: result.userPlaceID).first : nil)
+            guard let result else { return nil }
             await persistVisitPhotoAttachments(
                 submission.photoAttachments,
                 to: targetVisit,
@@ -972,7 +963,7 @@ struct MapScreen: View {
             )
             selectedSearchCandidateID = nil
             selectSavedResult(result)
-            showTransientMapSearchMessage("Updated saved place.")
+            showTransientMapSearchMessage(scopedSaveMessage(for: submission.context))
 
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -982,34 +973,54 @@ struct MapScreen: View {
         }
     }
 
+    private func scopedSaveMessage(for context: MapPlaceSaveContext) -> String {
+        switch context.mode {
+        case .add:
+            "Added to your map."
+        case .addVisit:
+            "Visit saved."
+        case .editVisit:
+            "Visit updated."
+        case .editWant:
+            "Want updated."
+        }
+    }
+
     @MainActor
     private func removeMapSave(_ context: MapPlaceSaveContext) async -> Bool {
-        guard case .edit(let visiblePlace) = context.mode else {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
+                return false
+            }
+            showTransientMapSearchMessage("Visit deleted.")
+            return true
+        case .editWant(let visiblePlace):
+            let removal = await store.removeSave(
+                userPlaceID: visiblePlace.userPlace.id,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            guard removal != nil else {
+                return false
+            }
+
+            clearNativeMapFeatureSelection()
+            selectedSearchCandidateID = nil
+            if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
+                for: visiblePlace,
+                in: visiblePlaces,
+                currentUserID: store.currentUser.id
+            ) {
+                selectedPlaceGroupKey = remainingGroup.key
+            } else {
+                selectedPlaceGroupKey = nil
+            }
+            isPlaceProfilePresented = false
+            showTransientMapSearchMessage("Want removed.")
+            return true
+        case .add, .addVisit:
             return false
         }
-
-        let removal = await store.removeSave(
-            userPlaceID: visiblePlace.userPlace.id,
-            backend: auth.isSignedIn ? backend : nil
-        )
-        guard removal != nil else {
-            return false
-        }
-
-        clearNativeMapFeatureSelection()
-        selectedSearchCandidateID = nil
-        if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
-            for: visiblePlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        ) {
-            selectedPlaceGroupKey = remainingGroup.key
-        } else {
-            selectedPlaceGroupKey = nil
-        }
-        isPlaceProfilePresented = false
-        showTransientMapSearchMessage("Removed from your map.")
-        return true
     }
 
     private func showTransientMapSearchMessage(_ message: String) {
@@ -2161,13 +2172,17 @@ enum MapPinOutlineBuilder {
 
 enum PlaceSheetAction {
     case add
-    case edit
+    case addVisit
     case none
+
+    static func topLevelAction(currentUserSave: VisiblePlace?) -> PlaceSheetAction {
+        currentUserSave == nil ? .add : .addVisit
+    }
 
     var systemImage: String {
         switch self {
         case .add: "plus"
-        case .edit: "pencil"
+        case .addVisit: "plus"
         case .none: ""
         }
     }
@@ -2175,8 +2190,17 @@ enum PlaceSheetAction {
     var accessibilityLabel: String {
         switch self {
         case .add: "Save to my map"
-        case .edit: "Edit saved place"
+        case .addVisit: "Add visit"
         case .none: ""
+        }
+    }
+
+    var isPrimaryAction: Bool {
+        switch self {
+        case .add, .addVisit:
+            true
+        case .none:
+            false
         }
     }
 }
@@ -2268,7 +2292,9 @@ struct PlaceSheetPlace {
 
 enum MapPlaceSaveMode {
     case add(AddSourceType)
-    case edit(VisiblePlace)
+    case addVisit(VisiblePlace)
+    case editVisit(VisiblePlace, LocalPlaceVisit)
+    case editWant(VisiblePlace)
 }
 
 struct MapPlaceSaveContext: Identifiable {
@@ -2277,25 +2303,85 @@ struct MapPlaceSaveContext: Identifiable {
     let mode: MapPlaceSaveMode
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
-    let initialRatingScore: Double
+    let initialRatingScore: Double?
     let initialNote: String
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
 
     var isEditing: Bool {
-        if case .edit = mode {
+        switch mode {
+        case .editVisit, .editWant:
             return true
+        case .add, .addVisit:
+            return false
         }
-        return false
+    }
+
+    var startsOnDetails: Bool {
+        switch mode {
+        case .add:
+            false
+        case .addVisit, .editVisit, .editWant:
+            true
+        }
+    }
+
+    var allowsStatusSelection: Bool {
+        switch mode {
+        case .add:
+            true
+        case .addVisit, .editVisit, .editWant:
+            false
+        }
+    }
+
+    var allowsPhotoAttachments: Bool {
+        switch mode {
+        case .add, .addVisit:
+            true
+        case .editVisit, .editWant:
+            false
+        }
+    }
+
+    var showsRemoveControl: Bool {
+        switch mode {
+        case .editVisit, .editWant:
+            true
+        case .add, .addVisit:
+            false
+        }
+    }
+
+    var sourceVisiblePlace: VisiblePlace? {
+        switch mode {
+        case .add:
+            nil
+        case .addVisit(let visiblePlace),
+             .editVisit(let visiblePlace, _),
+             .editWant(let visiblePlace):
+            visiblePlace
+        }
+    }
+
+    var editedVisit: LocalPlaceVisit? {
+        if case .editVisit(_, let visit) = mode {
+            return visit
+        }
+        return nil
     }
 
     var title: String {
         switch mode {
         case .add:
             "save this place"
-        case .edit:
-            "edit this place"
+        case .addVisit:
+            "add visit"
+        case .editVisit:
+            "edit visit"
+        case .editWant:
+            "edit want"
         }
     }
 
@@ -2303,8 +2389,12 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             "pick status and a few details."
-        case .edit:
-            "update what future you sees on the map."
+        case .addVisit:
+            "save what happened this time."
+        case .editVisit:
+            "adjust this saved visit."
+        case .editWant:
+            "update why this is on your radar."
         }
     }
 
@@ -2312,8 +2402,45 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             "save to my map"
-        case .edit:
-            "update my map"
+        case .addVisit:
+            "save visit"
+        case .editVisit:
+            "update visit"
+        case .editWant:
+            "update want"
+        }
+    }
+
+    var removeTitle: String {
+        switch mode {
+        case .editVisit:
+            "Delete visit"
+        case .editWant:
+            "Remove want"
+        case .add, .addVisit:
+            "Remove save"
+        }
+    }
+
+    var removeConfirmationTitle: String {
+        switch mode {
+        case .editVisit:
+            "Delete visit?"
+        case .editWant:
+            "Remove want?"
+        case .add, .addVisit:
+            "Remove save?"
+        }
+    }
+
+    var removeConfirmationMessage: String {
+        switch mode {
+        case .editVisit:
+            "This removes this visit and its photos from your place history."
+        case .editWant:
+            "This removes your want from this place."
+        case .add, .addVisit:
+            "This removes the place from your map."
         }
     }
 
@@ -2327,7 +2454,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(sourceType),
             initialStatus: .wannaGo,
             initialVisibility: defaultVisibility,
-            initialRatingScore: PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: "",
             initialAnswers: [:],
             initialPersonalLabels: [],
@@ -2345,7 +2472,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(.socialSave),
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
-            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
@@ -2353,16 +2480,55 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
-    static func editVisiblePlace(
+    static func addVisitVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?
+    ) -> MapPlaceSaveContext {
+        let defaultAttributes = latestVisit.map { VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON) }
+            ?? attributes.map { PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON) }
+        let note = visiblePlace.userPlace.status == .wannaGo ? visiblePlace.userPlace.note ?? "" : ""
+        return MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .addVisit(visiblePlace),
+            initialStatus: .been,
+            initialVisibility: visiblePlace.userPlace.visibility,
+            initialRatingScore: latestVisit?.ratingScore,
+            initialNote: note,
+            initialAnswers: initialAnswers(from: defaultAttributes),
+            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
+            initialCuisine: initialCuisine(from: defaultAttributes)
+        )
+    }
+
+    static func editVisit(
+        _ visit: LocalPlaceVisit,
+        visiblePlace: VisiblePlace
+    ) -> MapPlaceSaveContext {
+        let attributes = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: visit.attributeAnswersJSON)
+        return MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .editVisit(visiblePlace, visit),
+            initialStatus: .been,
+            initialVisibility: visiblePlace.userPlace.visibility,
+            initialRatingScore: visit.ratingScore,
+            initialNote: visit.note ?? "",
+            initialAnswers: initialAnswers(from: attributes),
+            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialCuisine: initialCuisine(from: attributes)
+        )
+    }
+
+    static func editWant(
         _ visiblePlace: VisiblePlace,
         attributes: [LocalPlaceAttribute]
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
-            mode: .edit(visiblePlace),
-            initialStatus: visiblePlace.userPlace.status,
+            mode: .editWant(visiblePlace),
+            initialStatus: .wannaGo,
             initialVisibility: visiblePlace.userPlace.visibility,
-            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: visiblePlace.userPlace.note ?? "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
@@ -2415,6 +2581,25 @@ struct MapPlaceSaveContext: Identifiable {
         return answers
     }
 
+    private static func initialAnswers(from attributes: [PlaceAttributeDraft]) -> [String: Set<String>] {
+        var answers: [String: Set<String>] = [:]
+        let decoder = JSONDecoder()
+
+        for attribute in attributes {
+            guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels,
+                  attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine
+            else { continue }
+            guard let data = attribute.valueJSON.data(using: .utf8) else { continue }
+            if let values = try? decoder.decode([String].self, from: data) {
+                answers[attribute.questionKey] = Set(values)
+            } else if let value = try? decoder.decode(String.self, from: data) {
+                answers[attribute.questionKey] = [value]
+            }
+        }
+
+        return answers
+    }
+
     private static func initialPersonalLabels(from attributes: [LocalPlaceAttribute]) -> Set<String> {
         guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }),
               let data = attribute.valueJSON.data(using: .utf8),
@@ -2426,7 +2611,39 @@ struct MapPlaceSaveContext: Identifiable {
         return Set(values)
     }
 
+    private static func initialPersonalLabels(from attributes: [PlaceAttributeDraft]) -> Set<String> {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }),
+              let data = attribute.valueJSON.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return []
+        }
+
+        return Set(values)
+    }
+
     private static func initialCuisine(from attributes: [LocalPlaceAttribute]) -> String? {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine }),
+              let data = attribute.valueJSON.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        if let value = try? JSONDecoder().decode(String.self, from: data) {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        if let values = try? JSONDecoder().decode([String].self, from: data),
+           let value = values.first {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        return nil
+    }
+
+    private static func initialCuisine(from attributes: [PlaceAttributeDraft]) -> String? {
         guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine }),
               let data = attribute.valueJSON.data(using: .utf8)
         else {
@@ -2555,7 +2772,7 @@ func createExplicitVisitIfNeeded(
     for submission: MapPlaceSaveSubmission,
     store: WanderStore
 ) -> LocalPlaceVisit? {
-    guard case .edit(let visiblePlace) = submission.context.mode,
+    guard case .addVisit(let visiblePlace) = submission.context.mode,
           submission.status == .been
     else {
         return nil
@@ -2565,8 +2782,57 @@ func createExplicitVisitIfNeeded(
         userPlaceID: visiblePlace.userPlace.id,
         note: submission.note,
         ratingScore: submission.ratingScore,
-        attributes: submission.attributes
+        attributes: submission.attributes,
+        visibility: submission.visibility
     )
+}
+
+@MainActor
+func persistScopedVisitOrWantSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> (SaveResult?, LocalPlaceVisit?) {
+    switch submission.context.mode {
+    case .add:
+        return (nil, nil)
+    case .addVisit:
+        guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
+            return (nil, nil)
+        }
+        if let backend {
+            _ = await store.syncVisit(visitID: visit.id, backend: backend)
+        }
+        return (SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), visit)
+    case .editVisit(_, let visit):
+        guard let updatedVisit = store.updateVisit(
+            visitID: visit.id,
+            note: submission.note,
+            ratingScore: submission.ratingScore,
+            attributes: submission.attributes,
+            visibility: submission.visibility,
+            replacesNote: true,
+            replacesRating: true
+        ) else {
+            return (nil, nil)
+        }
+        if let backend {
+            _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
+        }
+        return (SaveResult(userPlaceID: updatedVisit.userPlaceID, syncState: updatedVisit.syncState), updatedVisit)
+    case .editWant(let visiblePlace):
+        let result = await store.saveCandidate(
+            submission.candidate,
+            status: .wannaGo,
+            visibility: submission.visibility,
+            note: submission.note,
+            sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+            ratingScore: nil,
+            attributes: submission.attributes,
+            backend: backend
+        )
+        return (result, nil)
+    }
 }
 
 @MainActor
@@ -2613,6 +2879,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
+    @State private var hasSelectedRating: Bool
     @State private var selectedAnswers: [String: Set<String>]
     @State private var personalLabels: Set<String>
     @State private var selectedCuisine: String?
@@ -2633,11 +2900,12 @@ struct MapPlaceSaveFlowSheet: View {
         self.context = context
         self.onSave = onSave
         self.onRemove = onRemove
-        _step = State(initialValue: context.isEditing ? .details : .confirm)
+        _step = State(initialValue: context.startsOnDetails ? .details : .confirm)
         _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
-        _selectedRatingScore = State(initialValue: context.initialRatingScore)
+        _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
+        _hasSelectedRating = State(initialValue: context.initialRatingScore != nil)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
@@ -2762,13 +3030,13 @@ struct MapPlaceSaveFlowSheet: View {
                     selectedVisibility = .selfOnly
                 }
             }
-            .alert("Remove save?", isPresented: $isShowingRemoveConfirmation) {
-                Button("Remove save", role: .destructive) {
+            .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
+                Button(context.removeTitle, role: .destructive) {
                     removeSave()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(removeSaveConfirmationMessage)
+                Text(context.removeConfirmationMessage)
             }
         }
     }
@@ -2839,12 +3107,12 @@ struct MapPlaceSaveFlowSheet: View {
             candidateCard
             placeTypeSection
 
-            if context.isEditing {
+            if context.allowsStatusSelection {
                 saveAsSection
             }
 
             if selectedStatus == .been {
-                PlaceRatingSlider(score: $selectedRatingScore)
+                ratingSection
             }
 
             ForEach(questionBlocks) { block in
@@ -2867,10 +3135,12 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
 
-            MapSaveVisitPhotoSection(
-                canAddPhotos: selectedStatus == .been,
-                photos: $visitPhotoAttachments
-            )
+            if context.allowsPhotoAttachments {
+                MapSaveVisitPhotoSection(
+                    canAddPhotos: selectedStatus == .been,
+                    photos: $visitPhotoAttachments
+                )
+            }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("a note for future you")
@@ -2916,7 +3186,7 @@ struct MapPlaceSaveFlowSheet: View {
                 save()
             }
 
-            if context.isEditing {
+            if context.showsRemoveControl {
                 removeSaveSection
             }
         }
@@ -2924,13 +3194,52 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var removeSaveSection: some View {
         MapSaveDestructiveButton(
-            title: isRemoving ? "removing..." : "Remove save",
+            title: isRemoving ? "removing..." : context.removeTitle,
             systemImage: "trash",
             isDisabled: isSaving || isRemoving
         ) {
             isShowingRemoveConfirmation = true
         }
         .padding(.top, WanderTheme.spacing1)
+    }
+
+    private var ratingSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack {
+                Text("rating")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Spacer()
+                Button {
+                    hasSelectedRating.toggle()
+                } label: {
+                    Text(hasSelectedRating ? "remove" : "add")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .frame(minHeight: 30)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if hasSelectedRating {
+                PlaceRatingSlider(score: $selectedRatingScore)
+            } else {
+                Text("No rating yet.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var placeTypeSection: some View {
@@ -3186,7 +3495,7 @@ struct MapPlaceSaveFlowSheet: View {
         matching predicate: (LocalPlaceAttribute) -> Bool
     ) -> [String] {
         let visiblePlaces = store.currentUserVisiblePlaces.filter { visiblePlace in
-            if case let .edit(currentPlace) = context.mode,
+            if let currentPlace = context.sourceVisiblePlace,
                currentPlace.userPlace.id == visiblePlace.userPlace.id {
                 return false
             }
@@ -3273,7 +3582,7 @@ struct MapPlaceSaveFlowSheet: View {
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
+            ratingScore: selectedStatus == .been && hasSelectedRating ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
             photoAttachments: visitPhotoAttachments
@@ -3293,11 +3602,11 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var removeSaveConfirmationMessage: String {
-        "This removes \(context.candidate.name) from your map and deletes your note, rating, tags, labels, and answers. It will not remove the place for anyone else."
+        context.removeConfirmationMessage
     }
 
     private func removeSave() {
-        guard context.isEditing, !isSaving, !isRemoving else { return }
+        guard context.showsRemoveControl, !isSaving, !isRemoving else { return }
 
         isRemoving = true
         errorMessage = nil
@@ -4848,7 +5157,7 @@ struct PlaceSheet: View {
                 Image(systemName: action.systemImage)
                     .font(.system(size: iconSize, weight: .black))
                     .frame(width: size, height: size)
-                    .background(action == .add ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                    .background(action.isPrimaryAction ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Circle())
             }
@@ -4981,7 +5290,7 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "ALL"
-        case .myVisits: "MY VISITS"
+        case .myVisits: "MY SAVES"
         }
     }
 }
@@ -5036,6 +5345,14 @@ struct PlaceActivityEntry: Identifiable {
         isCurrentUser && userPlace.status == .been && visit != nil
     }
 
+    var canEdit: Bool {
+        isCurrentUser && (visit != nil || userPlace.status == .wannaGo)
+    }
+
+    var editAccessibilityLabel: String {
+        visit == nil ? "Edit want" : "Edit visit"
+    }
+
     var tags: [String] {
         if let visit, !visit.tags.isEmpty {
             return uniqueTags(visit.tags)
@@ -5087,10 +5404,13 @@ private struct PlaceActivityPhotoViewerRoute: Identifiable {
 
 struct PlaceActivitySection: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     @State private var filter: PlaceActivityFilter = .all
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
+    @State private var editFlow: MapPlaceSaveContext?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -5112,6 +5432,9 @@ struct PlaceActivitySection: View {
                             photos: photos(for: entry),
                             onOpenPhoto: { photo in
                                 viewerRoute = PlaceActivityPhotoViewerRoute(photoID: photo.id)
+                            },
+                            onEdit: {
+                                edit(entry)
                             }
                         )
                     }
@@ -5124,6 +5447,13 @@ struct PlaceActivitySection: View {
                 initialPhotoID: route.photoID,
                 entriesByID: entriesByID
             )
+        }
+        .sheet(item: $editFlow) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await saveActivityEdit(submission)
+            } onRemove: { context in
+                await removeActivityEdit(context)
+            }
         }
     }
 
@@ -5155,7 +5485,7 @@ struct PlaceActivitySection: View {
         case .all:
             entries
         case .myVisits:
-            entries.filter { $0.isCurrentUser && $0.userPlace.status == .been }
+            entries.filter { $0.isCurrentUser }
         }
     }
 
@@ -5179,7 +5509,51 @@ struct PlaceActivitySection: View {
         case .all:
             "No activity yet."
         case .myVisits:
-            "No visits yet."
+            "No saves yet."
+        }
+    }
+
+    private func edit(_ entry: PlaceActivityEntry) {
+        guard entry.canEdit else { return }
+
+        if let visit = entry.visit {
+            editFlow = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
+        } else if entry.userPlace.status == .wannaGo {
+            editFlow = MapPlaceSaveContext.editWant(
+                entry.summary.visiblePlace,
+                attributes: store.attributes(for: entry.userPlace.id)
+            )
+        }
+    }
+
+    @MainActor
+    private func saveActivityEdit(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        await persistVisitPhotoAttachments(
+            submission.photoAttachments,
+            to: targetVisit,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        if result != nil, !auth.isSignedIn {
+            auth.presentGate(for: .syncPlace)
+        }
+        return result
+    }
+
+    @MainActor
+    private func removeActivityEdit(_ context: MapPlaceSaveContext) async -> Bool {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            return await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil)
+        case .editWant(let visiblePlace):
+            return await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
+        case .add, .addVisit:
+            return false
         }
     }
 }
@@ -5244,6 +5618,7 @@ private struct PlaceActivityCard: View {
     let entry: PlaceActivityEntry
     let photos: [PlaceActivityPhoto]
     let onOpenPhoto: (PlaceActivityPhoto) -> Void
+    let onEdit: () -> Void
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -5330,6 +5705,19 @@ private struct PlaceActivityCard: View {
                     .minimumScaleFactor(0.78)
             }
             Spacer()
+            if entry.canEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 12, weight: .black))
+                        .frame(width: 32, height: 32)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(entry.editAccessibilityLabel)
+            }
             StatusBadge(status: entry.userPlace.status)
         }
     }

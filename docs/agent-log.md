@@ -9371,3 +9371,38 @@ XcodeGen follow-up, 2026-07-09 16:34 PDT:
 - Verification after regeneration:
   - `git diff --check` passed.
   - Elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/recme-recxx-xcodegen-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 237 tests, 0 failures.
+
+## 2026-07-09 16:45 PDT - Codex - Visit/Want Edit Contract Wiring
+
+Agent: Codex
+Branch: `codex/rec-xx-visits-storage`
+Worktree: `/private/tmp/recme-rec-xx-visits-storage`
+PR: #67 draft
+
+Goal: implement the product contract clarified by Ryan: top-level global "edit this place" must not remain available after the first save; edits should target either the single want record or an individual visit/save. First saves and new visits should expose full visit details and photos, with new visits defaulting from the user's previous visit or want data.
+
+Starting status:
+
+- Ran `git status --short --branch`, `git worktree list`, and reviewed the latest agent-log entries.
+- Current branch is pushed through `52908a4a5` and has only untracked generated `DerivedData-focused/` local noise.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, Discover/Profile call sites, `Wander/Services/WanderLocalStore.swift`, `WanderTests/WanderStoreTests.swift`, `docs/agent-log.md`, and possibly regenerated Xcode project if XcodeGen changes.
+
+Completion, 2026-07-09 18:26 PDT:
+
+- Implemented the clarified visit/want edit contract end to end in the app layer:
+  - Top-level place profile action now offers first save or add visit; it no longer opens a global "edit this place" flow after the first save.
+  - Activity cards expose pencil edit actions for user-owned visit cards and want cards only.
+  - Add-visit/edit-visit flows are scoped to persisted visit rows; edit-want remains scoped to the single current `user_places` want record.
+  - New visits default from the latest persisted visit, or from the want/default save metadata when no visit exists.
+  - Ratings are now truly optional; missing ratings no longer save as the default 3.0.
+  - Visit visibility continues to inherit from the parent save, and add/edit visit submissions update that parent visibility.
+  - Visit photos remain visit-scoped: first saves and new visits can attach photos, while existing visit photos are added/deleted from the visit card.
+- Added local model/helper coverage for visit attribute answer round-tripping, optional ratings, want-to-visit promotion, scoped visit edits, and add-visit defaults.
+- Verification:
+  - `git diff --check` passed.
+  - Focused elevated test run passed on `iPhone 17, OS 26.5`: 6 selected `WanderStoreTests`, 0 failures.
+  - Full elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/recme-recxx-visit-contract-tests CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 242 tests, 0 failures.
+- Known gaps:
+  - This pass keeps `wanna` represented by the existing single `user_places` record. Supporting a separate want card that can coexist with active visits still needs a future `place_wants`-style schema/local model decision.
+  - pgTAP/Supabase local DB tests are still not rerun in this environment.
+  - Live-device `/ios-qa` and `/ios-design-review` remain blocked until debug-only `DebugBridge` / `StateServer` instrumentation is intentionally installed.

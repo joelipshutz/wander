@@ -14,6 +14,7 @@ struct AddScreen: View {
     @State private var selectedStatus: PlaceStatus = .been
     @State private var selectedVisibility: PlaceVisibility = .followers
     @State private var selectedRatingScore = PlaceRating.defaultScore
+    @State private var hasSelectedRating = false
     @State private var selectedSource: AddSourceType = .manual
     @State private var note = ""
     @State private var manualName = ""
@@ -413,7 +414,7 @@ struct AddScreen: View {
             }
 
             if selectedStatus == .been {
-                PlaceRatingSlider(score: $selectedRatingScore)
+                optionalRatingSection
             }
 
             ForEach(currentQuestionBlocks) { block in
@@ -456,6 +457,36 @@ struct AddScreen: View {
             WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
                 Task {
                     await saveSelectedCandidate()
+                }
+            }
+        }
+    }
+
+    private var optionalRatingSection: some View {
+        QuestionBlock(title: "rating", tag: "optional") {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack {
+                    Text(hasSelectedRating ? "how was it?" : "No rating yet.")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Spacer()
+                    Button {
+                        hasSelectedRating.toggle()
+                    } label: {
+                        Text(hasSelectedRating ? "remove" : "add")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .padding(.horizontal, WanderTheme.spacing2)
+                            .frame(minHeight: 30)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if hasSelectedRating {
+                    PlaceRatingSlider(score: $selectedRatingScore)
                 }
             }
         }
@@ -535,6 +566,7 @@ struct AddScreen: View {
         selectedStatus = .been
         selectedVisibility = store.effectiveDefaultVisibility
         selectedRatingScore = PlaceRating.defaultScore
+        hasSelectedRating = false
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -561,6 +593,7 @@ struct AddScreen: View {
         selectedStatus = .been
         selectedVisibility = store.effectiveDefaultVisibility
         selectedRatingScore = PlaceRating.defaultScore
+        hasSelectedRating = false
         selectedSource = .manual
         note = ""
         manualName = ""
@@ -682,7 +715,7 @@ struct AddScreen: View {
             visibility: saveVisibility,
             note: note.isEmpty ? nil : note,
             sourceType: selectedSource,
-            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
+            ratingScore: selectedStatus == .been && hasSelectedRating ? selectedRatingScore : nil,
             attributes: attributeDrafts(),
             backend: auth.isSignedIn ? backend : nil
         )

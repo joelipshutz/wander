@@ -998,12 +998,12 @@ private struct SavedPlacesListScreen: View {
                 saves: saveSummaries(for: selectedPlace),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
-                action: .edit,
+                action: .addVisit,
                 onBack: {
                     self.selectedPlace = nil
                 },
                 onAction: {
-                    beginEditSelectedPlace(selectedPlace)
+                    beginAddVisitSelectedPlace(selectedPlace)
                 }
             )
         }
@@ -1228,10 +1228,11 @@ private struct SavedPlacesListScreen: View {
         }
     }
 
-    private func beginEditSelectedPlace(_ visiblePlace: VisiblePlace) {
-        let context = MapPlaceSaveContext.editVisiblePlace(
+    private func beginAddVisitSelectedPlace(_ visiblePlace: VisiblePlace) {
+        let context = MapPlaceSaveContext.addVisitVisiblePlace(
             visiblePlace,
-            attributes: store.attributes(for: visiblePlace.userPlace.id)
+            attributes: store.attributes(for: visiblePlace.userPlace.id),
+            latestVisit: store.visits(for: visiblePlace.userPlace.id).first
         )
         selectedPlace = nil
         Task { @MainActor in
@@ -1266,19 +1267,13 @@ private struct SavedPlacesListScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
             return result
-        case .edit(let visiblePlace):
-            let explicitVisit = createExplicitVisitIfNeeded(for: submission, store: store)
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
+        case .addVisit, .editVisit, .editWant:
+            let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+                submission,
+                store: store,
                 backend: auth.isSignedIn ? backend : nil
             )
-            let targetVisit = explicitVisit ?? (submission.status == .been ? store.visits(for: result.userPlaceID).first : nil)
+            guard let result else { return nil }
             await persistVisitPhotoAttachments(
                 submission.photoAttachments,
                 to: targetVisit,
@@ -1294,16 +1289,18 @@ private struct SavedPlacesListScreen: View {
 
     @MainActor
     private func removeProfileSave(_ context: MapPlaceSaveContext) async -> Bool {
-        guard case .edit(let visiblePlace) = context.mode else {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            return await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil)
+        case .editWant(let visiblePlace):
+            guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
+                return false
+            }
+            selectedPlace = nil
+            return true
+        case .add, .addVisit:
             return false
         }
-
-        guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
-            return false
-        }
-
-        selectedPlace = nil
-        return true
     }
 }
 

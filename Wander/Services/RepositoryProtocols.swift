@@ -547,6 +547,22 @@ enum VisitAttributeAnswers {
         return encoded
     }
 
+    static func drafts(fromAttributeAnswersJSON attributeAnswersJSON: String) -> [PlaceAttributeDraft] {
+        guard let data = attributeAnswersJSON.data(using: .utf8),
+              let answers = try? JSONDecoder().decode([VisitAttributeAnswer].self, from: data)
+        else {
+            return []
+        }
+
+        return answers.map { answer in
+            PlaceAttributeDraft(
+                questionKey: answer.questionKey,
+                valueType: answer.valueType,
+                valueJSON: encodedJSONValue(answer.value)
+            )
+        }
+    }
+
     static func tags(from attributes: [PlaceAttributeDraft]) -> [String] {
         normalizedTags(
             attributes
@@ -583,6 +599,16 @@ enum VisitAttributeAnswers {
         }
 
         return value
+    }
+
+    private static func encodedJSONValue(_ value: JSONValue) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "null"
+        }
+
+        return encoded
     }
 
     private static func stringValues(from json: String) -> [String] {

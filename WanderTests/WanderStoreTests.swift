@@ -897,6 +897,195 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.visits(for: updated.userPlaceID).isEmpty)
     }
 
+    func testSavingBeenWithoutRatingLeavesVisitAndSummaryUnrated() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_unrated_visit",
+                name: "Unrated Visit Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "good table",
+            sourceType: .manual,
+            ratingScore: nil
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        let visit = store.visits(for: result.userPlaceID).first
+
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertNil(saved?.userPlace.ratingScore)
+        XCTAssertNil(saved?.userPlace.recommendedScore)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 0)
+        XCTAssertNil(visit?.ratingScore)
+    }
+
+    func testCreateVisitFromWantPromotesSaveAndKeepsDetailsVisitScoped() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_want_to_visit",
+                name: "Want To Visit Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: "looks good for lunch",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["sunny"])
+            ]
+        )
+
+        let visit = try XCTUnwrap(store.createVisit(
+            userPlaceID: result.userPlaceID,
+            note: "went with Maya",
+            ratingScore: nil,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"])
+            ],
+            visibility: .selfOnly
+        ))
+        let saved = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
+
+        XCTAssertEqual(saved.userPlace.status, .been)
+        XCTAssertEqual(saved.userPlace.visibility, .selfOnly)
+        XCTAssertNil(saved.userPlace.ratingScore)
+        XCTAssertEqual(saved.userPlace.recommendedCount, 0)
+        XCTAssertEqual(visit.note, "went with Maya")
+        XCTAssertNil(visit.ratingScore)
+        XCTAssertEqual(visit.tags, ["quiet", "wifi solid"])
+        XCTAssertEqual(store.visits(for: result.userPlaceID).map(\.id), [visit.id])
+    }
+
+    func testUpdateVisitCanClearRatingNoteAndUpdateInheritedVisibility() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_edit_visit",
+                name: "Edit Visit Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first note",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+
+        let updated = try XCTUnwrap(store.updateVisit(
+            visitID: visit.id,
+            note: nil,
+            ratingScore: nil,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["counter"])
+            ],
+            visibility: .selfOnly,
+            replacesNote: true,
+            replacesRating: true
+        ))
+        let saved = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
+
+        XCTAssertNil(updated.note)
+        XCTAssertNil(updated.ratingScore)
+        XCTAssertEqual(updated.tags, ["counter"])
+        XCTAssertEqual(saved.userPlace.visibility, .selfOnly)
+        XCTAssertNil(saved.userPlace.ratingScore)
+        XCTAssertEqual(saved.userPlace.recommendedCount, 0)
+    }
+
+    func testVisitAttributeAnswerDraftsRoundTripForDefaults() {
+        let drafts = [
+            PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"]),
+            PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.restaurantCuisine, valueType: "single_choice", stringValue: "Thai"),
+            PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["date night"])
+        ]
+
+        let restored = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: VisitAttributeAnswers.encoded(from: drafts))
+        let restoredByKey = Dictionary(uniqueKeysWithValues: restored.map { ($0.questionKey, $0) })
+
+        XCTAssertEqual(restoredByKey["coffee_tags"]?.valueJSON, "[\"quiet\",\"wifi solid\"]")
+        XCTAssertEqual(restoredByKey[PlaceMemoryAttributeKeys.restaurantCuisine]?.valueJSON, "\"Thai\"")
+        XCTAssertEqual(restoredByKey[PlaceMemoryAttributeKeys.personalLabels]?.valueJSON, "[\"date night\"]")
+    }
+
+    func testAddVisitContextDefaultsFromWantThenLatestVisit() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_add_visit_defaults",
+                name: "Add Visit Defaults Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: "want because patio",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["sunny"]),
+                PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["weekend"])
+            ]
+        )
+        let wantPlace = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
+
+        let wantContext = MapPlaceSaveContext.addVisitVisiblePlace(
+            wantPlace,
+            attributes: store.attributes(for: result.userPlaceID),
+            latestVisit: nil
+        )
+
+        XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: nil), .add)
+        XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .addVisit)
+        XCTAssertEqual(wantContext.initialStatus, .been)
+        XCTAssertNil(wantContext.initialRatingScore)
+        XCTAssertEqual(wantContext.initialNote, "want because patio")
+        XCTAssertEqual(wantContext.initialAnswers["coffee_tags"], Set(["sunny"]))
+        XCTAssertEqual(wantContext.initialPersonalLabels, Set(["weekend"]))
+
+        let latestVisit = try XCTUnwrap(store.createVisit(
+            userPlaceID: result.userPlaceID,
+            note: "actual visit",
+            ratingScore: 4.5,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet"]),
+                PlaceAttributeDraft(questionKey: PlaceMemoryAttributeKeys.personalLabels, valueType: "personal_label", stringValues: ["return"])
+            ]
+        ))
+        let beenPlace = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
+
+        let visitContext = MapPlaceSaveContext.addVisitVisiblePlace(
+            beenPlace,
+            attributes: store.attributes(for: result.userPlaceID),
+            latestVisit: latestVisit
+        )
+
+        XCTAssertEqual(visitContext.initialStatus, .been)
+        XCTAssertEqual(visitContext.initialRatingScore, 4.5)
+        XCTAssertEqual(visitContext.initialNote, "")
+        XCTAssertEqual(visitContext.initialAnswers["coffee_tags"], Set(["quiet"]))
+        XCTAssertEqual(visitContext.initialPersonalLabels, Set(["return"]))
+    }
+
     func testOldSnapshotWithoutVisitsBackfillsExistingBeenSaves() throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -1189,7 +1378,7 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testPlaceRatingsNormalizeForBeenSavesOnly() {
-        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: nil), 3)
+        XCTAssertNil(PlaceRating.scoreForSave(status: .been, score: nil))
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 0), 1)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.25), 4.5)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.74), 4.5)

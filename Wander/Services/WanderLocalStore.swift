@@ -1177,7 +1177,8 @@ final class WanderStore: ObservableObject {
         visitedAt: Date = .now,
         note: String? = nil,
         ratingScore: Double? = nil,
-        attributes: [PlaceAttributeDraft] = []
+        attributes: [PlaceAttributeDraft] = [],
+        visibility: PlaceVisibility? = nil
     ) -> LocalPlaceVisit? {
         guard let userPlace = currentUserPlace(matching: userPlaceID) else { return nil }
 
@@ -1200,6 +1201,9 @@ final class WanderStore: ObservableObject {
         if userPlace.status != .been {
             userPlace.statusRaw = PlaceStatus.been.rawValue
         }
+        if let visibility {
+            userPlace.visibilityRaw = visibilityForSave(visibility).rawValue
+        }
         userPlace.updatedAt = now
         userPlace.localUpdatedAt = now
         userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
@@ -1217,7 +1221,10 @@ final class WanderStore: ObservableObject {
         visitedAt: Date? = nil,
         note: String? = nil,
         ratingScore: Double? = nil,
-        attributes: [PlaceAttributeDraft]? = nil
+        attributes: [PlaceAttributeDraft]? = nil,
+        visibility: PlaceVisibility? = nil,
+        replacesNote: Bool = false,
+        replacesRating: Bool = false
     ) -> LocalPlaceVisit? {
         guard let visit = currentUserVisit(matching: visitID) else { return nil }
 
@@ -1225,10 +1232,14 @@ final class WanderStore: ObservableObject {
         if let visitedAt {
             visit.visitedAt = visitedAt
         }
-        if let note {
+        if replacesNote {
+            visit.note = note
+        } else if let note {
             visit.note = note
         }
-        if let ratingScore {
+        if replacesRating {
+            visit.ratingScore = PlaceRating.normalized(ratingScore)
+        } else if let ratingScore {
             visit.ratingScore = PlaceRating.normalized(ratingScore)
         }
         if let attributes {
@@ -1238,6 +1249,14 @@ final class WanderStore: ObservableObject {
         visit.updatedAt = now
         visit.localUpdatedAt = now
         visit.syncStateRaw = visit.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+
+        if let visibility,
+           let userPlace = currentUserPlace(matching: visit.userPlaceID) {
+            userPlace.visibilityRaw = visibilityForSave(visibility).rawValue
+            userPlace.updatedAt = now
+            userPlace.localUpdatedAt = now
+            userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        }
 
         refreshUserPlaceVisitSummary(userPlaceID: visit.userPlaceID)
 
