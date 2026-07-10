@@ -9215,6 +9215,22 @@ Next:
 
 - Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
 
+## 2026-07-10 00:13 PDT - Codex - REC-XX Merge And TestFlight Build 64
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Merged PR: #67 (`codex/rec-xx-visits-storage`)
+
+Goal: complete Ryan's requested final rating-card count fix, squash-merge the visits/photos branch to `main`, apply the required hosted Supabase migration, bump the next TestFlight build, archive/upload, attach the build, and post the tester note.
+
+Progress:
+
+- PR #67 was squash-merged to `main` with commit `48f9f73ea` (`Add persisted visits and visit photos`).
+- Fast-forwarded this existing `main` worktree from `450b90809` to `48f9f73ea`.
+- Attempted `supabase db push --linked --dry-run`; Supabase blocked because hosted migration `20260709160829` existed remotely but not in local `main`.
+- Identified the remote-only migration as `fix_place_list_rpc_grants`, originally present on `origin/codex/rec-81-collab-visibility` commit `b5ff54927`. Added only `supabase/migrations/20260709160829_fix_place_list_rpc_grants.sql` to local `main` so repo migration history matches hosted Supabase before applying the new visit/photo migration.
+
 ## 2026-07-09 14:51 PDT - Codex - REC-XX Multiple Visits And Visit Photos Backend Plan
 
 Agent: Codex
