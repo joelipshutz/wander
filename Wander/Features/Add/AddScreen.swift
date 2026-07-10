@@ -28,6 +28,7 @@ struct AddScreen: View {
     @State private var isResolvingCandidates = false
     @State private var resolutionMessage: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var saveToast: AddSaveToast?
 
@@ -412,7 +413,7 @@ struct AddScreen: View {
             }
 
             if selectedStatus == .been {
-                PlaceRatingSlider(score: $selectedRatingScore)
+                ratingSection
             }
 
             ForEach(currentQuestionBlocks) { block in
@@ -456,6 +457,17 @@ struct AddScreen: View {
                 Task {
                     await saveSelectedCandidate()
                 }
+            }
+        }
+    }
+
+    private var ratingSection: some View {
+        QuestionBlock(title: "rating", tag: "required") {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("how was it?")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                PlaceRatingSlider(score: $selectedRatingScore)
             }
         }
     }
@@ -548,6 +560,7 @@ struct AddScreen: View {
         resolutionMessage = nil
         isResolvingCandidates = false
         selectedPhotoItem = nil
+        pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         saveToast = nil
     }
@@ -573,6 +586,7 @@ struct AddScreen: View {
         resolutionMessage = nil
         isResolvingCandidates = false
         selectedPhotoItem = nil
+        pendingVisitPhotoAttachments = []
         isImportingPhoto = false
     }
 
@@ -683,6 +697,16 @@ struct AddScreen: View {
             attributes: attributeDrafts(),
             backend: auth.isSignedIn ? backend : nil
         )
+
+        if selectedStatus == .been,
+           let savedResult {
+            await persistVisitPhotoAttachments(
+                pendingVisitPhotoAttachments,
+                to: store.visits(for: savedResult.userPlaceID).first,
+                store: store,
+                backend: auth.isSignedIn ? backend : nil
+            )
+        }
 
         if !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
@@ -864,6 +888,17 @@ struct AddScreen: View {
                 )
 
                 if applyPhotoImportResolution(resolution) {
+                    let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+                    if let image = UIImage(data: data),
+                       let attachment = MapPlaceSavePhotoAttachment.make(
+                           image: image,
+                           data: data,
+                           fallbackAssetRef: assetRef
+                       ) {
+                        pendingVisitPhotoAttachments = [attachment]
+                    } else {
+                        pendingVisitPhotoAttachments = []
+                    }
                     return
                 }
             }

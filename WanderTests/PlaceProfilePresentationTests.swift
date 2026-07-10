@@ -57,6 +57,21 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(ownRating.count, 1)
     }
 
+    func testOwnRatingUsesAggregatedRatedVisitCount() throws {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let place = place(id: "place_alibi", category: "bar")
+        let summaries = [
+            summary(owner: currentUser, place: place, ratingScore: 4.7, recommendedCount: 3, tags: [])
+        ]
+
+        let ownRating = try XCTUnwrap(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
+
+        XCTAssertEqual(ownRating.source, .own)
+        XCTAssertEqual(ownRating.displayScore, "4.7")
+        XCTAssertEqual(ownRating.count, 3)
+        XCTAssertEqual(ownRating.subtitle, "3 visits")
+    }
+
     func testOverallRatingAveragesTrustedRatingsWhenUnsaved() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
@@ -72,6 +87,24 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(rating.source, .trusted)
         XCTAssertEqual(rating.score, 4.5)
         XCTAssertEqual(rating.count, 2)
+    }
+
+    func testOverallRatingUsesAggregatedTrustedRatingCounts() throws {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let maya = profile(id: "user_maya", handle: "maya")
+        let ryan = profile(id: "user_ryan", handle: "ryan")
+        let place = place(id: "place_tacos", category: "restaurant")
+        let summaries = [
+            summary(owner: maya, place: place, ratingScore: 4, recommendedCount: 2, tags: []),
+            summary(owner: ryan, place: place, ratingScore: 5, recommendedCount: 1, tags: [])
+        ]
+
+        let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
+
+        XCTAssertEqual(rating.source, .trusted)
+        XCTAssertEqual(rating.score, 4.333333333333333, accuracy: 0.0001)
+        XCTAssertEqual(rating.count, 3)
+        XCTAssertEqual(rating.subtitle, "3 ratings")
     }
 
     func testCurrentUserWannaSaveCanShowTrustedOverallButNoOwnRating() throws {
@@ -181,6 +214,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         place: LocalPlace,
         status: PlaceStatus? = nil,
         ratingScore: Double?,
+        recommendedCount: Int? = nil,
         interestSignal: String? = nil,
         tags: [String]
     ) -> PlaceSaveSummary {
@@ -195,10 +229,12 @@ final class PlaceProfilePresentationTests: XCTestCase {
             note: nil,
             ratingScore: ratingScore,
             recommendedScore: ratingScore,
-            recommendedCount: ratingScore == nil ? 0 : 1,
+            recommendedCount: recommendedCount ?? (ratingScore == nil ? 0 : 1),
             sourceType: "test",
             syncState: .synced
         )
+        userPlace.ratingScore = ratingScore
+        userPlace.recommendedScore = ratingScore
         let visiblePlace = VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
         var attributes: [LocalPlaceAttribute] = []
 

@@ -125,6 +125,88 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(rpc.calls[0].body["storage_path"] as Any?)
     }
 
+    func testVisitRepositoryUpsertsVisitViaPostgRESTTable() async throws {
+        let table = RecordingTable()
+        let storage = RecordingStorage()
+        table.responses["POST:place_visits"] = """
+        [
+          {
+            "id": "visit_remote",
+            "user_place_id": "up_remote",
+            "visited_at": "2026-07-09T20:00:00Z",
+            "note": "second visit",
+            "rating_score": 4.5,
+            "tags": ["quiet", "wifi"],
+            "backfilled_from_user_place": false,
+            "created_at": "2026-07-09T20:00:00Z",
+            "updated_at": "2026-07-09T20:00:00Z",
+            "deleted_at": null
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseVisitRepository(table: table, storage: storage)
+        let visitedAt = ISO8601DateFormatter().date(from: "2026-07-09T20:00:00Z")!
+
+        let result = try await repository.upsertVisit(
+            PlaceVisitDraft(
+                id: "visit_remote",
+                userPlaceID: "up_remote",
+                visitedAt: visitedAt,
+                note: "second visit",
+                ratingScore: 4.5,
+                attributeAnswersJSON: """
+                [{"question_key":"coffee_tags","value_type":"multi_tag","value":["quiet","wifi"]}]
+                """,
+                backfilledFromUserPlace: false
+            )
+        )
+
+        XCTAssertEqual(result.visitID, "visit_remote")
+        XCTAssertEqual(result.tags, ["quiet", "wifi"])
+        XCTAssertEqual(table.calls.map(\.key), ["POST:place_visits"])
+        XCTAssertEqual(table.calls[0].queryItems.first { $0.name == "on_conflict" }?.value, "id")
+        let body = try XCTUnwrap(table.rawBodies[0] as? [[String: Any]])
+        XCTAssertEqual(body[0]["user_place_id"] as? String, "up_remote")
+        XCTAssertEqual(body[0]["backfilled_from_user_place"] as? Bool, false)
+        XCTAssertEqual(body[0]["rating_score"] as? Double, 4.5)
+    }
+
+    func testVisitRepositoryUploadsAndDeletesVisitPhotoStorage() async throws {
+        let table = RecordingTable()
+        let storage = RecordingStorage()
+        let repository = SupabaseVisitRepository(table: table, storage: storage)
+        let data = Data([0x01, 0x02, 0x03])
+
+        let url = try await repository.uploadPhotoData(
+            bucket: "visit-photos",
+            path: "user_123/visit_123/photo_123.jpg",
+            data: data,
+            contentType: "image/jpeg"
+        )
+        try await repository.deletePhoto(
+            photoID: "photo_123",
+            bucket: "visit-photos",
+            path: "user_123/visit_123/photo_123.jpg"
+        )
+
+        XCTAssertTrue(url.absoluteString.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/user_123/visit_123/photo_123.jpg?v="))
+        XCTAssertEqual(
+            storage.uploads,
+            [
+                RecordingStorage.Upload(
+                    bucket: "visit-photos",
+                    path: "user_123/visit_123/photo_123.jpg",
+                    data: data,
+                    contentType: "image/jpeg",
+                    upsert: true
+                )
+            ]
+        )
+        XCTAssertEqual(storage.deletes, [RecordingStorage.Delete(bucket: "visit-photos", path: "user_123/visit_123/photo_123.jpg")])
+        XCTAssertEqual(table.calls.map(\.key), ["DELETE:visit_photos"])
+        XCTAssertEqual(table.calls[0].queryItems, [URLQueryItem(name: "id", value: "eq.photo_123")])
+    }
+
     func testVisiblePlacesCallRPCWithSnakeCaseParamsAndMapRows() async throws {
         let rpc = RecordingRPC()
         rpc.responses["visible_places_in_view"] = """
@@ -784,6 +866,75 @@ private final class RecordingStorage: RemoteStorageCalling {
             url = URL(string: "\(url.absoluteString)?v=\(cacheBust)")!
         }
         return url
+    }
+}
+
+@MainActor
+private final class RecordingTable: RemoteTableCalling {
+    struct Call: Equatable {
+        let method: String
+        let table: String
+        let queryItems: [URLQueryItem]
+
+        var key: String { "\(method):\(table)" }
+    }
+
+    var responses: [String: Data] = [:]
+    private(set) var calls: [Call] = []
+    private(set) var rawBodies: [Any] = []
+
+    func select<Value: Decodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        decoder: JSONDecoder
+    ) async throws -> Value {
+        try response(method: "GET", table: table, queryItems: queryItems, decoder: decoder)
+    }
+
+    func upsert<Value: Decodable, Body: Encodable>(
+        table: String,
+        body: Body,
+        onConflict: String?,
+        decoder: JSONDecoder
+    ) async throws -> Value {
+        var queryItems: [URLQueryItem] = []
+        if let onConflict {
+            queryItems.append(URLQueryItem(name: "on_conflict", value: onConflict))
+        }
+        rawBodies.append(try encodedObject(body))
+        return try response(method: "POST", table: table, queryItems: queryItems, decoder: decoder)
+    }
+
+    func update<Value: Decodable, Body: Encodable>(
+        table: String,
+        queryItems: [URLQueryItem],
+        body: Body,
+        decoder: JSONDecoder
+    ) async throws -> Value {
+        rawBodies.append(try encodedObject(body))
+        return try response(method: "PATCH", table: table, queryItems: queryItems, decoder: decoder)
+    }
+
+    func delete(table: String, queryItems: [URLQueryItem]) async throws {
+        calls.append(Call(method: "DELETE", table: table, queryItems: queryItems))
+    }
+
+    private func response<Value: Decodable>(
+        method: String,
+        table: String,
+        queryItems: [URLQueryItem],
+        decoder: JSONDecoder
+    ) throws -> Value {
+        calls.append(Call(method: method, table: table, queryItems: queryItems))
+        guard let data = responses["\(method):\(table)"] else {
+            throw WanderRemoteError.invalidResponse("Missing fake table response for \(method):\(table)")
+        }
+        return try decoder.decode(Value.self, from: data)
+    }
+
+    private func encodedObject<Body: Encodable>(_ body: Body) throws -> Any {
+        let data = try RemoteEncoding.encoder.encode(body)
+        return try JSONSerialization.jsonObject(with: data)
     }
 }
 
