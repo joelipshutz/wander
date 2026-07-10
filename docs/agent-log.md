@@ -9503,3 +9503,30 @@ Checkpoint, 2026-07-09 23:59 PDT:
 - Created `/private/tmp/recme_visit_photo_rollback.sql`, a rollback-wrapped hosted verification harness that strips the migration/test transaction wrappers, applies `20260709220000_place_visits_visit_photos.sql`, runs `supabase/tests/place_visits_visit_photos.sql`, and rolls back.
 - Hosted rollback verification against linked project `rugmtlgufrhlxwfkumhw` passed through `supabase db query --linked --workdir /Users/ryanlieblein/Developer/wander --file /private/tmp/recme_visit_photo_rollback.sql`; returned pgTAP row `ok 61 - deleting the last owned visit unsaves when no retained wanna state exists`.
 - PR #67 metadata check: draft, mergeable, `mergeStateStatus=CLEAN`, no GitHub checks configured. Updated the PR body locally for the expanded end-to-end scope and verification before marking ready.
+
+Checkpoint, 2026-07-10 00:15 PDT:
+
+- Marked PR #67 ready, squash-merged it to `main`, and deleted the remote feature branch. GitHub merge result: `48f9f73ea Add persisted visits and visit photos`.
+- Continued release work in `/private/tmp/recme-rec-75-v1-defaults` on `main` after fast-forwarding to latest `origin/main`.
+- Supabase migration dry-run initially found remote-only migration `20260709160829_fix_place_list_rpc_grants.sql` already applied on hosted. Added that migration to `main` from the collaborator branch to keep local/remote migration history aligned, committed `d51826d81 Add applied place list grant migration`, and pushed `main`.
+- Applied hosted migration `20260709220000_place_visits_visit_photos.sql` with `pnpm dlx supabase db push --linked --yes`; verified `supabase migration list --linked` showed local and remote in sync through `20260709220000`.
+- Ran hosted pgTAP verification against the live linked database with `supabase db query --linked --file supabase/tests/place_visits_visit_photos.sql`; returned `ok 61 - deleting the last owned visit unsaves when no retained wanna state exists`.
+- Latest completed TestFlight build was build 63, so bumped `CURRENT_PROJECT_VERSION` to `64`, regenerated `Wander.xcodeproj` with XcodeGen, committed `52fedff36 chore: bump TestFlight build 64`, and pushed `main`.
+- Release verification build passed: `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build64-build CODE_SIGNING_ALLOWED=NO -jobs 1`.
+- Full release test run is now in progress with `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build64-tests CODE_SIGNING_ALLOWED=NO -jobs 1`.
+
+Completion, 2026-07-10 00:26 PDT:
+
+- Full elevated release test run passed on `iPhone 17, OS=26.5`: 247 tests, 0 failures. Result bundle: `/private/tmp/DerivedData-build64-tests/Logs/Test/Test-Wander-2026.07.10_00-13-40--0700.xcresult`.
+- Archived build 64 at `/private/tmp/Wander-0.1-build64.xcarchive`; archive metadata verified `CFBundleShortVersionString=0.1` and `CFBundleVersion=64`.
+- Created `/private/tmp/WanderExportUpload64.plist` with `manageAppVersionAndBuildNumber=false`.
+- First `xcodebuild -exportArchive` attempt failed with `exportArchive Failed to Use Accounts`; retried with Ryan's local App Store Connect API key from `/Users/ryanlieblein/.openclaw/workspace/.env.keys`.
+- Upload succeeded via `xcodebuild -exportArchive`; App Store Connect reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- Ran `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 64 --archive-path /private/tmp/Wander-0.1-build64.xcarchive --env /Users/ryanlieblein/.openclaw/workspace/.env.keys --what-to-test-file /private/tmp/recme-build64-what-to-test.txt --timeout-attempts 20 --poll-seconds 30`.
+- TestFlight helper result: build `0.1 (64)` id `7ca37898-c5e2-4bb1-b3be-ebc416834ee6`, processing `VALID`, export compliance set to `usesNonExemptEncryption=false`, What to Test copy updated for `en-US`, attached to `Wander Alpha`, external TestFlight review `APPROVED`.
+- Public TestFlight link remains `https://testflight.apple.com/join/knEhRa6t`.
+- Posted tester-facing Slack note to `#testflight-feedback` (`C0BAA7DG2AC`): `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783668308684619`.
+- Known gaps:
+  - Same-device visit photo display is backed by the persisted local file cache; authenticated cross-device photo display may need a follow-up signed-image fetch pass.
+  - Live-device design QA for the new visit/photo flow was not rerun in this release session.
+  - No Linear issue was moved because the branch/PR context used placeholder `REC-XX` rather than a concrete issue key.
