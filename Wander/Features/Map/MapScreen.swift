@@ -2879,7 +2879,6 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedStatus: PlaceStatus
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
-    @State private var hasSelectedRating: Bool
     @State private var selectedAnswers: [String: Set<String>]
     @State private var personalLabels: Set<String>
     @State private var selectedCuisine: String?
@@ -2905,7 +2904,6 @@ struct MapPlaceSaveFlowSheet: View {
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
         _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
-        _hasSelectedRating = State(initialValue: context.initialRatingScore != nil)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
@@ -3205,37 +3203,11 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var ratingSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text("rating")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-                Button {
-                    hasSelectedRating.toggle()
-                } label: {
-                    Text(hasSelectedRating ? "remove" : "add")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .frame(minHeight: 30)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
+            Text("rating")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
 
-            if hasSelectedRating {
-                PlaceRatingSlider(score: $selectedRatingScore)
-            } else {
-                Text("No rating yet.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            }
+            PlaceRatingSlider(score: $selectedRatingScore)
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -3582,7 +3554,7 @@ struct MapPlaceSaveFlowSheet: View {
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: selectedStatus == .been && hasSelectedRating ? selectedRatingScore : nil,
+            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
             photoAttachments: visitPhotoAttachments
@@ -3630,6 +3602,7 @@ private struct MapSaveVisitPhotoSection: View {
     @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
+    @State private var isShowingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var photoError: String?
 
@@ -3705,7 +3678,10 @@ private struct MapSaveVisitPhotoSection: View {
                                 isShowingCamera = true
                             }
                         }
-                        PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                        Button("Choose from Library") {
+                            isShowingPhotoMenu = false
+                            isShowingPhotoPicker = true
+                        }
                         Button("Cancel", role: .cancel) {}
                     }
                 }
@@ -3737,6 +3713,12 @@ private struct MapSaveVisitPhotoSection: View {
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $isShowingPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 8,
+            matching: .images
+        )
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             isShowingPhotoMenu = false
@@ -5295,12 +5277,35 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
     }
 }
 
+enum PlaceActivityEntryKind: Equatable {
+    case visit
+    case currentWant
+    case historicalWant
+    case legacyBeenSummary
+
+    var sortBucket: Int {
+        self == .historicalWant ? 1 : 0
+    }
+}
+
 struct PlaceActivityEntry: Identifiable {
     let summary: PlaceSaveSummary
     let visit: LocalPlaceVisit?
+    let kind: PlaceActivityEntryKind
     let currentUserID: String
 
-    var id: String { visit?.id ?? summary.id }
+    var id: String {
+        switch kind {
+        case .visit:
+            visit?.id ?? "\(summary.id)_visit"
+        case .currentWant:
+            "\(summary.id)_current_want"
+        case .historicalWant:
+            "\(summary.id)_historical_want"
+        case .legacyBeenSummary:
+            "\(summary.id)_legacy_been"
+        }
+    }
 
     var owner: LocalProfile {
         summary.visiblePlace.owner
@@ -5319,7 +5324,16 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var timestamp: Date {
-        visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.updatedAt
+        switch kind {
+        case .visit:
+            visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.updatedAt
+        case .currentWant:
+            userPlace.updatedAt
+        case .historicalWant:
+            userPlace.historicalWantedAt ?? userPlace.savedAt
+        case .legacyBeenSummary:
+            userPlace.visitedAt ?? userPlace.updatedAt
+        }
     }
 
     var timestampText: String {
@@ -5330,32 +5344,61 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var note: String? {
-        let trimmed = (visit?.note ?? userPlace.note)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceNote: String? = switch kind {
+        case .visit:
+            visit?.note
+        case .currentWant, .legacyBeenSummary:
+            userPlace.note
+        case .historicalWant:
+            userPlace.historicalWantNote
+        }
+        let trimmed = sourceNote?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     var ratingText: String? {
-        guard userPlace.status == .been, let ratingScore = visit?.ratingScore ?? userPlace.ratingScore else {
+        let ratingScore: Double? = switch kind {
+        case .visit:
+            visit?.ratingScore
+        case .legacyBeenSummary:
+            userPlace.ratingScore
+        case .currentWant, .historicalWant:
+            nil
+        }
+        guard let ratingScore else {
             return nil
         }
         return "\(PlaceRating.display(ratingScore))/5"
     }
 
     var canAddPhotos: Bool {
-        isCurrentUser && userPlace.status == .been && visit != nil
+        isCurrentUser && kind == .visit && visit != nil
     }
 
     var canEdit: Bool {
-        isCurrentUser && (visit != nil || userPlace.status == .wannaGo)
+        isCurrentUser && (kind == .visit || kind == .currentWant)
     }
 
     var editAccessibilityLabel: String {
-        visit == nil ? "Edit want" : "Edit visit"
+        kind == .currentWant ? "Edit want" : "Edit visit"
+    }
+
+    var status: PlaceStatus {
+        switch kind {
+        case .currentWant, .historicalWant:
+            .wannaGo
+        case .visit, .legacyBeenSummary:
+            .been
+        }
     }
 
     var tags: [String] {
         if let visit, !visit.tags.isEmpty {
             return uniqueTags(visit.tags)
+        }
+
+        if kind == .historicalWant {
+            return uniqueTags(userPlace.historicalWantTags)
         }
 
         var seen = Set<String>()
@@ -5460,16 +5503,35 @@ struct PlaceActivitySection: View {
     private var entries: [PlaceActivityEntry] {
         saves
             .flatMap { summary -> [PlaceActivityEntry] in
+                let userPlace = summary.visiblePlace.userPlace
                 let visits = store.visits(for: summary.visiblePlace.userPlace.id)
-                if summary.visiblePlace.userPlace.status == .been, !visits.isEmpty {
-                    return visits.map { visit in
-                        PlaceActivityEntry(summary: summary, visit: visit, currentUserID: currentUserID)
+
+                if userPlace.status == .been {
+                    var entries = visits.map { visit in
+                        PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
                     }
+
+                    if entries.isEmpty {
+                        entries.append(
+                            PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
+                        )
+                    }
+
+                    if userPlace.hasHistoricalWant {
+                        entries.append(
+                            PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant, currentUserID: currentUserID)
+                        )
+                    }
+
+                    return entries
                 }
 
-                return [PlaceActivityEntry(summary: summary, visit: nil, currentUserID: currentUserID)]
+                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)]
             }
             .sorted { lhs, rhs in
+                if lhs.kind.sortBucket != rhs.kind.sortBucket {
+                    return lhs.kind.sortBucket < rhs.kind.sortBucket
+                }
                 if lhs.timestamp != rhs.timestamp {
                     return lhs.timestamp > rhs.timestamp
                 }
@@ -5516,9 +5578,9 @@ struct PlaceActivitySection: View {
     private func edit(_ entry: PlaceActivityEntry) {
         guard entry.canEdit else { return }
 
-        if let visit = entry.visit {
+        if entry.kind == .visit, let visit = entry.visit {
             editFlow = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
-        } else if entry.userPlace.status == .wannaGo {
+        } else if entry.kind == .currentWant {
             editFlow = MapPlaceSaveContext.editWant(
                 entry.summary.visiblePlace,
                 attributes: store.attributes(for: entry.userPlace.id)
@@ -5621,6 +5683,7 @@ private struct PlaceActivityCard: View {
     let onEdit: () -> Void
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
+    @State private var isShowingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var photoError: String?
 
@@ -5677,6 +5740,12 @@ private struct PlaceActivityCard: View {
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $isShowingPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 8,
+            matching: .images
+        )
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             isShowingPhotoMenu = false
@@ -5718,7 +5787,7 @@ private struct PlaceActivityCard: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(entry.editAccessibilityLabel)
             }
-            StatusBadge(status: entry.userPlace.status)
+            StatusBadge(status: entry.status)
         }
     }
 
@@ -5765,7 +5834,10 @@ private struct PlaceActivityCard: View {
                             isShowingCamera = true
                         }
                     }
-                    PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                    Button("Choose from Library") {
+                        isShowingPhotoMenu = false
+                        isShowingPhotoPicker = true
+                    }
                     Button("Cancel", role: .cancel) {}
                 }
             }

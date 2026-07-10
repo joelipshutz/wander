@@ -355,6 +355,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let sourceArtifactID: String?
         let sourceUserPlaceID: String?
         let attributionUserID: String?
+        let historicalWantNote: String?
+        let historicalWantAttributeAnswersJSON: String?
+        let historicalWantTagsJSON: String?
+        let historicalWantedAt: Date?
         let syncStateRaw: String
         let localUpdatedAt: Date
         let serverUpdatedAt: Date?
@@ -386,6 +390,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
             sourceArtifactID = userPlace.sourceArtifactID
             sourceUserPlaceID = userPlace.sourceUserPlaceID
             attributionUserID = userPlace.attributionUserID
+            historicalWantNote = userPlace.historicalWantNote
+            historicalWantAttributeAnswersJSON = userPlace.historicalWantAttributeAnswersJSON
+            historicalWantTagsJSON = userPlace.historicalWantTagsJSON
+            historicalWantedAt = userPlace.historicalWantedAt
             syncStateRaw = userPlace.syncStateRaw
             localUpdatedAt = userPlace.localUpdatedAt
             serverUpdatedAt = userPlace.serverUpdatedAt
@@ -419,6 +427,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 sourceArtifactID: sourceArtifactID,
                 sourceUserPlaceID: sourceUserPlaceID,
                 attributionUserID: attributionUserID,
+                historicalWantNote: historicalWantNote,
+                historicalWantAttributeAnswersJSON: historicalWantAttributeAnswersJSON,
+                historicalWantTagsJSON: historicalWantTagsJSON,
+                historicalWantedAt: historicalWantedAt,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,
                 serverUpdatedAt: serverUpdatedAt,

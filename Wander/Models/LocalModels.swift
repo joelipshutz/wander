@@ -232,6 +232,10 @@ final class LocalUserPlace {
     var sourceArtifactID: String?
     var sourceUserPlaceID: String?
     var attributionUserID: String?
+    var historicalWantNote: String?
+    var historicalWantAttributeAnswersJSON: String?
+    var historicalWantTagsJSON: String?
+    var historicalWantedAt: Date?
     var syncStateRaw: String
     var localUpdatedAt: Date
     var serverUpdatedAt: Date?
@@ -240,7 +244,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -263,6 +267,10 @@ final class LocalUserPlace {
         self.sourceArtifactID = sourceArtifactID
         self.sourceUserPlaceID = sourceUserPlaceID
         self.attributionUserID = attributionUserID
+        self.historicalWantNote = historicalWantNote
+        self.historicalWantAttributeAnswersJSON = historicalWantAttributeAnswersJSON
+        self.historicalWantTagsJSON = historicalWantTagsJSON
+        self.historicalWantedAt = historicalWantedAt
         self.syncStateRaw = syncState.rawValue
         self.localUpdatedAt = localUpdatedAt
         self.serverUpdatedAt = serverUpdatedAt
@@ -276,6 +284,24 @@ final class LocalUserPlace {
     var status: PlaceStatus { PlaceStatus(rawValue: statusRaw) ?? .wannaGo }
     var visibility: PlaceVisibility { PlaceVisibility(rawValue: visibilityRaw) ?? .followers }
     var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
+    var hasHistoricalWant: Bool { historicalWantedAt != nil }
+    var historicalWantTags: [String] {
+        (try? JSONDecoder().decode([String].self, from: Data((historicalWantTagsJSON ?? "[]").utf8))) ?? []
+    }
+
+    func setHistoricalWantTags(_ tags: [String]) {
+        historicalWantTagsJSON = Self.encoded(tags)
+    }
+
+    private static func encoded(_ tags: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(tags),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+
+        return encoded
+    }
 }
 
 @Model

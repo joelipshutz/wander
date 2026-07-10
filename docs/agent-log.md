@@ -9406,3 +9406,43 @@ Completion, 2026-07-09 18:26 PDT:
   - This pass keeps `wanna` represented by the existing single `user_places` record. Supporting a separate want card that can coexist with active visits still needs a future `place_wants`-style schema/local model decision.
   - pgTAP/Supabase local DB tests are still not rerun in this environment.
   - Live-device `/ios-qa` and `/ios-design-review` remain blocked until debug-only `DebugBridge` / `StateServer` instrumentation is intentionally installed.
+
+## 2026-07-09 22:47 PDT - Codex - Visit Rating Count And Want History Fixes
+
+Agent: Codex
+Branch: `codex/rec-xx-visits-storage`
+Worktree: `/private/tmp/recme-rec-xx-visits-storage`
+PR: #67 draft
+
+Goal: investigate and fix Ryan's branch-test findings: repeat "been" saves for Brothers Cousins Tacos only show one visit/rating card, ratings should be mandatory for `been` saves, the rating slider should show immediately without an Add button, photo library selection does nothing, and historical `wanna` cards should not disappear when a place is later saved as `been`.
+
+Starting status:
+
+- Ran `git fetch origin`, `git status --short --branch`, `git worktree list`, reviewed recent `docs/agent-log.md`, and read `/investigate` instructions.
+- Current branch is pushed through `9556b2cd6`; only untracked generated `DerivedData-focused/` remains local noise.
+- Expected files: `Wander/Features/Add/AddScreen.swift`, `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`, local models/tests, and this log.
+
+Completion, 2026-07-09 23:06 PDT:
+
+- Root cause:
+  - Repeat `been` saves were still mutating the existing `user_places` save/backfilled visit instead of appending a new visit row, so one place could only show one current-user rating card.
+  - `wanna -> been` overwrote the only local `user_places` record and dropped the prior want data from activity.
+  - The previous pass made ratings optional and hid the slider behind an Add button, which no longer matches Ryan's clarified product contract.
+  - `PhotosPicker` was embedded directly inside a SwiftUI confirmation dialog, which did not present the library picker reliably.
+- Implemented:
+  - Existing `been` + new `been` now appends a new visit/save row and updates rating aggregation across all visit ratings.
+  - `been` saves always normalize to a required rating; a missing programmatic rating falls back to `PlaceRating.defaultScore`, and both Add and map save sheets show the slider immediately with no Add/Remove affordance. `wanna` save pages still omit rating UI.
+  - Added persisted historical want snapshot fields on `LocalUserPlace` and file snapshot persistence so a single want can remain visible after the place later has visits.
+  - `wanna -> been` and direct add-visit-from-want both preserve the want snapshot; `been -> wanna` adds/updates historical want data without demoting/deleting visit history.
+  - Latest Activity now emits separate visit cards plus a historical want card, with historical wants sorted after active visit/current save entries and no edit/photo affordances.
+  - Photo library actions now present via a view-level `.photosPicker` binding from both first-save attachment UI and existing visit cards.
+  - Deleting the last visit restores the historical want when one exists; otherwise it still unsaves the place.
+- Tests:
+  - Added/updated `WanderStoreTests` coverage for repeat `been` saves, mandatory/default ratings, historical want persistence, want-to-been promotion, add-visit-from-want, and stale demotion expectations.
+  - Initial sandboxed Xcode test failed before app code due CoreSimulator/cache permissions; reran elevated per repo policy.
+  - Documented `iPhone 16 Plus, OS 18.6` simulator was not installed locally; used available `iPhone 17, OS 26.5`.
+  - Focused elevated tests passed: 5 selected `WanderStoreTests`, 0 failures.
+  - Full elevated `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath DerivedData-focused CODE_SIGNING_ALLOWED=NO -jobs 1` passed: 245 tests, 0 failures.
+- Known gaps:
+  - Historical wants are local/snapshot metadata on the single `LocalUserPlace`; Supabase still needs a durable server-side counterpart if this history must sync across devices.
+  - Live visual QA for the photo picker and activity ordering has not been run on device in this pass.

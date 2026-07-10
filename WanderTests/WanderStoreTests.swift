@@ -311,8 +311,10 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(store.currentUserVisiblePlaces.count, originalCount)
         let woodcat = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Woodcat Coffee" }
-        XCTAssertEqual(woodcat?.userPlace.status, .wannaGo)
+        XCTAssertEqual(woodcat?.userPlace.status, .been)
         XCTAssertEqual(woodcat?.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(woodcat?.userPlace.historicalWantNote, "updated")
+        XCTAssertNotNil(woodcat?.userPlace.historicalWantedAt)
     }
 
     func testRemoveSaveDeletesOwnSavedMetadataLocally() {
@@ -565,7 +567,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.place.websiteURLString, "https://maru.example")
         XCTAssertEqual(saved?.place.phoneNumber, "+1 (213) 555-0100")
         XCTAssertEqual(saved?.place.timeZoneIdentifier, "America/Los_Angeles")
-        XCTAssertEqual(saved?.userPlace.status, .wannaGo)
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertEqual(saved?.userPlace.historicalWantNote, "still has actions")
     }
 
     func testCurrentLocationCandidatesUseInjectedResolver() async throws {
@@ -779,7 +782,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
-    func testMultipleVisitsAverageRatingsAndIgnoreUnratedVisits() {
+    func testMultipleVisitsAverageRatings() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let result = store.saveCandidate(
@@ -799,13 +802,13 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "second visit", ratingScore: 5))
-        XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "unrated visit", ratingScore: nil))
+        XCTAssertNotNil(store.createVisit(userPlaceID: result.userPlaceID, note: "default rating visit", ratingScore: nil))
 
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
         XCTAssertEqual(store.visits(for: result.userPlaceID).count, 3)
-        XCTAssertEqual(saved?.userPlace.ratingScore, 4.5)
-        XCTAssertEqual(saved?.userPlace.recommendedScore, 4.5)
-        XCTAssertEqual(saved?.userPlace.recommendedCount, 2)
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, 4)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 3)
     }
 
     func testBackfilledVisitDoesNotMutateAfterExplicitVisitExists() {
@@ -846,20 +849,22 @@ final class WanderStoreTests: XCTestCase {
 
         let visits = store.visits(for: result.userPlaceID)
         let backfilled = visits.first { $0.backfilledFromUserPlace }
-        let explicit = visits.first { !$0.backfilledFromUserPlace }
+        let second = visits.first { $0.note == "second visit" }
+        let latest = visits.first { $0.note == "latest parent note" }
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
 
-        XCTAssertEqual(visits.count, 2)
+        XCTAssertEqual(visits.count, 3)
         XCTAssertEqual(backfilled?.note, "first visit")
         XCTAssertEqual(backfilled?.ratingScore, 3)
         XCTAssertEqual(backfilled?.tags, ["quiet"])
-        XCTAssertEqual(explicit?.note, "second visit")
-        XCTAssertEqual(explicit?.ratingScore, 5)
-        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
-        XCTAssertEqual(saved?.userPlace.recommendedCount, 2)
+        XCTAssertEqual(second?.ratingScore, 5)
+        XCTAssertEqual(latest?.ratingScore, 2)
+        XCTAssertEqual(latest?.tags, ["loud"])
+        XCTAssertEqual(saved?.userPlace.ratingScore, 3.3)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 3)
     }
 
-    func testStatusTransitionToWannaDeletesVisitsAndClearsRatingSummary() {
+    func testSavingWantAfterBeenKeepsVisitsAndAddsHistoricalWant() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let candidate = PlaceCandidate(
@@ -890,14 +895,16 @@ final class WanderStoreTests: XCTestCase {
         )
 
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == updated.userPlaceID }
-        XCTAssertEqual(saved?.userPlace.status, .wannaGo)
-        XCTAssertNil(saved?.userPlace.ratingScore)
-        XCTAssertNil(saved?.userPlace.recommendedScore)
-        XCTAssertEqual(saved?.userPlace.recommendedCount, 0)
-        XCTAssertTrue(store.visits(for: updated.userPlaceID).isEmpty)
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, 4)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 1)
+        XCTAssertEqual(saved?.userPlace.historicalWantNote, "want later")
+        XCTAssertNotNil(saved?.userPlace.historicalWantedAt)
+        XCTAssertEqual(store.visits(for: updated.userPlaceID).count, 1)
     }
 
-    func testSavingBeenWithoutRatingLeavesVisitAndSummaryUnrated() {
+    func testSavingBeenWithoutRatingUsesDefaultRating() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
 
@@ -921,10 +928,140 @@ final class WanderStoreTests: XCTestCase {
         let visit = store.visits(for: result.userPlaceID).first
 
         XCTAssertEqual(saved?.userPlace.status, .been)
-        XCTAssertNil(saved?.userPlace.ratingScore)
-        XCTAssertNil(saved?.userPlace.recommendedScore)
-        XCTAssertEqual(saved?.userPlace.recommendedCount, 0)
-        XCTAssertNil(visit?.ratingScore)
+        XCTAssertEqual(saved?.userPlace.ratingScore, PlaceRating.defaultScore)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, PlaceRating.defaultScore)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 1)
+        XCTAssertEqual(visit?.ratingScore, PlaceRating.defaultScore)
+    }
+
+    func testRepeatBeenSaveCreatesAnotherVisitAndAveragesRatings() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_repeat_been",
+            name: "Brothers Cousins Tacos",
+            category: "tacos",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+
+        let first = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first tacos",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let second = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "second tacos",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+
+        let visits = store.visits(for: first.userPlaceID)
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == second.userPlaceID }
+
+        XCTAssertEqual(first.userPlaceID, second.userPlaceID)
+        XCTAssertEqual(visits.count, 2)
+        XCTAssertEqual(visits.map(\.note), ["second tacos", "first tacos"])
+        XCTAssertEqual(saved?.userPlace.ratingScore, 4.5)
+        XCTAssertEqual(saved?.userPlace.recommendedScore, 4.5)
+        XCTAssertEqual(saved?.userPlace.recommendedCount, 2)
+    }
+
+    func testWannaThenBeenPreservesHistoricalWantAndCreatesVisit() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_want_then_been",
+            name: "Want Then Been Tacos",
+            category: "tacos",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+
+        let want = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "heard about the salsa",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "taco_tags", valueType: "multi_tag", stringValues: ["late night"])
+            ]
+        )
+        let been = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "finally went",
+            sourceType: .manual,
+            ratingScore: 4.5,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "taco_tags", valueType: "multi_tag", stringValues: ["counter"])
+            ]
+        )
+
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == been.userPlaceID }
+        let visit = store.visits(for: been.userPlaceID).first
+
+        XCTAssertEqual(want.userPlaceID, been.userPlaceID)
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertEqual(saved?.userPlace.historicalWantNote, "heard about the salsa")
+        XCTAssertEqual(saved?.userPlace.historicalWantTags, ["late night"])
+        XCTAssertNotNil(saved?.userPlace.historicalWantedAt)
+        XCTAssertEqual(visit?.note, "finally went")
+        XCTAssertEqual(visit?.ratingScore, 4.5)
+        XCTAssertEqual(visit?.tags, ["counter"])
+    }
+
+    func testHistoricalWantSnapshotPersistsAfterRelaunch() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_historical_want_persist",
+            name: "Historical Want Tacos",
+            category: "tacos",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        _ = firstStore.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "saved for al pastor",
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(questionKey: "taco_tags", valueType: "multi_tag", stringValues: ["street stand"])
+            ]
+        )
+        _ = firstStore.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "finally tried it",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let saved = relaunchedStore.currentUserVisiblePlaces.first { $0.place.canonicalName == "Historical Want Tacos" }
+
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertEqual(saved?.userPlace.historicalWantNote, "saved for al pastor")
+        XCTAssertEqual(saved?.userPlace.historicalWantTags, ["street stand"])
+        XCTAssertNotNil(saved?.userPlace.historicalWantedAt)
+        XCTAssertEqual(relaunchedStore.visits(for: saved?.userPlace.id ?? "").count, 1)
     }
 
     func testCreateVisitFromWantPromotesSaveAndKeepsDetailsVisitScoped() throws {
@@ -961,15 +1098,17 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(saved.userPlace.status, .been)
         XCTAssertEqual(saved.userPlace.visibility, .selfOnly)
-        XCTAssertNil(saved.userPlace.ratingScore)
-        XCTAssertEqual(saved.userPlace.recommendedCount, 0)
+        XCTAssertEqual(saved.userPlace.ratingScore, PlaceRating.defaultScore)
+        XCTAssertEqual(saved.userPlace.recommendedCount, 1)
+        XCTAssertEqual(saved.userPlace.historicalWantNote, "looks good for lunch")
+        XCTAssertEqual(saved.userPlace.historicalWantTags, ["sunny"])
         XCTAssertEqual(visit.note, "went with Maya")
-        XCTAssertNil(visit.ratingScore)
+        XCTAssertEqual(visit.ratingScore, PlaceRating.defaultScore)
         XCTAssertEqual(visit.tags, ["quiet", "wifi solid"])
         XCTAssertEqual(store.visits(for: result.userPlaceID).map(\.id), [visit.id])
     }
 
-    func testUpdateVisitCanClearRatingNoteAndUpdateInheritedVisibility() throws {
+    func testUpdateVisitCanClearNoteButKeepsRequiredRatingAndInheritedVisibility() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let result = store.saveCandidate(
@@ -1003,11 +1142,11 @@ final class WanderStoreTests: XCTestCase {
         let saved = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID })
 
         XCTAssertNil(updated.note)
-        XCTAssertNil(updated.ratingScore)
+        XCTAssertEqual(updated.ratingScore, PlaceRating.defaultScore)
         XCTAssertEqual(updated.tags, ["counter"])
         XCTAssertEqual(saved.userPlace.visibility, .selfOnly)
-        XCTAssertNil(saved.userPlace.ratingScore)
-        XCTAssertEqual(saved.userPlace.recommendedCount, 0)
+        XCTAssertEqual(saved.userPlace.ratingScore, PlaceRating.defaultScore)
+        XCTAssertEqual(saved.userPlace.recommendedCount, 1)
     }
 
     func testVisitAttributeAnswerDraftsRoundTripForDefaults() {
@@ -1378,7 +1517,7 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testPlaceRatingsNormalizeForBeenSavesOnly() {
-        XCTAssertNil(PlaceRating.scoreForSave(status: .been, score: nil))
+        XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: nil), PlaceRating.defaultScore)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 0), 1)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.25), 4.5)
         XCTAssertEqual(PlaceRating.scoreForSave(status: .been, score: 4.74), 4.5)

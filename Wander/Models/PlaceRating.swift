@@ -22,7 +22,7 @@ struct PlaceRating: Equatable {
 
     static func scoreForSave(status: PlaceStatus, score: Double?) -> Double? {
         guard status == .been else { return nil }
-        return normalized(score)
+        return normalized(score) ?? defaultScore
     }
 
     static func display(_ score: Double) -> String {

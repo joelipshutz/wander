@@ -1189,7 +1189,7 @@ final class WanderStore: ObservableObject {
             userPlaceID: userPlace.id,
             visitedAt: visitedAt,
             note: note,
-            ratingScore: ratingScore,
+            ratingScore: PlaceRating.scoreForSave(status: .been, score: ratingScore),
             attributeAnswersJSON: attributeAnswersJSON,
             tags: VisitAttributeAnswers.tags(from: attributes),
             syncState: .pendingCreate,
@@ -1198,6 +1198,9 @@ final class WanderStore: ObservableObject {
             updatedAt: now
         )
 
+        if userPlace.status == .wannaGo {
+            preserveHistoricalWant(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
+        }
         if userPlace.status != .been {
             userPlace.statusRaw = PlaceStatus.been.rawValue
         }
@@ -1238,7 +1241,7 @@ final class WanderStore: ObservableObject {
             visit.note = note
         }
         if replacesRating {
-            visit.ratingScore = PlaceRating.normalized(ratingScore)
+            visit.ratingScore = PlaceRating.scoreForSave(status: .been, score: ratingScore)
         } else if let ratingScore {
             visit.ratingScore = PlaceRating.normalized(ratingScore)
         }
@@ -1279,7 +1282,9 @@ final class WanderStore: ObservableObject {
         if let userPlace = currentUserPlace(matching: visit.userPlaceID) {
             let remainingVisits = visits(for: userPlace.id)
             if remainingVisits.isEmpty {
-                deleteUserPlaceAfterLastVisit(userPlace, at: now)
+                if !restoreHistoricalWantAfterLastVisit(userPlace, at: now) {
+                    deleteUserPlaceAfterLastVisit(userPlace, at: now)
+                }
             } else {
                 refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
             }
@@ -1608,6 +1613,28 @@ final class WanderStore: ObservableObject {
         let categoryOverride = categoryOverrideAssignment(from: candidate)
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
+            let previousStatus = existing.status
+            let previousAttributeDrafts = attributeDrafts(for: existing.id)
+            if previousStatus == .wannaGo, status == .been {
+                preserveHistoricalWant(for: existing, attributes: previousAttributeDrafts)
+            }
+
+            if previousStatus == .been, status == .wannaGo {
+                preserveHistoricalWant(
+                    for: existing,
+                    note: note,
+                    attributes: attributes ?? previousAttributeDrafts,
+                    wantedAt: .now
+                )
+                existing.visibilityRaw = resolvedVisibility.rawValue
+                existing.updatedAt = .now
+                existing.localUpdatedAt = .now
+                existing.syncStateRaw = SyncState.pendingUpdate.rawValue
+                objectWillChange.send()
+                persist()
+                return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
+            }
+
             existing.statusRaw = status.rawValue
             existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
@@ -1615,13 +1642,23 @@ final class WanderStore: ObservableObject {
             existing.recommendedScore = savedRatingScore
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
             applyCategoryOverride(categoryOverride, to: existing)
-            let attributeDrafts = attributes ?? attributeDrafts(for: existing.id)
+            let attributeDrafts = attributes ?? previousAttributeDrafts
             if let attributes {
                 existing.ratingSignal = ratingSignal(from: attributes)
                 replaceAttributes(for: existing.id, with: attributes, syncState: .pendingUpdate)
             }
-            syncBackfilledVisit(for: existing, attributes: attributeDrafts)
             if status == .been {
+                if previousStatus == .been || previousStatus == .wannaGo {
+                    _ = createVisit(
+                        userPlaceID: existing.id,
+                        note: note,
+                        ratingScore: savedRatingScore,
+                        attributes: attributeDrafts,
+                        visibility: resolvedVisibility
+                    )
+                    return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
+                }
+                syncBackfilledVisit(for: existing, attributes: attributeDrafts)
                 refreshUserPlaceVisitSummary(userPlaceID: existing.id)
             } else {
                 softDeleteVisits(for: existing.id, at: .now)
@@ -2966,6 +3003,27 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func preserveHistoricalWant(for userPlace: LocalUserPlace, attributes: [PlaceAttributeDraft]) {
+        preserveHistoricalWant(
+            for: userPlace,
+            note: userPlace.note,
+            attributes: attributes,
+            wantedAt: userPlace.historicalWantedAt ?? userPlace.savedAt
+        )
+    }
+
+    private func preserveHistoricalWant(
+        for userPlace: LocalUserPlace,
+        note: String?,
+        attributes: [PlaceAttributeDraft],
+        wantedAt: Date
+    ) {
+        userPlace.historicalWantNote = note
+        userPlace.historicalWantAttributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+        userPlace.setHistoricalWantTags(VisitAttributeAnswers.tags(from: attributes))
+        userPlace.historicalWantedAt = wantedAt
+    }
+
     private func backfillMissingLegacyVisits() {
         for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
             if userPlace.status == .been, visits(for: userPlace.id).isEmpty {
@@ -3110,6 +3168,29 @@ final class WanderStore: ObservableObject {
         photo.lastSyncError = nil
         photo.uploadStateRaw = VisitPhotoUploadState.failed.rawValue
         photo.syncStateRaw = photo.serverID == nil ? SyncState.tombstoned.rawValue : SyncState.pendingDelete.rawValue
+    }
+
+    private func restoreHistoricalWantAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) -> Bool {
+        guard let wantedAt = userPlace.historicalWantedAt else { return false }
+
+        let drafts = VisitAttributeAnswers.drafts(
+            fromAttributeAnswersJSON: userPlace.historicalWantAttributeAnswersJSON ?? "[]"
+        )
+        userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        userPlace.note = userPlace.historicalWantNote
+        userPlace.ratingSignal = ratingSignal(from: drafts)
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.visitedAt = nil
+        userPlace.savedAt = wantedAt
+        userPlace.deletedAt = nil
+        userPlace.updatedAt = date
+        userPlace.localUpdatedAt = date
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        replaceAttributes(for: userPlace.id, with: drafts, syncState: userPlace.syncState)
+        return true
     }
 
     private func deleteUserPlaceAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) {
