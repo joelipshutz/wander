@@ -302,6 +302,7 @@ struct RemotePlaceListSummaryDTO: Codable, Equatable {
     let ownerUserID: String
     let ownerHandle: String
     let ownerDisplayName: String
+    let ownerAvatarURL: String?
     let name: String
     let description: String
     let visibility: String
@@ -315,6 +316,7 @@ struct RemotePlaceListSummaryDTO: Codable, Equatable {
         case ownerUserID = "owner_user_id"
         case ownerHandle = "owner_handle"
         case ownerDisplayName = "owner_display_name"
+        case ownerAvatarURL = "owner_avatar_url"
         case name
         case description
         case visibility
@@ -330,7 +332,7 @@ struct RemotePlaceListSummaryDTO: Codable, Equatable {
             ownerUserID: ownerUserID,
             ownerHandle: ownerHandle,
             ownerDisplayName: ownerDisplayName,
-            ownerAvatarURL: nil,
+            ownerAvatarURL: ownerAvatarURL,
             name: name,
             description: description,
             visibility: visibility,

@@ -1105,23 +1105,39 @@ final class WanderStore: ObservableObject {
     }
 
     private func remoteVisiblePlaces(filters: PlaceFilters) -> [VisiblePlace] {
-        remoteVisiblePlaceCache.filter { visiblePlace in
-            guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
-            guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
-            let normalizedCategories = filters.normalizedCategories
-            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
-            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
+        remoteVisiblePlaceCache
+            .map(visiblePlaceWithLatestOwner)
+            .filter { visiblePlace in
+                guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
+                guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
+                let normalizedCategories = filters.normalizedCategories
+                guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
+                guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
-            guard !filters.ownerScopes.isEmpty else { return true }
+                guard !filters.ownerScopes.isEmpty else { return true }
 
-            let isMine = visiblePlace.owner.id == currentUser.id
-            let relationship = relationship(to: visiblePlace.owner.id)
-            let isFriend = relationship == .mutual
-            return (filters.ownerScopes.contains("you") && isMine)
-                || (filters.ownerScopes.contains("friends") && !isMine && (isFriend || visiblePlace.userPlace.visibility == .mutuals))
-                || (filters.ownerScopes.contains("following") && !isMine)
-                || (filters.ownerScopes.contains("social") && !isMine)
+                let isMine = visiblePlace.owner.id == currentUser.id
+                let relationship = relationship(to: visiblePlace.owner.id)
+                let isFriend = relationship == .mutual
+                return (filters.ownerScopes.contains("you") && isMine)
+                    || (filters.ownerScopes.contains("friends") && !isMine && (isFriend || visiblePlace.userPlace.visibility == .mutuals))
+                    || (filters.ownerScopes.contains("following") && !isMine)
+                    || (filters.ownerScopes.contains("social") && !isMine)
+            }
+    }
+
+    private func visiblePlaceWithLatestOwner(_ visiblePlace: VisiblePlace) -> VisiblePlace {
+        guard let owner = profiles.first(where: { $0.id == visiblePlace.owner.id || $0.handle == visiblePlace.owner.handle }) else {
+            return visiblePlace
         }
+
+        return VisiblePlace(
+            id: visiblePlace.id,
+            place: visiblePlace.place,
+            userPlace: visiblePlace.userPlace,
+            owner: owner,
+            attributes: visiblePlace.attributes
+        )
     }
 
     private func mergeVisiblePlaces(_ places: [VisiblePlace]) -> [VisiblePlace] {
@@ -1463,7 +1479,7 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
-                upsertRemoteProfileShells(remoteProfiles)
+                upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
             } catch {
@@ -1554,7 +1570,7 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
-                upsertRemoteProfileShells(remoteProfiles)
+                upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
             } catch {
@@ -3591,7 +3607,7 @@ final class WanderStore: ObservableObject {
         let collaboratorShells = summaries.flatMap { summary in
             summary.collaborators.map(\.profileShell)
         }
-        upsertRemoteProfileShells(ownerShells + collaboratorShells)
+        upsertRemoteProfileShells(ownerShells + collaboratorShells, preserveExistingProfileMetadataWhenMissing: true)
 
         for summary in summaries {
             upsertRemotePlaceList(summary.list)
@@ -3603,6 +3619,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
+        upsertRemoteProfileShells(detail.collaborators.map(\.profileShell), preserveExistingProfileMetadataWhenMissing: true)
         upsertRemotePlaceList(detail.list)
         replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
         replaceRemoteItems(listID: detail.list.id, items: detail.items)
@@ -3723,7 +3740,7 @@ final class WanderStore: ObservableObject {
                 relationship: relationship(to: visiblePlace.owner.id)
             )
         }
-        upsertRemoteProfileShells(shells)
+        upsertRemoteProfileShells(shells, preserveExistingProfileMetadataWhenMissing: true)
         upsertRemoteAttributes(from: visiblePlaces)
     }
 
@@ -3738,7 +3755,10 @@ final class WanderStore: ObservableObject {
         currentUser.handle = remoteProfile.handle
         currentUser.searchHandle = remoteProfile.handle.lowercased()
         currentUser.displayName = remoteProfile.displayName
-        currentUser.avatarURL = remoteProfile.avatarURL
+        currentUser.avatarURL = currentProfileAvatarURL(
+            incoming: remoteProfile.avatarURL,
+            existing: currentUser.avatarURL
+        )
         currentUser.bio = remoteProfile.bio
         currentUser.homeArea = remoteProfile.homeArea
         currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
@@ -3780,7 +3800,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemoteSocialGraph(userID: String, following: [ProfileShell], followers: [ProfileShell]) {
-        upsertRemoteProfileShells(following + followers)
+        upsertRemoteProfileShells(following + followers, preserveExistingProfileMetadataWhenMissing: true)
 
         let followingIDs = Set(following.map(\.id)).subtracting([userID])
         let followerIDs = Set(followers.map(\.id)).subtracting([userID])
@@ -3846,15 +3866,23 @@ final class WanderStore: ObservableObject {
         "remote_follow_\(slug(followerUserID))_\(slug(followedUserID))"
     }
 
-    private func upsertRemoteProfileShells(_ shells: [ProfileShell]) {
+    private func upsertRemoteProfileShells(_ shells: [ProfileShell], preserveExistingProfileMetadataWhenMissing: Bool = false) {
         for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) {
             if let existing = profiles.first(where: { $0.id == shell.id || $0.handle == shell.handle }) {
                 existing.serverID = shell.id
                 existing.handle = shell.handle
                 existing.searchHandle = shell.handle.lowercased()
                 existing.displayName = shell.displayName
-                existing.avatarURL = shell.avatarURL
-                existing.bio = shell.bio
+                existing.avatarURL = mergedProfileMetadata(
+                    incoming: shell.avatarURL,
+                    existing: existing.avatarURL,
+                    preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
+                )
+                existing.bio = mergedProfileMetadata(
+                    incoming: shell.bio,
+                    existing: existing.bio,
+                    preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
+                )
                 existing.syncStateRaw = SyncState.synced.rawValue
                 existing.updatedAt = .now
             } else {
@@ -3873,6 +3901,28 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+    }
+
+    private func mergedProfileMetadata(
+        incoming: String?,
+        existing: String?,
+        preserveExistingWhenMissing: Bool
+    ) -> String? {
+        nonEmpty(incoming) ?? (preserveExistingWhenMissing ? existing : nil)
+    }
+
+    private func currentProfileAvatarURL(incoming: String?, existing: String?) -> String? {
+        if let incoming = nonEmpty(incoming) {
+            return incoming
+        }
+
+        guard let existing = nonEmpty(existing),
+              URL(string: existing)?.isFileURL == true
+        else {
+            return nil
+        }
+
+        return existing
     }
 
     private func mergeProfileShells(_ shells: [ProfileShell]) -> [ProfileShell] {
