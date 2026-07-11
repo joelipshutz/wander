@@ -9261,4 +9261,31 @@ Hardening checkpoint, 2026-07-09 16:37 PDT:
 - Validation gaps/caveats:
   - Docker is not installed on this machine, so `supabase test db` and a true local Supabase stack could not run.
   - `supabase db push --linked --include-all --dry-run --yes` is blocked by remote-only hosted migration `20260709160829`; no migration repair or pull was performed because that would change hosted migration history/workspace state.
-  - REC-60 remains not persistently applied to hosted; hosted validation was rollback-only.
+- REC-60 remains not persistently applied to hosted; hosted validation was rollback-only.
+
+## 2026-07-11 10:32 PDT - Codex - REC-60 Hosted Supabase Test Prep
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` - Add push notifications for follower and list activity
+
+Goal: perform the next hosted/local Supabase testing steps if the branch and target state look good: reconcile migration history, apply the notification migration, deploy the worker, and prepare real-device push testing.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected worktrees and status, and reviewed recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated `codex/rec-81-collab-visibility` and remains unused for REC-60 edits.
+- REC-60 worktree is clean and matches `origin/codex/rec-60-notifications` at `9283d526d`.
+- PR #60 is open but currently `CONFLICTING` with updated `origin/main` (`790b9672b`, build 64 log), so hosted application should not proceed until the branch is reconciled.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Potential merge conflict resolutions in Supabase migrations, project files, or recently changed docs
+
+Plan:
+
+- Merge latest `origin/main` into REC-60 and resolve conflicts without dropping REC-60 notification hardening.
+- Re-check Supabase migration list/dry-run after the merge.
+- Only apply hosted migrations/deploy the worker if migration history is coherent and the dry-run looks safe.
