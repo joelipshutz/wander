@@ -232,6 +232,10 @@ final class LocalUserPlace {
     var sourceArtifactID: String?
     var sourceUserPlaceID: String?
     var attributionUserID: String?
+    var historicalWantNote: String?
+    var historicalWantAttributeAnswersJSON: String?
+    var historicalWantTagsJSON: String?
+    var historicalWantedAt: Date?
     var syncStateRaw: String
     var localUpdatedAt: Date
     var serverUpdatedAt: Date?
@@ -240,7 +244,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -263,6 +267,10 @@ final class LocalUserPlace {
         self.sourceArtifactID = sourceArtifactID
         self.sourceUserPlaceID = sourceUserPlaceID
         self.attributionUserID = attributionUserID
+        self.historicalWantNote = historicalWantNote
+        self.historicalWantAttributeAnswersJSON = historicalWantAttributeAnswersJSON
+        self.historicalWantTagsJSON = historicalWantTagsJSON
+        self.historicalWantedAt = historicalWantedAt
         self.syncStateRaw = syncState.rawValue
         self.localUpdatedAt = localUpdatedAt
         self.serverUpdatedAt = serverUpdatedAt
@@ -276,6 +284,24 @@ final class LocalUserPlace {
     var status: PlaceStatus { PlaceStatus(rawValue: statusRaw) ?? .wannaGo }
     var visibility: PlaceVisibility { PlaceVisibility(rawValue: visibilityRaw) ?? .followers }
     var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
+    var hasHistoricalWant: Bool { historicalWantedAt != nil }
+    var historicalWantTags: [String] {
+        (try? JSONDecoder().decode([String].self, from: Data((historicalWantTagsJSON ?? "[]").utf8))) ?? []
+    }
+
+    func setHistoricalWantTags(_ tags: [String]) {
+        historicalWantTagsJSON = Self.encoded(tags)
+    }
+
+    private static func encoded(_ tags: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(tags),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+
+        return encoded
+    }
 }
 
 @Model
@@ -309,6 +335,155 @@ final class LocalPlaceAttribute {
     }
 
     var id: String { serverID ?? localID }
+    var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
+}
+
+@Model
+final class LocalPlaceVisit {
+    @Attribute(.unique) var localID: String
+    var serverID: String?
+    var userPlaceID: String
+    var visitedAt: Date
+    var note: String?
+    var ratingScore: Double?
+    var attributeAnswersJSON: String
+    var tagsJSON: String
+    var backfilledFromUserPlace: Bool
+    var syncStateRaw: String
+    var localUpdatedAt: Date
+    var serverUpdatedAt: Date?
+    var lastSyncError: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var deletedAt: Date?
+
+    init(
+        localID: String,
+        serverID: String? = nil,
+        userPlaceID: String,
+        visitedAt: Date = .now,
+        note: String? = nil,
+        ratingScore: Double? = nil,
+        attributeAnswersJSON: String = "[]",
+        tags: [String] = [],
+        backfilledFromUserPlace: Bool = false,
+        syncState: SyncState = .localOnly,
+        localUpdatedAt: Date = .now,
+        serverUpdatedAt: Date? = nil,
+        lastSyncError: String? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        deletedAt: Date? = nil
+    ) {
+        self.localID = localID
+        self.serverID = serverID
+        self.userPlaceID = userPlaceID
+        self.visitedAt = visitedAt
+        self.note = note
+        self.ratingScore = PlaceRating.normalized(ratingScore)
+        self.attributeAnswersJSON = attributeAnswersJSON
+        self.tagsJSON = Self.encoded(tags)
+        self.backfilledFromUserPlace = backfilledFromUserPlace
+        self.syncStateRaw = syncState.rawValue
+        self.localUpdatedAt = localUpdatedAt
+        self.serverUpdatedAt = serverUpdatedAt
+        self.lastSyncError = lastSyncError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+
+    var id: String { serverID ?? localID }
+    var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
+    var tags: [String] { (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? [] }
+
+    func setDerivedTags(_ tags: [String]) {
+        tagsJSON = Self.encoded(tags)
+    }
+
+    private static func encoded(_ tags: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(tags),
+              let encoded = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+
+        return encoded
+    }
+}
+
+@Model
+final class LocalVisitPhoto {
+    @Attribute(.unique) var localID: String
+    var serverID: String?
+    var visitID: String
+    var storageBucket: String
+    var storagePath: String?
+    var localAssetRef: String?
+    var remoteURLString: String?
+    var contentType: String?
+    var byteSize: Int?
+    var width: Int?
+    var height: Int?
+    var capturedAt: Date?
+    var sortOrder: Int
+    var uploadStateRaw: String
+    var syncStateRaw: String
+    var localUpdatedAt: Date
+    var serverUpdatedAt: Date?
+    var lastSyncError: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var deletedAt: Date?
+
+    init(
+        localID: String,
+        serverID: String? = nil,
+        visitID: String,
+        storageBucket: String = "visit-photos",
+        storagePath: String? = nil,
+        localAssetRef: String? = nil,
+        remoteURLString: String? = nil,
+        contentType: String? = nil,
+        byteSize: Int? = nil,
+        width: Int? = nil,
+        height: Int? = nil,
+        capturedAt: Date? = nil,
+        sortOrder: Int = 0,
+        uploadState: VisitPhotoUploadState = .pendingUpload,
+        syncState: SyncState = .localOnly,
+        localUpdatedAt: Date = .now,
+        serverUpdatedAt: Date? = nil,
+        lastSyncError: String? = nil,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        deletedAt: Date? = nil
+    ) {
+        self.localID = localID
+        self.serverID = serverID
+        self.visitID = visitID
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
+        self.localAssetRef = localAssetRef
+        self.remoteURLString = remoteURLString
+        self.contentType = contentType
+        self.byteSize = byteSize
+        self.width = width
+        self.height = height
+        self.capturedAt = capturedAt
+        self.sortOrder = sortOrder
+        self.uploadStateRaw = uploadState.rawValue
+        self.syncStateRaw = syncState.rawValue
+        self.localUpdatedAt = localUpdatedAt
+        self.serverUpdatedAt = serverUpdatedAt
+        self.lastSyncError = lastSyncError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+
+    var id: String { serverID ?? localID }
+    var uploadState: VisitPhotoUploadState { VisitPhotoUploadState(rawValue: uploadStateRaw) ?? .pendingUpload }
     var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
 }
 

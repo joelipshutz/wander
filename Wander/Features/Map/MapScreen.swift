@@ -876,11 +876,7 @@ struct MapScreen: View {
     }
 
     private func action(for visiblePlace: VisiblePlace) -> PlaceSheetAction {
-        if currentUserSave(matching: visiblePlace) != nil {
-            return .edit
-        }
-
-        return .add
+        PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: visiblePlace))
     }
 
     private func performAction(for visiblePlace: VisiblePlace) {
@@ -891,11 +887,12 @@ struct MapScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: store.attributes(for: visiblePlace.userPlace.id)
             )
-        case .edit:
+        case .addVisit:
             let placeToEdit = currentUserSave(matching: visiblePlace) ?? visiblePlace
-            mapSaveFlow = MapPlaceSaveContext.editVisiblePlace(
+            mapSaveFlow = MapPlaceSaveContext.addVisitVisiblePlace(
                 placeToEdit,
-                attributes: store.attributes(for: placeToEdit.userPlace.id)
+                attributes: store.attributes(for: placeToEdit.userPlace.id),
+                latestVisit: store.visits(for: placeToEdit.userPlace.id).first
             )
         case .none:
             break
@@ -914,6 +911,7 @@ struct MapScreen: View {
 
     @MainActor
     private func saveMapFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
@@ -932,6 +930,13 @@ struct MapScreen: View {
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
             )
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
+            )
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
             selectSavedResult(result)
@@ -943,20 +948,22 @@ struct MapScreen: View {
             }
 
             return result
-        case .edit(let visiblePlace):
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
+        case .addVisit, .editVisit, .editWant:
+            let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+                submission,
+                store: store,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            guard let result else { return nil }
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             selectedSearchCandidateID = nil
             selectSavedResult(result)
-            showTransientMapSearchMessage("Updated saved place.")
+            showTransientMapSearchMessage(scopedSaveMessage(for: submission.context))
 
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -966,34 +973,54 @@ struct MapScreen: View {
         }
     }
 
+    private func scopedSaveMessage(for context: MapPlaceSaveContext) -> String {
+        switch context.mode {
+        case .add:
+            "Added to your map."
+        case .addVisit:
+            "Visit saved."
+        case .editVisit:
+            "Visit updated."
+        case .editWant:
+            "Want updated."
+        }
+    }
+
     @MainActor
     private func removeMapSave(_ context: MapPlaceSaveContext) async -> Bool {
-        guard case .edit(let visiblePlace) = context.mode else {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
+                return false
+            }
+            showTransientMapSearchMessage("Visit deleted.")
+            return true
+        case .editWant(let visiblePlace):
+            let removal = await store.removeSave(
+                userPlaceID: visiblePlace.userPlace.id,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            guard removal != nil else {
+                return false
+            }
+
+            clearNativeMapFeatureSelection()
+            selectedSearchCandidateID = nil
+            if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
+                for: visiblePlace,
+                in: visiblePlaces,
+                currentUserID: store.currentUser.id
+            ) {
+                selectedPlaceGroupKey = remainingGroup.key
+            } else {
+                selectedPlaceGroupKey = nil
+            }
+            isPlaceProfilePresented = false
+            showTransientMapSearchMessage("Want removed.")
+            return true
+        case .add, .addVisit:
             return false
         }
-
-        let removal = await store.removeSave(
-            userPlaceID: visiblePlace.userPlace.id,
-            backend: auth.isSignedIn ? backend : nil
-        )
-        guard removal != nil else {
-            return false
-        }
-
-        clearNativeMapFeatureSelection()
-        selectedSearchCandidateID = nil
-        if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
-            for: visiblePlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        ) {
-            selectedPlaceGroupKey = remainingGroup.key
-        } else {
-            selectedPlaceGroupKey = nil
-        }
-        isPlaceProfilePresented = false
-        showTransientMapSearchMessage("Removed from your map.")
-        return true
     }
 
     private func showTransientMapSearchMessage(_ message: String) {
@@ -2145,13 +2172,17 @@ enum MapPinOutlineBuilder {
 
 enum PlaceSheetAction {
     case add
-    case edit
+    case addVisit
     case none
+
+    static func topLevelAction(currentUserSave: VisiblePlace?) -> PlaceSheetAction {
+        currentUserSave == nil ? .add : .addVisit
+    }
 
     var systemImage: String {
         switch self {
         case .add: "plus"
-        case .edit: "pencil"
+        case .addVisit: "plus"
         case .none: ""
         }
     }
@@ -2159,8 +2190,17 @@ enum PlaceSheetAction {
     var accessibilityLabel: String {
         switch self {
         case .add: "Save to my map"
-        case .edit: "Edit saved place"
+        case .addVisit: "Add visit"
         case .none: ""
+        }
+    }
+
+    var isPrimaryAction: Bool {
+        switch self {
+        case .add, .addVisit:
+            true
+        case .none:
+            false
         }
     }
 }
@@ -2252,7 +2292,9 @@ struct PlaceSheetPlace {
 
 enum MapPlaceSaveMode {
     case add(AddSourceType)
-    case edit(VisiblePlace)
+    case addVisit(VisiblePlace)
+    case editVisit(VisiblePlace, LocalPlaceVisit)
+    case editWant(VisiblePlace)
 }
 
 struct MapPlaceSaveContext: Identifiable {
@@ -2261,25 +2303,85 @@ struct MapPlaceSaveContext: Identifiable {
     let mode: MapPlaceSaveMode
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
-    let initialRatingScore: Double
+    let initialRatingScore: Double?
     let initialNote: String
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
 
     var isEditing: Bool {
-        if case .edit = mode {
+        switch mode {
+        case .editVisit, .editWant:
             return true
+        case .add, .addVisit:
+            return false
         }
-        return false
+    }
+
+    var startsOnDetails: Bool {
+        switch mode {
+        case .add:
+            false
+        case .addVisit, .editVisit, .editWant:
+            true
+        }
+    }
+
+    var allowsStatusSelection: Bool {
+        switch mode {
+        case .add:
+            true
+        case .addVisit, .editVisit, .editWant:
+            false
+        }
+    }
+
+    var allowsPhotoAttachments: Bool {
+        switch mode {
+        case .add, .addVisit:
+            true
+        case .editVisit, .editWant:
+            false
+        }
+    }
+
+    var showsRemoveControl: Bool {
+        switch mode {
+        case .editVisit, .editWant:
+            true
+        case .add, .addVisit:
+            false
+        }
+    }
+
+    var sourceVisiblePlace: VisiblePlace? {
+        switch mode {
+        case .add:
+            nil
+        case .addVisit(let visiblePlace),
+             .editVisit(let visiblePlace, _),
+             .editWant(let visiblePlace):
+            visiblePlace
+        }
+    }
+
+    var editedVisit: LocalPlaceVisit? {
+        if case .editVisit(_, let visit) = mode {
+            return visit
+        }
+        return nil
     }
 
     var title: String {
         switch mode {
         case .add:
             "save this place"
-        case .edit:
-            "edit this place"
+        case .addVisit:
+            "add visit"
+        case .editVisit:
+            "edit visit"
+        case .editWant:
+            "edit want"
         }
     }
 
@@ -2287,8 +2389,12 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             "pick status and a few details."
-        case .edit:
-            "update what future you sees on the map."
+        case .addVisit:
+            "save what happened this time."
+        case .editVisit:
+            "adjust this saved visit."
+        case .editWant:
+            "update why this is on your radar."
         }
     }
 
@@ -2296,8 +2402,45 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             "save to my map"
-        case .edit:
-            "update my map"
+        case .addVisit:
+            "save visit"
+        case .editVisit:
+            "update visit"
+        case .editWant:
+            "update want"
+        }
+    }
+
+    var removeTitle: String {
+        switch mode {
+        case .editVisit:
+            "Delete visit"
+        case .editWant:
+            "Remove want"
+        case .add, .addVisit:
+            "Remove save"
+        }
+    }
+
+    var removeConfirmationTitle: String {
+        switch mode {
+        case .editVisit:
+            "Delete visit?"
+        case .editWant:
+            "Remove want?"
+        case .add, .addVisit:
+            "Remove save?"
+        }
+    }
+
+    var removeConfirmationMessage: String {
+        switch mode {
+        case .editVisit:
+            "This removes this visit and its photos from your place history."
+        case .editWant:
+            "This removes your want from this place."
+        case .add, .addVisit:
+            "This removes the place from your map."
         }
     }
 
@@ -2311,7 +2454,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(sourceType),
             initialStatus: .wannaGo,
             initialVisibility: defaultVisibility,
-            initialRatingScore: PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: "",
             initialAnswers: [:],
             initialPersonalLabels: [],
@@ -2329,7 +2472,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(.socialSave),
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
-            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
@@ -2337,16 +2480,55 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
-    static func editVisiblePlace(
+    static func addVisitVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?
+    ) -> MapPlaceSaveContext {
+        let defaultAttributes = latestVisit.map { VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON) }
+            ?? attributes.map { PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON) }
+        let note = visiblePlace.userPlace.status == .wannaGo ? visiblePlace.userPlace.note ?? "" : ""
+        return MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .addVisit(visiblePlace),
+            initialStatus: .been,
+            initialVisibility: visiblePlace.userPlace.visibility,
+            initialRatingScore: latestVisit?.ratingScore,
+            initialNote: note,
+            initialAnswers: initialAnswers(from: defaultAttributes),
+            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
+            initialCuisine: initialCuisine(from: defaultAttributes)
+        )
+    }
+
+    static func editVisit(
+        _ visit: LocalPlaceVisit,
+        visiblePlace: VisiblePlace
+    ) -> MapPlaceSaveContext {
+        let attributes = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: visit.attributeAnswersJSON)
+        return MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .editVisit(visiblePlace, visit),
+            initialStatus: .been,
+            initialVisibility: visiblePlace.userPlace.visibility,
+            initialRatingScore: visit.ratingScore,
+            initialNote: visit.note ?? "",
+            initialAnswers: initialAnswers(from: attributes),
+            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialCuisine: initialCuisine(from: attributes)
+        )
+    }
+
+    static func editWant(
         _ visiblePlace: VisiblePlace,
         attributes: [LocalPlaceAttribute]
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
-            mode: .edit(visiblePlace),
-            initialStatus: visiblePlace.userPlace.status,
+            mode: .editWant(visiblePlace),
+            initialStatus: .wannaGo,
             initialVisibility: visiblePlace.userPlace.visibility,
-            initialRatingScore: visiblePlace.userPlace.ratingScore ?? PlaceRating.defaultScore,
+            initialRatingScore: nil,
             initialNote: visiblePlace.userPlace.note ?? "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
@@ -2399,7 +2581,37 @@ struct MapPlaceSaveContext: Identifiable {
         return answers
     }
 
+    private static func initialAnswers(from attributes: [PlaceAttributeDraft]) -> [String: Set<String>] {
+        var answers: [String: Set<String>] = [:]
+        let decoder = JSONDecoder()
+
+        for attribute in attributes {
+            guard attribute.questionKey != PlaceMemoryAttributeKeys.personalLabels,
+                  attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine
+            else { continue }
+            guard let data = attribute.valueJSON.data(using: .utf8) else { continue }
+            if let values = try? decoder.decode([String].self, from: data) {
+                answers[attribute.questionKey] = Set(values)
+            } else if let value = try? decoder.decode(String.self, from: data) {
+                answers[attribute.questionKey] = [value]
+            }
+        }
+
+        return answers
+    }
+
     private static func initialPersonalLabels(from attributes: [LocalPlaceAttribute]) -> Set<String> {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }),
+              let data = attribute.valueJSON.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return []
+        }
+
+        return Set(values)
+    }
+
+    private static func initialPersonalLabels(from attributes: [PlaceAttributeDraft]) -> Set<String> {
         guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }),
               let data = attribute.valueJSON.data(using: .utf8),
               let values = try? JSONDecoder().decode([String].self, from: data)
@@ -2430,6 +2642,27 @@ struct MapPlaceSaveContext: Identifiable {
 
         return nil
     }
+
+    private static func initialCuisine(from attributes: [PlaceAttributeDraft]) -> String? {
+        guard let attribute = attributes.first(where: { $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine }),
+              let data = attribute.valueJSON.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        if let value = try? JSONDecoder().decode(String.self, from: data) {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        if let values = try? JSONDecoder().decode([String].self, from: data),
+           let value = values.first {
+            return WanderPlaceCategory.cuisineGuess(forRawValue: value)
+                ?? WanderPlaceCategory.normalizedSubcategory(value)
+        }
+
+        return nil
+    }
 }
 
 struct MapPlaceSaveSubmission {
@@ -2440,6 +2673,188 @@ struct MapPlaceSaveSubmission {
     let ratingScore: Double?
     let note: String?
     let attributes: [PlaceAttributeDraft]
+    let photoAttachments: [MapPlaceSavePhotoAttachment]
+}
+
+struct MapPlaceSavePhotoAttachment: Identifiable {
+    let id: UUID
+    let image: UIImage
+    let data: Data
+    let contentType: String
+    let localAssetRef: String?
+
+    var width: Int? {
+        image.cgImage?.width
+    }
+
+    var height: Int? {
+        image.cgImage?.height
+    }
+
+    static func make(
+        image: UIImage,
+        data: Data? = nil,
+        contentType: String = "image/jpeg",
+        fallbackAssetRef: String? = nil
+    ) -> MapPlaceSavePhotoAttachment? {
+        guard let payload = data ?? image.jpegData(compressionQuality: 0.86) else {
+            return nil
+        }
+
+        let id = UUID()
+        let fileRef = VisitPhotoLocalFileStore.save(data: payload, id: id, contentType: contentType)
+        return MapPlaceSavePhotoAttachment(
+            id: id,
+            image: image,
+            data: payload,
+            contentType: contentType,
+            localAssetRef: fileRef ?? fallbackAssetRef
+        )
+    }
+}
+
+enum VisitPhotoLocalFileStore {
+    private static let prefix = "local_file:"
+    private static let directoryName = "VisitPhotos"
+
+    static func save(data: Data, id: UUID, contentType: String) -> String? {
+        guard let directory = directoryURL() else { return nil }
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            let filename = "\(id.uuidString.lowercased()).\(fileExtension(for: contentType))"
+            try data.write(to: directory.appendingPathComponent(filename), options: [.atomic])
+            return "\(prefix)\(filename)"
+        } catch {
+            return nil
+        }
+    }
+
+    static func image(from localAssetRef: String?) -> UIImage? {
+        guard let filename = filename(from: localAssetRef),
+              let directory = directoryURL()
+        else {
+            return nil
+        }
+
+        return UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
+    }
+
+    private static func filename(from localAssetRef: String?) -> String? {
+        guard let localAssetRef,
+              localAssetRef.hasPrefix(prefix)
+        else {
+            return nil
+        }
+
+        return String(localAssetRef.dropFirst(prefix.count))
+    }
+
+    private static func directoryURL() -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    private static func fileExtension(for contentType: String) -> String {
+        switch contentType.lowercased() {
+        case "image/png":
+            "png"
+        case "image/heic", "image/heif":
+            "heic"
+        default:
+            "jpg"
+        }
+    }
+}
+
+@MainActor
+func createExplicitVisitIfNeeded(
+    for submission: MapPlaceSaveSubmission,
+    store: WanderStore
+) -> LocalPlaceVisit? {
+    guard case .addVisit(let visiblePlace) = submission.context.mode,
+          submission.status == .been
+    else {
+        return nil
+    }
+
+    return store.createVisit(
+        userPlaceID: visiblePlace.userPlace.id,
+        note: submission.note,
+        ratingScore: submission.ratingScore,
+        attributes: submission.attributes,
+        visibility: submission.visibility
+    )
+}
+
+@MainActor
+func persistScopedVisitOrWantSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> (SaveResult?, LocalPlaceVisit?) {
+    switch submission.context.mode {
+    case .add:
+        return (nil, nil)
+    case .addVisit:
+        guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
+            return (nil, nil)
+        }
+        if let backend {
+            _ = await store.syncVisit(visitID: visit.id, backend: backend)
+        }
+        return (SaveResult(userPlaceID: visit.userPlaceID, syncState: visit.syncState), visit)
+    case .editVisit(_, let visit):
+        guard let updatedVisit = store.updateVisit(
+            visitID: visit.id,
+            note: submission.note,
+            ratingScore: submission.ratingScore,
+            attributes: submission.attributes,
+            visibility: submission.visibility,
+            replacesNote: true,
+            replacesRating: true
+        ) else {
+            return (nil, nil)
+        }
+        if let backend {
+            _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
+        }
+        return (SaveResult(userPlaceID: updatedVisit.userPlaceID, syncState: updatedVisit.syncState), updatedVisit)
+    case .editWant(let visiblePlace):
+        let result = await store.saveCandidate(
+            submission.candidate,
+            status: .wannaGo,
+            visibility: submission.visibility,
+            note: submission.note,
+            sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
+            ratingScore: nil,
+            attributes: submission.attributes,
+            backend: backend
+        )
+        return (result, nil)
+    }
+}
+
+@MainActor
+func persistVisitPhotoAttachments(
+    _ attachments: [MapPlaceSavePhotoAttachment],
+    to visit: LocalPlaceVisit?,
+    store: WanderStore,
+    backend: WanderBackend?
+) async {
+    guard let visit, !attachments.isEmpty else { return }
+
+    for attachment in attachments {
+        _ = await store.createVisitPhoto(
+            visitID: visit.id,
+            data: attachment.data,
+            localAssetRef: attachment.localAssetRef,
+            contentType: attachment.contentType,
+            width: attachment.width,
+            height: attachment.height,
+            backend: backend
+        )
+    }
 }
 
 private enum MapPlaceSaveStep {
@@ -2473,7 +2888,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isSaving = false
     @State private var isRemoving = false
     @State private var isShowingRemoveConfirmation = false
-    @State private var editVisitPhotos: [UIImage] = []
+    @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var errorMessage: String?
 
     init(
@@ -2484,11 +2899,11 @@ struct MapPlaceSaveFlowSheet: View {
         self.context = context
         self.onSave = onSave
         self.onRemove = onRemove
-        _step = State(initialValue: context.isEditing ? .details : .confirm)
+        _step = State(initialValue: context.startsOnDetails ? .details : .confirm)
         _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
-        _selectedRatingScore = State(initialValue: context.initialRatingScore)
+        _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
         _selectedAnswers = State(initialValue: context.initialAnswers)
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
@@ -2613,13 +3028,13 @@ struct MapPlaceSaveFlowSheet: View {
                     selectedVisibility = .selfOnly
                 }
             }
-            .alert("Remove save?", isPresented: $isShowingRemoveConfirmation) {
-                Button("Remove save", role: .destructive) {
+            .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
+                Button(context.removeTitle, role: .destructive) {
                     removeSave()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(removeSaveConfirmationMessage)
+                Text(context.removeConfirmationMessage)
             }
         }
     }
@@ -2690,12 +3105,12 @@ struct MapPlaceSaveFlowSheet: View {
             candidateCard
             placeTypeSection
 
-            if context.isEditing {
+            if context.allowsStatusSelection {
                 saveAsSection
             }
 
             if selectedStatus == .been {
-                PlaceRatingSlider(score: $selectedRatingScore)
+                ratingSection
             }
 
             ForEach(questionBlocks) { block in
@@ -2718,10 +3133,10 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
 
-            if context.isEditing {
+            if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
                     canAddPhotos: selectedStatus == .been,
-                    photos: $editVisitPhotos
+                    photos: $visitPhotoAttachments
                 )
             }
 
@@ -2769,7 +3184,7 @@ struct MapPlaceSaveFlowSheet: View {
                 save()
             }
 
-            if context.isEditing {
+            if context.showsRemoveControl {
                 removeSaveSection
             }
         }
@@ -2777,13 +3192,26 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var removeSaveSection: some View {
         MapSaveDestructiveButton(
-            title: isRemoving ? "removing..." : "Remove save",
+            title: isRemoving ? "removing..." : context.removeTitle,
             systemImage: "trash",
             isDisabled: isSaving || isRemoving
         ) {
             isShowingRemoveConfirmation = true
         }
         .padding(.top, WanderTheme.spacing1)
+    }
+
+    private var ratingSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("rating")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            PlaceRatingSlider(score: $selectedRatingScore)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var placeTypeSection: some View {
@@ -3039,7 +3467,7 @@ struct MapPlaceSaveFlowSheet: View {
         matching predicate: (LocalPlaceAttribute) -> Bool
     ) -> [String] {
         let visiblePlaces = store.currentUserVisiblePlaces.filter { visiblePlace in
-            if case let .edit(currentPlace) = context.mode,
+            if let currentPlace = context.sourceVisiblePlace,
                currentPlace.userPlace.id == visiblePlace.userPlace.id {
                 return false
             }
@@ -3128,7 +3556,8 @@ struct MapPlaceSaveFlowSheet: View {
             visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
-            attributes: attributeDrafts()
+            attributes: attributeDrafts(),
+            photoAttachments: visitPhotoAttachments
         )
 
         Task {
@@ -3145,11 +3574,11 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var removeSaveConfirmationMessage: String {
-        "This removes \(context.candidate.name) from your map and deletes your note, rating, tags, labels, and answers. It will not remove the place for anyone else."
+        context.removeConfirmationMessage
     }
 
     private func removeSave() {
-        guard context.isEditing, !isSaving, !isRemoving else { return }
+        guard context.showsRemoveControl, !isSaving, !isRemoving else { return }
 
         isRemoving = true
         errorMessage = nil
@@ -3170,9 +3599,10 @@ struct MapPlaceSaveFlowSheet: View {
 
 private struct MapSaveVisitPhotoSection: View {
     let canAddPhotos: Bool
-    @Binding var photos: [UIImage]
+    @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
+    @State private var isShowingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var photoError: String?
 
@@ -3197,9 +3627,9 @@ private struct MapSaveVisitPhotoSection: View {
             if !photos.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: WanderTheme.spacing2) {
-                        ForEach(Array(photos.enumerated()), id: \.offset) { index, image in
+                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, attachment in
                             ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
+                                Image(uiImage: attachment.image)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 82, height: 82)
@@ -3248,7 +3678,10 @@ private struct MapSaveVisitPhotoSection: View {
                                 isShowingCamera = true
                             }
                         }
-                        PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                        Button("Choose from Library") {
+                            isShowingPhotoMenu = false
+                            isShowingPhotoPicker = true
+                        }
                         Button("Cancel", role: .cancel) {}
                     }
                 }
@@ -3273,11 +3706,19 @@ private struct MapSaveVisitPhotoSection: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                photos.append(image)
+                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                    photos.append(attachment)
+                }
                 isShowingPhotoMenu = false
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $isShowingPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 8,
+            matching: .images
+        )
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             isShowingPhotoMenu = false
@@ -3293,7 +3734,7 @@ private struct MapSaveVisitPhotoSection: View {
     }
 
     private func importPhotos(from items: [PhotosPickerItem]) async {
-        var imported: [UIImage] = []
+        var imported: [MapPlaceSavePhotoAttachment] = []
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
@@ -3301,7 +3742,14 @@ private struct MapSaveVisitPhotoSection: View {
                 else {
                     continue
                 }
-                imported.append(image)
+                let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    data: data,
+                    fallbackAssetRef: assetRef
+                ) {
+                    imported.append(attachment)
+                }
             } catch {
                 await MainActor.run {
                     photoError = "Could not use one of those photos."
@@ -4691,7 +5139,7 @@ struct PlaceSheet: View {
                 Image(systemName: action.systemImage)
                     .font(.system(size: iconSize, weight: .black))
                     .frame(width: size, height: size)
-                    .background(action == .add ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                    .background(action.isPrimaryAction ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Circle())
             }
@@ -4824,16 +5272,40 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "ALL"
-        case .myVisits: "MY VISITS"
+        case .myVisits: "MY SAVES"
         }
+    }
+}
+
+enum PlaceActivityEntryKind: Equatable {
+    case visit
+    case currentWant
+    case historicalWant
+    case legacyBeenSummary
+
+    var sortBucket: Int {
+        self == .historicalWant ? 1 : 0
     }
 }
 
 struct PlaceActivityEntry: Identifiable {
     let summary: PlaceSaveSummary
+    let visit: LocalPlaceVisit?
+    let kind: PlaceActivityEntryKind
     let currentUserID: String
 
-    var id: String { summary.id }
+    var id: String {
+        switch kind {
+        case .visit:
+            visit?.id ?? "\(summary.id)_visit"
+        case .currentWant:
+            "\(summary.id)_current_want"
+        case .historicalWant:
+            "\(summary.id)_historical_want"
+        case .legacyBeenSummary:
+            "\(summary.id)_legacy_been"
+        }
+    }
 
     var owner: LocalProfile {
         summary.visiblePlace.owner
@@ -4852,7 +5324,16 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var timestamp: Date {
-        userPlace.visitedAt ?? userPlace.updatedAt
+        switch kind {
+        case .visit:
+            visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.updatedAt
+        case .currentWant:
+            userPlace.updatedAt
+        case .historicalWant:
+            userPlace.historicalWantedAt ?? userPlace.savedAt
+        case .legacyBeenSummary:
+            userPlace.visitedAt ?? userPlace.updatedAt
+        }
     }
 
     var timestampText: String {
@@ -4863,22 +5344,63 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var note: String? {
-        let trimmed = userPlace.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceNote: String? = switch kind {
+        case .visit:
+            visit?.note
+        case .currentWant, .legacyBeenSummary:
+            userPlace.note
+        case .historicalWant:
+            userPlace.historicalWantNote
+        }
+        let trimmed = sourceNote?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     var ratingText: String? {
-        guard userPlace.status == .been, let ratingScore = userPlace.ratingScore else {
+        let ratingScore: Double? = switch kind {
+        case .visit:
+            visit?.ratingScore
+        case .legacyBeenSummary:
+            userPlace.ratingScore
+        case .currentWant, .historicalWant:
+            nil
+        }
+        guard let ratingScore else {
             return nil
         }
         return "\(PlaceRating.display(ratingScore))/5"
     }
 
     var canAddPhotos: Bool {
-        isCurrentUser && userPlace.status == .been
+        isCurrentUser && kind == .visit && visit != nil
+    }
+
+    var canEdit: Bool {
+        isCurrentUser && (kind == .visit || kind == .currentWant)
+    }
+
+    var editAccessibilityLabel: String {
+        kind == .currentWant ? "Edit want" : "Edit visit"
+    }
+
+    var status: PlaceStatus {
+        switch kind {
+        case .currentWant, .historicalWant:
+            .wannaGo
+        case .visit, .legacyBeenSummary:
+            .been
+        }
     }
 
     var tags: [String] {
+        if let visit, !visit.tags.isEmpty {
+            return uniqueTags(visit.tags)
+        }
+
+        if kind == .historicalWant {
+            return uniqueTags(userPlace.historicalWantTags)
+        }
+
         var seen = Set<String>()
         return summary.attributes
             .flatMap(PlaceProfileTagParser.tags(from:))
@@ -4893,27 +5415,45 @@ struct PlaceActivityEntry: Identifiable {
         if isCurrentUser { return WanderTheme.terracotta.color }
         return owner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
     }
+
+    private func uniqueTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.compactMap { tag in
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let normalized = trimmed.lowercased()
+            guard !seen.contains(normalized) else { return nil }
+            seen.insert(normalized)
+            return trimmed
+        }
+    }
 }
 
 struct PlaceActivityPhoto: Identifiable {
-    let id = UUID()
+    let metadata: LocalVisitPhoto
     let entryID: String
-    let image: UIImage
-    let createdAt = Date()
+
+    var id: String { metadata.id }
+    var localImage: UIImage? { VisitPhotoLocalFileStore.image(from: metadata.localAssetRef) }
+    var remoteURL: URL? { metadata.remoteURLString.flatMap { URL(string: $0) } }
+    var uploadState: VisitPhotoUploadState { metadata.uploadState }
 }
 
 private struct PlaceActivityPhotoViewerRoute: Identifiable {
-    let photoID: UUID
+    let photoID: String
 
-    var id: UUID { photoID }
+    var id: String { photoID }
 }
 
 struct PlaceActivitySection: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     @State private var filter: PlaceActivityFilter = .all
-    @State private var photos: [PlaceActivityPhoto] = []
     @State private var viewerRoute: PlaceActivityPhotoViewerRoute?
+    @State private var editFlow: MapPlaceSaveContext?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -4932,15 +5472,12 @@ struct PlaceActivitySection: View {
                     ForEach(filteredEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,
-                            photos: Binding(
-                                get: { photos.filter { $0.entryID == entry.id } },
-                                set: { nextPhotos in
-                                    photos.removeAll { $0.entryID == entry.id }
-                                    photos.append(contentsOf: nextPhotos)
-                                }
-                            ),
+                            photos: photos(for: entry),
                             onOpenPhoto: { photo in
                                 viewerRoute = PlaceActivityPhotoViewerRoute(photoID: photo.id)
+                            },
+                            onEdit: {
+                                edit(entry)
                             }
                         )
                     }
@@ -4949,17 +5486,52 @@ struct PlaceActivitySection: View {
         }
         .fullScreenCover(item: $viewerRoute) { route in
             PlaceActivityPhotoViewer(
-                photos: $photos,
+                photos: allPhotos,
                 initialPhotoID: route.photoID,
                 entriesByID: entriesByID
             )
+        }
+        .sheet(item: $editFlow) { context in
+            MapPlaceSaveFlowSheet(context: context) { submission in
+                await saveActivityEdit(submission)
+            } onRemove: { context in
+                await removeActivityEdit(context)
+            }
         }
     }
 
     private var entries: [PlaceActivityEntry] {
         saves
-            .map { PlaceActivityEntry(summary: $0, currentUserID: currentUserID) }
+            .flatMap { summary -> [PlaceActivityEntry] in
+                let userPlace = summary.visiblePlace.userPlace
+                let visits = store.visits(for: summary.visiblePlace.userPlace.id)
+
+                if userPlace.status == .been {
+                    var entries = visits.map { visit in
+                        PlaceActivityEntry(summary: summary, visit: visit, kind: .visit, currentUserID: currentUserID)
+                    }
+
+                    if entries.isEmpty {
+                        entries.append(
+                            PlaceActivityEntry(summary: summary, visit: nil, kind: .legacyBeenSummary, currentUserID: currentUserID)
+                        )
+                    }
+
+                    if userPlace.hasHistoricalWant {
+                        entries.append(
+                            PlaceActivityEntry(summary: summary, visit: nil, kind: .historicalWant, currentUserID: currentUserID)
+                        )
+                    }
+
+                    return entries
+                }
+
+                return [PlaceActivityEntry(summary: summary, visit: nil, kind: .currentWant, currentUserID: currentUserID)]
+            }
             .sorted { lhs, rhs in
+                if lhs.kind.sortBucket != rhs.kind.sortBucket {
+                    return lhs.kind.sortBucket < rhs.kind.sortBucket
+                }
                 if lhs.timestamp != rhs.timestamp {
                     return lhs.timestamp > rhs.timestamp
                 }
@@ -4975,7 +5547,7 @@ struct PlaceActivitySection: View {
         case .all:
             entries
         case .myVisits:
-            entries.filter { $0.isCurrentUser && $0.userPlace.status == .been }
+            entries.filter { $0.isCurrentUser }
         }
     }
 
@@ -4983,12 +5555,67 @@ struct PlaceActivitySection: View {
         Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
     }
 
+    private var allPhotos: [PlaceActivityPhoto] {
+        entries.flatMap(photos(for:))
+    }
+
+    private func photos(for entry: PlaceActivityEntry) -> [PlaceActivityPhoto] {
+        guard let visit = entry.visit else { return [] }
+        return store.photos(for: visit.id).map { photo in
+            PlaceActivityPhoto(metadata: photo, entryID: entry.id)
+        }
+    }
+
     private var emptyStateText: String {
         switch filter {
         case .all:
             "No activity yet."
         case .myVisits:
-            "No visits yet."
+            "No saves yet."
+        }
+    }
+
+    private func edit(_ entry: PlaceActivityEntry) {
+        guard entry.canEdit else { return }
+
+        if entry.kind == .visit, let visit = entry.visit {
+            editFlow = MapPlaceSaveContext.editVisit(visit, visiblePlace: entry.summary.visiblePlace)
+        } else if entry.kind == .currentWant {
+            editFlow = MapPlaceSaveContext.editWant(
+                entry.summary.visiblePlace,
+                attributes: store.attributes(for: entry.userPlace.id)
+            )
+        }
+    }
+
+    @MainActor
+    private func saveActivityEdit(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        await persistVisitPhotoAttachments(
+            submission.photoAttachments,
+            to: targetVisit,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        if result != nil, !auth.isSignedIn {
+            auth.presentGate(for: .syncPlace)
+        }
+        return result
+    }
+
+    @MainActor
+    private func removeActivityEdit(_ context: MapPlaceSaveContext) async -> Bool {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            return await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil)
+        case .editWant(let visiblePlace):
+            return await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
+        case .add, .addVisit:
+            return false
         }
     }
 }
@@ -5047,11 +5674,16 @@ private struct PlaceActivityEmptyState: View {
 }
 
 private struct PlaceActivityCard: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let entry: PlaceActivityEntry
-    @Binding var photos: [PlaceActivityPhoto]
+    let photos: [PlaceActivityPhoto]
     let onOpenPhoto: (PlaceActivityPhoto) -> Void
+    let onEdit: () -> Void
     @State private var isShowingPhotoMenu = false
     @State private var isShowingCamera = false
+    @State private var isShowingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var photoError: String?
 
@@ -5100,10 +5732,20 @@ private struct PlaceActivityCard: View {
         )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                addPhoto(image)
+                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                    Task {
+                        await addPhoto(attachment)
+                    }
+                }
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $isShowingPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 8,
+            matching: .images
+        )
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             isShowingPhotoMenu = false
@@ -5132,7 +5774,20 @@ private struct PlaceActivityCard: View {
                     .minimumScaleFactor(0.78)
             }
             Spacer()
-            StatusBadge(status: entry.userPlace.status)
+            if entry.canEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 12, weight: .black))
+                        .frame(width: 32, height: 32)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(entry.editAccessibilityLabel)
+            }
+            StatusBadge(status: entry.status)
         }
     }
 
@@ -5145,11 +5800,7 @@ private struct PlaceActivityCard: View {
                         Button {
                             onOpenPhoto(photo)
                         } label: {
-                            Image(uiImage: photo.image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 76, height: 76)
-                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
                     }
@@ -5183,22 +5834,32 @@ private struct PlaceActivityCard: View {
                             isShowingCamera = true
                         }
                     }
-                    PhotosPicker("Choose from Library", selection: $selectedPhotoItems, maxSelectionCount: 8, matching: .images)
+                    Button("Choose from Library") {
+                        isShowingPhotoMenu = false
+                        isShowingPhotoPicker = true
+                    }
                     Button("Cancel", role: .cancel) {}
                 }
             }
         }
     }
 
-    @MainActor
-    private func addPhoto(_ image: UIImage) {
+    private func addPhoto(_ attachment: MapPlaceSavePhotoAttachment) async {
+        guard let visit = entry.visit else { return }
         photoError = nil
         isShowingPhotoMenu = false
-        photos.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+        _ = await store.createVisitPhoto(
+            visitID: visit.id,
+            data: attachment.data,
+            localAssetRef: attachment.localAssetRef,
+            contentType: attachment.contentType,
+            width: attachment.width,
+            height: attachment.height,
+            backend: auth.isSignedIn ? backend : nil
+        )
     }
 
     private func importPhotos(from items: [PhotosPickerItem]) async {
-        var imported: [PlaceActivityPhoto] = []
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
@@ -5206,7 +5867,14 @@ private struct PlaceActivityCard: View {
                 else {
                     continue
                 }
-                imported.append(PlaceActivityPhoto(entryID: entry.id, image: image))
+                let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    data: data,
+                    fallbackAssetRef: assetRef
+                ) {
+                    await addPhoto(attachment)
+                }
             } catch {
                 await MainActor.run {
                     photoError = "Could not use one of those photos."
@@ -5215,24 +5883,79 @@ private struct PlaceActivityCard: View {
         }
 
         await MainActor.run {
-            photos.append(contentsOf: imported)
             selectedPhotoItems = []
         }
     }
 }
 
+private struct VisitPhotoThumbnail: View {
+    let photo: PlaceActivityPhoto
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            if let image = photo.localImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let remoteURL = photo.remoteURL {
+                AsyncImage(url: remoteURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        placeholder(systemImage: "exclamationmark.triangle.fill")
+                    case .empty:
+                        placeholder(systemImage: "arrow.triangle.2.circlepath")
+                    @unknown default:
+                        placeholder(systemImage: "photo")
+                    }
+                }
+            } else {
+                placeholder(systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo")
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(alignment: .bottomTrailing) {
+            if photo.uploadState != .uploaded {
+                Image(systemName: photo.uploadState == .failed ? "exclamationmark.circle.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(photo.uploadState == .failed ? WanderTheme.stateError.color : WanderTheme.pinSocial.color)
+                    .padding(4)
+                    .background(WanderTheme.surfaceRaised.color, in: Circle())
+                    .padding(5)
+            }
+        }
+    }
+
+    private func placeholder(systemImage: String) -> some View {
+        ZStack {
+            WanderTheme.surfaceSand.color
+            Image(systemName: systemImage)
+                .font(.system(size: max(18, size * 0.28), weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+    }
+}
+
 private struct PlaceActivityPhotoViewer: View {
-    @Binding var photos: [PlaceActivityPhoto]
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let photos: [PlaceActivityPhoto]
     let entriesByID: [String: PlaceActivityEntry]
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedPhotoID: UUID
+    @State private var selectedPhotoID: String
 
     init(
-        photos: Binding<[PlaceActivityPhoto]>,
-        initialPhotoID: UUID,
+        photos: [PlaceActivityPhoto],
+        initialPhotoID: String,
         entriesByID: [String: PlaceActivityEntry]
     ) {
-        _photos = photos
+        self.photos = photos
         self.entriesByID = entriesByID
         _selectedPhotoID = State(initialValue: initialPhotoID)
     }
@@ -5254,9 +5977,7 @@ private struct PlaceActivityPhotoViewer: View {
 
                 TabView(selection: $selectedPhotoID) {
                     ForEach(photos) { photo in
-                        Image(uiImage: photo.image)
-                            .resizable()
-                            .scaledToFit()
+                        VisitPhotoFullScreenImage(photo: photo)
                             .tag(photo.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(.horizontal, WanderTheme.spacing2)
@@ -5308,12 +6029,55 @@ private struct PlaceActivityPhotoViewer: View {
 
     private func deleteSelectedPhoto() {
         guard let selectedPhoto else { return }
-        photos.removeAll { $0.id == selectedPhoto.id }
-        if let nextPhoto = photos.first {
-            selectedPhotoID = nextPhoto.id
-        } else {
-            dismiss()
+        Task {
+            _ = await store.deleteVisitPhoto(
+                photoID: selectedPhoto.id,
+                backend: auth.isSignedIn ? backend : nil
+            )
         }
+    }
+}
+
+private struct VisitPhotoFullScreenImage: View {
+    let photo: PlaceActivityPhoto
+
+    var body: some View {
+        if let image = photo.localImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+        } else if let remoteURL = photo.remoteURL {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    fullScreenPlaceholder(systemImage: "exclamationmark.triangle.fill", title: "Photo unavailable")
+                case .empty:
+                    fullScreenPlaceholder(systemImage: "arrow.triangle.2.circlepath", title: "Loading photo")
+                @unknown default:
+                    fullScreenPlaceholder(systemImage: "photo", title: "Photo")
+                }
+            }
+        } else {
+            fullScreenPlaceholder(
+                systemImage: photo.uploadState == .failed ? "exclamationmark.triangle.fill" : "photo",
+                title: photo.uploadState == .failed ? "Upload failed" : "Waiting to upload"
+            )
+        }
+    }
+
+    private func fullScreenPlaceholder(systemImage: String, title: String) -> some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .black))
+            Text(title)
+                .font(.system(size: 15, weight: .black))
+        }
+        .foregroundStyle(.white.opacity(0.76))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

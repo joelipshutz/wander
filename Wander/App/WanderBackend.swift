@@ -10,6 +10,7 @@ final class WanderBackend: ObservableObject {
     let placeRepository: (any PlaceRepository)?
     let userPlaceRepository: (any UserPlaceRepository)?
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
+    let visitRepository: (any VisitRepository)?
     let extractionRepository: (any ExtractionRepository)?
     let placeListRepository: (any PlaceListRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
@@ -28,6 +29,7 @@ final class WanderBackend: ObservableObject {
             let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client, userPlaceDeleter: client)
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
+            self.visitRepository = SupabaseVisitRepository(table: client, storage: client)
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
@@ -40,6 +42,7 @@ final class WanderBackend: ObservableObject {
             self.placeRepository = nil
             self.userPlaceRepository = nil
             self.socialPlaceSaveRepository = nil
+            self.visitRepository = nil
             self.extractionRepository = nil
             self.placeListRepository = nil
             self.listSuggestionRepository = nil
@@ -61,6 +64,7 @@ final class WanderBackend: ObservableObject {
         placeRepository: (any PlaceRepository)? = nil,
         userPlaceRepository: (any UserPlaceRepository)? = nil,
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
+        visitRepository: (any VisitRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
         placeListRepository: (any PlaceListRepository)? = nil,
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
@@ -74,6 +78,7 @@ final class WanderBackend: ObservableObject {
         self.placeRepository = placeRepository
         self.userPlaceRepository = userPlaceRepository
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
+        self.visitRepository = visitRepository
         self.extractionRepository = extractionRepository
         self.placeListRepository = placeListRepository
         self.listSuggestionRepository = listSuggestionRepository
@@ -88,6 +93,7 @@ final class WanderBackend: ObservableObject {
             || placeRepository != nil
             || userPlaceRepository != nil
             || socialPlaceSaveRepository != nil
+            || visitRepository != nil
             || extractionRepository != nil
             || placeListRepository != nil
             || listSuggestionRepository != nil
@@ -227,6 +233,62 @@ final class WanderBackend: ObservableObject {
         }
 
         try await userPlaceRepository.delete(userPlaceID: userPlaceID)
+    }
+
+    func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.visits(for: userPlaceID)
+    }
+
+    func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.upsertVisit(draft)
+    }
+
+    func deleteVisit(visitID: String) async throws {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await visitRepository.deleteVisit(visitID: visitID)
+    }
+
+    func photos(for visitID: String) async throws -> [VisitPhotoResult] {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.photos(for: visitID)
+    }
+
+    func upsertVisitPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.upsertPhotoMetadata(draft)
+    }
+
+    func uploadVisitPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await visitRepository.uploadPhotoData(bucket: bucket, path: path, data: data, contentType: contentType)
+    }
+
+    func deleteVisitPhoto(photoID: String, bucket: String, path: String) async throws {
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await visitRepository.deletePhoto(photoID: photoID, bucket: bucket, path: path)
     }
 
     func enqueueExtractionJob(_ draft: ExtractionJobDraft) async throws -> ExtractionJobEnqueueResult {

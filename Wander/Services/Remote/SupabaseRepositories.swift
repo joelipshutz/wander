@@ -248,6 +248,256 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 }
 
+struct SupabaseVisitRepository: VisitRepository {
+    private let table: RemoteTableCalling
+    private let storage: RemoteStorageCalling
+
+    init(table: RemoteTableCalling, storage: RemoteStorageCalling) {
+        self.table = table
+        self.storage = storage
+    }
+
+    func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
+        let rows: [PlaceVisitRow] = try await table.select(
+            table: "place_visits",
+            queryItems: [
+                URLQueryItem(name: "select", value: PlaceVisitRow.selectColumns),
+                URLQueryItem(name: "user_place_id", value: "eq.\(userPlaceID)"),
+                URLQueryItem(name: "deleted_at", value: "is.null"),
+                URLQueryItem(name: "order", value: "visited_at.desc")
+            ]
+        )
+        return rows.map(\.result)
+    }
+
+    func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult {
+        let body = PlaceVisitUpsertBody(draft: draft)
+        let rows: [PlaceVisitRow] = try await table.upsert(
+            table: "place_visits",
+            body: [body],
+            onConflict: "id"
+        )
+        guard let row = rows.first else {
+            throw WanderRemoteError.invalidResponse("place_visits upsert returned no rows")
+        }
+        return row.result
+    }
+
+    func deleteVisit(visitID: String) async throws {
+        try await table.delete(
+            table: "place_visits",
+            queryItems: [URLQueryItem(name: "id", value: "eq.\(visitID)")]
+        )
+    }
+
+    func photos(for visitID: String) async throws -> [VisitPhotoResult] {
+        let rows: [VisitPhotoRow] = try await table.select(
+            table: "visit_photos",
+            queryItems: [
+                URLQueryItem(name: "select", value: VisitPhotoRow.selectColumns),
+                URLQueryItem(name: "visit_id", value: "eq.\(visitID)"),
+                URLQueryItem(name: "deleted_at", value: "is.null"),
+                URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
+            ]
+        )
+        return rows.map(\.result)
+    }
+
+    func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
+        let body = VisitPhotoUpsertBody(draft: draft)
+        let rows: [VisitPhotoRow] = try await table.upsert(
+            table: "visit_photos",
+            body: [body],
+            onConflict: "id"
+        )
+        guard let row = rows.first else {
+            throw WanderRemoteError.invalidResponse("visit_photos upsert returned no rows")
+        }
+        return row.result
+    }
+
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
+        try await storage.uploadObject(bucket: bucket, path: path, data: data, contentType: contentType, upsert: true)
+        return try storage.publicObjectURL(bucket: bucket, path: path, cacheBust: UUID().uuidString)
+    }
+
+    func deletePhoto(photoID: String, bucket: String, path: String) async throws {
+        try await storage.deleteObject(bucket: bucket, path: path)
+        try await table.delete(
+            table: "visit_photos",
+            queryItems: [URLQueryItem(name: "id", value: "eq.\(photoID)")]
+        )
+    }
+}
+
+private struct PlaceVisitRow: Decodable {
+    static let selectColumns = "id,user_place_id,visited_at,note,rating_score,tags,backfilled_from_user_place,created_at,updated_at,deleted_at"
+
+    let id: String
+    let userPlaceID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let tags: [String]
+    let backfilledFromUserPlace: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userPlaceID = "user_place_id"
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case tags
+        case backfilledFromUserPlace = "backfilled_from_user_place"
+    }
+
+    var result: PlaceVisitResult {
+        PlaceVisitResult(
+            visitID: id,
+            userPlaceID: userPlaceID,
+            visitedAt: visitedAt,
+            note: note,
+            ratingScore: ratingScore,
+            tags: tags,
+            backfilledFromUserPlace: backfilledFromUserPlace
+        )
+    }
+}
+
+private struct PlaceVisitUpsertBody: Encodable {
+    let id: String?
+    let userPlaceID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswers: [VisitAttributeAnswer]
+    let backfilledFromUserPlace: Bool
+    let deletedAt: Date?
+
+    init(draft: PlaceVisitDraft) {
+        self.id = draft.id
+        self.userPlaceID = draft.userPlaceID
+        self.visitedAt = draft.visitedAt
+        self.note = draft.note
+        self.ratingScore = PlaceRating.normalized(draft.ratingScore)
+        self.attributeAnswers = Self.decodedAttributeAnswers(draft.attributeAnswersJSON)
+        self.backfilledFromUserPlace = draft.backfilledFromUserPlace
+        self.deletedAt = nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userPlaceID = "user_place_id"
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case attributeAnswers = "attribute_answers"
+        case backfilledFromUserPlace = "backfilled_from_user_place"
+        case deletedAt = "deleted_at"
+    }
+
+    private static func decodedAttributeAnswers(_ json: String) -> [VisitAttributeAnswer] {
+        guard let data = json.data(using: .utf8),
+              let answers = try? JSONDecoder().decode([VisitAttributeAnswer].self, from: data)
+        else {
+            return []
+        }
+        return answers
+    }
+}
+
+private struct VisitPhotoRow: Decodable {
+    static let selectColumns = "id,visit_id,storage_bucket,storage_path,content_type,byte_size,width,height,captured_at,sort_order,upload_state,created_at,updated_at,deleted_at"
+
+    let id: String
+    let visitID: String
+    let storageBucket: String
+    let storagePath: String
+    let contentType: String?
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+    let uploadStateRaw: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case visitID = "visit_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case contentType = "content_type"
+        case byteSize = "byte_size"
+        case width
+        case height
+        case capturedAt = "captured_at"
+        case sortOrder = "sort_order"
+        case uploadStateRaw = "upload_state"
+    }
+
+    var result: VisitPhotoResult {
+        VisitPhotoResult(
+            photoID: id,
+            visitID: visitID,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
+            remoteURLString: nil,
+            contentType: contentType,
+            byteSize: byteSize,
+            width: width,
+            height: height,
+            capturedAt: capturedAt,
+            sortOrder: sortOrder,
+            uploadState: VisitPhotoUploadState(rawValue: uploadStateRaw) ?? .pendingUpload
+        )
+    }
+}
+
+private struct VisitPhotoUpsertBody: Encodable {
+    let id: String?
+    let visitID: String
+    let storageBucket: String
+    let storagePath: String
+    let contentType: String
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+    let uploadStateRaw: String
+    let deletedAt: Date?
+
+    init(draft: VisitPhotoDraft) {
+        self.id = draft.id
+        self.visitID = draft.visitID
+        self.storageBucket = draft.storageBucket
+        self.storagePath = draft.storagePath
+        self.contentType = draft.contentType ?? "image/jpeg"
+        self.byteSize = draft.byteSize
+        self.width = draft.width
+        self.height = draft.height
+        self.capturedAt = draft.capturedAt
+        self.sortOrder = draft.sortOrder
+        self.uploadStateRaw = draft.uploadState == .uploading ? VisitPhotoUploadState.pendingUpload.rawValue : draft.uploadState.rawValue
+        self.deletedAt = nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case visitID = "visit_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case contentType = "content_type"
+        case byteSize = "byte_size"
+        case width
+        case height
+        case capturedAt = "captured_at"
+        case sortOrder = "sort_order"
+        case uploadStateRaw = "upload_state"
+        case deletedAt = "deleted_at"
+    }
+}
+
 struct SupabaseExtractionRepository: ExtractionRepository {
     private let rpc: RemoteProcedureCalling
     private let functions: RemoteFunctionCalling?

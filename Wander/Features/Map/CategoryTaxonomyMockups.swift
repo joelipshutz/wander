@@ -58,7 +58,7 @@ private struct RemoveSaveEditMockup: View {
     }
 
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit this place", subtitle: "Jitlada - saved by you") {
+        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - saved by you") {
             placeHeader
 
             MockupSection(title: "place type") {
@@ -230,7 +230,7 @@ private enum CategoryTaxonomyMockData {
 
 private struct CategoryTaxonomyEditMockup: View {
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit this place", subtitle: "Jitlada - Los Angeles") {
+        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - Los Angeles") {
             placeHeader
 
             MockupSection(title: "place type") {

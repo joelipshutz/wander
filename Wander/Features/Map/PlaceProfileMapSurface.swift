@@ -159,7 +159,7 @@ private struct PlaceProfilePreviewCard: View {
                             Image(systemName: action.systemImage)
                                 .font(.system(size: 17, weight: .black))
                                 .frame(width: 36, height: 36)
-                                .background(action == .add ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
+                                .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
                                 .foregroundStyle(WanderTheme.textOnAction.color)
                                 .clipShape(Circle())
                         }
@@ -320,7 +320,7 @@ private struct PlaceProfileFullView: View {
 
             Spacer(minLength: WanderTheme.spacing3)
 
-            if let status = place.status, action == .edit {
+            if let status = place.status, action == .addVisit {
                 PlaceProfileStatusPill(status: status)
             }
         }
@@ -627,9 +627,9 @@ private struct PlaceProfileMapHeader: View {
                         if action != .none {
                             Button(action: onAction) {
                                 Image(systemName: action.systemImage)
-                                    .font(.system(size: action == .add ? 20 : 17, weight: .black))
+                                    .font(.system(size: action.isPrimaryAction ? 20 : 17, weight: .black))
                                     .frame(width: 42, height: 42)
-                                    .background(action == .add ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
+                                    .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
                                     .foregroundStyle(WanderTheme.textOnAction.color)
                                     .clipShape(Circle())
                                     .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)

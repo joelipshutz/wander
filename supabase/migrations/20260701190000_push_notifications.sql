@@ -22,7 +22,7 @@ create table if not exists public.notification_device_tokens (
     length(device_token) between 32 and 512
     and device_token ~ '^[A-Fa-f0-9]+$'
   ),
-  token_hash text generated always as (encode(digest(device_token, 'sha256'), 'hex')) stored,
+  token_hash text generated always as (encode(extensions.digest(device_token, 'sha256'), 'hex')) stored,
   is_active boolean not null default true,
   last_registered_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now(),
@@ -773,7 +773,7 @@ begin
   set is_active = false,
       last_seen_at = now()
   where user_id = viewer_id
-    and token_hash = encode(digest(normalized_token, 'sha256'), 'hex')
+    and token_hash = encode(extensions.digest(normalized_token, 'sha256'), 'hex')
     and (normalized_environment is null or environment = normalized_environment);
 end;
 $$;

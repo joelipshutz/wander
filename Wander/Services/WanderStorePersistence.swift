@@ -46,6 +46,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let places: [PlaceRecord]
     let userPlaces: [UserPlaceRecord]
     let placeAttributes: [PlaceAttributeRecord]
+    let placeVisits: [PlaceVisitRecord]?
+    let visitPhotos: [VisitPhotoRecord]?
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
     let placeLists: [PlaceListRecord]?
@@ -67,6 +69,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         places = store.places.map(PlaceRecord.init)
         userPlaces = store.userPlaces.map(UserPlaceRecord.init)
         placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
+        placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
+        visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
         placeLists = store.placeLists.map(PlaceListRecord.init)
@@ -95,6 +99,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
             places: shouldResetSavedPlaces ? [] : places.map { $0.model() },
             userPlaces: shouldResetSavedPlaces ? [] : userPlaces.map { $0.model() },
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
+            placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
+            visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
             placeLists: placeLists?.map { $0.model() } ?? [],
@@ -117,6 +123,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let places: [LocalPlace]
         let userPlaces: [LocalUserPlace]
         let placeAttributes: [LocalPlaceAttribute]
+        let placeVisits: [LocalPlaceVisit]
+        let visitPhotos: [LocalVisitPhoto]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]
         let placeLists: [LocalPlaceList]
@@ -130,6 +138,44 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let isPrivateProfile: Bool
         let autoSaveListAddsToWant: Bool
         let didApplySavedPlaceReset: Bool
+    }
+
+    private static func restoredPlaceVisits(
+        records: [PlaceVisitRecord]?,
+        userPlaces: [UserPlaceRecord],
+        placeAttributes: [PlaceAttributeRecord]
+    ) -> [LocalPlaceVisit] {
+        if let records {
+            return records.map { $0.model() }
+        }
+
+        return userPlaces
+            .filter { $0.statusRaw == PlaceStatus.been.rawValue && $0.deletedAt == nil }
+            .map { userPlace in
+                let userPlaceIDs = Set([userPlace.localID, userPlace.serverID].compactMap { $0 })
+                let attributes = placeAttributes.filter { userPlaceIDs.contains($0.userPlaceID) }
+                let attributeDrafts = attributes.map {
+                    PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON)
+                }
+                return LocalPlaceVisit(
+                    localID: "local_visit_backfill_\(userPlace.localID)",
+                    serverID: nil,
+                    userPlaceID: userPlace.serverID ?? userPlace.localID,
+                    visitedAt: userPlace.visitedAt ?? userPlace.savedAt,
+                    note: userPlace.note,
+                    ratingScore: userPlace.ratingScore,
+                    attributeAnswersJSON: VisitAttributeAnswers.encoded(from: attributeDrafts),
+                    tags: VisitAttributeAnswers.tags(from: attributeDrafts),
+                    backfilledFromUserPlace: true,
+                    syncState: SyncState(rawValue: userPlace.syncStateRaw) ?? .localOnly,
+                    localUpdatedAt: userPlace.localUpdatedAt,
+                    serverUpdatedAt: userPlace.serverUpdatedAt,
+                    lastSyncError: userPlace.lastSyncError,
+                    createdAt: userPlace.createdAt,
+                    updatedAt: userPlace.updatedAt,
+                    deletedAt: nil
+                )
+            }
     }
 
     struct ProfileRecord: Codable, Equatable {
@@ -309,6 +355,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let sourceArtifactID: String?
         let sourceUserPlaceID: String?
         let attributionUserID: String?
+        let historicalWantNote: String?
+        let historicalWantAttributeAnswersJSON: String?
+        let historicalWantTagsJSON: String?
+        let historicalWantedAt: Date?
         let syncStateRaw: String
         let localUpdatedAt: Date
         let serverUpdatedAt: Date?
@@ -340,6 +390,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
             sourceArtifactID = userPlace.sourceArtifactID
             sourceUserPlaceID = userPlace.sourceUserPlaceID
             attributionUserID = userPlace.attributionUserID
+            historicalWantNote = userPlace.historicalWantNote
+            historicalWantAttributeAnswersJSON = userPlace.historicalWantAttributeAnswersJSON
+            historicalWantTagsJSON = userPlace.historicalWantTagsJSON
+            historicalWantedAt = userPlace.historicalWantedAt
             syncStateRaw = userPlace.syncStateRaw
             localUpdatedAt = userPlace.localUpdatedAt
             serverUpdatedAt = userPlace.serverUpdatedAt
@@ -373,6 +427,10 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 sourceArtifactID: sourceArtifactID,
                 sourceUserPlaceID: sourceUserPlaceID,
                 attributionUserID: attributionUserID,
+                historicalWantNote: historicalWantNote,
+                historicalWantAttributeAnswersJSON: historicalWantAttributeAnswersJSON,
+                historicalWantTagsJSON: historicalWantTagsJSON,
+                historicalWantedAt: historicalWantedAt,
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,
                 serverUpdatedAt: serverUpdatedAt,
@@ -427,6 +485,140 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 lastSyncError: lastSyncError,
                 createdAt: createdAt,
                 updatedAt: updatedAt
+            )
+        }
+    }
+
+    struct PlaceVisitRecord: Codable, Equatable {
+        let localID: String
+        let serverID: String?
+        let userPlaceID: String
+        let visitedAt: Date
+        let note: String?
+        let ratingScore: Double?
+        let attributeAnswersJSON: String
+        let tagsJSON: String
+        let backfilledFromUserPlace: Bool
+        let syncStateRaw: String
+        let localUpdatedAt: Date
+        let serverUpdatedAt: Date?
+        let lastSyncError: String?
+        let createdAt: Date
+        let updatedAt: Date
+        let deletedAt: Date?
+
+        init(_ visit: LocalPlaceVisit) {
+            localID = visit.localID
+            serverID = visit.serverID
+            userPlaceID = visit.userPlaceID
+            visitedAt = visit.visitedAt
+            note = visit.note
+            ratingScore = visit.ratingScore
+            attributeAnswersJSON = visit.attributeAnswersJSON
+            tagsJSON = visit.tagsJSON
+            backfilledFromUserPlace = visit.backfilledFromUserPlace
+            syncStateRaw = visit.syncStateRaw
+            localUpdatedAt = visit.localUpdatedAt
+            serverUpdatedAt = visit.serverUpdatedAt
+            lastSyncError = visit.lastSyncError
+            createdAt = visit.createdAt
+            updatedAt = visit.updatedAt
+            deletedAt = visit.deletedAt
+        }
+
+        func model() -> LocalPlaceVisit {
+            let tags = (try? JSONDecoder().decode([String].self, from: Data(tagsJSON.utf8))) ?? []
+            return LocalPlaceVisit(
+                localID: localID,
+                serverID: serverID,
+                userPlaceID: userPlaceID,
+                visitedAt: visitedAt,
+                note: note,
+                ratingScore: ratingScore,
+                attributeAnswersJSON: attributeAnswersJSON,
+                tags: tags,
+                backfilledFromUserPlace: backfilledFromUserPlace,
+                syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                localUpdatedAt: localUpdatedAt,
+                serverUpdatedAt: serverUpdatedAt,
+                lastSyncError: lastSyncError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt
+            )
+        }
+    }
+
+    struct VisitPhotoRecord: Codable, Equatable {
+        let localID: String
+        let serverID: String?
+        let visitID: String
+        let storageBucket: String
+        let storagePath: String?
+        let localAssetRef: String?
+        let remoteURLString: String?
+        let contentType: String?
+        let byteSize: Int?
+        let width: Int?
+        let height: Int?
+        let capturedAt: Date?
+        let sortOrder: Int
+        let uploadStateRaw: String
+        let syncStateRaw: String
+        let localUpdatedAt: Date
+        let serverUpdatedAt: Date?
+        let lastSyncError: String?
+        let createdAt: Date
+        let updatedAt: Date
+        let deletedAt: Date?
+
+        init(_ photo: LocalVisitPhoto) {
+            localID = photo.localID
+            serverID = photo.serverID
+            visitID = photo.visitID
+            storageBucket = photo.storageBucket
+            storagePath = photo.storagePath
+            localAssetRef = photo.localAssetRef
+            remoteURLString = photo.remoteURLString
+            contentType = photo.contentType
+            byteSize = photo.byteSize
+            width = photo.width
+            height = photo.height
+            capturedAt = photo.capturedAt
+            sortOrder = photo.sortOrder
+            uploadStateRaw = photo.uploadStateRaw
+            syncStateRaw = photo.syncStateRaw
+            localUpdatedAt = photo.localUpdatedAt
+            serverUpdatedAt = photo.serverUpdatedAt
+            lastSyncError = photo.lastSyncError
+            createdAt = photo.createdAt
+            updatedAt = photo.updatedAt
+            deletedAt = photo.deletedAt
+        }
+
+        func model() -> LocalVisitPhoto {
+            LocalVisitPhoto(
+                localID: localID,
+                serverID: serverID,
+                visitID: visitID,
+                storageBucket: storageBucket,
+                storagePath: storagePath,
+                localAssetRef: localAssetRef,
+                remoteURLString: remoteURLString,
+                contentType: contentType,
+                byteSize: byteSize,
+                width: width,
+                height: height,
+                capturedAt: capturedAt,
+                sortOrder: sortOrder,
+                uploadState: VisitPhotoUploadState(rawValue: uploadStateRaw) ?? .pendingUpload,
+                syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                localUpdatedAt: localUpdatedAt,
+                serverUpdatedAt: serverUpdatedAt,
+                lastSyncError: lastSyncError,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                deletedAt: deletedAt
             )
         }
     }

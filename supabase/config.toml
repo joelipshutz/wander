@@ -428,6 +428,12 @@ verify_jwt = false
 import_map = "./functions/extraction-worker/deno.json"
 entrypoint = "./functions/extraction-worker/index.ts"
 
+[functions.push-notification-worker]
+enabled = true
+verify_jwt = false
+import_map = "./functions/push-notification-worker/deno.json"
+entrypoint = "./functions/push-notification-worker/index.ts"
+
 [functions.parse-discover-query]
 enabled = true
 verify_jwt = false
