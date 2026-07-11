@@ -9530,6 +9530,37 @@ Completion, 2026-07-10 00:26 PDT:
   - Same-device visit photo display is backed by the persisted local file cache; authenticated cross-device photo display may need a follow-up signed-image fetch pass.
   - Live-device design QA for the new visit/photo flow was not rerun in this release session.
   - No Linear issue was moved because the branch/PR context used placeholder `REC-XX` rather than a concrete issue key.
+
+## 2026-07-11 10:34 PDT - Codex - REC-73 Merge And TestFlight Build 65
+
+Agent: Codex
+Branch: `main`
+Worktree: `/private/tmp/recme-rec-75-v1-defaults`
+Linear: `REC-73` (`Fix profile avatars missing from Discover places, members, and place cards`)
+Merged PR: #69 (`codex/rec-73-avatar-audit-fix`)
+
+Goal: squash-merge PR #69, push latest `main`, package build 65 for TestFlight, post the required tester-facing Slack note, and close out REC-73 once the build is available.
+
+Starting status:
+
+- User explicitly requested squash-merge to `main`, new TestFlight build, Slack update, and Linear closeout.
+- Ran `git fetch origin`, checked root status/worktrees, and continued from the clean `main` worktree `/private/tmp/recme-rec-75-v1-defaults` because the root checkout is on unrelated branch `codex/rec-81-collab-visibility`.
+- Latest completed TestFlight release in this log is build 64, so this release bumps `CURRENT_PROJECT_VERSION` from `64` to `65`.
+- PR #69 was initially draft and conflicted with current `main`; rebased `codex/rec-73-avatar-audit-fix` onto `origin/main`, resolving only `docs/agent-log.md` by preserving both build 64 history and the REC-73 avatar investigation.
+- Focused rebased avatar regression tests passed on `iPhone 17 Pro, OS=26.5`.
+- Marked PR #69 ready. GitHub reported `mergeable=MERGEABLE`, `mergeStateStatus=CLEAN`, and no checks configured.
+- Squash-merged PR #69 to `main` with merge commit `e1babb0a3` (`Fix REC-73 profile avatar persistence`). Remote branch deletion was requested, but GitHub CLI could not delete the local branch because it is still checked out in `/private/tmp/recme-rec73-avatar-audit`.
+
+Included app changes since build 64:
+
+- REC-73 profile avatar persistence: preserve friend/collaborator avatar metadata when lower-fidelity social graph, Discover, place-card, and place-list payloads omit avatar URLs; decode list owner avatar URLs; preserve local-only current-user avatar files when remote profile refresh omits an avatar; add regression tests and a durable profile-avatar identity contract.
+
+Expected release files:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+- Temporary archive/export/release-note artifacts under `/private/tmp`
 ## 2026-06-30 23:58 PDT - Codex - Profile Avatar Persistence Investigation
 
 Agent: Codex
