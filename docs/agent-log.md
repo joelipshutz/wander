@@ -10273,3 +10273,16 @@ Post-merge checkpoint, 2026-07-12 14:19 PDT:
 
 - `origin/main` advanced during implementation with REC-60 push notifications and TestFlight build 67. Committed the validated REC-82 state, merged `origin/main`, and resolved overlaps by preserving both photo and notification repositories/backend injection/tests plus all agent-log entries.
 - Post-merge full suite passed on iPhone 17 Pro, iOS 26.5: 271 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82-merged/Logs/Test/Test-Wander-2026.07.12_14-16-03--0700.xcresult`.
+
+Completion, 2026-07-12 14:16 PDT:
+
+- Build bump PR #73 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/73. Release source commit: `f2623b037b2039231a085e3ecec9784c21a81c33`.
+- Archived rec.me `0.1 (67)` from a clean detached worktree at `/private/tmp/Wander-0.1-build67.xcarchive`. Archive metadata and the app Info.plist independently confirmed build 67, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Exported and uploaded with `/private/tmp/WanderExportUpload67.plist`, `destination=upload`, and `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 67, then reported build id `809d79a8-791b-4e8d-b3f9-75b37e55db34`, processing `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783890938564809.
+- Linear `REC-60` is Done and has release evidence, PR links, validation, and tester focus.
+- Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; exact notification worker Deno check passed; hosted notification pgTAP passed 40/40.
+- Tester focus: one-tap Allow/Disable behavior, every cross-account notification trigger, and exact People/list/place/draft/Discover landing destinations.
+- Known behavior communicated to testers: app-level Disable cannot revoke Apple's system permission, but it disables all rec.me preferences and device delivery. Backend-ready notifications for unfinished product surfaces begin firing only when those feature triggers are in use.
