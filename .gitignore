@@ -5,6 +5,7 @@
 .env.*
 !.env.example
 DerivedData/
+node_modules/
 *.xcuserstate
 xcuserdata/
 Wander/Config/LocalAuth.xcconfig

@@ -209,6 +209,17 @@ Rules:
   direct hosted verification query that checks the relevant policy/security
   posture. For recreated RPCs, add metadata assertions for `prosecdef`,
   `proconfig`, and grants when relevant.
+- Any migration that creates, replaces, grants, revokes, or otherwise changes an
+  iOS-called Supabase RPC must run the hosted smoke test before handoff:
+  `npm --prefix scripts ci --ignore-scripts`, then
+  `node scripts/supabase-smoke-test.mjs`. The pinned smoke tool uses reserved
+  smoke identities inside one rolled-back transaction to exercise owner,
+  collaborator, stranger, and anonymous access and catch hosted-only
+  `403 permission denied for function ...` failures.
+- If the smoke test lacks coverage for the RPC or RLS path being changed, extend
+  `scripts/supabase-smoke-test.mjs` in the same branch instead of relying on a
+  one-off manual query. Keep the test lightweight, idempotent, and safe to run
+  against hosted Supabase; fixture and behavior mutations must roll back.
 - Prefer `supabase db push --linked --yes` only after the local migration has
   been reviewed and the target project is confirmed. After applying a hosted
   migration, verify with `supabase migration list --linked` and, for sensitive

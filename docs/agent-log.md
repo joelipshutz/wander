@@ -9278,6 +9278,21 @@ Starting status:
 - Root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated `codex/rec-81-collab-visibility` and remains unused for REC-60 edits.
 - REC-60 worktree is clean and matches `origin/codex/rec-60-notifications` at `9283d526d`.
 - PR #60 is open but currently `CONFLICTING` with updated `origin/main` (`790b9672b`, build 64 log), so hosted application should not proceed until the branch is reconciled.
+## 2026-07-09 14:55 PDT - Codex - REC-81 Collaborator Visibility Investigation
+
+Agent: Codex
+Branch: `codex/rec-81-collab-visibility`
+Worktree: `/private/tmp/recme-rec81-collab`
+Linear: `REC-81` (`Collaborator added to list does not see shared list on TestFlight build 63`)
+
+Goal: investigate why Ryan, on TestFlight build 63, does not see Joe's `LA Coffeee` list after Joe adds him as a collaborator.
+
+Starting status:
+
+- Created/claimed Linear `REC-81` and moved it to In Progress.
+- Fresh worktree created from latest `origin/main` at build 63 (`450b908`).
+- Root checkout remains on stale `codex/rating-score-reset`; REC-81 investigation is isolated in this worktree.
+- Diff from build 61 to build 63 does not include list/collaborator source files, so this is likely a live list sync or identity/backend issue rather than a build-63-specific list regression.
 
 Expected files:
 
@@ -9290,6 +9305,111 @@ Plan:
 - Re-check Supabase migration list/dry-run after the merge.
 - Only apply hosted migrations/deploy the worker if migration history is coherent and the dry-run looks safe.
 
+- Potentially `Wander/Features/Lists/ListsScreen.swift`
+- Potentially `Wander/Services/WanderLocalStore.swift`
+- Potentially Supabase RPC/migration/test files if the bug is backend-side
+
+Initial investigation plan:
+
+- Trace collaborator save UI into local store mutation and pending sync.
+- Verify server RPC behavior for `set_place_list_collaborators` and `visible_place_lists`.
+- Check whether collaborator IDs from friend/profile data match hosted Supabase profile IDs.
+- Produce a concrete owner/collaborator TestFlight test matrix for Joe and Ryan.
+
+Checkpoint, 2026-07-09 15:30 PDT:
+
+- Hosted Supabase read-only checks found Joe's active profile as `jolipshutz`, Ryan as `ryan_lieblein`, and no hosted `place_lists` rows at all. `LA Coffeee` was not present server-side, so Ryan had no remote list to see on build 63.
+- Applied `plan-eng-review` reasoning to the defect. No product decision was needed; this was a sync/fixture leakage bug.
+- Root cause:
+  - Live Lists defaulted to static mock list data when the store had no real lists, so TestFlight could show fake local lists that had no Supabase `sourceListID`.
+  - Existing persistent local lists without a remote ID and with `localOnly` state were not candidates for list sync.
+  - Signed-in backfill synced places but did not sync/refresh place lists.
+- Fix:
+  - `ListsScreen` now defaults to a live scenario, only uses mock list data for explicit visual QA scenarios, and syncs pending lists before refreshing remote lists on list home/detail entry.
+  - `WanderRootView` now includes place-list sync and refresh in signed-in backfill.
+  - `WanderLocalStore.syncPendingPlaceLists` now backfills persistent legacy local lists with no remote ID, while avoiding uploads from non-persistent demo fixtures. Added debug logs for candidate count, sync attempt, success, and failure.
+  - Added regression coverage for live/default list scenarios and persistent legacy list backfill with collaborator upload.
+- Verification:
+  - Passed focused simulator tests on `iPhone 16 Plus, OS 18.6`:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsBackfillsPersistentLegacyLocalList -only-testing:WanderTests/WanderStoreTests/testSyncPendingPlaceListsDoesNotBackfillNonPersistentDemoLists`
+    Result: 11 passed, 0 failed.
+  - A separate generic simulator build was started with a fresh DerivedData path but interrupted while still rebuilding third-party Swift packages; it did not reach app source or expose an app compile failure. The focused test run already built the app and test target successfully.
+
+Known issues / next:
+
+- Build 63 remains broken for this flow. The fix needs a new build.
+- If Joe's visible `LA Coffeee` was only static mock data, there is no real local list to upload. If it exists in persistent local storage, opening the fixed build signed in should backfill it to Supabase, then Ryan should see it under Collabs after refresh/relaunch.
+- Need decide whether to push/open a PR and then package a new TestFlight build.
+
+Checkpoint, 2026-07-09 15:55 PDT:
+
+- Joe reported creating real `hello` and `test` lists and adding Ryan, but Ryan still does not see them.
+- Re-checked hosted Supabase with service-role read-only REST queries:
+  - Profiles exist for Joe (`jolipshutz`) and Ryan (`ryan_lieblein`).
+  - `place_lists` is still empty.
+  - `place_list_members` is still empty.
+  - `place_list_items` is still empty.
+- Conclusion: the phone action is not successfully calling `upsert_place_list`; there is no server-side list/collaborator link to Ryan.
+- Product correction from Joe: Collabs should mean collaborative lists, including lists owned by the current user after they add a collaborator. Previous store behavior treated Collabs as only other-owned lists where the current user is a collaborator.
+- Applied app fix:
+  - `visiblePlaceLists(scope: .collabs)` now includes owner-created lists with collaborators, and excludes solo owner lists.
+  - Lists empty-state copy now uses scope-specific copy. Collabs says `Make a new list` with helper copy about adding a friend, not `Add places to your list`.
+- Verification:
+  - Passed focused simulator tests on `iPhone 16 Plus, OS 18.6`:
+    `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSeededPlaceListsRespectOwnerFriendAndCollabScopes -only-testing:WanderTests/WanderStoreTests/testOwnerCanCreateUpdateAndDeletePlaceListLocally -only-testing:WanderTests/NavigationContractTests`
+    Result: 11 passed, 0 failed.
+- Next debug step if it still fails on device: run from Xcode and check logs for `place-list sync candidates`, `rpc preparing name=upsert_place_list`, `rpc success name=upsert_place_list`, or `auth headers failed` / `rpc failed`.
+
+Checkpoint, 2026-07-09 16:10 PDT:
+
+- Joe shared device/Xcode logs. The `default.csv` and telemetry lines are unrelated noise; the relevant logs show Clerk/Supabase auth working for profile and map RPCs, but hosted list RPCs failing with `403 permission denied for function upsert_place_list` and `403 permission denied for function visible_place_lists`.
+- Added an idempotent migration to repair authenticated execute grants for the public place-list RPC wrappers and the underlying `app` helper functions they call.
+- Process gap identified: local iOS tests did not catch hosted Supabase role/permission drift. Adding a lightweight hosted Supabase smoke-test harness plus AGENTS instructions so future database/RPC work must validate authenticated backend access, not just compile or local unit behavior.
+
+Checkpoint, 2026-07-09 16:35 PDT:
+
+- Applied hosted Supabase migration `20260709160829_fix_place_list_rpc_grants.sql`; remote migration history confirms local and remote `20260709160829`.
+- Added `scripts/supabase-smoke-test.mjs`, which seeds durable `codex_smoke` profiles/place fixtures, switches to the `authenticated` role with a smoke user claim, exercises the iOS-called place-list RPCs, and rolls back list mutations.
+- Hosted smoke test passed:
+  - `public.visible_place_lists`
+  - `public.upsert_place_list`
+  - `public.place_list_detail`
+  - `public.set_place_list_collaborators`
+  - `public.add_place_list_item`
+  - `public.remove_place_list_item`
+  - `public.delete_place_list`
+- Updated `AGENTS.md` to require `node scripts/supabase-smoke-test.mjs` before handoff for iOS-called Supabase RPC/grant/RLS changes, and to extend the script when coverage is missing.
+
+Checkpoint, 2026-07-11 19:39 PDT:
+
+- Joe asked whether `Yo Test` exists in hosted Supabase. Read-only service-role query found `Yo Test` owned by Joe with Ryan as an active collaborator, plus two older duplicate `Yo Yo Test Test` rows also owned by Joe with Ryan as collaborator.
+- Joe clarified collaborator picker behavior: once a friend is added as a collaborator, they should disappear from the Friends row/list in the collaborator sheet.
+- Updated `FriendCollaboratorSearchContent` so selected collaborators are filtered out of available friend candidates, remain visible only in the selected section, and can be removed there. Added an explicit empty state for “All available friends are already collaborators.”
+- Verification:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81-open CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+  - Result: 9 tests passed, 0 failed. App target compiled through `ListsScreen.swift`.
+
+Checkpoint, 2026-07-11 20:10 PDT:
+
+- Joe clarified that collaborative lists should also appear in the `My lists` sub-tab, not only under `Collabs`, and should have an explicit group icon.
+- Continuing REC-81 on `codex/rec-81-collab-visibility`; worktree was clean at `b5b428d` before edits.
+- Implementation scope:
+  - Treat `My lists` as lists the current user owns or actively collaborates on.
+  - Keep collaborative lists duplicated under `Collabs` as the focused shared-list view.
+  - Mark collaborative list tiles with the native `person.2.fill` group icon in every scope.
+  - Add store regression coverage for joined collaborative lists appearing in `My lists` while ordinary friend lists remain excluded.
+- Validation:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81-open CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSeededPlaceListsRespectOwnerFriendAndCollabScopes -only-testing:WanderTests/NavigationContractTests`
+  - Result: 10 tests passed, 0 failed. The app target compiled through `ListsScreen.swift`.
+- Tracking:
+  - Added the implementation and test result to Linear REC-81.
+  - Mission Control at `localhost:4000` was unavailable, so no duplicate local tracker task could be created.
+- Integration:
+  - Opened ready PR #70: https://github.com/joelipshutz/wander/pull/70.
+  - Merged latest `origin/main` through `09638fc`; app/test code merged cleanly. The only conflict was the append-only agent log, and both REC-81 and main histories were preserved.
+  - Re-ran the focused suite from a fresh DerivedData path after the merge. Result: 10 tests passed, 0 failed.
 ## 2026-07-10 00:13 PDT - Codex - REC-XX Merge And TestFlight Build 64
 
 Agent: Codex
@@ -9916,3 +10036,100 @@ Completion, 2026-07-12 13:20 PDT:
 - `xcodegen generate` and `git diff --check` passed.
 - The required iPhone 16 Plus / iOS 18.6 simulator was unavailable. The full suite passed on the installed iPhone 17 / iOS 26.5 simulator: 254 tests, 0 failures.
 - No TestFlight build, build-number bump, merge to `main`, or tester Slack announcement was requested or performed.
+- Merged latest `origin/main` (`6b3e093f9`) before push, preserving main's list-sync startup work alongside REC-60 push-token registration. Regenerated XcodeGen output and reran the full suite successfully on iPhone 17 / iOS 26.5 after conflict resolution.
+
+## 2026-07-12 11:42 PDT - Codex - REC-81 List Cover Polish And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-81-collab-visibility`
+Worktree: `/private/tmp/recme-rec81-collab-open`
+Linear: `REC-81`
+PR: #70
+
+Goal: fix the inconsistent list-cover rendering shown in device screenshots, then review/merge PR #70 and explicitly release the latest `main` to TestFlight.
+
+Starting status:
+
+- Worktree clean at `3db8bfe`, tracking the pushed REC-81 branch; PR #70 is open, ready, and mergeable.
+- Device screenshots show the same list grid using large covers under `Collabs` but collapsing to tiny intrinsic-width covers under `My lists`.
+- Covers always synthesize four cells, so lists with fewer than four places show fake `+` placeholders that look interactive and broken.
+- Design direction: list cards must occupy stable grid columns in every scope; covers should visualize only real places with adaptive 0/1/2/3/4+ layouts and no fake add affordance.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `docs/agent-log.md`
+- Release bump files after PR merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`
+
+Checkpoint, 2026-07-12 12:26 PDT:
+
+- Fixed list-cover width collapse by making every list card claim its grid column. Replaced fabricated `+` cells with adaptive 0/1/2/3/4+ place cover compositions; zero-place lists use a quiet name monogram.
+- Added the collaborative group glyph to owned/shared list titles and included collaborative status in the card VoiceOver label.
+- Simulator QA passed on iPhone 16 Plus, iOS 18.6, for both My Lists and Collabs. Evidence:
+  - `/private/tmp/rec81-list-covers-my-lists.png`
+  - `/private/tmp/rec81-list-covers-collabs-2.png`
+  - Design audit: `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/design-audit-20260712/report.md`
+- Pre-merge review found and fixed release-blocking state risks:
+  - Batch and per-list synchronization are now single-flight, preventing duplicate hosted list creation when startup, list screens, and direct item adds overlap.
+  - Successful remote refreshes tombstone previously synced lists that disappear from the authoritative response, so removed collaborators do not retain cached list access.
+  - Remote summaries/details do not overwrite dirty owner edits after a failed sync.
+  - Sign-in claims guest-owned lists, member identities, and item `addedByUserID` values before backfill.
+- Added seven focused regressions covering concurrent sync entry points, new lists and owner edits created while a request is in flight, collaborator access removal, failed local collaborator removal, and guest-list claim/backfill. Focused result: 7 passed, 0 failed.
+- In-flight owner edits now preserve pending state and immediately resend the newer snapshot; batch sync drains lists created while the batch is running.
+- Open list detail screens now resolve only through visible lists and dismiss when remote access is revoked.
+- Final full iOS suite passed on iPhone 16 Plus, iOS 18.6: 262 tests, 0 failures. Result bundle: `/private/tmp/DerivedData-rec81-final/Logs/Test/`.
+- Hardened `scripts/supabase-smoke-test.mjs`:
+  - pinned `pg@8.22.0` with a committed lockfile and no runtime install;
+  - loads only Wander database env keys;
+  - verifies the hosted certificate with Supabase Root 2021 CA and rejects URL TLS overrides;
+  - seeds reserved owner/collaborator/stranger identities inside one rollback-only transaction;
+  - verifies direct grants, security-definer `search_path`, anonymous denial, owner-only list management, collaborator read/add, and stranger denial.
+- Added and applied hosted migration `20260712122500_restrict_place_list_rpc_execution.sql`, explicitly revoking `PUBLIC`/`anon` execution from app helpers and public wrappers before granting `authenticated`.
+- Hosted Supabase authorization smoke test passed every list RPC and role boundary after the migration. No fixture or behavior mutation was committed.
+- Final smoke hardening rejects every node-postgres connection-string TLS override, verifies owner update/delete effects, and asserts direct anonymous denial on both app helpers and public wrappers.
+- `git diff --check`, `node --check scripts/supabase-smoke-test.mjs`, and `npm --prefix scripts ls --depth=0` pass.
+
+## 2026-07-12 12:40 PDT - Codex - TestFlight Build 66 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-66`
+Worktree: `/private/tmp/recme-build66-release`
+Linear: `REC-81`
+
+Goal: package the latest merged `main` into TestFlight build 66 after PR #70 landed.
+
+Starting status:
+
+- PR #70 squash-merged to `main` as `7ad2e2577` (`Fix collaborative list sync and list covers (#70)`).
+- Latest completed TestFlight release is build 65; `project.yml` is being bumped once from 65 to 66 for this explicit release batch.
+- Included tester-facing scope since build 65: collaborative list sync/backfill and access visibility, stale-list revocation, guest list claim, in-flight edit protection, My Lists/Collabs placement and group indicator, collaborator picker cleanup, adaptive stable list covers, and authenticated-only place-list RPC grants.
+- Pre-release validation before merge: 262 iOS tests passed, seven focused list regressions passed, hosted Supabase owner/collaborator/stranger/anonymous smoke matrix passed, and My Lists/Collabs simulator screenshots passed design review.
+
+Release plan:
+
+- Regenerate the Xcode project with build 66 and verify the generated diff is limited to build-number settings.
+- Run build/tests from release source, archive with App Store signing, upload with build-number management disabled, process through `scripts/testflight-release.mjs`, and attach to `Wander Alpha`.
+- Post the required tester-facing note to `#testflight-feedback` and close REC-81 only after build 66 is confirmed available.
+
+Checkpoint, 2026-07-12 12:52 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 65 to 66 in `project.yml` and regenerated with XcodeGen 2.45.4.
+- XcodeGen emitted unrelated project-default churn; restored the generated project and reapplied only the two required `CURRENT_PROJECT_VERSION = 66` settings, matching prior release practice.
+- The first release-source test attempt stopped before app tests because the task's multiple disposable DerivedData trees filled the disk. Removed only `/private/tmp/DerivedData-rec81-*` and `/private/tmp/DerivedData-build66`, freeing about 10 GB; no repo or user files were removed.
+- Reran the release-source full suite on iPhone 16 Plus, iOS 18.6: 262 tests passed, 0 failures.
+- Generic iOS Simulator build passed from the same build-66 source and DerivedData cache.
+- `git diff --check` passes; release diff is scoped to `project.yml`, the two generated project build-number settings, and this agent log.
+
+Completion, 2026-07-12 13:04 PDT:
+
+- Release bump PR #71 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/71.
+- Main release commit: `6ca33765e6f1d2c0a30b476f527607a20a3af391`.
+- Archived build `0.1 (66)` at `/private/tmp/Wander-0.1-build66.xcarchive`; archive metadata and app Info.plist both confirmed build 66, bundle `com.grayline.wander`, team `Y7TVK75RZ8`.
+- Initial export without an Xcode GUI account failed with `Failed to Use Accounts`; retried the unchanged archive using the local App Store Connect API key.
+- Uploaded with `/private/tmp/WanderExportUpload66.plist`, `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- TestFlight helper confirmed archive upload metadata build 66, then reported build id `056f4d70-2a3c-4df0-929a-ae97f08ff2c7`, processing `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783886565390209.
+- Linear `REC-81` updated with release evidence and moved to Done.
+- Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
+- Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.

@@ -166,9 +166,13 @@ struct ListsScreen: View {
 
     private func syncLists() {
         Task {
-            _ = await store.syncPendingPlaceLists(backend: backend)
-            await store.refreshRemotePlaceLists(backend: backend)
+            await syncAndRefreshLists()
         }
+    }
+
+    private func syncAndRefreshLists() async {
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        await store.refreshRemotePlaceLists(backend: backend)
     }
 
     private func refreshOpenList(sourceListID: String) {
@@ -205,7 +209,7 @@ struct ListsScreen: View {
         }
         .wanderScreen()
         .task {
-            await store.refreshRemotePlaceLists(backend: backend)
+            await syncAndRefreshLists()
         }
     }
 
@@ -261,13 +265,13 @@ struct ListsScreen: View {
                         .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 16, x: 0, y: 8)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("Add places to your list")
+                        Text(emptyStateTitle)
                             .font(.system(size: 40, weight: .black, design: .rounded))
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
                             .foregroundStyle(WanderTheme.textInk.color)
 
-                        Text("Tap the save icon, then choose a list name to start adding places.")
+                        Text(emptyStateSubtitle)
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -294,6 +298,28 @@ struct ListsScreen: View {
             .accessibilityLabel("Create your first list")
 
             emptyHintRow
+        }
+    }
+
+    private var emptyStateTitle: String {
+        switch selectedScope {
+        case .mine:
+            "Make your first list"
+        case .friends:
+            "No friend lists yet"
+        case .collabs:
+            "Make a new list"
+        }
+    }
+
+    private var emptyStateSubtitle: String {
+        switch selectedScope {
+        case .mine:
+            "Create a plan, then add places from map or search."
+        case .friends:
+            "Lists from people you follow will show up here when they share them."
+        case .collabs:
+            "Create a list and add a friend to make it collaborative."
         }
     }
 
@@ -337,7 +363,12 @@ struct ListsScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open \(list.name)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(
+                    list.isCollaborative
+                        ? "Open \(list.name), collaborative list"
+                        : "Open \(list.name)"
+                )
             }
         }
     }
@@ -350,6 +381,8 @@ struct ListsScreen: View {
             .filter { !deletedListIDs.contains($0.id) }
 
         guard !storeLists.isEmpty else {
+            guard scenario.usesMockData else { return [] }
+
             switch selectedScope {
             case .mine:
                 return PlaceListMock.mine.filter { !deletedListIDs.contains($0.id) }
@@ -391,6 +424,7 @@ enum ListsScope: String, CaseIterable {
 }
 
 enum ListsScreenScenario: String {
+    case live
     case populated
     case empty
     case friends
@@ -427,14 +461,23 @@ enum ListsScreenScenario: String {
         }
     }
 
+    var usesMockData: Bool {
+        switch self {
+        case .live, .empty:
+            false
+        default:
+            true
+        }
+    }
+
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> ListsScreenScenario {
         guard let flagIndex = arguments.firstIndex(of: "-WanderListsScenario") else {
-            return .populated
+            return .live
         }
 
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return .populated
+            return .live
         }
 
         return ListsScreenScenario(rawValue: arguments[valueIndex]) ?? .populated
@@ -464,6 +507,13 @@ private struct ListTile: View {
                             .font(.system(size: 11, weight: .black))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
+
+                    if list.isCollaborative {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .accessibilityLabel("Collaborative list")
+                    }
                 }
 
                 Text(list.subtitle)
@@ -490,18 +540,10 @@ private struct ListTile: View {
 private struct ListPreviewMosaic: View {
     let list: PlaceListMock
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2)
-    ]
-
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 2) {
-            ForEach(0..<4, id: \.self) { index in
-                mosaicTile(place: list.previewPlaces.indices.contains(index) ? list.previewPlaces[index] : nil)
-            }
-        }
+        mosaicContent
         .padding(3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
@@ -510,23 +552,73 @@ private struct ListPreviewMosaic: View {
         )
     }
 
-    private func mosaicTile(place: ListPlaceMock?) -> some View {
+    @ViewBuilder
+    private var mosaicContent: some View {
+        switch min(list.previewPlaces.count, 4) {
+        case 0:
+            emptyCover
+        case 1:
+            mosaicTile(place: list.previewPlaces[0])
+        case 2:
+            HStack(spacing: 2) {
+                mosaicTile(place: list.previewPlaces[0])
+                mosaicTile(place: list.previewPlaces[1])
+            }
+        case 3:
+            HStack(spacing: 2) {
+                mosaicTile(place: list.previewPlaces[0])
+
+                VStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[1])
+                    mosaicTile(place: list.previewPlaces[2])
+                }
+            }
+        default:
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[0])
+                    mosaicTile(place: list.previewPlaces[1])
+                }
+
+                HStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[2])
+                    mosaicTile(place: list.previewPlaces[3])
+                }
+            }
+        }
+    }
+
+    private var emptyCover: some View {
         ZStack {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .fill(place?.tint ?? WanderTheme.surfaceSand.color)
+                .fill(WanderTheme.surfaceSand.color)
 
-            Image(systemName: place.map { WanderPlaceCategory.symbolName(for: $0.category) } ?? "plus")
-                .font(.system(size: place == nil ? 16 : 20, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(place == nil ? 0.22 : 0.72))
+            Text(String(list.name.prefix(1)).uppercased())
+                .font(.system(size: 42, weight: .black, design: .rounded))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(0.18))
         }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private func mosaicTile(place: ListPlaceMock) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .fill(place.tint)
+
+            Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(0.68))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
     }
 }
 
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     var onEdit: (PlaceListMock) -> Void
     var onCollaborators: (PlaceListMock) -> Void
@@ -604,6 +696,7 @@ private struct ListDetailScreen: View {
             }
         }
         .task(id: sourceList?.id ?? list.id) {
+            _ = await store.syncPendingPlaceLists(backend: backend)
             await store.refreshRemotePlaceLists(backend: backend)
             await loadSuggestions()
         }
@@ -635,6 +728,11 @@ private struct ListDetailScreen: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
         .onDisappear {
             autoSaveToastTask?.cancel()
+        }
+        .onChange(of: sourceList?.id) { _, visibleListID in
+            if list.sourceListID != nil && visibleListID == nil {
+                dismiss()
+            }
         }
     }
 
@@ -777,7 +875,7 @@ private struct ListDetailScreen: View {
 
     private var sourceList: LocalPlaceList? {
         guard let sourceListID = list.sourceListID else { return nil }
-        return store.placeLists.first {
+        return store.visiblePlaceLists.first {
             $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
         }
     }
@@ -1622,10 +1720,16 @@ private struct FriendCollaboratorSearchContent: View {
     @Binding var selectedCollaborators: [ListCollaboratorMock]
     @State private var query = ""
 
-    private var friendCandidates: [ListCollaboratorMock] {
+    private var allFriendCandidates: [ListCollaboratorMock] {
         store.following(of: store.currentUser.id)
             .filter { store.relationship(to: $0.id) == .mutual }
             .map(ListCollaboratorMock.init(profile:))
+    }
+
+    private var friendCandidates: [ListCollaboratorMock] {
+        allFriendCandidates.filter { friend in
+            !selectedCollaborators.contains { isSameCollaborator($0, friend) }
+        }
     }
 
     private var filteredFriends: [ListCollaboratorMock] {
@@ -1667,8 +1771,16 @@ private struct FriendCollaboratorSearchContent: View {
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
 
-                if friendCandidates.isEmpty {
+                if allFriendCandidates.isEmpty {
                     Text("No friends available to invite.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                } else if friendCandidates.isEmpty {
+                    Text("All available friends are already collaborators.")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1732,14 +1844,8 @@ private struct FriendCollaboratorSearchContent: View {
     }
 
     private func friendRow(_ friend: ListCollaboratorMock) -> some View {
-        let isSelected = selectedCollaborators.contains { isSameCollaborator($0, friend) }
-
-        return Button {
-            if isSelected {
-                selectedCollaborators.removeAll { isSameCollaborator($0, friend) }
-            } else {
-                selectedCollaborators.append(friend)
-            }
+        Button {
+            selectedCollaborators.append(friend)
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
                 WanderAvatar(
@@ -1760,16 +1866,16 @@ private struct FriendCollaboratorSearchContent: View {
 
                 Spacer()
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle.fill")
+                Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(isSelected ? WanderTheme.categorySage.color : WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.terracotta.color)
             }
             .padding(WanderTheme.spacing3)
             .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isSelected ? "Remove \(friend.name)" : "Add \(friend.name)")
+        .accessibilityLabel("Add \(friend.name)")
     }
 
     private func isSameCollaborator(_ lhs: ListCollaboratorMock, _ rhs: ListCollaboratorMock) -> Bool {

@@ -148,8 +148,10 @@ struct WanderRootView: View {
                 await store.refreshRemoteCurrentProfile(backend: backend)
                 let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
                 await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
+                let syncedListCount = await store.syncPendingPlaceLists(backend: backend)
+                await store.refreshRemotePlaceLists(backend: backend)
                 #if DEBUG
-                WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public)")
+                WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public)")
                 #endif
             }
         } else {

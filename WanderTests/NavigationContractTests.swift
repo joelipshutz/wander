@@ -31,6 +31,7 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testListsScreenCanResolveInteractiveVisualQAScenarios() {
+        XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander"]), .live)
         XCTAssertEqual(
             ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "collaboratorsSheet"]),
             .collaboratorsSheet
@@ -64,6 +65,13 @@ final class NavigationContractTests: XCTestCase {
             .placeDetail
         )
         XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
+    }
+
+    func testListsScreenOnlyUsesMockDataForExplicitVisualQAScenarios() {
+        XCTAssertFalse(ListsScreenScenario.live.usesMockData)
+        XCTAssertFalse(ListsScreenScenario.empty.usesMockData)
+        XCTAssertTrue(ListsScreenScenario.populated.usesMockData)
+        XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
     @MainActor
