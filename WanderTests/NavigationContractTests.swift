@@ -143,4 +143,17 @@ final class NavigationContractTests: XCTestCase {
             62
         )
     }
+
+    @MainActor
+    func testPlaceProfileFullViewKeepsScrollableBottomInset() {
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 0),
+            64
+        )
+
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
+            66
+        )
+    }
 }

@@ -10326,3 +10326,40 @@ Completion, 2026-07-12 15:48 PDT:
 - Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; signed archive passed.
 - Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
 - Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
+
+## 2026-07-12 16:15 PDT - Codex - REC-83 Full-View Bottom Cutoff Investigation
+
+Agent: Codex
+Branch: `codex/rec-83-full-view-bottom-cutoff`
+Worktree: `/private/tmp/recme-rec83-full-cutoff`
+Linear: `REC-83`
+
+Goal: investigate and fix Ryan's follow-up report that the full place-card view still has roughly a half inch clipped at the bottom after build 68.
+
+Starting status:
+
+- User reports the cutoff still reproduces in TestFlight build 68, so the prior row-level fix did not address the root cause.
+- `REC-83` was moved back to `In Progress` with a comment noting this new full-view/safe-area investigation.
+- Fresh worktree created from latest `origin/main` at `a81b97168`.
+- Root checkout remains on stale `codex/rec-81-collab-visibility`; this investigation is isolated in the new worktree.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- Potentially focused tests under `WanderTests/` if a stable layout/state contract can be asserted.
+
+Investigation plan:
+
+- Trace the full place-card presentation and scroll/container hierarchy before editing.
+- Compare the prior REC-83 diff against the current symptom to identify why the previous fix missed page-level clipping.
+- Reproduce or approximate the layout on simulator if possible, then fix the actual safe-area/container root cause.
+
+Root-cause checkpoint, 2026-07-12 16:26 PDT:
+
+- The prior REC-83 fix (`c93560ab7`) only changed the repeated Place Details rows/card styling. It did not change the full-screen place-profile container.
+- The still-reproducing symptom is page-level: `PlaceProfileFullView` ignored both the top and bottom container safe areas, then tried to compute scroll bottom padding from `proxy.safeAreaInsets.bottom`. In that ignored-safe-area context, the bottom inset can be zero or otherwise not reserve the actual system/home-indicator space.
+- Fixed the shared full-screen place profile by keeping top-edge full bleed for the map header only, no longer ignoring the bottom safe area, and adding a deterministic minimum 64pt scroll bottom inset via `PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from:)`.
+- Added a focused regression test for the bottom inset contract in `NavigationContractTests`.
+- Validation: focused simulator XCTest passed on `iPhone 17 Pro, OS 26.5`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-rec83 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests/testPlaceProfileFullViewKeepsScrollableBottomInset`.
+- Visual check: installed the debug build to the booted iPhone 17 Pro simulator and launched `com.grayline.wander -WanderUseDemoFixtures -WanderMapSheetExpanded -WanderMapPlace 'Woodcat Coffee'`; top-of-full-card screenshot captured at `/tmp/rec83-full-place-demo-after-fix.png`. `simctl` does not expose general touch/scroll input on this machine, so bottom-scroll visual proof is covered by code inspection plus the layout contract test rather than an automated bottom screenshot.
