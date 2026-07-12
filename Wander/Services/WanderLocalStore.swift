@@ -286,7 +286,7 @@ final class WanderStore: ObservableObject {
         visiblePlaceLists.filter { list in
             switch scope {
             case .mine:
-                return list.ownerUserID == currentUser.id
+                return list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id)
             case .friends:
                 return list.ownerUserID != currentUser.id && !isMember(of: list, userID: currentUser.id)
             case .collabs:

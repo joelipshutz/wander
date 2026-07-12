@@ -9318,3 +9318,20 @@ Checkpoint, 2026-07-11 19:39 PDT:
   - `git diff --check`
   - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81-open CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
   - Result: 9 tests passed, 0 failed. App target compiled through `ListsScreen.swift`.
+
+Checkpoint, 2026-07-11 20:10 PDT:
+
+- Joe clarified that collaborative lists should also appear in the `My lists` sub-tab, not only under `Collabs`, and should have an explicit group icon.
+- Continuing REC-81 on `codex/rec-81-collab-visibility`; worktree was clean at `b5b428d` before edits.
+- Implementation scope:
+  - Treat `My lists` as lists the current user owns or actively collaborates on.
+  - Keep collaborative lists duplicated under `Collabs` as the focused shared-list view.
+  - Mark collaborative list tiles with the native `person.2.fill` group icon in every scope.
+  - Add store regression coverage for joined collaborative lists appearing in `My lists` while ordinary friend lists remain excluded.
+- Validation:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81-open CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/WanderStoreTests/testSeededPlaceListsRespectOwnerFriendAndCollabScopes -only-testing:WanderTests/NavigationContractTests`
+  - Result: 10 tests passed, 0 failed. The app target compiled through `ListsScreen.swift`.
+- Tracking:
+  - Added the implementation and test result to Linear REC-81.
+  - Mission Control at `localhost:4000` was unavailable, so no duplicate local tracker task could be created.

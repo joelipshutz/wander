@@ -502,6 +502,13 @@ private struct ListTile: View {
                             .font(.system(size: 11, weight: .black))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
+
+                    if list.isCollaborative {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .accessibilityLabel("Collaborative list")
+                    }
                 }
 
                 Text(list.subtitle)

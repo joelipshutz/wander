@@ -2262,6 +2262,8 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
 
         XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == "list_laptop" })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .mine).contains { $0.id == "list_launch" })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == "list_maya_sunset" })
         XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == "list_maya_sunset" })
         XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_launch" })
         XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == "list_saturday" })
