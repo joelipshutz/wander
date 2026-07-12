@@ -22,6 +22,13 @@ enum SyncState: String, Codable, CaseIterable, Equatable {
     case tombstoned
 }
 
+enum VisitPhotoUploadState: String, Codable, CaseIterable, Equatable {
+    case pendingUpload = "pending_upload"
+    case uploading
+    case uploaded
+    case failed
+}
+
 enum FollowSource: String, Codable, CaseIterable, Equatable {
     case username
     case contacts

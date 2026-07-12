@@ -105,32 +105,40 @@ enum PlaceProfilePresenter {
         from saves: [PlaceSaveSummary],
         currentUserID: String
     ) -> PlaceActualRating? {
-        let ownScores = saves
+        let ownAggregates = saves
             .filter {
                 $0.visiblePlace.owner.id == currentUserID
                     && $0.visiblePlace.userPlace.status == .been
             }
-            .compactMap(\.visiblePlace.userPlace.ratingScore)
+            .compactMap { summary -> (score: Double, count: Int)? in
+                guard let score = summary.visiblePlace.userPlace.ratingScore else { return nil }
+                return (score, max(summary.visiblePlace.userPlace.recommendedCount, 1))
+            }
 
-        guard !ownScores.isEmpty else { return nil }
-        let average = ownScores.reduce(0, +) / Double(ownScores.count)
-        return PlaceActualRating(score: average, count: ownScores.count, source: .own)
+        let count = ownAggregates.reduce(0) { $0 + $1.count }
+        guard count > 0 else { return nil }
+        let average = ownAggregates.reduce(0) { $0 + ($1.score * Double($1.count)) } / Double(count)
+        return PlaceActualRating(score: average, count: count, source: .own)
     }
 
     static func overallRating(
         from saves: [PlaceSaveSummary],
         currentUserID: String
     ) -> PlaceActualRating? {
-        let localScores = saves
+        let localAggregates = saves
             .filter {
                 $0.visiblePlace.owner.id != currentUserID
                     && $0.visiblePlace.userPlace.status == .been
             }
-            .compactMap(\.visiblePlace.userPlace.ratingScore)
+            .compactMap { summary -> (score: Double, count: Int)? in
+                guard let score = summary.visiblePlace.userPlace.ratingScore else { return nil }
+                return (score, max(summary.visiblePlace.userPlace.recommendedCount, 1))
+            }
 
-        if !localScores.isEmpty {
-            let average = localScores.reduce(0, +) / Double(localScores.count)
-            return PlaceActualRating(score: average, count: localScores.count, source: .trusted)
+        let localCount = localAggregates.reduce(0) { $0 + $1.count }
+        if localCount > 0 {
+            let average = localAggregates.reduce(0) { $0 + ($1.score * Double($1.count)) } / Double(localCount)
+            return PlaceActualRating(score: average, count: localCount, source: .trusted)
         }
 
         guard let aggregateSource = saves.first(where: {

@@ -70,6 +70,8 @@ final class WanderStore: ObservableObject {
     @Published private(set) var places: [LocalPlace]
     @Published private(set) var userPlaces: [LocalUserPlace]
     @Published private(set) var placeAttributes: [LocalPlaceAttribute]
+    @Published private(set) var placeVisits: [LocalPlaceVisit]
+    @Published private(set) var visitPhotos: [LocalVisitPhoto]
     @Published private(set) var follows: [LocalFollow]
     @Published private(set) var blocks: [LocalBlock]
     @Published private(set) var placeLists: [LocalPlaceList]
@@ -144,6 +146,8 @@ final class WanderStore: ObservableObject {
             self.places = restored.places
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
+            self.placeVisits = restored.placeVisits
+            self.visitPhotos = restored.visitPhotos
             self.follows = restored.follows
             self.blocks = restored.blocks
             self.placeLists = restored.placeLists
@@ -163,6 +167,8 @@ final class WanderStore: ObservableObject {
             self.places = fixtures.places
             self.userPlaces = fixtures.userPlaces
             self.placeAttributes = fixtures.placeAttributes
+            self.placeVisits = fixtures.placeVisits
+            self.visitPhotos = fixtures.visitPhotos
             self.follows = fixtures.follows
             self.blocks = fixtures.blocks
             self.placeLists = fixtures.placeLists
@@ -176,6 +182,8 @@ final class WanderStore: ObservableObject {
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
         self.currentUser.defaultVisibilityRaw = self.defaultVisibility.rawValue
+        backfillMissingLegacyVisits()
+        refreshAllVisitDerivedState()
 
         if shouldPersistAfterRestore {
             persist()
@@ -221,11 +229,15 @@ final class WanderStore: ObservableObject {
     var pendingSyncCount: Int {
         let pendingUserPlaces = userPlaces.filter { $0.syncState != .synced }.count
         let pendingAttributes = placeAttributes.filter { $0.syncState != .synced }.count
+        let pendingVisits = placeVisits.filter { $0.syncState != .synced }.count
+        let pendingVisitPhotos = visitPhotos.filter { $0.syncState != .synced }.count
         let pendingArtifacts = sourceArtifacts.filter { SyncState(rawValue: $0.syncStateRaw) != .synced }.count
         let pendingJobs = extractionJobs.filter { SyncState(rawValue: $0.syncStateRaw) != .synced }.count
 
         return pendingUserPlaces
             + pendingAttributes
+            + pendingVisits
+            + pendingVisitPhotos
             + pendingArtifacts
             + pendingJobs
             + unresolvedDrafts.count
@@ -1131,23 +1143,39 @@ final class WanderStore: ObservableObject {
     }
 
     private func remoteVisiblePlaces(filters: PlaceFilters) -> [VisiblePlace] {
-        remoteVisiblePlaceCache.filter { visiblePlace in
-            guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
-            guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
-            let normalizedCategories = filters.normalizedCategories
-            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
-            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
+        remoteVisiblePlaceCache
+            .map(visiblePlaceWithLatestOwner)
+            .filter { visiblePlace in
+                guard !isBlockedBetweenCurrentUser(and: visiblePlace.owner.id) else { return false }
+                guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
+                let normalizedCategories = filters.normalizedCategories
+                guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
+                guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
 
-            guard !filters.ownerScopes.isEmpty else { return true }
+                guard !filters.ownerScopes.isEmpty else { return true }
 
-            let isMine = visiblePlace.owner.id == currentUser.id
-            let relationship = relationship(to: visiblePlace.owner.id)
-            let isFriend = relationship == .mutual
-            return (filters.ownerScopes.contains("you") && isMine)
-                || (filters.ownerScopes.contains("friends") && !isMine && (isFriend || visiblePlace.userPlace.visibility == .mutuals))
-                || (filters.ownerScopes.contains("following") && !isMine)
-                || (filters.ownerScopes.contains("social") && !isMine)
+                let isMine = visiblePlace.owner.id == currentUser.id
+                let relationship = relationship(to: visiblePlace.owner.id)
+                let isFriend = relationship == .mutual
+                return (filters.ownerScopes.contains("you") && isMine)
+                    || (filters.ownerScopes.contains("friends") && !isMine && (isFriend || visiblePlace.userPlace.visibility == .mutuals))
+                    || (filters.ownerScopes.contains("following") && !isMine)
+                    || (filters.ownerScopes.contains("social") && !isMine)
+            }
+    }
+
+    private func visiblePlaceWithLatestOwner(_ visiblePlace: VisiblePlace) -> VisiblePlace {
+        guard let owner = profiles.first(where: { $0.id == visiblePlace.owner.id || $0.handle == visiblePlace.owner.handle }) else {
+            return visiblePlace
         }
+
+        return VisiblePlace(
+            id: visiblePlace.id,
+            place: visiblePlace.place,
+            userPlace: visiblePlace.userPlace,
+            owner: owner,
+            attributes: visiblePlace.attributes
+        )
     }
 
     private func mergeVisiblePlaces(_ places: [VisiblePlace]) -> [VisiblePlace] {
@@ -1171,6 +1199,237 @@ final class WanderStore: ObservableObject {
         return placeAttributes
             .filter { userPlaceIDs.contains($0.userPlaceID) }
             .sorted { $0.questionKey < $1.questionKey }
+    }
+
+    func visits(for userPlaceID: String) -> [LocalPlaceVisit] {
+        let userPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        return placeVisits
+            .filter { userPlaceIDs.contains($0.userPlaceID) && $0.deletedAt == nil }
+            .sorted { lhs, rhs in
+                if lhs.visitedAt != rhs.visitedAt {
+                    return lhs.visitedAt > rhs.visitedAt
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    func photos(for visitID: String) -> [LocalVisitPhoto] {
+        let visitIDs = matchingVisitIDs(visitID)
+        return visitPhotos
+            .filter { visitIDs.contains($0.visitID) && $0.deletedAt == nil }
+            .sorted { lhs, rhs in
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    @discardableResult
+    func createVisit(
+        userPlaceID: String,
+        visitedAt: Date = .now,
+        note: String? = nil,
+        ratingScore: Double? = nil,
+        attributes: [PlaceAttributeDraft] = [],
+        visibility: PlaceVisibility? = nil
+    ) -> LocalPlaceVisit? {
+        guard let userPlace = currentUserPlace(matching: userPlaceID) else { return nil }
+
+        let now = Date.now
+        let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+        let visit = LocalPlaceVisit(
+            localID: "local_visit_\(UUID().uuidString.lowercased())",
+            userPlaceID: userPlace.id,
+            visitedAt: visitedAt,
+            note: note,
+            ratingScore: PlaceRating.scoreForSave(status: .been, score: ratingScore),
+            attributeAnswersJSON: attributeAnswersJSON,
+            tags: VisitAttributeAnswers.tags(from: attributes),
+            syncState: .pendingCreate,
+            localUpdatedAt: now,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        if userPlace.status == .wannaGo {
+            preserveHistoricalWant(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
+        }
+        if userPlace.status != .been {
+            userPlace.statusRaw = PlaceStatus.been.rawValue
+        }
+        if let visibility {
+            userPlace.visibilityRaw = visibilityForSave(visibility).rawValue
+        }
+        userPlace.updatedAt = now
+        userPlace.localUpdatedAt = now
+        userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        placeVisits.append(visit)
+        refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+
+        objectWillChange.send()
+        persist()
+        return visit
+    }
+
+    @discardableResult
+    func updateVisit(
+        visitID: String,
+        visitedAt: Date? = nil,
+        note: String? = nil,
+        ratingScore: Double? = nil,
+        attributes: [PlaceAttributeDraft]? = nil,
+        visibility: PlaceVisibility? = nil,
+        replacesNote: Bool = false,
+        replacesRating: Bool = false
+    ) -> LocalPlaceVisit? {
+        guard let visit = currentUserVisit(matching: visitID) else { return nil }
+
+        let now = Date.now
+        if let visitedAt {
+            visit.visitedAt = visitedAt
+        }
+        if replacesNote {
+            visit.note = note
+        } else if let note {
+            visit.note = note
+        }
+        if replacesRating {
+            visit.ratingScore = PlaceRating.scoreForSave(status: .been, score: ratingScore)
+        } else if let ratingScore {
+            visit.ratingScore = PlaceRating.normalized(ratingScore)
+        }
+        if let attributes {
+            visit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+            visit.setDerivedTags(VisitAttributeAnswers.tags(from: attributes))
+        }
+        visit.updatedAt = now
+        visit.localUpdatedAt = now
+        visit.syncStateRaw = visit.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+
+        if let visibility,
+           let userPlace = currentUserPlace(matching: visit.userPlaceID) {
+            userPlace.visibilityRaw = visibilityForSave(visibility).rawValue
+            userPlace.updatedAt = now
+            userPlace.localUpdatedAt = now
+            userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        }
+
+        refreshUserPlaceVisitSummary(userPlaceID: visit.userPlaceID)
+
+        objectWillChange.send()
+        persist()
+        return visit
+    }
+
+    @discardableResult
+    func deleteVisit(visitID: String) -> Bool {
+        guard let visit = currentUserVisit(matching: visitID) else { return false }
+
+        let now = Date.now
+        let visitIDs = matchingVisitIDs(visit.id)
+        for photo in visitPhotos where visitIDs.contains(photo.visitID) && photo.deletedAt == nil {
+            softDelete(photo, at: now)
+        }
+        softDelete(visit, at: now)
+
+        if let userPlace = currentUserPlace(matching: visit.userPlaceID) {
+            let remainingVisits = visits(for: userPlace.id)
+            if remainingVisits.isEmpty {
+                if !restoreHistoricalWantAfterLastVisit(userPlace, at: now) {
+                    deleteUserPlaceAfterLastVisit(userPlace, at: now)
+                }
+            } else {
+                refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            }
+        }
+
+        objectWillChange.send()
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func createVisitPhoto(
+        visitID: String,
+        storagePath: String? = nil,
+        localAssetRef: String? = nil,
+        remoteURLString: String? = nil,
+        contentType: String? = "image/jpeg",
+        byteSize: Int? = nil,
+        width: Int? = nil,
+        height: Int? = nil,
+        capturedAt: Date? = nil
+    ) -> LocalVisitPhoto? {
+        guard let visit = currentUserVisit(matching: visitID) else { return nil }
+
+        let now = Date.now
+        let nextSortOrder = (photos(for: visit.id).map(\.sortOrder).max() ?? -1) + 1
+        let localID = "local_visit_photo_\(UUID().uuidString.lowercased())"
+        let path = storagePath ?? "\(currentUser.id)/\(visit.id)/\(localID).jpg"
+        let photo = LocalVisitPhoto(
+            localID: localID,
+            visitID: visit.id,
+            storagePath: path,
+            localAssetRef: localAssetRef,
+            remoteURLString: remoteURLString,
+            contentType: contentType,
+            byteSize: byteSize,
+            width: width,
+            height: height,
+            capturedAt: capturedAt,
+            sortOrder: nextSortOrder,
+            uploadState: remoteURLString == nil ? .pendingUpload : .uploaded,
+            syncState: .pendingCreate,
+            localUpdatedAt: now,
+            createdAt: now,
+            updatedAt: now
+        )
+        visitPhotos.append(photo)
+
+        objectWillChange.send()
+        persist()
+        return photo
+    }
+
+    @discardableResult
+    func createVisitPhoto(
+        visitID: String,
+        data: Data,
+        localAssetRef: String? = nil,
+        contentType: String = "image/jpeg",
+        width: Int? = nil,
+        height: Int? = nil,
+        capturedAt: Date? = nil,
+        backend: WanderBackend?
+    ) async -> LocalVisitPhoto? {
+        guard let photo = createVisitPhoto(
+            visitID: visitID,
+            localAssetRef: localAssetRef,
+            contentType: contentType,
+            byteSize: data.count,
+            width: width,
+            height: height,
+            capturedAt: capturedAt
+        ) else {
+            return nil
+        }
+
+        guard backend != nil else {
+            return photo
+        }
+
+        return await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+    }
+
+    @discardableResult
+    func deleteVisitPhoto(photoID: String) -> Bool {
+        guard let photo = currentUserPhoto(matching: photoID) else { return false }
+
+        softDelete(photo, at: .now)
+        objectWillChange.send()
+        persist()
+        return true
     }
 
     func followers(of userID: String) -> [LocalProfile] {
@@ -1258,7 +1517,7 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
-                upsertRemoteProfileShells(remoteProfiles)
+                upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
             } catch {
@@ -1349,7 +1608,7 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
-                upsertRemoteProfileShells(remoteProfiles)
+                upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
             } catch {
@@ -1408,6 +1667,28 @@ final class WanderStore: ObservableObject {
         let categoryOverride = categoryOverrideAssignment(from: candidate)
 
         if let existing = userPlaces.first(where: { $0.userID == currentUser.id && $0.placeID == place.id && $0.deletedAt == nil }) {
+            let previousStatus = existing.status
+            let previousAttributeDrafts = attributeDrafts(for: existing.id)
+            if previousStatus == .wannaGo, status == .been {
+                preserveHistoricalWant(for: existing, attributes: previousAttributeDrafts)
+            }
+
+            if previousStatus == .been, status == .wannaGo {
+                preserveHistoricalWant(
+                    for: existing,
+                    note: note,
+                    attributes: attributes ?? previousAttributeDrafts,
+                    wantedAt: .now
+                )
+                existing.visibilityRaw = resolvedVisibility.rawValue
+                existing.updatedAt = .now
+                existing.localUpdatedAt = .now
+                existing.syncStateRaw = SyncState.pendingUpdate.rawValue
+                objectWillChange.send()
+                persist()
+                return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
+            }
+
             existing.statusRaw = status.rawValue
             existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
@@ -1415,9 +1696,27 @@ final class WanderStore: ObservableObject {
             existing.recommendedScore = savedRatingScore
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
             applyCategoryOverride(categoryOverride, to: existing)
+            let attributeDrafts = attributes ?? previousAttributeDrafts
             if let attributes {
                 existing.ratingSignal = ratingSignal(from: attributes)
                 replaceAttributes(for: existing.id, with: attributes, syncState: .pendingUpdate)
+            }
+            if status == .been {
+                if previousStatus == .been || previousStatus == .wannaGo {
+                    _ = createVisit(
+                        userPlaceID: existing.id,
+                        note: note,
+                        ratingScore: savedRatingScore,
+                        attributes: attributeDrafts,
+                        visibility: resolvedVisibility
+                    )
+                    return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
+                }
+                syncBackfilledVisit(for: existing, attributes: attributeDrafts)
+                refreshUserPlaceVisitSummary(userPlaceID: existing.id)
+            } else {
+                softDeleteVisits(for: existing.id, at: .now)
+                refreshUserPlaceVisitSummary(userPlaceID: existing.id)
             }
             existing.updatedAt = .now
             existing.localUpdatedAt = .now
@@ -1447,9 +1746,12 @@ final class WanderStore: ObservableObject {
             syncState: .pendingCreate
         )
         userPlaces.append(userPlace)
+        let attributeDrafts = attributes ?? []
         if let attributes {
             replaceAttributes(for: userPlace.id, with: attributes, syncState: .pendingCreate)
         }
+        syncBackfilledVisit(for: userPlace, attributes: attributeDrafts)
+        refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
         analytics.track(
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.placeSaved,
@@ -1694,7 +1996,9 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         WanderDebugLog.sync.debug("failed retry candidates count=\(retryableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
-        return await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
+        let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
+        _ = await syncPendingVisits(backend: backend)
+        return syncedCount
     }
 
     @discardableResult
@@ -1716,7 +2020,212 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         WanderDebugLog.sync.debug("signed-in backfill candidates count=\(syncableIDs.count, privacy: .public) states=\(self.syncCandidateStateSummary(), privacy: .public)")
         #endif
-        return await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
+        let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
+        _ = await syncPendingVisits(backend: backend)
+        return syncedCount
+    }
+
+    @discardableResult
+    func syncPendingVisits(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+
+        let visitIDs = placeVisits
+            .filter { visit in
+                guard let userPlace = userPlaces.first(where: { userPlace in
+                    userPlace.userID == currentUser.id
+                        && userPlace.deletedAt == nil
+                        && (userPlace.id == visit.userPlaceID || userPlace.localID == visit.userPlaceID || userPlace.serverID == visit.userPlaceID)
+                }) else {
+                    return false
+                }
+
+                return visit.deletedAt == nil
+                    && visit.syncState != .synced
+                    && visit.syncState != .serverDenied
+                    && visit.syncState != .tombstoned
+                    && userPlace.status == .been
+                    && userPlace.syncState != .pendingDelete
+                    && userPlace.syncState != .serverDenied
+                    && userPlace.syncState != .tombstoned
+            }
+            .map(\.id)
+
+        var syncedCount = 0
+        for visitID in visitIDs {
+            if await syncVisit(visitID: visitID, backend: backend) {
+                syncedCount += 1
+            }
+        }
+        return syncedCount
+    }
+
+    @discardableResult
+    func syncVisit(visitID: String, backend: WanderBackend?) async -> Bool {
+        guard let backend,
+              let visit = placeVisits.first(where: { $0.deletedAt == nil && ($0.id == visitID || $0.localID == visitID || $0.serverID == visitID) }),
+              let userPlace = userPlaces.first(where: { userPlace in
+                  userPlace.deletedAt == nil
+                      && (userPlace.id == visit.userPlaceID || userPlace.localID == visit.userPlaceID || userPlace.serverID == visit.userPlaceID)
+              })
+        else {
+            return false
+        }
+
+        guard userPlace.status == .been,
+              userPlace.syncState != .pendingDelete,
+              userPlace.syncState != .serverDenied,
+              userPlace.syncState != .tombstoned
+        else {
+            return false
+        }
+
+        if userPlace.serverID == nil || userPlace.syncState != .synced {
+            _ = await retryOwnPlaceSync(userPlaceID: userPlace.id, backend: backend, trigger: .signedInBackfill)
+        }
+
+        guard let remoteUserPlaceID = userPlace.serverID else {
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing remote user place id")
+            return false
+        }
+
+        if visit.backfilledFromUserPlace {
+            return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
+        }
+
+        if visit.serverID == nil {
+            markPlaceVisit(localOrServerID: visit.id, serverID: UUID().uuidString.lowercased(), syncState: .pendingCreate)
+        } else {
+            markPlaceVisit(localOrServerID: visit.id, syncState: .pendingUpdate)
+        }
+
+        guard let draft = visitDraft(for: visit.id, remoteUserPlaceID: remoteUserPlaceID) else {
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing visit draft")
+            return false
+        }
+
+        do {
+            let result = try await backend.upsertVisit(draft)
+            markPlaceVisit(
+                localOrServerID: visit.id,
+                serverID: result.visitID,
+                syncState: .synced,
+                result: result
+            )
+            lastRemoteError = nil
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
+    }
+
+    @discardableResult
+    func uploadVisitPhoto(photoID: String, data: Data, backend: WanderBackend?) async -> LocalVisitPhoto? {
+        guard let backend,
+              let photo = currentUserPhoto(matching: photoID),
+              let visit = currentUserVisit(matching: photo.visitID)
+        else {
+            return nil
+        }
+
+        if visit.serverID == nil || visit.syncState != .synced {
+            _ = await syncVisit(visitID: visit.id, backend: backend)
+        }
+
+        guard let remoteVisitID = visit.serverID else {
+            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing remote visit id")
+            return photo
+        }
+
+        let remotePhotoID = photo.serverID ?? UUID().uuidString.lowercased()
+        let contentType = photo.contentType ?? "image/jpeg"
+        let storagePath = "\(currentUser.id)/\(remoteVisitID)/\(remotePhotoID).\(fileExtension(forContentType: contentType))"
+        markVisitPhoto(
+            localOrServerID: photo.id,
+            serverID: remotePhotoID,
+            visitID: remoteVisitID,
+            storagePath: storagePath,
+            syncState: .pendingCreate,
+            uploadState: .pendingUpload
+        )
+
+        guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
+            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
+            return photo
+        }
+
+        do {
+            _ = try await backend.upsertVisitPhotoMetadata(pendingDraft)
+            markVisitPhoto(localOrServerID: photo.id, syncState: .pendingUpdate, uploadState: .uploading)
+            let remoteURL = try await backend.uploadVisitPhotoData(
+                bucket: pendingDraft.storageBucket,
+                path: pendingDraft.storagePath,
+                data: data,
+                contentType: contentType
+            )
+            markVisitPhoto(
+                localOrServerID: photo.id,
+                remoteURLString: remoteURL.absoluteString,
+                syncState: .pendingUpdate,
+                uploadState: .uploaded
+            )
+            if let uploadedDraft = visitPhotoDraft(for: photo.id, uploadState: .uploaded) {
+                let result = try await backend.upsertVisitPhotoMetadata(uploadedDraft)
+                markVisitPhoto(localOrServerID: photo.id, syncState: .synced, uploadState: result.uploadState, result: result)
+            }
+            lastRemoteError = nil
+        } catch {
+            let message = remoteErrorMessage(error)
+            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: message)
+            lastRemoteError = message
+        }
+
+        return photo
+    }
+
+    @discardableResult
+    func deleteVisit(visitID: String, backend: WanderBackend?) async -> Bool {
+        let remoteVisitID = placeVisits.first { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }?.serverID
+        let didDeleteLocally = deleteVisit(visitID: visitID)
+        guard didDeleteLocally else { return false }
+        guard let backend, let remoteVisitID else { return true }
+
+        do {
+            try await backend.deleteVisit(visitID: remoteVisitID)
+            markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
+            lastRemoteError = nil
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markPlaceVisit(localOrServerID: visitID, syncState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteVisitPhoto(photoID: String, backend: WanderBackend?) async -> Bool {
+        let photo = visitPhotos.first { $0.id == photoID || $0.localID == photoID || $0.serverID == photoID }
+        let remotePhotoID = photo?.serverID
+        let storageBucket = photo?.storageBucket ?? "visit-photos"
+        let storagePath = photo?.storagePath
+        let didDeleteLocally = deleteVisitPhoto(photoID: photoID)
+        guard didDeleteLocally else { return false }
+        guard let backend, let remotePhotoID, let storagePath else { return true }
+
+        do {
+            try await backend.deleteVisitPhoto(photoID: remotePhotoID, bucket: storageBucket, path: storagePath)
+            markVisitPhoto(localOrServerID: photoID, syncState: .tombstoned, uploadState: .failed)
+            lastRemoteError = nil
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markVisitPhoto(localOrServerID: photoID, syncState: .failed, uploadState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
     }
 
     private func syncOwnPlaces(withIDs userPlaceIDs: [String], backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> Int {
@@ -2494,6 +3003,268 @@ final class WanderStore: ObservableObject {
         return ids
     }
 
+    private func matchingVisitIDs(_ visitID: String) -> Set<String> {
+        guard let visit = placeVisits.first(where: { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }) else {
+            return [visitID]
+        }
+
+        var ids: Set<String> = [visitID, visit.id, visit.localID]
+        if let serverID = visit.serverID {
+            ids.insert(serverID)
+        }
+        return ids
+    }
+
+    private func currentUserPlace(matching userPlaceID: String) -> LocalUserPlace? {
+        userPlaces.first { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.id == userPlaceID
+                    || userPlace.localID == userPlaceID
+                    || userPlace.serverID == userPlaceID)
+        }
+    }
+
+    private func currentUserVisit(matching visitID: String) -> LocalPlaceVisit? {
+        guard let visit = placeVisits.first(where: { visit in
+            visit.deletedAt == nil
+                && (visit.id == visitID || visit.localID == visitID || visit.serverID == visitID)
+        }) else {
+            return nil
+        }
+
+        return currentUserPlace(matching: visit.userPlaceID) == nil ? nil : visit
+    }
+
+    private func currentUserPhoto(matching photoID: String) -> LocalVisitPhoto? {
+        guard let photo = visitPhotos.first(where: { photo in
+            photo.deletedAt == nil
+                && (photo.id == photoID || photo.localID == photoID || photo.serverID == photoID)
+        }) else {
+            return nil
+        }
+
+        return currentUserVisit(matching: photo.visitID) == nil ? nil : photo
+    }
+
+    private func attributeDrafts(for userPlaceID: String) -> [PlaceAttributeDraft] {
+        attributes(for: userPlaceID).map {
+            PlaceAttributeDraft(
+                questionKey: $0.questionKey,
+                valueType: $0.valueType,
+                valueJSON: $0.valueJSON
+            )
+        }
+    }
+
+    private func preserveHistoricalWant(for userPlace: LocalUserPlace, attributes: [PlaceAttributeDraft]) {
+        preserveHistoricalWant(
+            for: userPlace,
+            note: userPlace.note,
+            attributes: attributes,
+            wantedAt: userPlace.historicalWantedAt ?? userPlace.savedAt
+        )
+    }
+
+    private func preserveHistoricalWant(
+        for userPlace: LocalUserPlace,
+        note: String?,
+        attributes: [PlaceAttributeDraft],
+        wantedAt: Date
+    ) {
+        userPlace.historicalWantNote = note
+        userPlace.historicalWantAttributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
+        userPlace.setHistoricalWantTags(VisitAttributeAnswers.tags(from: attributes))
+        userPlace.historicalWantedAt = wantedAt
+    }
+
+    private func backfillMissingLegacyVisits() {
+        for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
+            if userPlace.status == .been, visits(for: userPlace.id).isEmpty {
+                syncBackfilledVisit(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
+            } else if userPlace.status != .been {
+                softDeleteBackfilledVisits(for: userPlace.id, at: .now)
+            }
+        }
+    }
+
+    private func syncBackfilledVisit(for userPlace: LocalUserPlace, attributes: [PlaceAttributeDraft]? = nil) {
+        let now = Date.now
+        guard userPlace.deletedAt == nil, userPlace.status == .been else {
+            softDeleteBackfilledVisits(for: userPlace.id, at: now)
+            return
+        }
+
+        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+        let hasExplicitVisit = placeVisits.contains { visit in
+            userPlaceIDs.contains(visit.userPlaceID)
+                && !visit.backfilledFromUserPlace
+                && visit.deletedAt == nil
+        }
+        if hasExplicitVisit {
+            return
+        }
+
+        let drafts = attributes ?? attributeDrafts(for: userPlace.id)
+        let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: drafts)
+        let tags = VisitAttributeAnswers.tags(from: drafts)
+
+        if let existing = placeVisits.first(where: { visit in
+            visit.backfilledFromUserPlace && userPlaceIDs.contains(visit.userPlaceID)
+        }) {
+            existing.userPlaceID = userPlace.id
+            existing.visitedAt = userPlace.visitedAt ?? userPlace.savedAt
+            existing.note = userPlace.note
+            existing.ratingScore = userPlace.ratingScore
+            existing.attributeAnswersJSON = attributeAnswersJSON
+            existing.setDerivedTags(tags)
+            existing.deletedAt = nil
+            existing.updatedAt = now
+            existing.localUpdatedAt = now
+            existing.syncStateRaw = userPlace.syncStateRaw
+            existing.lastSyncError = userPlace.lastSyncError
+            existing.serverUpdatedAt = userPlace.serverUpdatedAt
+            return
+        }
+
+        placeVisits.append(
+            LocalPlaceVisit(
+                localID: "local_visit_backfill_\(slug(userPlace.localID))",
+                userPlaceID: userPlace.id,
+                visitedAt: userPlace.visitedAt ?? userPlace.savedAt,
+                note: userPlace.note,
+                ratingScore: userPlace.ratingScore,
+                attributeAnswersJSON: attributeAnswersJSON,
+                tags: tags,
+                backfilledFromUserPlace: true,
+                syncState: userPlace.syncState,
+                localUpdatedAt: userPlace.localUpdatedAt,
+                serverUpdatedAt: userPlace.serverUpdatedAt,
+                lastSyncError: userPlace.lastSyncError,
+                createdAt: userPlace.createdAt,
+                updatedAt: userPlace.updatedAt
+            )
+        )
+    }
+
+    private func refreshAllVisitDerivedState() {
+        for visit in placeVisits {
+            visit.setDerivedTags(VisitAttributeAnswers.tags(fromAttributeAnswersJSON: visit.attributeAnswersJSON))
+        }
+        for userPlace in userPlaces where userPlace.userID == currentUser.id {
+            refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+        }
+    }
+
+    private func refreshUserPlaceVisitSummary(userPlaceID: String) {
+        guard let userPlace = userPlaces.first(where: { userPlace in
+            userPlace.id == userPlaceID || userPlace.localID == userPlaceID || userPlace.serverID == userPlaceID
+        }) else {
+            return
+        }
+
+        guard userPlace.deletedAt == nil, userPlace.status == .been else {
+            userPlace.ratingScore = nil
+            userPlace.recommendedScore = nil
+            userPlace.recommendedCount = 0
+            return
+        }
+
+        let activeVisits = visits(for: userPlace.id)
+        let ratings = activeVisits.compactMap { PlaceRating.normalized($0.ratingScore) }
+        if ratings.isEmpty {
+            userPlace.ratingScore = nil
+            userPlace.recommendedScore = nil
+            userPlace.recommendedCount = 0
+        } else {
+            let average = ratings.reduce(0, +) / Double(ratings.count)
+            let roundedAverage = (average * 10).rounded() / 10
+            userPlace.ratingScore = roundedAverage
+            userPlace.recommendedScore = roundedAverage
+            userPlace.recommendedCount = ratings.count
+        }
+
+        if let latestVisitedAt = activeVisits.map(\.visitedAt).max() {
+            userPlace.visitedAt = latestVisitedAt
+        }
+    }
+
+    private func softDeleteBackfilledVisits(for userPlaceID: String, at date: Date) {
+        let userPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        for visit in placeVisits where visit.backfilledFromUserPlace && userPlaceIDs.contains(visit.userPlaceID) && visit.deletedAt == nil {
+            softDelete(visit, at: date)
+        }
+    }
+
+    private func softDeleteVisits(for userPlaceID: String, at date: Date) {
+        let userPlaceIDs = matchingUserPlaceIDs(userPlaceID)
+        for visit in placeVisits where userPlaceIDs.contains(visit.userPlaceID) && visit.deletedAt == nil {
+            let visitIDs = matchingVisitIDs(visit.id)
+            for photo in visitPhotos where visitIDs.contains(photo.visitID) && photo.deletedAt == nil {
+                softDelete(photo, at: date)
+            }
+            softDelete(visit, at: date)
+        }
+    }
+
+    private func softDelete(_ visit: LocalPlaceVisit, at date: Date) {
+        visit.deletedAt = date
+        visit.updatedAt = date
+        visit.localUpdatedAt = date
+        visit.lastSyncError = nil
+        visit.syncStateRaw = visit.serverID == nil ? SyncState.tombstoned.rawValue : SyncState.pendingDelete.rawValue
+    }
+
+    private func softDelete(_ photo: LocalVisitPhoto, at date: Date) {
+        photo.deletedAt = date
+        photo.updatedAt = date
+        photo.localUpdatedAt = date
+        photo.lastSyncError = nil
+        photo.uploadStateRaw = VisitPhotoUploadState.failed.rawValue
+        photo.syncStateRaw = photo.serverID == nil ? SyncState.tombstoned.rawValue : SyncState.pendingDelete.rawValue
+    }
+
+    private func restoreHistoricalWantAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) -> Bool {
+        guard let wantedAt = userPlace.historicalWantedAt else { return false }
+
+        let drafts = VisitAttributeAnswers.drafts(
+            fromAttributeAnswersJSON: userPlace.historicalWantAttributeAnswersJSON ?? "[]"
+        )
+        userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        userPlace.note = userPlace.historicalWantNote
+        userPlace.ratingSignal = ratingSignal(from: drafts)
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.visitedAt = nil
+        userPlace.savedAt = wantedAt
+        userPlace.deletedAt = nil
+        userPlace.updatedAt = date
+        userPlace.localUpdatedAt = date
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        replaceAttributes(for: userPlace.id, with: drafts, syncState: userPlace.syncState)
+        return true
+    }
+
+    private func deleteUserPlaceAfterLastVisit(_ userPlace: LocalUserPlace, at date: Date) {
+        userPlace.note = nil
+        userPlace.ratingSignal = nil
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.categoryOverride = nil
+        userPlace.subcategoryOverride = nil
+        userPlace.categoryOverrideSource = nil
+        userPlace.categoryOverrideConfidence = nil
+        userPlace.deletedAt = date
+        userPlace.updatedAt = date
+        userPlace.localUpdatedAt = date
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.tombstoned.rawValue : SyncState.pendingDelete.rawValue
+        placeAttributes.removeAll { matchingUserPlaceIDs(userPlace.id).contains($0.userPlaceID) }
+    }
+
     private func matchingPlaceIDs(_ placeID: String) -> Set<String> {
         guard let place = places.first(where: { $0.id == placeID || $0.localID == placeID || $0.serverID == placeID }) else {
             return [placeID]
@@ -2526,8 +3297,180 @@ final class WanderStore: ObservableObject {
             attribute.lastSyncError = error
             attribute.serverUpdatedAt = syncState == .synced ? .now : attribute.serverUpdatedAt
         }
+        for visit in placeVisits where previousIDs.contains(visit.userPlaceID) {
+            visit.userPlaceID = canonicalUserPlaceID
+            if visit.backfilledFromUserPlace {
+                visit.syncStateRaw = syncState.rawValue
+                visit.lastSyncError = error
+                visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
+            }
+        }
         objectWillChange.send()
         persist()
+    }
+
+    private func markPlaceVisit(
+        localOrServerID: String,
+        serverID: String? = nil,
+        syncState: SyncState,
+        error: String? = nil,
+        result: PlaceVisitResult? = nil
+    ) {
+        guard let visit = placeVisits.first(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }) else {
+            return
+        }
+
+        let previousIDs = matchingVisitIDs(localOrServerID)
+        if let serverID {
+            visit.serverID = serverID
+        }
+        if let result {
+            visit.serverID = result.visitID
+            visit.userPlaceID = result.userPlaceID
+            visit.visitedAt = result.visitedAt
+            visit.note = result.note
+            visit.ratingScore = result.ratingScore
+            visit.setDerivedTags(result.tags)
+            visit.backfilledFromUserPlace = result.backfilledFromUserPlace
+        }
+        visit.syncStateRaw = syncState.rawValue
+        visit.lastSyncError = error
+        visit.serverUpdatedAt = syncState == .synced ? .now : visit.serverUpdatedAt
+        visit.localUpdatedAt = .now
+        visit.updatedAt = .now
+
+        let canonicalVisitID = visit.serverID ?? visit.id
+        for photo in visitPhotos where previousIDs.contains(photo.visitID) {
+            photo.visitID = canonicalVisitID
+        }
+
+        refreshUserPlaceVisitSummary(userPlaceID: visit.userPlaceID)
+        objectWillChange.send()
+        persist()
+    }
+
+    private func markVisitPhoto(
+        localOrServerID: String,
+        serverID: String? = nil,
+        visitID: String? = nil,
+        storagePath: String? = nil,
+        remoteURLString: String? = nil,
+        syncState: SyncState,
+        uploadState: VisitPhotoUploadState,
+        error: String? = nil,
+        result: VisitPhotoResult? = nil
+    ) {
+        guard let photo = visitPhotos.first(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }) else {
+            return
+        }
+
+        if let serverID {
+            photo.serverID = serverID
+        }
+        if let visitID {
+            photo.visitID = visitID
+        }
+        if let storagePath {
+            photo.storagePath = storagePath
+        }
+        if let remoteURLString {
+            photo.remoteURLString = remoteURLString
+        }
+        if let result {
+            photo.serverID = result.photoID
+            photo.visitID = result.visitID
+            photo.storageBucket = result.storageBucket
+            photo.storagePath = result.storagePath
+            photo.contentType = result.contentType
+            photo.byteSize = result.byteSize
+            photo.width = result.width
+            photo.height = result.height
+            photo.capturedAt = result.capturedAt
+            photo.sortOrder = result.sortOrder
+            photo.uploadStateRaw = result.uploadState.rawValue
+        } else {
+            photo.uploadStateRaw = uploadState.rawValue
+        }
+        photo.syncStateRaw = syncState.rawValue
+        photo.lastSyncError = error
+        photo.serverUpdatedAt = syncState == .synced ? .now : photo.serverUpdatedAt
+        photo.localUpdatedAt = .now
+        photo.updatedAt = .now
+
+        objectWillChange.send()
+        persist()
+    }
+
+    private func visitDraft(for visitID: String, remoteUserPlaceID: String) -> PlaceVisitDraft? {
+        guard let visit = placeVisits.first(where: { $0.deletedAt == nil && ($0.id == visitID || $0.localID == visitID || $0.serverID == visitID) }) else {
+            return nil
+        }
+
+        return PlaceVisitDraft(
+            id: visit.serverID,
+            userPlaceID: remoteUserPlaceID,
+            visitedAt: visit.visitedAt,
+            note: visit.note,
+            ratingScore: visit.ratingScore,
+            attributeAnswersJSON: visit.attributeAnswersJSON,
+            backfilledFromUserPlace: visit.backfilledFromUserPlace
+        )
+    }
+
+    private func visitPhotoDraft(for photoID: String, uploadState: VisitPhotoUploadState) -> VisitPhotoDraft? {
+        guard let photo = visitPhotos.first(where: { $0.deletedAt == nil && ($0.id == photoID || $0.localID == photoID || $0.serverID == photoID) }),
+              let photoID = photo.serverID,
+              let storagePath = photo.storagePath
+        else {
+            return nil
+        }
+
+        return VisitPhotoDraft(
+            id: photoID,
+            visitID: photo.visitID,
+            storageBucket: photo.storageBucket,
+            storagePath: storagePath,
+            remoteURLString: photo.remoteURLString,
+            contentType: photo.contentType,
+            byteSize: photo.byteSize,
+            width: photo.width,
+            height: photo.height,
+            capturedAt: photo.capturedAt,
+            sortOrder: photo.sortOrder,
+            uploadState: uploadState
+        )
+    }
+
+    private func hydrateBackfilledVisit(_ visit: LocalPlaceVisit, remoteUserPlaceID: String, backend: WanderBackend) async -> Bool {
+        do {
+            let remoteVisits = try await backend.visits(for: remoteUserPlaceID)
+            guard let result = remoteVisits.first(where: { $0.backfilledFromUserPlace }) else {
+                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Remote backfilled visit missing")
+                return false
+            }
+            markPlaceVisit(localOrServerID: visit.id, serverID: result.visitID, syncState: .synced, result: result)
+            return true
+        } catch {
+            let message = remoteErrorMessage(error)
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
+            lastRemoteError = message
+            return false
+        }
+    }
+
+    private func fileExtension(forContentType contentType: String) -> String {
+        switch contentType.lowercased() {
+        case "image/png":
+            return "png"
+        case "image/heic":
+            return "heic"
+        case "image/heif":
+            return "heif"
+        case "image/webp":
+            return "webp"
+        default:
+            return "jpg"
+        }
     }
 
     private func removeSaveLocally(userPlaceID: String) -> LocalRemoveSaveChange? {
@@ -2586,6 +3529,13 @@ final class WanderStore: ObservableObject {
             userPlace.syncStateRaw = rowSyncState.rawValue
         }
 
+        for visit in placeVisits where previousUserPlaceIDs.contains(visit.userPlaceID) && visit.deletedAt == nil {
+            let visitIDs = matchingVisitIDs(visit.id)
+            for photo in visitPhotos where visitIDs.contains(photo.visitID) && photo.deletedAt == nil {
+                softDelete(photo, at: now)
+            }
+            softDelete(visit, at: now)
+        }
         placeAttributes.removeAll { previousUserPlaceIDs.contains($0.userPlaceID) }
         remoteVisiblePlaceCache.removeAll { visiblePlace in
             guard visiblePlace.owner.id == currentUser.id else { return false }
@@ -2695,7 +3645,7 @@ final class WanderStore: ObservableObject {
         let collaboratorShells = summaries.flatMap { summary in
             summary.collaborators.map(\.profileShell)
         }
-        upsertRemoteProfileShells(ownerShells + collaboratorShells)
+        upsertRemoteProfileShells(ownerShells + collaboratorShells, preserveExistingProfileMetadataWhenMissing: true)
 
         for summary in summaries {
             upsertRemotePlaceList(summary.list)
@@ -2707,6 +3657,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
+        upsertRemoteProfileShells(detail.collaborators.map(\.profileShell), preserveExistingProfileMetadataWhenMissing: true)
         upsertRemotePlaceList(detail.list)
         replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
         replaceRemoteItems(listID: detail.list.id, items: detail.items)
@@ -2827,7 +3778,7 @@ final class WanderStore: ObservableObject {
                 relationship: relationship(to: visiblePlace.owner.id)
             )
         }
-        upsertRemoteProfileShells(shells)
+        upsertRemoteProfileShells(shells, preserveExistingProfileMetadataWhenMissing: true)
         upsertRemoteAttributes(from: visiblePlaces)
     }
 
@@ -2842,7 +3793,10 @@ final class WanderStore: ObservableObject {
         currentUser.handle = remoteProfile.handle
         currentUser.searchHandle = remoteProfile.handle.lowercased()
         currentUser.displayName = remoteProfile.displayName
-        currentUser.avatarURL = remoteProfile.avatarURL
+        currentUser.avatarURL = currentProfileAvatarURL(
+            incoming: remoteProfile.avatarURL,
+            existing: currentUser.avatarURL
+        )
         currentUser.bio = remoteProfile.bio
         currentUser.homeArea = remoteProfile.homeArea
         currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
@@ -2884,7 +3838,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemoteSocialGraph(userID: String, following: [ProfileShell], followers: [ProfileShell]) {
-        upsertRemoteProfileShells(following + followers)
+        upsertRemoteProfileShells(following + followers, preserveExistingProfileMetadataWhenMissing: true)
 
         let followingIDs = Set(following.map(\.id)).subtracting([userID])
         let followerIDs = Set(followers.map(\.id)).subtracting([userID])
@@ -2950,15 +3904,23 @@ final class WanderStore: ObservableObject {
         "remote_follow_\(slug(followerUserID))_\(slug(followedUserID))"
     }
 
-    private func upsertRemoteProfileShells(_ shells: [ProfileShell]) {
+    private func upsertRemoteProfileShells(_ shells: [ProfileShell], preserveExistingProfileMetadataWhenMissing: Bool = false) {
         for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) {
             if let existing = profiles.first(where: { $0.id == shell.id || $0.handle == shell.handle }) {
                 existing.serverID = shell.id
                 existing.handle = shell.handle
                 existing.searchHandle = shell.handle.lowercased()
                 existing.displayName = shell.displayName
-                existing.avatarURL = shell.avatarURL
-                existing.bio = shell.bio
+                existing.avatarURL = mergedProfileMetadata(
+                    incoming: shell.avatarURL,
+                    existing: existing.avatarURL,
+                    preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
+                )
+                existing.bio = mergedProfileMetadata(
+                    incoming: shell.bio,
+                    existing: existing.bio,
+                    preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
+                )
                 existing.syncStateRaw = SyncState.synced.rawValue
                 existing.updatedAt = .now
             } else {
@@ -2977,6 +3939,28 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+    }
+
+    private func mergedProfileMetadata(
+        incoming: String?,
+        existing: String?,
+        preserveExistingWhenMissing: Bool
+    ) -> String? {
+        nonEmpty(incoming) ?? (preserveExistingWhenMissing ? existing : nil)
+    }
+
+    private func currentProfileAvatarURL(incoming: String?, existing: String?) -> String? {
+        if let incoming = nonEmpty(incoming) {
+            return incoming
+        }
+
+        guard let existing = nonEmpty(existing),
+              URL(string: existing)?.isFileURL == true
+        else {
+            return nil
+        }
+
+        return existing
     }
 
     private func mergeProfileShells(_ shells: [ProfileShell]) -> [ProfileShell] {

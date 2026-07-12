@@ -39,6 +39,7 @@ struct DiscoverScreen: View {
                 [
                     visiblePlace.id,
                     visiblePlace.owner.id,
+                    visiblePlace.owner.avatarURL ?? "",
                     visiblePlace.userPlace.status.rawValue,
                     visiblePlace.userPlace.visibility.rawValue
                 ].joined(separator: ":")
@@ -209,13 +210,13 @@ struct DiscoverScreen: View {
                 saves: saveSummaries(for: visiblePlace),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
-                action: isSavedByCurrentUser(visiblePlace) ? .edit : .add,
+                action: PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: visiblePlace)),
                 onBack: {
                     selectedPlace = nil
                 },
                 onAction: {
                     if isSavedByCurrentUser(visiblePlace) {
-                        beginEditDiscoverPlace(visiblePlace)
+                        beginAddVisitDiscoverPlace(visiblePlace)
                     } else {
                         beginSaveDiscoverPlace(visiblePlace)
                     }
@@ -309,13 +310,14 @@ struct DiscoverScreen: View {
                     DiscoverPlaceResultCard(
                         group: group,
                         isSavedByCurrentUser: isSavedByCurrentUser(group.primary),
-                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName
+                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName,
+                        currentUserID: store.currentUser.id
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
                     } save: {
                         beginSaveDiscoverPlace(group.primary)
                     } edit: {
-                        beginEditDiscoverPlace(group.primary)
+                        beginAddVisitDiscoverPlace(group.primary)
                     }
                 }
             }
@@ -406,15 +408,16 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func beginEditDiscoverPlace(_ visiblePlace: VisiblePlace) {
+    private func beginAddVisitDiscoverPlace(_ visiblePlace: VisiblePlace) {
         guard let currentUserSave = currentUserSave(matching: visiblePlace) else {
             beginSaveDiscoverPlace(visiblePlace)
             return
         }
 
-        presentPlaceSaveFlow(MapPlaceSaveContext.editVisiblePlace(
+        presentPlaceSaveFlow(MapPlaceSaveContext.addVisitVisiblePlace(
             currentUserSave,
-            attributes: store.attributes(for: currentUserSave.userPlace.id)
+            attributes: store.attributes(for: currentUserSave.userPlace.id),
+            latestVisit: store.visits(for: currentUserSave.userPlace.id).first
         ))
     }
 
@@ -433,6 +436,7 @@ struct DiscoverScreen: View {
 
     @MainActor
     private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
@@ -447,8 +451,16 @@ struct DiscoverScreen: View {
                 visibility: submission.visibility,
                 note: submission.note,
                 sourceType: sourceType,
+                ratingScore: submission.ratingScore,
                 attributes: submission.attributes,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             await refreshPlaces()
             await refreshMembers()
@@ -457,19 +469,22 @@ struct DiscoverScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
             return result
-        case .edit(let visiblePlace):
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-                attributes: submission.attributes,
+        case .addVisit, .editVisit, .editWant:
+            let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+                submission,
+                store: store,
                 backend: auth.isSignedIn ? backend : nil
+            )
+            guard let result else { return nil }
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
             )
             await refreshPlaces()
             await refreshMembers()
-            savedMessage = result.syncState == .synced ? "Updated." : "Saved here. We'll retry sync."
+            savedMessage = scopedDiscoverMessage(for: submission.context, syncState: result.syncState)
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
             }
@@ -477,21 +492,44 @@ struct DiscoverScreen: View {
         }
     }
 
+    private func scopedDiscoverMessage(for context: MapPlaceSaveContext, syncState: SyncState) -> String {
+        let suffix = syncState == .synced ? "" : " We'll retry sync."
+        switch context.mode {
+        case .add:
+            return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
+        case .addVisit:
+            return "Visit saved." + suffix
+        case .editVisit:
+            return "Visit updated." + suffix
+        case .editWant:
+            return "Want updated." + suffix
+        }
+    }
+
     @MainActor
     private func removeDiscoverSave(_ context: MapPlaceSaveContext) async -> Bool {
-        guard case .edit(let visiblePlace) = context.mode else {
+        switch context.mode {
+        case .editVisit(_, let visit):
+            guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
+                return false
+            }
+            await refreshPlaces()
+            await refreshMembers()
+            savedMessage = "Visit deleted."
+            return true
+        case .editWant(let visiblePlace):
+            guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
+                return false
+            }
+
+            await refreshPlaces()
+            await refreshMembers()
+            selectedPlace = nil
+            savedMessage = "Want removed."
+            return true
+        case .add, .addVisit:
             return false
         }
-
-        guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
-            return false
-        }
-
-        await refreshPlaces()
-        await refreshMembers()
-        selectedPlace = nil
-        savedMessage = "Removed from your map."
-        return true
     }
 
     private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
@@ -516,7 +554,7 @@ struct DiscoverScreen: View {
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
         var seen = Set<String>()
 
-        return (placeResults.places + store.visiblePlaces())
+        return (store.visiblePlaces() + placeResults.places)
             .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
             .filter { visiblePlace in
                 guard !seen.contains(visiblePlace.userPlace.id) else { return false }
@@ -732,6 +770,7 @@ private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
     let isSavedByCurrentUser: Bool
     let matchedOwnerName: String
+    let currentUserID: String
     let openPlace: () -> Void
     let save: () -> Void
     let edit: () -> Void
@@ -774,10 +813,19 @@ private struct DiscoverPlaceResultCard: View {
                                 .lineLimit(1)
                         }
 
-                        Text(matchLine)
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .lineLimit(1)
+                        HStack(spacing: WanderTheme.spacing2) {
+                            WanderAvatar(
+                                initials: displayOwner.initials,
+                                avatarURL: displayOwner.avatarURL,
+                                size: 24,
+                                color: displayOwnerColor
+                            )
+
+                            Text(matchLine)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
@@ -786,14 +834,14 @@ private struct DiscoverPlaceResultCard: View {
             Spacer(minLength: WanderTheme.spacing2)
 
             Button(action: isSavedByCurrentUser ? edit : save) {
-                Image(systemName: isSavedByCurrentUser ? "pencil" : "plus")
+                Image(systemName: "plus")
                     .font(.system(size: 17, weight: .black))
                     .frame(width: 48, height: 48)
-                    .background(isSavedByCurrentUser ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
-                    .foregroundStyle(isSavedByCurrentUser ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
+                    .background(WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Circle())
             }
-            .accessibilityLabel(isSavedByCurrentUser ? "Edit saved place" : "Save place")
+            .accessibilityLabel(isSavedByCurrentUser ? "Add visit" : "Save place")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -838,6 +886,18 @@ private struct DiscoverPlaceResultCard: View {
                 return trimmed?.isEmpty == false ? trimmed : nil
             }
             .joined(separator: " · ")
+    }
+
+    private var displayOwner: LocalProfile {
+        group.places.first { visiblePlace in
+            visiblePlace.owner.displayName == matchedOwnerName
+                || visiblePlace.owner.handle == matchedOwnerName
+        }?.owner ?? visiblePlace.owner
+    }
+
+    private var displayOwnerColor: Color {
+        if displayOwner.id == currentUserID { return WanderTheme.terracotta.color }
+        return displayOwner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
     }
 }
 
