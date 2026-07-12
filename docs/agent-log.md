@@ -9803,3 +9803,26 @@ Completion, 2026-07-10 00:21 PDT:
 - Linear `REC-73` linked to PR #69, moved to `In Review`, and updated with root cause plus validation notes.
 - Known issue: this session validated the data paths with focused and full tests, but did not run manual visual verification against Ryan's live/signed-in friend data. Ryan should test the branch in Xcode with a friend/profile-photo account before making PR #69 ready.
 - No TestFlight release was requested or performed.
+
+## 2026-07-12 11:42 PDT - Codex - REC-81 List Cover Polish And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-81-collab-visibility`
+Worktree: `/private/tmp/recme-rec81-collab-open`
+Linear: `REC-81`
+PR: #70
+
+Goal: fix the inconsistent list-cover rendering shown in device screenshots, then review/merge PR #70 and explicitly release the latest `main` to TestFlight.
+
+Starting status:
+
+- Worktree clean at `3db8bfe`, tracking the pushed REC-81 branch; PR #70 is open, ready, and mergeable.
+- Device screenshots show the same list grid using large covers under `Collabs` but collapsing to tiny intrinsic-width covers under `My lists`.
+- Covers always synthesize four cells, so lists with fewer than four places show fake `+` placeholders that look interactive and broken.
+- Design direction: list cards must occupy stable grid columns in every scope; covers should visualize only real places with adaptive 0/1/2/3/4+ layouts and no fake add affordance.
+
+Expected files:
+
+- `Wander/Features/Lists/ListsScreen.swift`
+- `docs/agent-log.md`
+- Release bump files after PR merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`

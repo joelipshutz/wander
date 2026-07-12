@@ -363,6 +363,7 @@ struct ListsScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel("Open \(list.name)")
             }
         }
