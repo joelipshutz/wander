@@ -10133,3 +10133,52 @@ Completion, 2026-07-12 13:04 PDT:
 - Linear `REC-81` updated with release evidence and moved to Done.
 - Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
 - Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.
+## 2026-07-12 13:28 PDT - Codex - REC-60 Unified Permission And Notification Routing
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` (`In Progress`)
+Starting status: clean at `a19c4c59c`, synchronized with `origin/codex/rec-60-notifications`.
+
+Goal: make Allow Notifications a single permission/preferences/device-registration action, make Disable Notifications turn off and gray all notification types, remove the separate device-sync action, and route every notification type to a useful in-app destination.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Services/PushNotificationManager.swift`
+- `Wander/App/WanderApp.swift`
+- `Wander/App/WanderRootView.swift`
+- Notification/deeplink models and focused tests as discovered
+- `supabase/migrations/*notification_deeplinks.sql`
+- `supabase/tests/notifications.sql`
+- `docs/notifications-platform.md`
+- `docs/agent-log.md`
+
+Coordination: the main checkout remains dirty with unrelated REC-81 work. This isolated worktree is clean and no overlapping active edit was found in the planned REC-60 files.
+
+Completion, 2026-07-12 13:45 PDT:
+
+- Replaced the separate global push toggle and `Sync this device` action with one setup state machine. Before setup, every category renders off, disabled, and visually muted.
+- **Allow notifications** now requests iOS alert/sound/badge permission, enables every backend notification preference (including digest), requests APNs registration, and immediately registers a stored token when available. APNs callback registration remains automatic when the token arrives later.
+- **Disable notifications** first sets every backend preference false, then deactivates the stored device token. The UI turns every category off and disables it. iOS system permission remains granted because apps cannot revoke it; reopening setup does not require another prompt.
+- If iOS permission was previously denied, Allow opens this app's iOS Settings and automatically finishes setup when the user returns with permission enabled.
+- Added explicit user-facing errors for permission failure, backend preference failure, APNs registration failure, and token-deactivation failure. Backend preferences are disabled before token cleanup so a cleanup failure cannot continue queueing pushes.
+- Added `UNUserNotificationCenterDelegate` response handling, foreground presentation, and a cold-launch pending payload handoff.
+- Added typed destination parsing from `recme.deeplink_url` with `notification_type` + safe payload-ID fallback for older events.
+- Wired all notification destinations:
+  - follow -> Profile people/followers;
+  - mutual follow -> Profile people/friends;
+  - collaborator/list-place events -> exact list detail;
+  - map-save/followed-place events -> exact Map place card and camera;
+  - capture ready -> matching Profile draft or drafts section;
+  - discovery digest -> Discover.
+- Place notification lookup uses a one-time global visible-place refresh on tap so a referenced place outside the current map viewport can still open.
+- Existing hosted notification payloads already contain the required deeplinks and safe IDs, so no schema/function migration or worker redeploy was needed in this pass.
+- Added preference-preset, exhaustive type-routing, URL parsing, payload fallback, and owning-tab contract tests.
+- Validation passed:
+  - `xcodegen generate`
+  - `git diff --check`
+  - focused `RemoteRepositoryTests`
+  - full iOS suite on installed iPhone 17 / iOS 26.5: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec60-unified/Logs/Test/Test-Wander-2026.07.12_13-42-03--0700.xcresult`)
+- The repo-default iPhone 16 Plus / iOS 18.6 runtime remains unavailable on this machine. No TestFlight release, build-number bump, or merge to `main` was requested or performed.

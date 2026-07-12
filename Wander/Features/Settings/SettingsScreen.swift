@@ -397,12 +397,15 @@ private struct TrustAndPrivacySheet: View {
 
 private struct NotificationSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    @State private var preferences = NotificationPreferences()
+    @State private var preferences = NotificationPreferences.allDisabled
     @State private var isLoading = false
     @State private var isSaving = false
+    @State private var isChangingEnabledState = false
+    @State private var isWaitingForSettingsAuthorization = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -423,11 +426,6 @@ private struct NotificationSettingsSheet: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                         SettingsSectionTitle("push types")
-                        notificationToggle(
-                            title: "Push notifications",
-                            systemImage: "bell.badge",
-                            binding: preferenceBinding(\.pushEnabled) { NotificationPreferencesUpdate(pushEnabled: $0) }
-                        )
                         notificationToggle(
                             title: "Follows and friends",
                             systemImage: "person.2",
@@ -462,6 +460,7 @@ private struct NotificationSettingsSheet: View {
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .opacity(notificationsEnabled ? 1 : 0.45)
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -485,6 +484,24 @@ private struct NotificationSettingsSheet: View {
         .task {
             await load()
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, isWaitingForSettingsAuthorization else { return }
+            Task {
+                await pushNotifications.refreshAuthorizationStatus()
+                guard pushNotifications.canRegisterForRemoteNotifications else { return }
+                isWaitingForSettingsAuthorization = false
+                await enableNotifications(permissionAlreadyGranted: true)
+            }
+        }
+        .onChange(of: pushNotifications.lastErrorMessage) { _, message in
+            if let message {
+                errorMessage = message
+            }
+        }
+    }
+
+    private var notificationsEnabled: Bool {
+        preferences.pushEnabled && pushNotifications.canRegisterForRemoteNotifications
     }
 
     private var statusBlock: some View {
@@ -498,7 +515,7 @@ private struct NotificationSettingsSheet: View {
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(pushNotifications.statusTitle)
+                    Text(notificationsEnabled ? "Notifications on" : "Notifications off")
                         .font(.system(size: 15, weight: .black))
                     Text(statusSubtitle)
                         .font(.system(size: 13, weight: .medium))
@@ -508,38 +525,21 @@ private struct NotificationSettingsSheet: View {
                 Spacer()
             }
 
-            if pushNotifications.canRequestAuthorization {
-                Button {
-                    Task {
-                        await pushNotifications.requestAuthorizationAndRegister()
-                        await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: auth.state)
+            Button {
+                Task {
+                    if notificationsEnabled {
+                        await disableNotifications()
+                    } else {
+                        await enableNotifications()
                     }
-                } label: {
-                    actionLabel(
-                        title: pushNotifications.isRequestingAuthorization ? "asking" : "allow notifications",
-                        systemImage: "bell.badge"
-                    )
                 }
-                .disabled(pushNotifications.isRequestingAuthorization)
-            } else if pushNotifications.authorizationStatus == .denied {
-                Button {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    actionLabel(title: "open iOS settings", systemImage: "gear")
-                }
-            } else if pushNotifications.canRegisterForRemoteNotifications {
-                Button {
-                    UIApplication.shared.registerForRemoteNotifications()
-                } label: {
-                    actionLabel(
-                        title: pushNotifications.isRegisteringToken ? "syncing" : "sync this device",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                }
-                .disabled(pushNotifications.isRegisteringToken)
+            } label: {
+                actionLabel(
+                    title: actionButtonTitle,
+                    systemImage: notificationsEnabled ? "bell.slash" : "bell.badge"
+                )
             }
+            .disabled(isChangingEnabledState || isLoading || !auth.isSignedIn || !backend.canRegisterPushNotifications)
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -547,9 +547,12 @@ private struct NotificationSettingsSheet: View {
     }
 
     private var statusSubtitle: String {
+        if notificationsEnabled {
+            return "This device can receive every enabled rec.me activity type."
+        }
         switch pushNotifications.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            return "This device can receive rec.me activity."
+            return "Allow notifications to turn on every activity type for this device."
         case .denied:
             return "Enable alerts in iOS Settings to receive pushes."
         case .notDetermined:
@@ -557,6 +560,13 @@ private struct NotificationSettingsSheet: View {
         @unknown default:
             return "Notification status is unavailable."
         }
+    }
+
+    private var actionButtonTitle: String {
+        if isChangingEnabledState || pushNotifications.isRequestingAuthorization || pushNotifications.isRegisteringToken {
+            return notificationsEnabled ? "disabling" : "allowing"
+        }
+        return notificationsEnabled ? "disable notifications" : "allow notifications"
     }
 
     private func actionLabel(title: String, systemImage: String) -> some View {
@@ -586,7 +596,7 @@ private struct NotificationSettingsSheet: View {
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
-        .disabled(isLoading || isSaving || !backend.canRegisterPushNotifications)
+        .disabled(isLoading || isSaving || isChangingEnabledState || !notificationsEnabled || !backend.canRegisterPushNotifications)
     }
 
     private func preferenceBinding(
@@ -614,9 +624,76 @@ private struct NotificationSettingsSheet: View {
         defer { isLoading = false }
 
         do {
-            preferences = try await backend.notificationPreferences()
+            let loadedPreferences = try await backend.notificationPreferences()
+            preferences = pushNotifications.canRegisterForRemoteNotifications && loadedPreferences.pushEnabled
+                ? loadedPreferences
+                : .allDisabled
         } catch {
             errorMessage = "Could not load notification settings."
+        }
+    }
+
+    private func enableNotifications(permissionAlreadyGranted: Bool = false) async {
+        guard auth.isSignedIn, backend.canRegisterPushNotifications else {
+            errorMessage = "Sign in to turn on notifications."
+            return
+        }
+
+        if pushNotifications.authorizationStatus == .denied && !permissionAlreadyGranted {
+            isWaitingForSettingsAuthorization = true
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                await UIApplication.shared.open(url)
+            }
+            return
+        }
+
+        isChangingEnabledState = true
+        errorMessage = nil
+        pushNotifications.clearLastError()
+        defer { isChangingEnabledState = false }
+
+        let permissionGranted: Bool
+        if permissionAlreadyGranted || pushNotifications.canRegisterForRemoteNotifications {
+            permissionGranted = true
+            UIApplication.shared.registerForRemoteNotifications()
+        } else {
+            permissionGranted = await pushNotifications.requestAuthorizationAndRegister()
+        }
+
+        guard permissionGranted else {
+            preferences = .allDisabled
+            errorMessage = pushNotifications.lastErrorMessage ?? "Notifications were not allowed."
+            return
+        }
+
+        do {
+            preferences = try await backend.updateNotificationPreferences(.allEnabled)
+            _ = await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: auth.state)
+            if let registrationError = pushNotifications.lastErrorMessage {
+                errorMessage = registrationError
+            }
+        } catch {
+            preferences = .allDisabled
+            errorMessage = "Permission was allowed, but rec.me could not finish notification setup. Try again."
+        }
+    }
+
+    private func disableNotifications() async {
+        guard auth.isSignedIn, backend.canRegisterPushNotifications else { return }
+
+        isChangingEnabledState = true
+        errorMessage = nil
+        pushNotifications.clearLastError()
+        defer { isChangingEnabledState = false }
+
+        do {
+            preferences = try await backend.updateNotificationPreferences(.allDisabled)
+            let disconnected = await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
+            if !disconnected {
+                errorMessage = pushNotifications.lastErrorMessage
+            }
+        } catch {
+            errorMessage = "Could not disable notifications. Try again."
         }
     }
 

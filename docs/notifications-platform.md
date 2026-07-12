@@ -40,6 +40,25 @@ Before relying on a new notification in TestFlight:
 
 The producer sends only to followers who can read the associated `user_places` row under its current visibility and block rules. Its copy is `<display name> saved a place` with the canonical place name as the body. The routing payload contains only visit, user-place, place, and actor IDs.
 
+## Permission And Routing
+
+Notification setup is one action in Profile -> Settings -> Notifications. Before setup, every category is shown off and disabled. **Allow notifications** requests iOS permission, enables every category, requests an APNs token, and registers any available stored token. **Disable notifications** turns off every backend category before deactivating the device token; iOS permission may remain granted because apps cannot revoke system permission themselves.
+
+Notification taps resolve as follows:
+
+| Type | Destination |
+| --- | --- |
+| `followed_you` | Profile -> people -> followers |
+| `mutual_follow` | Profile -> people -> friends |
+| `list_collaborator_added` | The referenced list detail |
+| `list_place_added` | The referenced list detail |
+| `place_saved_from_your_map` | The referenced place card on Map |
+| `followed_place_visit` | The referenced place card on Map |
+| `capture_ready` | The matching Profile draft, or the drafts section |
+| `followed_activity_digest` | Discover |
+
+The app parses `recme.deeplink_url` first and falls back to `notification_type` plus safe routing IDs in `recme.data`. This keeps older queued notifications routable if their URL format changes.
+
 ## Adding A Notification
 
 Use this checklist for each new producer:

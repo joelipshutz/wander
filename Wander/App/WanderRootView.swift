@@ -91,6 +91,9 @@ struct WanderRootView: View {
             await pushNotifications.refreshAuthorizationStatus()
             await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
+            if let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
+                pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
             guard let deviceToken = notification.userInfo?[WanderAppDelegate.deviceTokenKey] as? Data else { return }
@@ -101,6 +104,16 @@ struct WanderRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didFailToRegisterForRemoteNotifications)) { notification in
             guard let error = notification.userInfo?[WanderAppDelegate.errorKey] as? Error else { return }
             pushNotifications.handleRegistrationFailure(error)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveNotificationResponse)) { notification in
+            guard let userInfo = WanderAppDelegate.takePendingNotificationUserInfo()
+                ?? notification.userInfo?[WanderAppDelegate.userInfoKey] as? [AnyHashable: Any]
+            else { return }
+            pushNotifications.handleNotificationResponse(userInfo: userInfo)
+        }
+        .onChange(of: pushNotifications.navigationRequest) { _, request in
+            guard let request else { return }
+            routeNotification(request)
         }
         .onChange(of: auth.isPresentingNativeAuth) { _, isPresenting in
             guard !isPresenting else { return }
@@ -124,6 +137,25 @@ struct WanderRootView: View {
             } else {
                 selectedTab = newTab
             }
+        }
+    }
+
+    private func routeNotification(_ request: NotificationNavigationRequest) {
+        isPresentingAdd = false
+        initialPresentation = nil
+
+        selectedTab = Self.notificationTab(for: request.destination)
+        if request.destination == .discover {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+        }
+    }
+
+    static func notificationTab(for destination: NotificationDestination) -> WanderTab {
+        switch destination {
+        case .people, .drafts: .profile
+        case .list: .lists
+        case .place: .map
+        case .discover: .discover
         }
     }
 

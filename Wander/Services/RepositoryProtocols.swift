@@ -796,6 +796,26 @@ struct NotificationPreferences: Equatable {
     var captureEnabled: Bool = true
     var discoveryDigestEnabled: Bool = false
     var followedActivityEnabled: Bool = true
+
+    static let allEnabled = NotificationPreferences(
+        pushEnabled: true,
+        socialGraphEnabled: true,
+        sharedListsEnabled: true,
+        recommendationsEnabled: true,
+        captureEnabled: true,
+        discoveryDigestEnabled: true,
+        followedActivityEnabled: true
+    )
+
+    static let allDisabled = NotificationPreferences(
+        pushEnabled: false,
+        socialGraphEnabled: false,
+        sharedListsEnabled: false,
+        recommendationsEnabled: false,
+        captureEnabled: false,
+        discoveryDigestEnabled: false,
+        followedActivityEnabled: false
+    )
 }
 
 struct NotificationPreferencesUpdate: Equatable {
@@ -824,6 +844,26 @@ struct NotificationPreferencesUpdate: Equatable {
         self.discoveryDigestEnabled = discoveryDigestEnabled
         self.followedActivityEnabled = followedActivityEnabled
     }
+
+    static let allEnabled = NotificationPreferencesUpdate(
+        pushEnabled: true,
+        socialGraphEnabled: true,
+        sharedListsEnabled: true,
+        recommendationsEnabled: true,
+        captureEnabled: true,
+        discoveryDigestEnabled: true,
+        followedActivityEnabled: true
+    )
+
+    static let allDisabled = NotificationPreferencesUpdate(
+        pushEnabled: false,
+        socialGraphEnabled: false,
+        sharedListsEnabled: false,
+        recommendationsEnabled: false,
+        captureEnabled: false,
+        discoveryDigestEnabled: false,
+        followedActivityEnabled: false
+    )
 }
 
 @MainActor
