@@ -9885,3 +9885,17 @@ Checkpoint, 2026-07-12 12:52 PDT:
 - Reran the release-source full suite on iPhone 16 Plus, iOS 18.6: 262 tests passed, 0 failures.
 - Generic iOS Simulator build passed from the same build-66 source and DerivedData cache.
 - `git diff --check` passes; release diff is scoped to `project.yml`, the two generated project build-number settings, and this agent log.
+
+Completion, 2026-07-12 13:04 PDT:
+
+- Release bump PR #71 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/71.
+- Main release commit: `6ca33765e6f1d2c0a30b476f527607a20a3af391`.
+- Archived build `0.1 (66)` at `/private/tmp/Wander-0.1-build66.xcarchive`; archive metadata and app Info.plist both confirmed build 66, bundle `com.grayline.wander`, team `Y7TVK75RZ8`.
+- Initial export without an Xcode GUI account failed with `Failed to Use Accounts`; retried the unchanged archive using the local App Store Connect API key.
+- Uploaded with `/private/tmp/WanderExportUpload66.plist`, `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `** EXPORT SUCCEEDED **`.
+- TestFlight helper confirmed archive upload metadata build 66, then reported build id `056f4d70-2a3c-4df0-929a-ae97f08ff2c7`, processing `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783886565390209.
+- Linear `REC-81` updated with release evidence and moved to Done.
+- Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
+- Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.
