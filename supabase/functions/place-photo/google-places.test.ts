@@ -28,7 +28,7 @@ Deno.test("selectGooglePlace rejects an unrelated result even at the same coordi
   if (selected !== null) throw new Error("accepted unrelated result");
 });
 
-Deno.test("representativePhoto uses the provider-ranked first usable photo", () => {
+Deno.test("representativePhoto uses the first usable photo returned by the provider", () => {
   const selected = representativePhoto({
     photos: [
       { name: "tiny", widthPx: 80, heightPx: 80 },

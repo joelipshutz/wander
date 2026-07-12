@@ -10254,7 +10254,7 @@ Checkpoint, 2026-07-12 14:11 PDT:
 - Added the `place-photo` Supabase Edge Function:
   - validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract before provider access;
   - uses an existing Google Place ID when trustworthy, otherwise Text Search with name/address and a 1 km coordinate bias;
-  - rejects weak-name or distant matches, takes Google's provider-ranked first usable photo, and requires the direct Google Maps source-photo URL;
+  - rejects weak-name or distant matches, takes Google's first returned usable photo, and requires the direct Google Maps source-photo URL;
   - keeps the API key server-side and returns `Cache-Control: no-store`.
 - Replaced the full place-profile map header with photo-first media behavior while preserving the MapKit header as loading/error/no-match fallback. The image loader uses an ephemeral `URLSession` with no URL cache. The UI exposes author profile attribution plus the individual source photo on Google Maps.
 - Deliberately did not persist Google photo names, image bytes, or returned URLs because Google prohibits prefetching/caching/storing Places content beyond allowed exceptions. Google Place IDs remain the only durable provider identity.
@@ -10264,7 +10264,7 @@ Checkpoint, 2026-07-12 14:11 PDT:
   - Focused iOS photo repository/encoding tests passed on iPhone 17 Pro, iOS 26.5.
   - Final full iOS suite passed: 264 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82/Logs/Test/Test-Wander-2026.07.12_14-06-27--0700.xcresult`.
   - Generic iOS Simulator build passed.
-  - Google match/photo helper tests passed through Node's TypeScript type stripping, including rejecting an unrelated venue at the same coordinate and selecting the first provider-ranked usable image.
+  - Google match/photo helper tests passed through Node's TypeScript type stripping, including rejecting an unrelated venue at the same coordinate and selecting the first usable image returned by Google.
   - `node --experimental-strip-types --check` passed for both Edge Function TypeScript files; `git diff --check` passed.
 - Environment note: the repo-documented iPhone 16 Plus, iOS 18.6 simulator is not installed on this machine. Validation used the installed iPhone 17 Pro, iOS 26.5 simulator.
 - Remaining live-test blocker: an approved, quota-capped Google Cloud billing project and restricted Places API server key. Until `WANDER_GOOGLE_PLACES_API_KEY` is set and `place-photo` is deployed, Xcode builds and the safe MapKit fallback work, but live venue photos cannot load and photo visual QA cannot be completed honestly.
