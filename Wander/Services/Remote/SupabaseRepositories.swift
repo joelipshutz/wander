@@ -707,6 +707,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let recommendationsEnabled: Bool
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
+    let followedActivityEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case pushEnabled = "push_enabled"
@@ -715,6 +716,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case recommendationsEnabled = "recommendations_enabled"
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
+        case followedActivityEnabled = "followed_activity_enabled"
     }
 
     var preferences: NotificationPreferences {
@@ -724,7 +726,8 @@ private struct NotificationPreferencesResponse: Decodable {
             sharedListsEnabled: sharedListsEnabled,
             recommendationsEnabled: recommendationsEnabled,
             captureEnabled: captureEnabled,
-            discoveryDigestEnabled: discoveryDigestEnabled
+            discoveryDigestEnabled: discoveryDigestEnabled,
+            followedActivityEnabled: followedActivityEnabled
         )
     }
 }
@@ -748,6 +751,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let recommendationsEnabled: Bool?
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
+    let followedActivityEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
         self.pushEnabled = update.pushEnabled
@@ -756,6 +760,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.recommendationsEnabled = update.recommendationsEnabled
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
+        self.followedActivityEnabled = update.followedActivityEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -765,6 +770,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case recommendationsEnabled = "recommendations_enabled"
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
+        case followedActivityEnabled = "followed_activity_enabled"
     }
 }
 

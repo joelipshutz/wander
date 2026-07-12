@@ -444,6 +444,11 @@ private struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.recommendationsEnabled) { NotificationPreferencesUpdate(recommendationsEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "People you follow",
+                            systemImage: "person.crop.circle.badge.checkmark",
+                            binding: preferenceBinding(\.followedActivityEnabled) { NotificationPreferencesUpdate(followedActivityEnabled: $0) }
+                        )
+                        notificationToggle(
                             title: "Capture ready",
                             systemImage: "sparkles",
                             binding: preferenceBinding(\.captureEnabled) { NotificationPreferencesUpdate(captureEnabled: $0) }

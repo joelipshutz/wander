@@ -795,6 +795,7 @@ struct NotificationPreferences: Equatable {
     var recommendationsEnabled: Bool = true
     var captureEnabled: Bool = true
     var discoveryDigestEnabled: Bool = false
+    var followedActivityEnabled: Bool = true
 }
 
 struct NotificationPreferencesUpdate: Equatable {
@@ -804,6 +805,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var recommendationsEnabled: Bool?
     var captureEnabled: Bool?
     var discoveryDigestEnabled: Bool?
+    var followedActivityEnabled: Bool?
 
     init(
         pushEnabled: Bool? = nil,
@@ -811,7 +813,8 @@ struct NotificationPreferencesUpdate: Equatable {
         sharedListsEnabled: Bool? = nil,
         recommendationsEnabled: Bool? = nil,
         captureEnabled: Bool? = nil,
-        discoveryDigestEnabled: Bool? = nil
+        discoveryDigestEnabled: Bool? = nil,
+        followedActivityEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
         self.socialGraphEnabled = socialGraphEnabled
@@ -819,6 +822,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.recommendationsEnabled = recommendationsEnabled
         self.captureEnabled = captureEnabled
         self.discoveryDigestEnabled = discoveryDigestEnabled
+        self.followedActivityEnabled = followedActivityEnabled
     }
 }
 

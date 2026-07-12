@@ -819,7 +819,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "shared_lists_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
-          "discovery_digest_enabled": false
+          "discovery_digest_enabled": false,
+          "followed_activity_enabled": true
         }
         """.data(using: .utf8)
         rpc.responses["update_notification_preferences"] = """
@@ -829,7 +830,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "shared_lists_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
-          "discovery_digest_enabled": true
+          "discovery_digest_enabled": true,
+          "followed_activity_enabled": false
         }
         """.data(using: .utf8)
         rpc.responses["register_push_token"] = #""token-row-id""#.data(using: .utf8)
@@ -837,7 +839,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let preferences = try await repository.preferences()
         let updated = try await repository.updatePreferences(
-            NotificationPreferencesUpdate(discoveryDigestEnabled: true)
+            NotificationPreferencesUpdate(discoveryDigestEnabled: true, followedActivityEnabled: false)
         )
         let tokenID = try await repository.registerPushToken(
             "abcdef1234567890",
@@ -847,8 +849,10 @@ final class RemoteRepositoryTests: XCTestCase {
         try await repository.unregisterPushToken("abcdef1234567890", environment: .sandbox)
 
         XCTAssertTrue(preferences.socialGraphEnabled)
+        XCTAssertTrue(preferences.followedActivityEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
+        XCTAssertFalse(updated.followedActivityEnabled)
         XCTAssertEqual(tokenID, "token-row-id")
         XCTAssertEqual(
             rpc.calls.map(\.name),
@@ -862,6 +866,7 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
         XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
+        XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
         XCTAssertEqual(rpc.rawBodies[2]["input_environment"] as? String, "sandbox")

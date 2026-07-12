@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(33);
+select plan(40);
 
 select is(
   (
@@ -43,6 +43,10 @@ values
   ('user_list_owner', 'listowner', 'List Owner'),
   ('user_list_collab', 'listcollab', 'List Collab'),
   ('user_capture_owner', 'captureowner', 'Capture Owner');
+insert into public.profiles (id, handle, display_name)
+values
+  ('user_activity_actor', 'activityactor', 'Activity Actor'),
+  ('user_activity_follower', 'activityfollower', 'Activity Follower');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
@@ -72,6 +76,12 @@ select is(
   (public.get_notification_preferences()).discovery_digest_enabled,
   false,
   'discovery digest notifications default off'
+);
+
+select is(
+  (public.get_notification_preferences()).followed_activity_enabled,
+  true,
+  'followed-place activity notifications default on'
 );
 
 select is(
@@ -127,6 +137,134 @@ select ok(
 reset role;
 delete from public.notification_events;
 
+insert into public.places (
+  id, canonical_name, category, latitude, longitude,
+  source_provider, source_provider_place_id
+)
+values (
+  '40000000-0000-0000-0000-000000000001',
+  'Bar Nido',
+  'bars_nightlife',
+  34.07,
+  -118.30,
+  'mapkit',
+  'bar-nido'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_activity_follower', true);
+select public.register_push_token(
+  '1212121212121212121212121212121212121212121212121212121212121212',
+  'sandbox',
+  'com.grayline.wander'
+);
+reset role;
+
+insert into public.follows(follower_user_id, followed_user_id, source)
+values ('user_activity_follower', 'user_activity_actor', 'profile');
+
+insert into public.user_places (
+  id, user_id, place_id, status, note, visibility, source_type
+)
+values (
+  '41000000-0000-0000-0000-000000000010',
+  'user_activity_actor',
+  '40000000-0000-0000-0000-000000000001',
+  'been',
+  'never include this private note',
+  'followers',
+  'manual'
+);
+
+select is(
+  (select notification_type from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1),
+  'followed_place_visit',
+  'a followed user saving a visited place queues an activity push'
+);
+
+select results_eq(
+  $$ select title, body from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1 $$,
+  $$ values ('Activity Actor saved a place'::text, 'Bar Nido'::text) $$,
+  'followed-place push uses the actor and place copy'
+);
+
+select ok(
+  (
+    select data ?& array['visit_id', 'user_place_id', 'place_id', 'actor_user_id']
+      and not (data ?| array['note', 'rating_score', 'latitude', 'longitude'])
+    from public.notification_events
+    where recipient_user_id = 'user_activity_follower'
+    limit 1
+  ),
+  'followed-place payload includes routing ids and excludes private visit data'
+);
+
+delete from public.notification_events;
+insert into public.place_visits (
+  id, user_place_id, visited_at, backfilled_from_user_place
+)
+values (
+  '45000000-0000-0000-0000-000000000010',
+  '41000000-0000-0000-0000-000000000010',
+  now(),
+  false
+);
+
+select is(
+  (select count(*)::int from public.notification_events where recipient_user_id = 'user_activity_follower'),
+  1,
+  'a later explicit check-in queues one new activity push'
+);
+
+delete from public.notification_events;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_activity_follower', true);
+select public.update_notification_preferences('{"followed_activity_enabled": false}'::jsonb);
+reset role;
+
+insert into public.place_visits (
+  id, user_place_id, visited_at, backfilled_from_user_place
+)
+values (
+  '45000000-0000-0000-0000-000000000011',
+  '41000000-0000-0000-0000-000000000010',
+  now(),
+  false
+);
+
+select is(
+  (select count(*)::int from public.notification_events where recipient_user_id = 'user_activity_follower'),
+  0,
+  'disabled followed-activity preference suppresses check-in pushes'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_activity_follower', true);
+select public.update_notification_preferences('{"followed_activity_enabled": true}'::jsonb);
+reset role;
+update public.user_places
+set visibility = 'self'
+where id = '41000000-0000-0000-0000-000000000010';
+
+insert into public.place_visits (
+  id, user_place_id, visited_at, backfilled_from_user_place
+)
+values (
+  '45000000-0000-0000-0000-000000000012',
+  '41000000-0000-0000-0000-000000000010',
+  now(),
+  false
+);
+
+select is(
+  (select count(*)::int from public.notification_events where recipient_user_id = 'user_activity_follower'),
+  0,
+  'self-only place activity is not disclosed to followers'
+);
+
+reset role;
+delete from public.notification_events;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_original_follower', true);
 select public.register_push_token(
@@ -166,25 +304,6 @@ select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_block_recipient'),
   0,
   'block relationships suppress follow push events even if a row is inserted later'
-);
-
-insert into public.places (
-  id,
-  canonical_name,
-  category,
-  latitude,
-  longitude,
-  source_provider,
-  source_provider_place_id
-)
-values (
-  '40000000-0000-0000-0000-000000000001',
-  'Bar Nido',
-  'bars_nightlife',
-  34.07,
-  -118.30,
-  'mapkit',
-  'bar-nido'
 );
 
 insert into public.user_places (

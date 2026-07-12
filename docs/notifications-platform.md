@@ -34,6 +34,12 @@ Before relying on a new notification in TestFlight:
 - Trigger one real event, invoke `push-notification-worker`, and confirm the event reaches `sent`.
 - Repeat with the relevant preference bucket disabled and confirm no event is queued.
 
+## Followed Place Activity
+
+`followed_place_visit` is queued when a new `place_visits` row represents either an initial visited-place save or a later check-in. It is controlled by the default-on `followed_activity_enabled` preference shown as **People you follow** in Settings.
+
+The producer sends only to followers who can read the associated `user_places` row under its current visibility and block rules. Its copy is `<display name> saved a place` with the canonical place name as the body. The routing payload contains only visit, user-place, place, and actor IDs.
+
 ## Adding A Notification
 
 Use this checklist for each new producer:

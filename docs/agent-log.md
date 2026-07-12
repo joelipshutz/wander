@@ -9881,3 +9881,38 @@ Outcome:
 - Reopened `Wander.xcodeproj` in Xcode so the IDE can refresh stale signing diagnostics.
 - Mission Control task creation was attempted, but local `http://localhost:4000` was not running.
 - No app source, project settings, or committed secrets changed. This repair only refreshed local Apple signing assets and recorded the outcome.
+## 2026-07-12 13:00 PDT - Codex - REC-60 Followed Place Activity Notification
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` (`In Progress`)
+Starting status: clean and synchronized with `origin/codex/rec-60-notifications` at `5112395f9`.
+
+Goal: notify a user's eligible followers when that user saves a place as visited or records a new check-in, using the shared notifications platform.
+
+Expected files:
+
+- `supabase/migrations/*followed_place_visit_notifications.sql`
+- `supabase/tests/notifications.sql`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/Remote/SupabaseRepositories.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/RemoteRepositoryTests.swift`
+- `docs/notifications-platform.md`
+- `docs/agent-log.md`
+
+Coordination: the primary checkout is dirty with unrelated REC-81 work. This isolated REC-60 worktree is clean; no overlapping active work was found in the files above.
+
+Completion, 2026-07-12 13:20 PDT:
+
+- Added the `followed_place_visit` event and a dedicated default-on `followed_activity_enabled` preference exposed as **People you follow** in Notification Settings.
+- Added one `place_visits` insert producer so both an initial visited-place save and each later explicit check-in use the same path without duplicate producers.
+- Fanout is limited to followers who pass `app.can_read_user_place` for the current place visibility and block graph. Queue safeguards still enforce active tokens, global push state, the category preference, actor/recipient validity, and per-visit/recipient dedupe.
+- Push copy is `<display name> saved a place` with the canonical place name as the body. Payload data contains only visit, user-place, place, and actor IDs; notes, ratings, coordinates, and other private visit data are excluded.
+- Hosted migration `20260712130000_followed_place_visit_notifications.sql` was applied to project `rugmtlgufrhlxwfkumhw`. The dry run first required restoring already-merged migration `20260712122500_restrict_place_list_rpc_execution.sql` from `origin/main`; no hosted migration repair was performed.
+- Hosted pgTAP passed 40/40, covering initial saves, later check-ins, preference opt-out, self-only visibility, payload safety, and all prior notification behavior.
+- Hosted metadata verification confirmed `queue_notification_event`, `notification_type_enabled`, and `notify_followed_place_visit_insert` remain security-definer, pin `search_path=public, app`, and are not executable by `anon` or `authenticated`.
+- `xcodegen generate` and `git diff --check` passed.
+- The required iPhone 16 Plus / iOS 18.6 simulator was unavailable. The full suite passed on the installed iPhone 17 / iOS 26.5 simulator: 254 tests, 0 failures.
+- No TestFlight build, build-number bump, merge to `main`, or tester Slack announcement was requested or performed.
