@@ -9665,6 +9665,25 @@ Expected release files:
 - `Wander.xcodeproj/project.pbxproj`
 - `docs/agent-log.md`
 - Temporary archive/export/release-note artifacts under `/private/tmp`
+
+Completion, 2026-07-11 16:14 PDT:
+
+- Squash-merged PR #69 to `main`: https://github.com/joelipshutz/wander/pull/69.
+- Main merge commit: `e1babb0a33410516de49dcb457bb6dd94da15496`.
+- Deleted remote branch `codex/rec-73-avatar-audit-fix`; the local branch remains checked out in `/private/tmp/recme-rec73-avatar-audit`.
+- Bumped TestFlight build number to `65` in `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, committed `da3214604` (`chore: bump TestFlight build 65`), and pushed `main`.
+- Validation passed:
+  - Focused REC-73 avatar regression tests on `iPhone 17 Pro, OS=26.5`.
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-build65-build CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-build65-build CODE_SIGNING_ALLOWED=NO -jobs 1`.
+  - `xcodebuild archive -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS' -archivePath /private/tmp/Wander-0.1-build65.xcarchive -derivedDataPath /private/tmp/DerivedData-build65-archive -allowProvisioningUpdates`.
+- Uploaded archive `/private/tmp/Wander-0.1-build65.xcarchive` with export options `manageAppVersionAndBuildNumber=false`.
+- Ran `scripts/testflight-release.mjs --build-number 65 --archive-path /private/tmp/Wander-0.1-build65.xcarchive --what-to-test-file /private/tmp/recme-build65-what-to-test.txt`; App Store Connect reported build `0.1 (65)` as `VALID`, attached to `Wander Alpha`, and external TestFlight review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Slack tester note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783811626550069.
+- Linear `REC-73` was already `Done`; added release closeout comment `a4281f4c-e407-4445-8fbc-ddf816ecb309` with PR, build, validation, TestFlight, and Slack details.
+- Known issue: build 65 focuses on avatar persistence. Other social/list/photo issues remain tracked separately.
+
 ## 2026-06-30 23:58 PDT - Codex - Profile Avatar Persistence Investigation
 
 Agent: Codex
