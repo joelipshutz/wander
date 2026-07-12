@@ -9764,3 +9764,49 @@ Completion, 2026-07-10 00:21 PDT:
 - Linear `REC-73` linked to PR #69, moved to `In Review`, and updated with root cause plus validation notes.
 - Known issue: this session validated the data paths with focused and full tests, but did not run manual visual verification against Ryan's live/signed-in friend data. Ryan should test the branch in Xcode with a friend/profile-photo account before making PR #69 ready.
 - No TestFlight release was requested or performed.
+## 2026-07-12 11:08 PDT - Codex - REC-60 Hosted Push Activation
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60`
+
+Goal: finish the hosted notification backend activation for REC-60 by securely configuring the worker/APNs credentials, establishing automatic worker invocation, redeploying, and running the strongest available hosted smoke verification before handing off literal real-device testing steps.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected the dirty unrelated root checkout and all worktrees, read the latest agent log, and continued in the existing clean REC-60 worktree.
+- Hosted notification migration and pgTAP verification were already complete; `push-notification-worker` was deployed and correctly rejected unauthenticated calls with `missing_worker_secret`.
+- Linear `REC-60` remains `In Review`, linked to PR #60.
+- No TestFlight release was requested by name, so this pass does not merge the PR, increment the build, archive, upload, or post a tester release announcement.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Potentially `supabase/migrations/*` and `supabase/tests/notifications.sql` if durable worker scheduling requires a database migration
+- Potentially `docs/notifications-platform.md` for operations/testing instructions
+
+Completion, 2026-07-12 11:30 PDT:
+
+- Added `20260712112000_schedule_push_notification_worker.sql`, which enables `pg_cron` and `pg_net` and installs one active `recme-push-notification-worker` job running every minute. The job reads `recme_project_url` and `recme_push_worker_secret` from encrypted Supabase Vault and makes no request when either value is absent.
+- Hosted dry run showed only the new schedule migration. A rollback-wrapped hosted execution test successfully enabled both extensions, installed the schedule, verified its cadence/configuration, and rolled back.
+- Applied the schedule migration to linked project `rugmtlgufrhlxwfkumhw` and verified the cron job was active and initially inert.
+- Updated `supabase/tests/notifications.sql` from 31 to 33 assertions to cover the active once-per-minute schedule and ensure its command reads runtime configuration from Vault rather than embedding hosted values. Hosted pgTAP passed 33/33 after the persistent apply.
+- Signed into Apple Developer for Grayline Studio, LLC, created APNs key `RB7JZ42U2U` named `recme push notifications`, scoped it team-wide for sandbox and production, downloaded it, validated its PKCS#8 format, and moved it to `/Users/ryanlieblein/.openclaw/workspace/AuthKey_RB7JZ42U2U.p8` with owner-only permissions. No key material was written to Git or logs.
+- Generated a 256-bit worker secret, set hosted Edge Function secrets `WANDER_WORKER_SECRET`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and `APNS_TOPIC`, and stored the matching project URL and worker secret in Supabase Vault.
+- Redeployed `push-notification-worker`. An authenticated manual smoke call returned HTTP 200 with zero pending events. The automatic cron invocation then returned HTTP 200 through `pg_net` with no timeout, proving the scheduled path reaches the deployed worker.
+- Direct APNs HTTP/2 credential smoke test authenticated successfully; Apple returned the expected `BadDeviceToken` response for a deliberately invalid token, confirming the key/team/topic while sending no notification to a real device.
+- Updated `docs/notifications-platform.md` with the automatic cadence and hosted runtime contract.
+- Validation passed:
+  - `git diff --check`
+  - hosted notification pgTAP: 33/33
+  - Deno check for `push-notification-worker`
+  - generic iOS Simulator build with `CODE_SIGNING_ALLOWED=NO`
+  - full iOS test suite on `iPhone 16 Plus, OS=18.6` with `CODE_SIGNING_ALLOWED=NO`
+- The first sandboxed Deno/build attempts were blocked by package DNS and CoreSimulator permissions; both passed when rerun with normal network/simulator access.
+- PR remains #60 (`codex/rec-60-notifications`) and Linear remains `In Review`. No merge, build-number bump, TestFlight upload, or tester Slack announcement was performed because this request did not explicitly ask for a TestFlight release.
+
+Remaining real-device validation:
+
+- Build PR #60 on a physical iPhone, sign in, allow notifications, and confirm the production/sandbox device token row appears.
+- Trigger one real positive event and one preference-disabled no-push event. The hosted worker is now automatic; testers do not manually invoke it.

@@ -9,6 +9,19 @@ REC-60 establishes the first rec.me push notification pipeline. The immediate co
 3. `app.queue_notification_event` checks the recipient profile, self-actions, blocks, active device tokens, preference buckets, and pending dedupe keys.
 4. `push-notification-worker` claims events with `public.claim_pending_push_notifications`, sends APNs payloads, and calls `public.mark_push_notification_result`.
 5. Retryable worker failures return events to `pending` with backoff. Expired claims are reclaimable, and exhausted claims fail.
+6. Supabase Cron invokes the worker once per minute. The cron command reads `recme_project_url` and `recme_push_worker_secret` from Supabase Vault, so no runtime secret is committed to Git.
+
+## Hosted Runtime Configuration
+
+The worker requires these hosted Edge Function secrets:
+
+- `WANDER_WORKER_SECRET`
+- `APNS_KEY_ID`
+- `APNS_TEAM_ID`
+- `APNS_PRIVATE_KEY`
+- `APNS_TOPIC` (`com.grayline.wander`)
+
+Supabase Vault must contain `recme_project_url` and `recme_push_worker_secret`. The worker secret in Vault must match `WANDER_WORKER_SECRET`. Migration `20260712112000_schedule_push_notification_worker.sql` installs the once-per-minute cron job; it does not make an HTTP request until both Vault values exist.
 
 ## Testing Baseline
 
@@ -39,5 +52,6 @@ Use this checklist for each new producer:
 - Default claim lease: 10 minutes.
 - Default max attempts: 5.
 - Retry backoff: 5 minutes per attempt, capped at 1 hour.
+- Automatic delivery cadence: once per minute, up to 100 claimed events per run.
 - The worker response includes `claimed_count`, a `summary`, and per-event processing results.
 - Permanent APNs token failures deactivate tokens. Retryable APNs/transport failures are rescheduled until `max_attempts`.

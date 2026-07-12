@@ -2,7 +2,30 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(31);
+select plan(33);
+
+select is(
+  (
+    select count(*)::int
+    from cron.job
+    where jobname = 'recme-push-notification-worker'
+      and schedule = '* * * * *'
+      and active
+  ),
+  1,
+  'push notification worker has one active once-per-minute schedule'
+);
+
+select ok(
+  (
+    select command like '%vault.decrypted_secrets%'
+      and command like '%recme_push_worker_secret%'
+      and command not like '%https://rugmtlgufrhlxwfkumhw.supabase.co%'
+    from cron.job
+    where jobname = 'recme-push-notification-worker'
+  ),
+  'push worker schedule reads runtime configuration from Vault instead of embedding hosted values'
+);
 
 insert into public.profiles (id, handle, display_name)
 values
