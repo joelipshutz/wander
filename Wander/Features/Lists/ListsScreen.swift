@@ -1661,10 +1661,16 @@ private struct FriendCollaboratorSearchContent: View {
     @Binding var selectedCollaborators: [ListCollaboratorMock]
     @State private var query = ""
 
-    private var friendCandidates: [ListCollaboratorMock] {
+    private var allFriendCandidates: [ListCollaboratorMock] {
         store.following(of: store.currentUser.id)
             .filter { store.relationship(to: $0.id) == .mutual }
             .map(ListCollaboratorMock.init(profile:))
+    }
+
+    private var friendCandidates: [ListCollaboratorMock] {
+        allFriendCandidates.filter { friend in
+            !selectedCollaborators.contains { isSameCollaborator($0, friend) }
+        }
     }
 
     private var filteredFriends: [ListCollaboratorMock] {
@@ -1706,8 +1712,16 @@ private struct FriendCollaboratorSearchContent: View {
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
 
-                if friendCandidates.isEmpty {
+                if allFriendCandidates.isEmpty {
                     Text("No friends available to invite.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                } else if friendCandidates.isEmpty {
+                    Text("All available friends are already collaborators.")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1771,14 +1785,8 @@ private struct FriendCollaboratorSearchContent: View {
     }
 
     private func friendRow(_ friend: ListCollaboratorMock) -> some View {
-        let isSelected = selectedCollaborators.contains { isSameCollaborator($0, friend) }
-
-        return Button {
-            if isSelected {
-                selectedCollaborators.removeAll { isSameCollaborator($0, friend) }
-            } else {
-                selectedCollaborators.append(friend)
-            }
+        Button {
+            selectedCollaborators.append(friend)
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
                 WanderAvatar(
@@ -1799,16 +1807,16 @@ private struct FriendCollaboratorSearchContent: View {
 
                 Spacer()
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle.fill")
+                Image(systemName: "plus.circle.fill")
                     .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(isSelected ? WanderTheme.categorySage.color : WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.terracotta.color)
             }
             .padding(WanderTheme.spacing3)
             .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isSelected ? "Remove \(friend.name)" : "Add \(friend.name)")
+        .accessibilityLabel("Add \(friend.name)")
     }
 
     private func isSameCollaborator(_ lhs: ListCollaboratorMock, _ rhs: ListCollaboratorMock) -> Bool {

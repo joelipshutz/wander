@@ -9308,3 +9308,13 @@ Checkpoint, 2026-07-09 16:35 PDT:
   - `public.remove_place_list_item`
   - `public.delete_place_list`
 - Updated `AGENTS.md` to require `node scripts/supabase-smoke-test.mjs` before handoff for iOS-called Supabase RPC/grant/RLS changes, and to extend the script when coverage is missing.
+
+Checkpoint, 2026-07-11 19:39 PDT:
+
+- Joe asked whether `Yo Test` exists in hosted Supabase. Read-only service-role query found `Yo Test` owned by Joe with Ryan as an active collaborator, plus two older duplicate `Yo Yo Test Test` rows also owned by Joe with Ryan as collaborator.
+- Joe clarified collaborator picker behavior: once a friend is added as a collaborator, they should disappear from the Friends row/list in the collaborator sheet.
+- Updated `FriendCollaboratorSearchContent` so selected collaborators are filtered out of available friend candidates, remain visible only in the selected section, and can be removed there. Added an explicit empty state for “All available friends are already collaborators.”
+- Verification:
+  - `git diff --check`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath /private/tmp/DerivedData-rec81-open CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests`
+  - Result: 9 tests passed, 0 failed. App target compiled through `ListsScreen.swift`.
