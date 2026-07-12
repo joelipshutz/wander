@@ -10274,6 +10274,15 @@ Post-merge checkpoint, 2026-07-12 14:19 PDT:
 - `origin/main` advanced during implementation with REC-60 push notifications and TestFlight build 67. Committed the validated REC-82 state, merged `origin/main`, and resolved overlaps by preserving both photo and notification repositories/backend injection/tests plus all agent-log entries.
 - Post-merge full suite passed on iPhone 17 Pro, iOS 26.5: 271 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82-merged/Logs/Test/Test-Wander-2026.07.12_14-16-03--0700.xcresult`.
 
+Handoff, 2026-07-12 14:22 PDT:
+
+- Implementation commit: `9a23bfa58` (`Implement REC-82 Google place photos`). Latest-main integration commits: `681469565` and docs-only `16ddbed2c`.
+- Pushed branch `codex/rec-82-seed-place-photos` and opened draft PR #75: https://github.com/joelipshutz/wander/pull/75.
+- Linked PR #75 to Linear REC-82, moved the issue to In Review, and added validation plus the exact live-provider blocker in comment `715ab3d1-8d22-447e-bddf-520c0b07fa3c`.
+- No TestFlight build, provider secret, Google billing project, hosted function deployment, or tester Slack message was requested or performed.
+- Known issue: without the approved Google key and deployed Edge Function, Xcode shows the correct existing MapKit fallback rather than a venue photo.
+- Exact next steps: approve a billing-enabled Google Cloud project; enable Places API (New); set low Text Search/Photo quotas and budget alerts; create a Places-restricted server key; set `WANDER_GOOGLE_PLACES_API_KEY` in Supabase; deploy `place-photo`; open representative saved, friend, search, and list places in Xcode; capture large and small-phone screenshots; verify photo match, crop, attribution links, failure fallback, and quota behavior; then mark PR #75 ready.
+
 Completion, 2026-07-12 14:16 PDT:
 
 - Build bump PR #73 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/73. Release source commit: `f2623b037b2039231a085e3ecec9784c21a81c33`.
