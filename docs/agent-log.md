@@ -9862,3 +9862,22 @@ Completion, 2026-07-12 11:49 PDT:
 - Automatic launch was denied only because the physical phone was locked. Unlocking the phone and opening rec.me completes the launch step.
 - Reopened the REC-60 project in Xcode after profile refresh so the IDE can discard its stale signing diagnostics.
 - No app source, project settings, signing team, or committed secrets changed. This repair updated local Apple signing assets only.
+
+## 2026-07-12 12:08 PDT - Codex - REC-60 Joe Local Signing Refresh
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Linear: `REC-60`
+
+Goal: clear Joe's Xcode device-build failure showing no Apple account and a stale profile without Push Notifications / `aps-environment`.
+
+Outcome:
+
+- Confirmed the branch was clean, on `codex/rec-60-notifications`, and already declared `Wander/Resources/Wander.entitlements` with `aps-environment`.
+- Ran an authenticated signed Debug device build with `-allowProvisioningUpdates` and the local App Store Connect API key. Xcode refreshed/selected profile `f9b2a766-e10e-4a94-a05e-578ab47a009c`.
+- Verified the embedded profile contains `aps-environment=development` for `Y7TVK75RZ8.com.grayline.wander`.
+- Re-ran the normal signed Debug device build without API-key or provisioning-update flags. It passed with `** BUILD SUCCEEDED **`, using signing identity `Apple Development: jolipshutz@gmail.com (W77GVFZNW7)` and profile `f9b2a766-e10e-4a94-a05e-578ab47a009c`.
+- Reopened `Wander.xcodeproj` in Xcode so the IDE can refresh stale signing diagnostics.
+- Mission Control task creation was attempted, but local `http://localhost:4000` was not running.
+- No app source, project settings, or committed secrets changed. This repair only refreshed local Apple signing assets and recorded the outcome.
