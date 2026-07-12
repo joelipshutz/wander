@@ -1,5 +1,6 @@
 @preconcurrency import MapKit
 import SwiftUI
+import UIKit
 
 struct PlaceProfileMapSurface: View {
     let place: PlaceSheetPlace
@@ -247,6 +248,8 @@ private struct PlaceProfileFullView: View {
     let onBack: () -> Void
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
 
     var body: some View {
         GeometryReader { proxy in
@@ -255,6 +258,7 @@ private struct PlaceProfileFullView: View {
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
                     place: place,
+                    photo: photo,
                     action: action,
                     shareURL: shareURL,
                     shareText: shareText,
@@ -300,6 +304,18 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .task(id: place.photoLookupKey) {
+            photo = nil
+            do {
+                photo = try await backend.placePhoto(for: place.photoRequest)
+            } catch {
+                #if DEBUG
+                WanderDebugLog.remote.debug(
+                    "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                )
+                #endif
+            }
+        }
     }
 
     private var heading: some View {
@@ -575,6 +591,7 @@ private struct PlaceProfileMapHeader: View {
     static let minimumFullBleedTopInset: CGFloat = 54
 
     let place: PlaceSheetPlace
+    let photo: PlacePhoto?
     let action: PlaceSheetAction
     let shareURL: URL?
     let shareText: String
@@ -584,17 +601,10 @@ private struct PlaceProfileMapHeader: View {
 
     var body: some View {
         ZStack {
-            if let latitude = place.latitude, let longitude = place.longitude {
-                Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
-                    Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                        PlaceProfileCategoryThumb(category: place.primaryCategory, size: 54)
-                            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
-                    }
-                }
-                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-                .allowsHitTesting(false)
-            } else {
-                PlaceProfileMapFallback()
+            mapFallback
+
+            if let photoURL = photo?.photoURL {
+                NonCachingPlacePhotoImage(url: photoURL, placeName: place.name)
             }
 
             LinearGradient(
@@ -606,6 +616,18 @@ private struct PlaceProfileMapHeader: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+
+            if let photo {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        PlacePhotoAttribution(photo: photo)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing3)
+                }
+            }
 
             VStack {
                 HStack {
@@ -659,6 +681,23 @@ private struct PlaceProfileMapHeader: View {
         }
         .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var mapFallback: some View {
+        if let latitude = place.latitude, let longitude = place.longitude {
+            Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
+                Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
+                    PlaceProfileCategoryThumb(category: place.primaryCategory, size: 54)
+                        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .allowsHitTesting(false)
+        } else {
+            PlaceProfileMapFallback()
+        }
     }
 
     static func resolvedTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
@@ -670,6 +709,93 @@ private struct PlaceProfileMapHeader: View {
             center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
             span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
         )
+    }
+}
+
+private struct PlacePhotoAttribution: View {
+    let photo: PlacePhoto
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let authorName = photo.authorName, !authorName.isEmpty {
+                if let authorURL = photo.authorProfileURL {
+                    Link("Photo by \(authorName)", destination: authorURL)
+                } else {
+                    Text("Photo by \(authorName)")
+                }
+
+                Text("·")
+            }
+
+            if let sourceURL = photo.sourcePhotoURL {
+                Link("Google Maps", destination: sourceURL)
+            } else {
+                Text("Google Maps")
+            }
+        }
+        .font(.system(size: 10, weight: .bold))
+        .lineLimit(1)
+        .padding(.horizontal, 9)
+        .frame(minHeight: 28)
+        .background(Color.black.opacity(0.68))
+        .foregroundStyle(Color.white)
+        .tint(Color.white)
+        .clipShape(Capsule())
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var label: String {
+        if let authorName = photo.authorName, !authorName.isEmpty {
+            return "Photo by \(authorName) · Google Maps"
+        }
+        return "Google Maps"
+    }
+
+    private var accessibilityLabel: String {
+        if photo.sourcePhotoURL != nil {
+            return "\(label). Open source photo in Google Maps."
+        }
+        return label
+    }
+}
+
+private struct NonCachingPlacePhotoImage: View {
+    let url: URL
+    let placeName: String
+    @State private var image: Image?
+
+    var body: some View {
+        Group {
+            if let image {
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+                    .accessibilityLabel("Photo of \(placeName)")
+            }
+        }
+        .task(id: url) {
+            image = nil
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.urlCache = nil
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+            let session = URLSession(configuration: configuration)
+            defer { session.invalidateAndCancel() }
+
+            guard let (data, response) = try? await session.data(for: request),
+                  let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode),
+                  let uiImage = UIImage(data: data)
+            else { return }
+
+            withAnimation(.easeOut(duration: 0.24)) {
+                image = Image(uiImage: uiImage)
+            }
+        }
     }
 }
 

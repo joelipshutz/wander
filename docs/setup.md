@@ -170,6 +170,21 @@ npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABA
 npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 ```
 
+### Google Places venue photos
+
+REC-82 loads one representative venue photo only when a signed-in user opens a place profile. The iOS app calls the authenticated `place-photo` Edge Function, which validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract, matches the place by provider id or name plus coordinates, requests Google's provider-ranked first usable photo, and returns a short-lived image URL plus the required Google Maps/author/source attribution. The app falls back to its existing MapKit header when the provider is unavailable or cannot make a safe match.
+
+Google Places currently includes separate 1,000-event monthly free caps for Text Search Enterprise and Place Details Photos. Most Rec.me places originate in MapKit, so the first photo open can consume one event from each SKU; requests above either cap are billable, and Text Search is the more expensive call. The Google Cloud project must have billing enabled. Before setting the secret, configure Places API (New), set low method quotas plus budget alerts appropriate for the alpha, and create a server-side key restricted to Places API. Yelp is not a free commercial fallback: its free access is a 30-day evaluation trial.
+
+Keep the key server-side and deploy the function:
+
+```bash
+npx supabase secrets set WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy place-photo --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
+Do not store Google photo names, image bytes, or returned image URLs in SwiftData, Supabase, fixtures, or analytics. Google Place IDs may be retained. The UI must keep the Google Maps attribution, photo author attribution when present, and source-photo link visible with the image.
+
 Current hosted SQL test status:
 
 ```text

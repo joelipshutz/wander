@@ -1,0 +1,144 @@
+export type PlacePhotoInput = {
+  name: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  sourceProvider: string | null;
+  sourceProviderPlaceID: string | null;
+};
+
+export type GoogleAuthorAttribution = {
+  displayName?: string;
+  uri?: string;
+  photoUri?: string;
+};
+
+export type GooglePhoto = {
+  name?: string;
+  widthPx?: number;
+  heightPx?: number;
+  authorAttributions?: GoogleAuthorAttribution[];
+  googleMapsUri?: string;
+  flagContentUri?: string;
+};
+
+export type GooglePlace = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
+  photos?: GooglePhoto[];
+};
+
+export function selectGooglePlace(
+  places: GooglePlace[],
+  input: PlacePhotoInput,
+): GooglePlace | null {
+  const requestedName = normalize(input.name);
+  if (!requestedName) return null;
+
+  const ranked = places
+    .map((place) => ({ place, score: placeScore(place, input, requestedName) }))
+    .filter((candidate) => candidate.score >= 0 && representativePhoto(candidate.place))
+    .sort((lhs, rhs) => rhs.score - lhs.score);
+
+  return ranked[0]?.place ?? null;
+}
+
+export function representativePhoto(place: GooglePlace): GooglePhoto | null {
+  return place.photos?.find((photo) => {
+    if (!photo.name) return false;
+    const width = photo.widthPx ?? 0;
+    const height = photo.heightPx ?? 0;
+    return width === 0 || height === 0 || Math.max(width, height) >= 400;
+  }) ?? null;
+}
+
+export function isGoogleProvider(sourceProvider: string | null): boolean {
+  const provider = normalize(sourceProvider ?? "");
+  return provider === "google" || provider === "google maps" || provider === "google places";
+}
+
+function placeScore(
+  place: GooglePlace,
+  input: PlacePhotoInput,
+  requestedName: string,
+): number {
+  const candidateName = normalize(place.displayName?.text ?? "");
+  if (!candidateName) return -1;
+
+  const exactName = candidateName === requestedName;
+  const nameSimilarity = tokenSimilarity(candidateName, requestedName);
+  const includesName = candidateName.includes(requestedName) || requestedName.includes(candidateName);
+  if (!exactName && !includesName && nameSimilarity < 0.4) return -1;
+
+  let score = exactName ? 120 : includesName ? 72 : Math.round(nameSimilarity * 52);
+
+  const distance = distanceMeters(
+    input.latitude,
+    input.longitude,
+    place.location?.latitude ?? null,
+    place.location?.longitude ?? null,
+  );
+  if (distance !== null) {
+    if (distance <= 75) score += 48;
+    else if (distance <= 250) score += 32;
+    else if (distance <= 1_000) score += 12;
+    else if (distance > 5_000) return -1;
+  }
+
+  const requestedAddress = normalize(input.address ?? "");
+  const candidateAddress = normalize(place.formattedAddress ?? "");
+  if (requestedAddress && candidateAddress) {
+    score += Math.round(tokenSimilarity(requestedAddress, candidateAddress) * 24);
+  }
+
+  // A coordinate-backed nearby result may have a shortened display name, but a
+  // text-only result must still look like the requested venue.
+  if (distance === null && !exactName && !includesName && nameSimilarity < 0.5) return -1;
+  if (distance !== null && distance > 1_000 && !exactName && nameSimilarity < 0.7) return -1;
+
+  return score;
+}
+
+function normalize(value: string): string {
+  return value
+    .toLocaleLowerCase("en-US")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function tokenSimilarity(lhs: string, rhs: string): number {
+  const lhsTokens = new Set(lhs.split(" ").filter(Boolean));
+  const rhsTokens = new Set(rhs.split(" ").filter(Boolean));
+  if (!lhsTokens.size || !rhsTokens.size) return 0;
+
+  let overlap = 0;
+  for (const token of lhsTokens) {
+    if (rhsTokens.has(token)) overlap += 1;
+  }
+  return overlap / Math.max(lhsTokens.size, rhsTokens.size);
+}
+
+function distanceMeters(
+  latitudeA: number | null,
+  longitudeA: number | null,
+  latitudeB: number | null,
+  longitudeB: number | null,
+): number | null {
+  if (
+    latitudeA === null || longitudeA === null ||
+    latitudeB === null || longitudeB === null
+  ) return null;
+
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const earthRadiusMeters = 6_371_000;
+  const deltaLatitude = radians(latitudeB - latitudeA);
+  const deltaLongitude = radians(longitudeB - longitudeA);
+  const a = Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(radians(latitudeA)) * Math.cos(radians(latitudeB)) *
+      Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}

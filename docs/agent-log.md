@@ -9899,3 +9899,60 @@ Completion, 2026-07-12 13:04 PDT:
 - Linear `REC-81` updated with release evidence and moved to Done.
 - Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
 - Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.
+## 2026-07-12 13:42 PDT - Codex - REC-82 Seed Place Photos
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: implement an end-to-end place-photo seed path so every place detail can show at least one representative venue photo, preferring Google Maps only if its terms/pricing fit a free implementation and otherwise using Yelp. Seed the most representative available venue image, favoring storefront/name signage where provider metadata supports it; uploaded visit-photo carousels remain deferred.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent agent-log entries before editing.
+- Root checkout is on unrelated `codex/rec-81-collab-visibility`; REC-82 is isolated in a clean worktree created from `origin/main` at `6b3e093f9`.
+- Linear REC-82 was read with its Slack-synced context and moved from Backlog to In Progress.
+- No overlapping REC-82 work was found. Existing nearby work covers uploaded visit photos and profile avatars, which will be preserved rather than repurposed.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Place model/persistence/remote DTO and repository files under `Wander/Models/` and `Wander/Services/`
+- Place-detail/map/discover/list UI surfaces that render venue images
+- `Wander/App/WanderBackend.swift` and configuration only if provider wiring requires them
+- Supabase migration/function or storage files if provider access must stay server-side
+- Focused tests under `WanderTests/`
+
+Initial plan:
+
+- Confirm current official Google Maps and Yelp photo API pricing/usage constraints and choose the free compliant provider.
+- Trace every place creation/hydration path and the existing visit-photo contract before defining a separate seeded venue-photo contract.
+- Implement provider lookup, durable cache/persistence, repository-boundary wiring, placeholders/failure behavior, and photo rendering across opened place surfaces.
+- Add deterministic fakes and regression coverage, then run the full simulator suite and capture representative Xcode/simulator evidence.
+- Push the branch, open a draft PR for Ryan's Xcode testing, link it to REC-82, and leave the issue In Review with validation notes.
+
+Checkpoint, 2026-07-12 14:11 PDT:
+
+- Provider decision from current official terms/pricing:
+  - Google Places has separate 1,000-event monthly free caps for Text Search Enterprise and Place Details Photos, requires billing, and bills overages. A MapKit-origin place can consume both SKUs on its first photo open.
+  - Yelp's only free access is a 5,000-call, 30-day evaluation trial that is not licensed for commercial deployment; its commercial plan is paid and restricts caching to 24 hours.
+  - Selected Google Places, contingent on an explicitly approved billing project with low quotas/budget alerts. No Google/Yelp key is configured in the Wander repo or local Wander secrets. A safety review rejected searching unrelated local projects for credential material, so no secret reuse was attempted.
+- Implemented a provider-neutral `PlacePhotoRepository` boundary and Google-backed `SupabasePlacePhotoRepository` wired through `WanderBackend`.
+- Added the `place-photo` Supabase Edge Function:
+  - validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract before provider access;
+  - uses an existing Google Place ID when trustworthy, otherwise Text Search with name/address and a 1 km coordinate bias;
+  - rejects weak-name or distant matches, takes Google's provider-ranked first usable photo, and requires the direct Google Maps source-photo URL;
+  - keeps the API key server-side and returns `Cache-Control: no-store`.
+- Replaced the full place-profile map header with photo-first media behavior while preserving the MapKit header as loading/error/no-match fallback. The image loader uses an ephemeral `URLSession` with no URL cache. The UI exposes author profile attribution plus the individual source photo on Google Maps.
+- Deliberately did not persist Google photo names, image bytes, or returned URLs because Google prohibits prefetching/caching/storing Places content beyond allowed exceptions. Google Place IDs remain the only durable provider identity.
+- Updated `docs/decisions.md`, `docs/setup.md`, and Supabase function config with the provider, pricing, attribution, no-cache, authentication, secret, quota, and deployment contract.
+- Validation:
+  - `xcodegen generate` passed and produced no project diff.
+  - Focused iOS photo repository/encoding tests passed on iPhone 17 Pro, iOS 26.5.
+  - Final full iOS suite passed: 264 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82/Logs/Test/Test-Wander-2026.07.12_14-06-27--0700.xcresult`.
+  - Generic iOS Simulator build passed.
+  - Google match/photo helper tests passed through Node's TypeScript type stripping, including rejecting an unrelated venue at the same coordinate and selecting the first provider-ranked usable image.
+  - `node --experimental-strip-types --check` passed for both Edge Function TypeScript files; `git diff --check` passed.
+- Environment note: the repo-documented iPhone 16 Plus, iOS 18.6 simulator is not installed on this machine. Validation used the installed iPhone 17 Pro, iOS 26.5 simulator.
+- Remaining live-test blocker: an approved, quota-capped Google Cloud billing project and restricted Places API server key. Until `WANDER_GOOGLE_PLACES_API_KEY` is set and `place-photo` is deployed, Xcode builds and the safe MapKit fallback work, but live venue photos cannot load and photo visual QA cannot be completed honestly.

@@ -2911,6 +2911,8 @@ private extension PlaceSheetPlace {
         self.websiteURLString = nil
         self.phoneNumber = nil
         self.actionLinksJSON = nil
+        self.sourceProvider = nil
+        self.sourceProviderPlaceID = nil
         self.compactSubtitleOverride = listPlace.metadata
         self.status = listPlace.status
         self.visibility = .followers

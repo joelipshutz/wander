@@ -810,6 +810,65 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
     }
 
+    func testPlacePhotoRepositoryInvokesEdgeFunctionAndMapsAttribution() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "provider": "google_places",
+          "provider_place_id": "ChIJwoodcat",
+          "photo_url": "https://lh3.googleusercontent.com/example",
+          "width": 1600,
+          "height": 1000,
+          "author_name": "Woodcat Coffee",
+          "author_profile_url": "https://maps.google.com/maps/contrib/example",
+          "author_avatar_url": "https://lh3.googleusercontent.com/avatar",
+          "source_photo_url": "https://www.google.com/maps/photos/example",
+          "flag_content_url": "https://www.google.com/maps/photos/flag/example"
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: "1532 Sunset Blvd, Los Angeles, CA",
+            latitude: 34.0777,
+            longitude: -118.2588,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-woodcat"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "google_places")
+        XCTAssertEqual(photo.providerPlaceID, "ChIJwoodcat")
+        XCTAssertEqual(photo.authorName, "Woodcat Coffee")
+        XCTAssertEqual(photo.sourcePhotoURL?.host, "www.google.com")
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["name"] as? String, "Woodcat Coffee")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider"] as? String, "mapkit")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider_place_id"] as? String, "mapkit-woodcat")
+        XCTAssertEqual(
+            try XCTUnwrap(rpc.rawBodies[0]["latitude"] as? Double),
+            34.0777,
+            accuracy: 0.00001
+        )
+    }
+
+    func testPlacePhotoLookupKeyUsesProviderIdentityAndCoordinates() {
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: nil,
+            latitude: 34.077712,
+            longitude: -118.258812,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "ChIJwoodcat"
+        )
+
+        XCTAssertEqual(
+            request.lookupKey,
+            "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
+        )
+    }
+
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
         let parser = RemoteDiscoverFilterParser(repository: FailingDiscoverFilterRepository())
 

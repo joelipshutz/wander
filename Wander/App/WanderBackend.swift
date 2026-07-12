@@ -14,6 +14,7 @@ final class WanderBackend: ObservableObject {
     let extractionRepository: (any ExtractionRepository)?
     let placeListRepository: (any PlaceListRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
+    let placePhotoRepository: (any PlacePhotoRepository)?
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
@@ -32,6 +33,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
+            self.placePhotoRepository = SupabasePlacePhotoRepository(functions: client)
         } else {
             self.profileRepository = nil
             self.profileAvatarRepository = nil
@@ -44,6 +46,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = nil
             self.placeListRepository = nil
             self.listSuggestionRepository = nil
+            self.placePhotoRepository = nil
         }
     }
 
@@ -64,7 +67,8 @@ final class WanderBackend: ObservableObject {
         visitRepository: (any VisitRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
         placeListRepository: (any PlaceListRepository)? = nil,
-        listSuggestionRepository: (any ListSuggestionRepository)? = nil
+        listSuggestionRepository: (any ListSuggestionRepository)? = nil,
+        placePhotoRepository: (any PlacePhotoRepository)? = nil
     ) {
         self.configuration = configuration
         self.profileRepository = profileRepository
@@ -78,6 +82,7 @@ final class WanderBackend: ObservableObject {
         self.extractionRepository = extractionRepository
         self.placeListRepository = placeListRepository
         self.listSuggestionRepository = listSuggestionRepository
+        self.placePhotoRepository = placePhotoRepository
     }
 
     var canUseRemoteData: Bool {
@@ -92,10 +97,18 @@ final class WanderBackend: ObservableObject {
             || extractionRepository != nil
             || placeListRepository != nil
             || listSuggestionRepository != nil
+            || placePhotoRepository != nil
     }
 
     var canSyncProfileAvatars: Bool {
         profileAvatarRepository != nil
+    }
+
+    func placePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await placePhotoRepository.photo(for: request)
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {

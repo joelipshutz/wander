@@ -648,6 +648,21 @@ struct SupabaseListSuggestionRepository: ListSuggestionRepository {
     }
 }
 
+struct SupabasePlacePhotoRepository: PlacePhotoRepository {
+    private let functions: RemoteFunctionCalling
+
+    init(functions: RemoteFunctionCalling) {
+        self.functions = functions
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        try await functions.invoke(
+            "place-photo",
+            body: request
+        )
+    }
+}
+
 private struct SearchProfilesParams: Encodable {
     let query: String
 }
