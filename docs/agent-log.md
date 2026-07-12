@@ -10182,3 +10182,32 @@ Completion, 2026-07-12 13:45 PDT:
   - focused `RemoteRepositoryTests`
   - full iOS suite on installed iPhone 17 / iOS 26.5: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec60-unified/Logs/Test/Test-Wander-2026.07.12_13-42-03--0700.xcresult`)
 - The repo-default iPhone 16 Plus / iOS 18.6 runtime remains unavailable on this machine. No TestFlight release, build-number bump, or merge to `main` was requested or performed.
+## 2026-07-12 13:56 PDT - Codex - TestFlight Build 67 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-67`
+Worktree: `/private/tmp/recme-build67-release`
+Linear: `REC-60`
+
+Goal: package the explicitly requested REC-60 notification release from latest `main` into TestFlight build 67.
+
+Starting status:
+
+- PR #60 squash-merged to `main` as `a5d1e83e7` after a clean pre-landing review.
+- Pre-merge validation: 269/269 iOS tests, generic simulator build, Deno worker check, and hosted notification pgTAP 40/40 all passed.
+- Latest completed TestFlight release is build 66; `origin/main` currently declares `CURRENT_PROJECT_VERSION: 66`.
+- Included release scope since build 66: modular push preferences/token/event/worker platform, automatic hosted worker scheduling, follow/friend/shared-list/map-save/capture/followed-place notifications, unified Allow/Disable setup, and notification-tap routing to exact app destinations.
+
+Release plan:
+
+- Bump build 66 to 67 in `project.yml`, regenerate the Xcode project, and confirm generated changes are limited to build-number settings.
+- Run the complete simulator test/build gate from build-67 source.
+- Open and squash-merge the build bump PR to `main`.
+- Archive latest `main`, export/upload with Xcode build-number management disabled, process with `scripts/testflight-release.mjs`, attach to `Wander Alpha`, and post the required `#testflight-feedback` release note.
+
+Release checkpoint, 2026-07-12 14:04 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 66 to 67 in `project.yml` and regenerated `Wander.xcodeproj` with XcodeGen; generated project changes are limited to the two build-number settings.
+- Full iOS suite passed on the installed iPhone 17 / iOS 26.5 runtime: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build67/Logs/Test/`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
+- `git diff --check` passed. Next step is the build-67 bump PR and squash merge before archiving latest `main`.
