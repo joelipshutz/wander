@@ -7,6 +7,15 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testNotificationDestinationsSelectTheirOwningTabs() {
+        XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
+    }
+
+    @MainActor
     func testRootViewCanResolveInitialTabForVisualQA() {
         XCTAssertEqual(
             WanderRootView.resolvedInitialTab(from: ["Wander", "-WanderInitialTab", "discover"]),

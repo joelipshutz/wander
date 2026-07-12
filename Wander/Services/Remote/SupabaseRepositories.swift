@@ -663,11 +663,162 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 }
 
+struct SupabaseNotificationRepository: NotificationRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func preferences() async throws -> NotificationPreferences {
+        let response: NotificationPreferencesResponse = try await rpc.call(
+            "get_notification_preferences",
+            params: EmptyParams()
+        )
+        return response.preferences
+    }
+
+    func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences {
+        let response: NotificationPreferencesResponse = try await rpc.call(
+            "update_notification_preferences",
+            params: UpdateNotificationPreferencesParams(update: update)
+        )
+        return response.preferences
+    }
+
+    func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String {
+        let response: RegisterPushTokenResponse = try await rpc.call(
+            "register_push_token",
+            params: RegisterPushTokenParams(
+                inputDeviceToken: token,
+                inputEnvironment: environment.rawValue,
+                inputAppBundleID: appBundleID
+            )
+        )
+        return response.value
+    }
+
+    func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "unregister_push_token",
+            params: UnregisterPushTokenParams(
+                inputDeviceToken: token,
+                inputEnvironment: environment?.rawValue
+            )
+        )
+    }
+}
+
 private struct SearchProfilesParams: Encodable {
     let query: String
 }
 
 private struct EmptyParams: Encodable {}
+
+private struct NotificationPreferencesResponse: Decodable {
+    let pushEnabled: Bool
+    let socialGraphEnabled: Bool
+    let sharedListsEnabled: Bool
+    let recommendationsEnabled: Bool
+    let captureEnabled: Bool
+    let discoveryDigestEnabled: Bool
+    let followedActivityEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case pushEnabled = "push_enabled"
+        case socialGraphEnabled = "social_graph_enabled"
+        case sharedListsEnabled = "shared_lists_enabled"
+        case recommendationsEnabled = "recommendations_enabled"
+        case captureEnabled = "capture_enabled"
+        case discoveryDigestEnabled = "discovery_digest_enabled"
+        case followedActivityEnabled = "followed_activity_enabled"
+    }
+
+    var preferences: NotificationPreferences {
+        NotificationPreferences(
+            pushEnabled: pushEnabled,
+            socialGraphEnabled: socialGraphEnabled,
+            sharedListsEnabled: sharedListsEnabled,
+            recommendationsEnabled: recommendationsEnabled,
+            captureEnabled: captureEnabled,
+            discoveryDigestEnabled: discoveryDigestEnabled,
+            followedActivityEnabled: followedActivityEnabled
+        )
+    }
+}
+
+private struct UpdateNotificationPreferencesParams: Encodable {
+    let inputPreferences: NotificationPreferencesPatch
+
+    init(update: NotificationPreferencesUpdate) {
+        self.inputPreferences = NotificationPreferencesPatch(update: update)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputPreferences = "input_preferences"
+    }
+}
+
+private struct NotificationPreferencesPatch: Encodable {
+    let pushEnabled: Bool?
+    let socialGraphEnabled: Bool?
+    let sharedListsEnabled: Bool?
+    let recommendationsEnabled: Bool?
+    let captureEnabled: Bool?
+    let discoveryDigestEnabled: Bool?
+    let followedActivityEnabled: Bool?
+
+    init(update: NotificationPreferencesUpdate) {
+        self.pushEnabled = update.pushEnabled
+        self.socialGraphEnabled = update.socialGraphEnabled
+        self.sharedListsEnabled = update.sharedListsEnabled
+        self.recommendationsEnabled = update.recommendationsEnabled
+        self.captureEnabled = update.captureEnabled
+        self.discoveryDigestEnabled = update.discoveryDigestEnabled
+        self.followedActivityEnabled = update.followedActivityEnabled
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case pushEnabled = "push_enabled"
+        case socialGraphEnabled = "social_graph_enabled"
+        case sharedListsEnabled = "shared_lists_enabled"
+        case recommendationsEnabled = "recommendations_enabled"
+        case captureEnabled = "capture_enabled"
+        case discoveryDigestEnabled = "discovery_digest_enabled"
+        case followedActivityEnabled = "followed_activity_enabled"
+    }
+}
+
+private struct RegisterPushTokenParams: Encodable {
+    let inputDeviceToken: String
+    let inputEnvironment: String
+    let inputAppBundleID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputDeviceToken = "input_device_token"
+        case inputEnvironment = "input_environment"
+        case inputAppBundleID = "input_app_bundle_id"
+    }
+}
+
+private struct RegisterPushTokenResponse: Decodable {
+    let value: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        value = try container.decode(String.self)
+    }
+}
+
+private struct UnregisterPushTokenParams: Encodable {
+    let inputDeviceToken: String
+    let inputEnvironment: String?
+
+    enum CodingKeys: String, CodingKey {
+        case inputDeviceToken = "input_device_token"
+        case inputEnvironment = "input_environment"
+    }
+}
 
 private struct PlaceListIDParams: Encodable {
     let inputListID: String

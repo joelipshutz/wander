@@ -4,6 +4,7 @@ import SwiftUI
 struct ListsScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     private let scenario: ListsScreenScenario
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
@@ -80,6 +81,29 @@ struct ListsScreen: View {
                 )
             }
         }
+        .task {
+            await handleNotificationRoute(pushNotifications.navigationRequest)
+        }
+        .onChange(of: pushNotifications.navigationRequest) { _, request in
+            Task {
+                await handleNotificationRoute(request)
+            }
+        }
+    }
+
+    private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
+        guard let request, case .list(let listID) = request.destination else { return }
+
+        await store.refreshRemotePlaceLists(backend: backend)
+        guard let list = store.visiblePlaceLists.first(where: {
+            $0.id == listID || $0.localID == listID || $0.serverID == listID
+        }) else { return }
+
+        selectedList = PlaceListMock(list: list, store: store)
+        selectedScopeID = list.ownerUserID == store.currentUser.id
+            ? ListsScope.mine.rawValue
+            : ListsScope.collabs.rawValue
+        pushNotifications.consumeNavigationRequest(id: request.id)
     }
 
     private func detailScreen(for list: PlaceListMock, initialSelectedPlace: ListPlaceMock? = nil) -> some View {

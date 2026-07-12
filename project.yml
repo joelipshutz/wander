@@ -68,7 +68,7 @@ targets:
         PRODUCT_NAME: Wander
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander
         MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "66"
+        CURRENT_PROJECT_VERSION: "67"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Wander/Resources/Wander.entitlements
         LD_RUNPATH_SEARCH_PATHS:
@@ -82,9 +82,11 @@ targets:
           ONLY_ACTIVE_ARCH: YES
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
           SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          APS_ENVIRONMENT: development
         Release:
           SWIFT_COMPILATION_MODE: wholemodule
           SWIFT_OPTIMIZATION_LEVEL: "-O"
+          APS_ENVIRONMENT: production
     dependencies:
       - package: posthog-ios
         product: PostHog
