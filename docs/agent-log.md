@@ -10312,3 +10312,17 @@ Release checkpoint, 2026-07-12 15:37 PDT:
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` from `/private/tmp/recme-build68-release`.
 - Full iOS suite passed on the installed iPhone 17 Pro / iOS 26.5 runtime: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build68/Logs/Test/Test-Wander-2026.07.12_15-35-42--0700.xcresult`). The AGENTS.md iPhone 16 Plus / iOS 18.6 destination is not installed on this machine.
 - Next step is the build-68 bump PR and squash merge before archiving latest `main`.
+
+Completion, 2026-07-12 15:48 PDT:
+
+- Build bump PR #78 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/78. Release source commit: `56cb1aa35b60215870a1a8d9d39f51f1934c4dba`.
+- Archived rec.me `0.1 (68)` from a clean detached `origin/main` worktree at `/private/tmp/Wander-0.1-build68.xcarchive`. Archive metadata and app Info.plist independently confirmed build 68, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Initial account-based `xcodebuild -exportArchive` failed with `Failed to Use Accounts`; retried the unchanged archive with Ryan's local App Store Connect API key from `/Users/ryanlieblein/.openclaw/workspace/.env.keys`.
+- Exported and uploaded with `/private/tmp/WanderExportUpload68.plist`, `destination=upload`, and `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 68, then reported build id `eabac244-de57-48d5-ba6d-31d2f45ca9cc`, processing `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783896472153349.
+- Linear `REC-83` is Done and has release evidence, PR links, validation, TestFlight status, and tester focus.
+- Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; signed archive passed.
+- Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
+- Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
