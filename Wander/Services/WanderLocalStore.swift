@@ -78,6 +78,9 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeListMembers: [LocalPlaceListMember]
     @Published private(set) var placeListItems: [LocalPlaceListItem]
     @Published private(set) var unresolvedDrafts: [UnresolvedDraft] = []
+
+    private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
+    private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
     @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = []
@@ -298,11 +301,12 @@ final class WanderStore: ObservableObject {
         visiblePlaceLists.filter { list in
             switch scope {
             case .mine:
-                return list.ownerUserID == currentUser.id
+                return list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id)
             case .friends:
                 return list.ownerUserID != currentUser.id && !isMember(of: list, userID: currentUser.id)
             case .collabs:
-                return list.ownerUserID != currentUser.id && isMember(of: list, userID: currentUser.id)
+                return isCollaborative(list)
+                    && (list.ownerUserID == currentUser.id || isMember(of: list, userID: currentUser.id))
             }
         }
     }
@@ -313,6 +317,12 @@ final class WanderStore: ObservableObject {
 
     func canAddPlaces(to list: LocalPlaceList) -> Bool {
         canManage(list) || isMember(of: list, userID: currentUser.id)
+    }
+
+    private func isCollaborative(_ list: LocalPlaceList) -> Bool {
+        placeListMembers.contains { member in
+            member.listID == list.id && member.deletedAt == nil
+        }
     }
 
     func collaborators(for list: LocalPlaceList) -> [LocalProfile] {
@@ -656,30 +666,102 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func syncPendingPlaceLists(backend: WanderBackend?) async -> Int {
-        guard let backend else { return 0 }
+        guard let backend else {
+            #if DEBUG
+            WanderDebugLog.sync.debug("place-list sync skipped reason=missing_backend")
+            #endif
+            return 0
+        }
 
-        let listIDs = placeLists
-            .filter { list in
-                list.ownerUserID == currentUser.id
-                    && (list.syncState == .pendingCreate
-                        || list.syncState == .pendingUpdate
-                        || list.syncState == .pendingDelete
-                        || list.syncState == .failed)
-            }
-            .map(\.id)
+        if let placeListSyncTask {
+            return await placeListSyncTask.task.value
+        }
 
+        let syncID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return 0 }
+            return await self.performPendingPlaceListSync(backend: backend)
+        }
+        placeListSyncTask = (syncID, task)
+        let syncedCount = await task.value
+        if placeListSyncTask?.id == syncID {
+            placeListSyncTask = nil
+        }
+        return syncedCount
+    }
+
+    private func performPendingPlaceListSync(backend: WanderBackend) async -> Int {
+        var processedLocalIDs = Set<String>()
         var syncedCount = 0
-        for listID in listIDs {
-            if await syncPlaceList(localOrServerID: listID, backend: backend) {
+        while let list = placeLists.first(where: { list in
+            list.ownerUserID == currentUser.id
+                && !processedLocalIDs.contains(list.localID)
+                && isPendingPlaceListSyncCandidate(list)
+        }) {
+            processedLocalIDs.insert(list.localID)
+            if await syncPlaceList(localOrServerID: list.id, backend: backend) {
                 syncedCount += 1
             }
         }
 
+        #if DEBUG
+        WanderDebugLog.sync.debug("place-list sync completed synced_count=\(syncedCount, privacy: .public)")
+        #endif
+
         return syncedCount
+    }
+
+    private func shouldBackfillLegacyPlaceList(_ list: LocalPlaceList) -> Bool {
+        persistence != nil
+            && list.deletedAt == nil
+            && list.syncState != .tombstoned
+            && remoteID(list.serverID ?? list.id) == nil
+    }
+
+    private func isPendingPlaceListSyncCandidate(_ list: LocalPlaceList) -> Bool {
+        list.syncState == .pendingCreate
+            || list.syncState == .pendingUpdate
+            || list.syncState == .pendingDelete
+            || list.syncState == .failed
+            || shouldBackfillLegacyPlaceList(list)
+    }
+
+    private func shouldImmediatelyResyncPlaceList(localID: String) -> Bool {
+        guard let list = placeLists.first(where: { $0.localID == localID }) else { return false }
+        return list.syncState == .pendingCreate
+            || list.syncState == .pendingUpdate
+            || list.syncState == .pendingDelete
     }
 
     @discardableResult
     private func syncPlaceList(localOrServerID: String, backend: WanderBackend) async -> Bool {
+        guard let list = placeLists.first(where: {
+            $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID
+        }) else { return false }
+
+        let syncKey = list.localID
+        if let existingTask = individualPlaceListSyncTasks[syncKey] {
+            return await existingTask.task.value
+        }
+
+        let syncID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            return await self.performPlaceListSync(localOrServerID: syncKey, backend: backend)
+        }
+        individualPlaceListSyncTasks[syncKey] = (syncID, task)
+        let succeeded = await task.value
+        if individualPlaceListSyncTasks[syncKey]?.id == syncID {
+            individualPlaceListSyncTasks[syncKey] = nil
+        }
+        if shouldImmediatelyResyncPlaceList(localID: syncKey) {
+            return await syncPlaceList(localOrServerID: syncKey, backend: backend)
+        }
+        return succeeded
+    }
+
+    @discardableResult
+    private func performPlaceListSync(localOrServerID: String, backend: WanderBackend) async -> Bool {
         guard let index = placeLists.firstIndex(where: { $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID }),
               canManage(placeLists[index])
         else { return false }
@@ -724,11 +806,14 @@ final class WanderStore: ObservableObject {
             visibility: list.visibility
         )
 
+        #if DEBUG
+        WanderDebugLog.sync.debug("place-list sync attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) state=\(list.syncState.rawValue, privacy: .public) has_remote_id=\((draft.id != nil), privacy: .public) collaborator_count=\(collaboratorUserIDs.count, privacy: .public)")
+        #endif
+
         do {
             let remoteListID = try await backend.upsertPlaceList(draft)
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID || $0.serverID == remoteListID }) {
                 placeLists[currentIndex].serverID = remoteListID
-                placeLists[currentIndex].syncStateRaw = SyncState.synced.rawValue
                 replaceListIDReferences(previousID: previousID, canonicalID: placeLists[currentIndex].id)
                 placeLists[currentIndex].cachedItemCount = listItems(for: placeLists[currentIndex]).count
             }
@@ -742,17 +827,52 @@ final class WanderStore: ObservableObject {
                 await syncPlaceListItem(localOrServerID: itemID, listID: remoteListID, backend: backend)
             }
 
+            if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }),
+               placeListMatchesSnapshot(placeLists[currentIndex], snapshot: list, collaboratorUserIDs: collaboratorUserIDs) {
+                placeLists[currentIndex].syncStateRaw = SyncState.synced.rawValue
+            }
+
             lastRemoteError = nil
+            #if DEBUG
+            WanderDebugLog.sync.debug("place-list sync success local_list=\(WanderDebugLog.shortID(previousID), privacy: .public) remote_list=\(WanderDebugLog.shortID(remoteListID), privacy: .public)")
+            #endif
             persist()
             return true
         } catch {
             if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.localID == list.localID }) {
-                placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
+                if placeListMatchesSnapshot(placeLists[currentIndex], snapshot: list, collaboratorUserIDs: collaboratorUserIDs) {
+                    placeLists[currentIndex].syncStateRaw = SyncState.failed.rawValue
+                }
             }
             lastRemoteError = remoteErrorMessage(error)
+            #if DEBUG
+            WanderDebugLog.sync.error("place-list sync failed list=\(WanderDebugLog.shortID(previousID), privacy: .public) error=\(WanderDebugLog.clean(self.lastRemoteError ?? String(describing: error)), privacy: .public)")
+            #endif
             persist()
             return false
         }
+    }
+
+    private func placeListMatchesSnapshot(
+        _ current: LocalPlaceList,
+        snapshot: LocalPlaceList,
+        collaboratorUserIDs: [String]
+    ) -> Bool {
+        current.name == snapshot.name
+            && current.description == snapshot.description
+            && current.visibilityRaw == snapshot.visibilityRaw
+            && current.updatedAt == snapshot.updatedAt
+            && current.deletedAt == snapshot.deletedAt
+            && activeCollaboratorUserIDs(for: current) == collaboratorUserIDs
+    }
+
+    private func activeCollaboratorUserIDs(for list: LocalPlaceList) -> [String] {
+        let listIDs = listReferenceIDs(for: list)
+        return placeListMembers
+            .filter { listIDs.contains($0.listID) && $0.deletedAt == nil }
+            .map(\.userID)
+            .filter { $0 != currentUser.id }
+            .sorted()
     }
 
     private func syncPlaceListItem(localOrServerID: String, listID: String, backend: WanderBackend) async {
@@ -2570,6 +2690,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let summaries = try await backend.visiblePlaceLists()
+            reconcileMissingRemotePlaceLists(with: summaries)
             upsertRemotePlaceListSummaries(summaries)
 
             let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
@@ -2797,6 +2918,26 @@ final class WanderStore: ObservableObject {
             userPlace.userID = signedInProfile.id
             userPlace.updatedAt = .now
             userPlace.localUpdatedAt = .now
+            didClaimRows = true
+        }
+
+        for index in placeLists.indices where placeLists[index].ownerUserID == previousUserID && placeLists[index].deletedAt == nil {
+            placeLists[index].ownerUserID = signedInProfile.id
+            placeLists[index].updatedAt = .now
+            if placeLists[index].serverID == nil && placeLists[index].syncState == .localOnly {
+                placeLists[index].syncStateRaw = SyncState.pendingCreate.rawValue
+            }
+            didClaimRows = true
+        }
+
+        for index in placeListMembers.indices where placeListMembers[index].userID == previousUserID && placeListMembers[index].deletedAt == nil {
+            placeListMembers[index].userID = signedInProfile.id
+            didClaimRows = true
+        }
+
+        for index in placeListItems.indices where placeListItems[index].addedByUserID == previousUserID && placeListItems[index].deletedAt == nil {
+            placeListItems[index].addedByUserID = signedInProfile.id
+            placeListItems[index].updatedAt = .now
             didClaimRows = true
         }
 
@@ -3610,6 +3751,7 @@ final class WanderStore: ObservableObject {
         upsertRemoteProfileShells(ownerShells + collaboratorShells, preserveExistingProfileMetadataWhenMissing: true)
 
         for summary in summaries {
+            guard !shouldPreserveLocalPlaceListChanges(remoteListID: summary.list.id) else { continue }
             upsertRemotePlaceList(summary.list)
             replaceRemoteCollaborators(listID: summary.list.id, collaborators: summary.collaborators)
         }
@@ -3618,7 +3760,35 @@ final class WanderStore: ObservableObject {
         persist()
     }
 
+    private func reconcileMissingRemotePlaceLists(with summaries: [RemotePlaceListSummary]) {
+        let visibleRemoteIDs = Set(summaries.map(\.list.id))
+        let now = Date.now
+
+        for listIndex in placeLists.indices where
+            placeLists[listIndex].deletedAt == nil
+                && placeLists[listIndex].syncState == .synced
+                && placeLists[listIndex].serverID.map({ UUID(uuidString: $0) != nil }) == true
+                && !visibleRemoteIDs.contains(placeLists[listIndex].serverID ?? placeLists[listIndex].id) {
+            let list = placeLists[listIndex]
+            let listIDs = listReferenceIDs(for: list)
+            placeLists[listIndex].deletedAt = now
+            placeLists[listIndex].updatedAt = now
+            placeLists[listIndex].syncStateRaw = SyncState.tombstoned.rawValue
+
+            for memberIndex in placeListMembers.indices where listIDs.contains(placeListMembers[memberIndex].listID) && placeListMembers[memberIndex].deletedAt == nil {
+                placeListMembers[memberIndex].deletedAt = now
+            }
+            for itemIndex in placeListItems.indices where listIDs.contains(placeListItems[itemIndex].listID) && placeListItems[itemIndex].deletedAt == nil {
+                placeListItems[itemIndex].deletedAt = now
+                placeListItems[itemIndex].updatedAt = now
+                placeListItems[itemIndex].syncStateRaw = SyncState.tombstoned.rawValue
+            }
+        }
+    }
+
     private func upsertRemotePlaceListDetail(_ detail: RemotePlaceListDetail) {
+        guard !shouldPreserveLocalPlaceListChanges(remoteListID: detail.list.id) else { return }
+
         upsertRemoteProfileShells(detail.collaborators.map(\.profileShell), preserveExistingProfileMetadataWhenMissing: true)
         upsertRemotePlaceList(detail.list)
         replaceRemoteCollaborators(listID: detail.list.id, collaborators: detail.collaborators)
@@ -3630,6 +3800,21 @@ final class WanderStore: ObservableObject {
 
         objectWillChange.send()
         persist()
+    }
+
+    private func shouldPreserveLocalPlaceListChanges(remoteListID: String) -> Bool {
+        guard let localList = placeLists.first(where: { list in
+            list.id == remoteListID || list.serverID == remoteListID
+        }), localList.ownerUserID == currentUser.id else {
+            return false
+        }
+
+        switch localList.syncState {
+        case .pendingCreate, .pendingUpdate, .pendingDelete, .failed, .serverDenied:
+            return true
+        case .localOnly, .synced, .tombstoned:
+            return false
+        }
     }
 
     private func upsertRemotePlaceList(_ remoteList: LocalPlaceList) {
