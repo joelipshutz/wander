@@ -10221,10 +10221,17 @@ Post-rebase validation, 2026-07-12 14:18 PDT:
 - Full iOS suite passed on the installed iPhone 17 Pro / iOS 26.5 runtime:
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec83-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
   - Result bundle: `/private/tmp/DerivedData-rec83-postrebase/Logs/Test/Test-Wander-2026.07.12_14-15-14--0700.xcresult`
-  - `xcresulttool` summary: 269 passed, 0 failed, 0 skipped.
+- `xcresulttool` summary: 269 passed, 0 failed, 0 skipped.
 - Post-rebase simulator screenshot captured at `/private/tmp/rec83-postrebase-elysian.png`; visible place-profile/rating/best-for cards render cleanly. Place Details still sits below the first iPhone viewport for this demo place, so the lower-card check relies on the details-row layout fix and compile/test coverage rather than an automated scroll capture.
 - PR opened for the `main` landing step: https://github.com/joelipshutz/wander/pull/76.
-- Next steps: squash-merge PR #76 to `main`, update Linear `REC-83`, and leave TestFlight untouched because this request only asked to push the fix to `main`.
+
+Completion, 2026-07-12 14:27 PDT:
+
+- PR #76 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/76.
+- Main commit: `c93560ab75801de1a757b1009ebdd8959e6ed3a6` (`Fix place profile details card cutoff`).
+- Remote branch `codex/rec-83-card-cutoff` deleted after merge; local worktree branch retained only as disposable workspace state.
+- Linear `REC-83` is Done and was updated with merge/validation evidence.
+- No TestFlight release, build-number bump, archive, upload, or Slack tester note was performed because Ryan asked only to push the fix to `main`.
 
 ## 2026-07-12 13:56 PDT - Codex - TestFlight Build 67 Release
 
