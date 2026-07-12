@@ -453,16 +453,17 @@ private struct PlaceProfileFullView: View {
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             sectionLabel("Place details")
-            VStack(spacing: WanderTheme.spacing2) {
-                if let addressLine {
-                    PlaceProfileDetailRow(title: "Address", value: addressLine)
+            VStack(spacing: 0) {
+                ForEach(Array(detailRows.enumerated()), id: \.element.id) { index, detail in
+                    PlaceProfileDetailRow(title: detail.title, value: detail.value)
+                    if index < detailRows.count - 1 {
+                        Divider()
+                            .overlay(WanderTheme.borderHairline.color.opacity(0.72))
+                            .padding(.leading, 88)
+                    }
                 }
-                if let category = PlaceProfileCopy.categoryDisplay(for: place) {
-                    PlaceProfileDetailRow(title: "Category", value: category.capitalized)
-                }
-                PlaceProfileDetailRow(title: "Source", value: sourceDisplay)
             }
-            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
@@ -557,6 +558,18 @@ private struct PlaceProfileFullView: View {
 
     private var addressLine: String? {
         PlaceProfileCopy.detailsAddress(for: place)
+    }
+
+    private var detailRows: [PlaceProfileDetailItem] {
+        var rows: [PlaceProfileDetailItem] = []
+        if let addressLine {
+            rows.append(PlaceProfileDetailItem(title: "Address", value: addressLine))
+        }
+        if let category = PlaceProfileCopy.categoryDisplay(for: place) {
+            rows.append(PlaceProfileDetailItem(title: "Category", value: category.capitalized))
+        }
+        rows.append(PlaceProfileDetailItem(title: "Source", value: sourceDisplay))
+        return rows
     }
 
     private var sourceDisplay: String {
@@ -1246,10 +1259,21 @@ private struct PlaceProfileDetailRow: View {
             Text(value)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
-                .frame(maxWidth: .infinity, alignment: .trailing)
                 .multilineTextAlignment(.trailing)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
+}
+
+private struct PlaceProfileDetailItem: Identifiable {
+    var id: String { title.lowercased() }
+    let title: String
+    let value: String
 }
 
 private struct PlaceFact: Identifiable {

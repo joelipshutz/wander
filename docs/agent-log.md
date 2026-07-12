@@ -10133,6 +10133,7 @@ Completion, 2026-07-12 13:04 PDT:
 - Linear `REC-81` updated with release evidence and moved to Done.
 - Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
 - Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.
+
 ## 2026-07-12 13:28 PDT - Codex - REC-60 Unified Permission And Notification Routing
 
 Agent: Codex
@@ -10182,6 +10183,49 @@ Completion, 2026-07-12 13:45 PDT:
   - focused `RemoteRepositoryTests`
   - full iOS suite on installed iPhone 17 / iOS 26.5: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec60-unified/Logs/Test/Test-Wander-2026.07.12_13-42-03--0700.xcresult`)
 - The repo-default iPhone 16 Plus / iOS 18.6 runtime remains unavailable on this machine. No TestFlight release, build-number bump, or merge to `main` was requested or performed.
+
+## 2026-07-12 13:49 PDT - Codex - REC-83 Place Details Cutoff
+
+Agent: Codex
+Branch: `codex/rec-83-card-cutoff`
+Worktree: `/private/tmp/recme-rec83-card-cutoff`
+Linear: `REC-83` (`Fix place profile card bottom cutoff by beige block`)
+
+Goal: fix Ryan's screenshot bug where the bottom of place profile cards, especially the Place Details Address row, appears cut off/covered by a beige block, then push the fix through `main`.
+
+Starting status:
+
+- Created Linear `REC-83` from the chat-reported bug and moved it to In Progress.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated stale branch `codex/rec-81-collab-visibility`; work is isolated in a fresh worktree from latest `origin/main` at `6b3e093f9`.
+- Current worktree status is clean.
+- Expected files: `Wander/Features/Map/MapScreen.swift` or related place-profile layout files, tests if a layout contract can be captured, and this log.
+
+Checkpoint, 2026-07-12 14:06 PDT:
+
+- Root cause narrowed to `PlaceProfileMapSurface.swift`: the Place Details card used padded loose rows inside a background that could expose the parent bone/beige surface when values wrapped or the card bottom sat near the viewport edge.
+- Reworked the details card into a full-width raised surface with stable 44pt-min rows, internal row padding, separators, and multiline right-aligned values so the white card owns its full height instead of appearing cut off.
+- Pre-rebase validation passed from the REC-83 worktree:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec83-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec83-build CODE_SIGNING_ALLOWED=NO -jobs 1` passed 262 tests, 0 failures.
+  - Simulator screenshots captured at `/private/tmp/rec83-place-profile.png` and `/private/tmp/rec83-elysian-profile.png`; first viewport was clean, though Place Details sat below the initial iPhone viewport in those launch states.
+- `origin/main` advanced to `a5d1e83e7` (`Implement REC-60 push notifications (#60)`) during the fix, so the branch will be rebased before final validation and merge.
+- No TestFlight release requested; this should merge to `main` and ride the next explicit TestFlight batch.
+
+Post-rebase validation, 2026-07-12 14:18 PDT:
+
+- Rebased `codex/rec-83-card-cutoff` onto latest `origin/main` at `0a8f07bbb` (`docs: record TestFlight build 67 release (#74)`), preserving the REC-60 notification and build-67 agent-log entries.
+- Branch head is the amended REC-83 commit `Fix place profile details card cutoff`; the final PR/merge identifiers will be recorded after the GitHub landing step.
+- `git diff --check` passed.
+- Generic iOS Simulator build passed from the rebased source:
+  - `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec83-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
+- Full iOS suite passed on the installed iPhone 17 Pro / iOS 26.5 runtime:
+  - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec83-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Result bundle: `/private/tmp/DerivedData-rec83-postrebase/Logs/Test/Test-Wander-2026.07.12_14-15-14--0700.xcresult`
+  - `xcresulttool` summary: 269 passed, 0 failed, 0 skipped.
+- Post-rebase simulator screenshot captured at `/private/tmp/rec83-postrebase-elysian.png`; visible place-profile/rating/best-for cards render cleanly. Place Details still sits below the first iPhone viewport for this demo place, so the lower-card check relies on the details-row layout fix and compile/test coverage rather than an automated scroll capture.
+- PR opened for the `main` landing step: https://github.com/joelipshutz/wander/pull/76.
+- Next steps: squash-merge PR #76 to `main`, update Linear `REC-83`, and leave TestFlight untouched because this request only asked to push the fix to `main`.
+
 ## 2026-07-12 13:56 PDT - Codex - TestFlight Build 67 Release
 
 Agent: Codex
