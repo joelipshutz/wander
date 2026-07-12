@@ -9854,3 +9854,34 @@ Checkpoint, 2026-07-12 12:26 PDT:
 - Hosted Supabase authorization smoke test passed every list RPC and role boundary after the migration. No fixture or behavior mutation was committed.
 - Final smoke hardening rejects every node-postgres connection-string TLS override, verifies owner update/delete effects, and asserts direct anonymous denial on both app helpers and public wrappers.
 - `git diff --check`, `node --check scripts/supabase-smoke-test.mjs`, and `npm --prefix scripts ls --depth=0` pass.
+
+## 2026-07-12 12:40 PDT - Codex - TestFlight Build 66 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-66`
+Worktree: `/private/tmp/recme-build66-release`
+Linear: `REC-81`
+
+Goal: package the latest merged `main` into TestFlight build 66 after PR #70 landed.
+
+Starting status:
+
+- PR #70 squash-merged to `main` as `7ad2e2577` (`Fix collaborative list sync and list covers (#70)`).
+- Latest completed TestFlight release is build 65; `project.yml` is being bumped once from 65 to 66 for this explicit release batch.
+- Included tester-facing scope since build 65: collaborative list sync/backfill and access visibility, stale-list revocation, guest list claim, in-flight edit protection, My Lists/Collabs placement and group indicator, collaborator picker cleanup, adaptive stable list covers, and authenticated-only place-list RPC grants.
+- Pre-release validation before merge: 262 iOS tests passed, seven focused list regressions passed, hosted Supabase owner/collaborator/stranger/anonymous smoke matrix passed, and My Lists/Collabs simulator screenshots passed design review.
+
+Release plan:
+
+- Regenerate the Xcode project with build 66 and verify the generated diff is limited to build-number settings.
+- Run build/tests from release source, archive with App Store signing, upload with build-number management disabled, process through `scripts/testflight-release.mjs`, and attach to `Wander Alpha`.
+- Post the required tester-facing note to `#testflight-feedback` and close REC-81 only after build 66 is confirmed available.
+
+Checkpoint, 2026-07-12 12:52 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 65 to 66 in `project.yml` and regenerated with XcodeGen 2.45.4.
+- XcodeGen emitted unrelated project-default churn; restored the generated project and reapplied only the two required `CURRENT_PROJECT_VERSION = 66` settings, matching prior release practice.
+- The first release-source test attempt stopped before app tests because the task's multiple disposable DerivedData trees filled the disk. Removed only `/private/tmp/DerivedData-rec81-*` and `/private/tmp/DerivedData-build66`, freeing about 10 GB; no repo or user files were removed.
+- Reran the release-source full suite on iPhone 16 Plus, iOS 18.6: 262 tests passed, 0 failures.
+- Generic iOS Simulator build passed from the same build-66 source and DerivedData cache.
+- `git diff --check` passes; release diff is scoped to `project.yml`, the two generated project build-number settings, and this agent log.
