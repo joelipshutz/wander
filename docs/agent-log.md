@@ -10363,3 +10363,11 @@ Root-cause checkpoint, 2026-07-12 16:26 PDT:
 - Added a focused regression test for the bottom inset contract in `NavigationContractTests`.
 - Validation: focused simulator XCTest passed on `iPhone 17 Pro, OS 26.5`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-rec83 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests/testPlaceProfileFullViewKeepsScrollableBottomInset`.
 - Visual check: installed the debug build to the booted iPhone 17 Pro simulator and launched `com.grayline.wander -WanderUseDemoFixtures -WanderMapSheetExpanded -WanderMapPlace 'Woodcat Coffee'`; top-of-full-card screenshot captured at `/tmp/rec83-full-place-demo-after-fix.png`. `simctl` does not expose general touch/scroll input on this machine, so bottom-scroll visual proof is covered by code inspection plus the layout contract test rather than an automated bottom screenshot.
+
+Handoff, 2026-07-12 16:29 PDT:
+
+- Implementation commit: `24182ef5f` (`Fix full place profile bottom inset`).
+- PR opened: https://github.com/joelipshutz/wander/pull/80.
+- Linear `REC-83` moved to `In Review`, with PR, root cause, validation, and visual-check limitation documented in a Linear comment.
+- Known local-only artifact: `DerivedData-rec83/` remains untracked in this temporary worktree and was not staged or pushed.
+- Next step: review/merge PR #80 to `main`; if Ryan wants this in TestFlight, package latest `main` as a new build after merge rather than reusing build 68.
