@@ -536,18 +536,10 @@ private struct ListTile: View {
 private struct ListPreviewMosaic: View {
     let list: PlaceListMock
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2)
-    ]
-
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 2) {
-            ForEach(0..<4, id: \.self) { index in
-                mosaicTile(place: list.previewPlaces.indices.contains(index) ? list.previewPlaces[index] : nil)
-            }
-        }
+        mosaicContent
         .padding(3)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
@@ -556,17 +548,66 @@ private struct ListPreviewMosaic: View {
         )
     }
 
-    private func mosaicTile(place: ListPlaceMock?) -> some View {
+    @ViewBuilder
+    private var mosaicContent: some View {
+        switch min(list.previewPlaces.count, 4) {
+        case 0:
+            emptyCover
+        case 1:
+            mosaicTile(place: list.previewPlaces[0])
+        case 2:
+            HStack(spacing: 2) {
+                mosaicTile(place: list.previewPlaces[0])
+                mosaicTile(place: list.previewPlaces[1])
+            }
+        case 3:
+            HStack(spacing: 2) {
+                mosaicTile(place: list.previewPlaces[0])
+
+                VStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[1])
+                    mosaicTile(place: list.previewPlaces[2])
+                }
+            }
+        default:
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[0])
+                    mosaicTile(place: list.previewPlaces[1])
+                }
+
+                HStack(spacing: 2) {
+                    mosaicTile(place: list.previewPlaces[2])
+                    mosaicTile(place: list.previewPlaces[3])
+                }
+            }
+        }
+    }
+
+    private var emptyCover: some View {
         ZStack {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .fill(place?.tint ?? WanderTheme.surfaceSand.color)
+                .fill(WanderTheme.surfaceSand.color)
 
-            Image(systemName: place.map { WanderPlaceCategory.symbolName(for: $0.category) } ?? "plus")
-                .font(.system(size: place == nil ? 16 : 20, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(place == nil ? 0.22 : 0.72))
+            Text(String(list.name.prefix(1)).uppercased())
+                .font(.system(size: 42, weight: .black, design: .rounded))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(0.18))
         }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private func mosaicTile(place: ListPlaceMock) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .fill(place.tint)
+
+            Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(0.68))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
     }
 }
 
