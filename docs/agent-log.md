@@ -9829,3 +9829,36 @@ Remaining real-device validation:
 
 - Build PR #60 on a physical iPhone, sign in, allow notifications, and confirm the production/sandbox device token row appears.
 - Trigger one real positive event and one preference-disabled no-push event. The hosted worker is now automatic; testers do not manually invoke it.
+
+## 2026-07-12 11:46 PDT - Codex - REC-60 Device Signing Repair
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60`
+
+Goal: fix Ryan's physical-iPhone Xcode build failure reporting no Apple accounts and a provisioning profile without Push Notifications / `aps-environment`.
+
+Root cause evidence:
+
+- The branch correctly declares `Wander/Resources/Wander.entitlements`, `APS_ENVIRONMENT=development` for Debug, team `Y7TVK75RZ8`, and bundle id `com.grayline.wander`.
+- Xcode was selecting a stale development profile created before Push Notifications was enabled for the app, while its UI also had no Apple account available to refresh signing automatically.
+- Outside the sandbox, the login keychain contains a valid `Apple Development: Created via API (BU88FB5ZG4)` signing identity.
+- An authenticated `xcodebuild` provisioning refresh using the existing App Store Connect API key created profile `fd1e9d8d-2350-452f-b9f8-f96298102f6f` on 2026-07-12.
+- The refreshed profile is Xcode-managed, includes Ry's iPhone, expires 2027-07-12, matches `Y7TVK75RZ8.com.grayline.wander`, and explicitly contains `aps-environment=development` plus associated domains.
+
+Fix / verification in progress:
+
+- Running a clean signed Debug device build with `-allowProvisioningUpdates` and App Store Connect API authentication.
+- Next: inspect the signed app's embedded profile, install it on Ry's connected iPhone, reopen Xcode to clear stale signing diagnostics, then commit/push this log update.
+
+Completion, 2026-07-12 11:49 PDT:
+
+- Clean signed Debug device build completed successfully after the authenticated provisioning refresh.
+- Verified the built app's code signature contains `application-identifier=Y7TVK75RZ8.com.grayline.wander`, `aps-environment=development`, associated domains, and the expected team identifier.
+- Verified the embedded profile is the new Xcode-managed profile and includes the Push Notifications entitlement plus Ry's iPhone UDID.
+- Re-ran the normal Xcode signing path without API-key or provisioning-update flags. It passed with exit code 0, proving the local certificate/profile pair now resolves the original Xcode errors.
+- Installed the signed app on connected `Ry’s iPhone` (`iPhone 15 Pro`) with `xcrun devicectl`; bundle installation succeeded for `com.grayline.wander`.
+- Automatic launch was denied only because the physical phone was locked. Unlocking the phone and opening rec.me completes the launch step.
+- Reopened the REC-60 project in Xcode after profile refresh so the IDE can discard its stale signing diagnostics.
+- No app source, project settings, signing team, or committed secrets changed. This repair updated local Apple signing assets only.
