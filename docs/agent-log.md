@@ -10390,3 +10390,10 @@ Known external configuration:
 
 - Google Places is free only within its separate monthly Text Search and Place Details Photo caps, requires billing, and charges overage. Yelp remains unsuitable because its free tier is evaluation-only. Google is therefore implemented behind a restricted server key and low quotas, but no approved key has been supplied yet.
 - No TestFlight build, build-number bump, or tester Slack announcement was requested or performed.
+
+Handoff, 2026-07-12 15:49 PDT:
+
+- Implementation commit `8fa834833` (`Complete REC-82 place photo fallback`) was pushed to `origin/codex/rec-82-seed-place-photos`.
+- Updated draft PR #75 with the final behavior, hosted migration/function state, validation, and two-account Xcode test steps: https://github.com/joelipshutz/wander/pull/75.
+- Updated Linear REC-82's durable comment and moved it back to In Review.
+- Exact manual test: open `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`; save a dropped pin as Been with a photo; verify the same crop appears in the collapsed tile and full header; relaunch to confirm remote fallback; then sign into an authorized second account and verify the same default photo. Google-specific visual QA can begin after the restricted quota-capped key is approved and set.
