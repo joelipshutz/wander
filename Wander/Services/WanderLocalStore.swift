@@ -1307,6 +1307,45 @@ final class WanderStore: ObservableObject {
             }
     }
 
+    func firstVisitPhoto(forPlaceID placeID: String) -> LocalVisitPhoto? {
+        let placeIDs = matchingPlaceIDs(placeID)
+        let userPlaceIDs = Set(
+            userPlaces
+                .filter {
+                    $0.userID == currentUser.id
+                        && $0.deletedAt == nil
+                        && placeIDs.contains($0.placeID)
+                }
+                .flatMap { userPlace in
+                    [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
+                }
+        )
+        let visitIDs = Set(
+            placeVisits
+                .filter { $0.deletedAt == nil && userPlaceIDs.contains($0.userPlaceID) }
+                .flatMap { visit in
+                    [visit.id, visit.localID, visit.serverID].compactMap { $0 }
+                }
+        )
+
+        return visitPhotos
+            .filter { photo in
+                guard photo.deletedAt == nil, visitIDs.contains(photo.visitID) else { return false }
+                if let localAssetRef = photo.localAssetRef, !localAssetRef.isEmpty { return true }
+                return photo.uploadState == .uploaded && photo.storagePath?.isEmpty == false
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+                return lhs.id < rhs.id
+            }
+            .first
+    }
+
     @discardableResult
     func createVisit(
         userPlaceID: String,

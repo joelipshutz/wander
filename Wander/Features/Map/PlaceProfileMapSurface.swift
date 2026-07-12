@@ -111,11 +111,14 @@ private struct PlaceProfilePreviewCard: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
+    @State private var photo: PlacePhoto? = nil
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                PlaceProfileCategoryThumb(category: place.primaryCategory, size: 82)
+                PlaceProfilePhotoThumb(place: place, photo: photo, size: 82)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     if let previewSignal {
@@ -188,6 +191,30 @@ private struct PlaceProfilePreviewCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(place.name)")
+        .task(id: photoResolutionKey) {
+            await resolvePhoto()
+        }
+    }
+
+    private var localPhoto: PlacePhoto? {
+        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+    }
+
+    private var photoResolutionKey: String {
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
+    }
+
+    private func resolvePhoto() async {
+        let localPhoto = localPhoto
+        photo = localPhoto
+        do {
+            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            if remotePhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                photo = remotePhoto
+            }
+        } catch {
+            photo = localPhoto
+        }
     }
 
     private var previewSignal: String? {
@@ -249,6 +276,7 @@ private struct PlaceProfileFullView: View {
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto?
 
     var body: some View {
@@ -304,11 +332,16 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
-        .task(id: place.photoLookupKey) {
-            photo = nil
+        .task(id: photoResolutionKey) {
+            let localPhoto = localPhoto
+            photo = localPhoto
             do {
-                photo = try await backend.placePhoto(for: place.photoRequest)
+                let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+                if remotePhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                    photo = remotePhoto
+                }
             } catch {
+                photo = localPhoto
                 #if DEBUG
                 WanderDebugLog.remote.debug(
                     "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
@@ -316,6 +349,14 @@ private struct PlaceProfileFullView: View {
                 #endif
             }
         }
+    }
+
+    private var localPhoto: PlacePhoto? {
+        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+    }
+
+    private var photoResolutionKey: String {
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
     }
 
     private var heading: some View {
@@ -616,8 +657,8 @@ private struct PlaceProfileMapHeader: View {
         ZStack {
             mapFallback
 
-            if let photoURL = photo?.photoURL {
-                NonCachingPlacePhotoImage(url: photoURL, placeName: place.name)
+            if let photo {
+                PlaceProfilePhotoImage(photo: photo, placeName: place.name)
             }
 
             LinearGradient(
@@ -630,7 +671,7 @@ private struct PlaceProfileMapHeader: View {
                 endPoint: .bottom
             )
 
-            if let photo {
+            if let photo, photo.isGooglePlacesPhoto {
                 VStack {
                     Spacer()
                     HStack {
@@ -772,9 +813,10 @@ private struct PlacePhotoAttribution: View {
     }
 }
 
-private struct NonCachingPlacePhotoImage: View {
-    let url: URL
+private struct PlaceProfilePhotoImage: View {
+    let photo: PlacePhoto
     let placeName: String
+    @EnvironmentObject private var backend: WanderBackend
     @State private var image: Image?
 
     var body: some View {
@@ -787,28 +829,64 @@ private struct NonCachingPlacePhotoImage: View {
                     .accessibilityLabel("Photo of \(placeName)")
             }
         }
-        .task(id: url) {
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .task(id: photo) {
             image = nil
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+            let uiImage: UIImage?
+            if let localAssetRef = photo.localAssetRef,
+               let localImage = VisitPhotoLocalFileStore.image(from: localAssetRef) {
+                uiImage = localImage
+            } else if let data = try? await backend.placePhotoImageData(for: photo) {
+                uiImage = UIImage(data: data)
+            } else {
+                uiImage = nil
+            }
 
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.urlCache = nil
-            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-            let session = URLSession(configuration: configuration)
-            defer { session.invalidateAndCancel() }
-
-            guard let (data, response) = try? await session.data(for: request),
-                  let httpResponse = response as? HTTPURLResponse,
-                  (200..<300).contains(httpResponse.statusCode),
-                  let uiImage = UIImage(data: data)
-            else { return }
+            guard let uiImage else { return }
 
             withAnimation(.easeOut(duration: 0.24)) {
                 image = Image(uiImage: uiImage)
             }
         }
+    }
+}
+
+private struct PlaceProfilePhotoThumb: View {
+    let place: PlaceSheetPlace
+    let photo: PlacePhoto?
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            PlaceProfileCategoryThumb(category: place.primaryCategory, size: size)
+            if let photo {
+                PlaceProfilePhotoImage(photo: photo, placeName: place.name)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private extension PlacePhoto {
+    init(localVisitPhoto photo: LocalVisitPhoto) {
+        self.init(
+            provider: "visit_photo",
+            providerPlaceID: photo.id,
+            photoURLString: "",
+            width: photo.width,
+            height: photo.height,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: photo.storageBucket,
+            storagePath: photo.storagePath,
+            localAssetRef: photo.localAssetRef
+        )
     }
 }
 

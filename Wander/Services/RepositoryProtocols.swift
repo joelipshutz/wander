@@ -687,6 +687,7 @@ struct VisitPhotoResult: Equatable {
 }
 
 struct PlacePhotoRequest: Encodable, Equatable {
+    let placeID: String?
     let name: String
     let address: String?
     let latitude: Double?
@@ -694,7 +695,26 @@ struct PlacePhotoRequest: Encodable, Equatable {
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
 
+    init(
+        placeID: String? = nil,
+        name: String,
+        address: String?,
+        latitude: Double?,
+        longitude: Double?,
+        sourceProvider: String?,
+        sourceProviderPlaceID: String?
+    ) {
+        self.placeID = placeID
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
+    }
+
     enum CodingKeys: String, CodingKey {
+        case placeID = "place_id"
         case name
         case address
         case latitude
@@ -707,7 +727,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
         let coordinate = [latitude, longitude]
             .compactMap { $0.map { String(format: "%.5f", $0) } }
             .joined(separator: ",")
-        return [sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+        return [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
             .joined(separator: "|")
@@ -725,6 +745,9 @@ struct PlacePhoto: Decodable, Equatable {
     let authorAvatarURLString: String?
     let sourcePhotoURLString: String?
     let flagContentURLString: String?
+    let storageBucket: String?
+    let storagePath: String?
+    let localAssetRef: String?
 
     enum CodingKeys: String, CodingKey {
         case provider
@@ -737,12 +760,16 @@ struct PlacePhoto: Decodable, Equatable {
         case authorAvatarURLString = "author_avatar_url"
         case sourcePhotoURLString = "source_photo_url"
         case flagContentURLString = "flag_content_url"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case localAssetRef = "local_asset_ref"
     }
 
     var photoURL: URL? { URL(string: photoURLString) }
     var authorProfileURL: URL? { authorProfileURLString.flatMap(URL.init(string:)) }
     var authorAvatarURL: URL? { authorAvatarURLString.flatMap(URL.init(string:)) }
     var sourcePhotoURL: URL? { sourcePhotoURLString.flatMap(URL.init(string:)) }
+    var isGooglePlacesPhoto: Bool { provider == "google_places" }
 }
 
 struct SaveResult: Equatable {
@@ -986,6 +1013,7 @@ protocol SocialPlaceSaveRepository {
 @MainActor
 protocol PlacePhotoRepository {
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func imageData(for photo: PlacePhoto) async throws -> Data
 }
 
 @MainActor

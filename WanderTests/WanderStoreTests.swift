@@ -853,6 +853,36 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
+    func testFirstVisitPhotoForPlaceUsesEarliestUsablePhoto() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "dropped_pin_photo_default",
+                name: "Dropped pin",
+                category: "other",
+                latitude: 34.09435,
+                longitude: -118.44982,
+                sourceProvider: "manual",
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        let visit = store.visits(for: result.userPlaceID).first
+        let first = store.createVisitPhoto(visitID: visit?.id ?? "", localAssetRef: "first.jpg")
+        let second = store.createVisitPhoto(visitID: visit?.id ?? "", localAssetRef: "second.jpg")
+        let placeID = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.place.id
+
+        XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, first?.id)
+        XCTAssertNotEqual(first?.id, second?.id)
+
+        _ = store.deleteVisitPhoto(photoID: first?.id ?? "")
+        XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, second?.id)
+    }
+
     func testMultipleVisitsAverageRatings() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

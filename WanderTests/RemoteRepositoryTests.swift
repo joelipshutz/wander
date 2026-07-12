@@ -853,6 +853,42 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testPlacePhotoRepositoryFallsBackToFirstVisibleVisitPhotoAndAuthenticatedStorage() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000001",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg",
+          "width": 1200,
+          "height": 900
+        }]
+        """.data(using: .utf8)
+        let storage = RecordingStorage()
+        storage.downloadData = Data([0xFF, 0xD8, 0xFF])
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: storage)
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000001",
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        let photo = try await repository.photo(for: request)
+        let data = try await repository.imageData(for: photo)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(photo.providerPlaceID, "55000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(photo.storageBucket, "visit-photos")
+        XCTAssertEqual(data, Data([0xFF, 0xD8, 0xFF]))
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo", "first_visible_place_photo"])
+        XCTAssertEqual(rpc.rawBodies[1]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
+    }
+
     func testPlacePhotoLookupKeyUsesProviderIdentityAndCoordinates() {
         let request = PlacePhotoRequest(
             name: "Woodcat Coffee",
@@ -1047,6 +1083,8 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     private(set) var uploads: [Upload] = []
     private(set) var deletes: [Delete] = []
+    private(set) var downloads: [Delete] = []
+    var downloadData = Data()
 
     func uploadObject(
         bucket: String,
@@ -1068,6 +1106,11 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     func deleteObject(bucket: String, path: String) async throws {
         deletes.append(Delete(bucket: bucket, path: path))
+    }
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        downloads.append(Delete(bucket: bucket, path: path))
+        return downloadData
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {

@@ -52,6 +52,7 @@ protocol RemoteStorageCalling {
         upsert: Bool
     ) async throws
     func deleteObject(bucket: String, path: String) async throws
+    func downloadObject(bucket: String, path: String) async throws -> Data
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL
 }
 
@@ -519,6 +520,31 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             path: path,
             treatsNotFoundAsSuccess: true
         )
+    }
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        let headers = try await authenticatedHeaders()
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WanderRemoteError.invalidResponse("Missing HTTP response for storage download")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw WanderRemoteError.notAuthenticated
+            }
+            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            throw WanderRemoteError.invalidResponse("Storage download failed with \(httpResponse.statusCode): \(body)")
+        }
+        return data
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String? = nil) throws -> URL {

@@ -2283,6 +2283,7 @@ struct PlaceSheetPlace {
 
     var photoRequest: PlacePhotoRequest {
         PlacePhotoRequest(
+            placeID: id,
             name: name,
             address: address,
             latitude: latitude,

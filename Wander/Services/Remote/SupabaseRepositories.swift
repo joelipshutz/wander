@@ -649,16 +649,113 @@ struct SupabaseListSuggestionRepository: ListSuggestionRepository {
 }
 
 struct SupabasePlacePhotoRepository: PlacePhotoRepository {
+    private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
+    private let storage: (any RemoteStorageCalling)?
 
     init(functions: RemoteFunctionCalling) {
+        self.rpc = nil
         self.functions = functions
+        self.storage = nil
+    }
+
+    init(rpc: RemoteProcedureCalling, functions: RemoteFunctionCalling, storage: RemoteStorageCalling) {
+        self.rpc = rpc
+        self.functions = functions
+        self.storage = storage
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
-        try await functions.invoke(
-            "place-photo",
-            body: request
+        do {
+            return try await functions.invoke(
+                "place-photo",
+                body: request
+            )
+        } catch {
+            guard let rpc,
+                  let placeID = request.placeID,
+                  UUID(uuidString: placeID) != nil
+            else {
+                throw error
+            }
+
+            let rows: [FirstVisiblePlacePhotoRow] = try await rpc.call(
+                "first_visible_place_photo",
+                params: FirstVisiblePlacePhotoParams(inputPlaceID: placeID)
+            )
+            guard let row = rows.first else { throw error }
+            return row.photo
+        }
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        if let storageBucket = photo.storageBucket,
+           let storagePath = photo.storagePath,
+           let storage {
+            return try await storage.downloadObject(bucket: storageBucket, path: storagePath)
+        }
+
+        guard let photoURL = photo.photoURL else {
+            throw WanderRemoteError.invalidResponse("Place photo has no readable source")
+        }
+
+        var request = URLRequest(url: photoURL)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode)
+        else {
+            throw WanderRemoteError.invalidResponse("Place photo download failed")
+        }
+        return data
+    }
+}
+
+private struct FirstVisiblePlacePhotoParams: Encodable {
+    let inputPlaceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlaceID = "input_place_id"
+    }
+}
+
+private struct FirstVisiblePlacePhotoRow: Decodable {
+    let photoID: String
+    let storageBucket: String
+    let storagePath: String
+    let width: Int?
+    let height: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case photoID = "photo_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case width
+        case height
+    }
+
+    var photo: PlacePhoto {
+        PlacePhoto(
+            provider: "visit_photo",
+            providerPlaceID: photoID,
+            photoURLString: "",
+            width: width,
+            height: height,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
+            localAssetRef: nil
         )
     }
 }

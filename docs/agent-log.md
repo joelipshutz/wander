@@ -10339,3 +10339,54 @@ Completion, 2026-07-12 14:16 PDT:
 - Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; exact notification worker Deno check passed; hosted notification pgTAP passed 40/40.
 - Tester focus: one-tap Allow/Disable behavior, every cross-account notification trigger, and exact People/list/place/draft/Discover landing destinations.
 - Known behavior communicated to testers: app-level Disable cannot revoke Apple's system permission, but it disables all rec.me preferences and device delivery. Backend-ready notifications for unfinished product surfaces begin firing only when those feature triggers are in use.
+## 2026-07-12 14:28 PDT - Codex - REC-82 User Photo Fallback Expansion
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: expand REC-82 so the same preferred image appears in both the full place-profile header and collapsed map card: Google Places photo when a trustworthy provider match exists, otherwise the earliest visible user-uploaded visit photo. A dropped pin's first saved photo must become the shared default for friends who can see that place.
+
+Starting status:
+
+- Re-read the Linear issue/comments, moved REC-82 from In Review back to In Progress, and reviewed the two annotated device screenshots supplied by Ryan.
+- Re-ran the required fetch/status/worktree/log checks. The root checkout contains unrelated REC-81 work; implementation remains isolated in the existing clean REC-82 worktree and draft PR #75.
+- Merged latest `origin/main` (`c93560ab7`, REC-83 card cutoff) before editing and preserved its overlapping place-profile layout changes.
+- No other active worktree is editing REC-82. This expansion will touch the existing REC-82 place-photo boundary/UI plus local visit-photo lookup and a narrow Supabase visibility RPC/migration; `docs/agent-log.md` remains a shared high-conflict file and will be edited carefully.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `Wander/Services/RepositoryProtocols.swift`, `RemoteRepositories.swift`, `WanderLocalStore.swift`, and backend injection as required
+- Supabase migration/RPC files and `scripts/supabase-smoke-test.mjs`
+- Focused tests under `WanderTests/`
+- `docs/decisions.md`, `docs/setup.md`, and this agent log
+
+Implementation contract:
+
+- Google photo wins only for a correlated Google place match.
+- Otherwise choose the first user-uploaded photo that the viewer is authorized to see, ordered deterministically by original photo creation/order.
+- Use the same resolution result for the full header and collapsed place card; local unsynced photos should appear immediately while hosted visible photos provide cross-user fallback.
+
+Completion, 2026-07-12 15:46 PDT:
+
+- Implemented one Google-first preferred-photo resolver for both place-profile surfaces. The full header and 82-point collapsed-card tile now render the same resolved image.
+- Added immediate local fallback: the earliest usable current-user visit photo for a canonical place renders from its on-device file as soon as it is created, including while upload is pending.
+- Added hosted cross-user fallback: `public.first_visible_place_photo(uuid)` deterministically selects the earliest uploaded visit photo for the canonical place. It is explicitly `SECURITY INVOKER`, pins `search_path = public, app`, grants execute only to `authenticated`, and relies on the existing user-place/visit/photo RLS chain. Private `visit-photos` bytes are downloaded with the viewer's auth headers; no permanent public object URL was introduced.
+- Google remains first priority whenever the Edge Function makes a trustworthy provider match. Its no-cache and attribution behavior is unchanged. If Google has no match, is unconfigured, or errors, iOS calls the user-photo RPC; MapKit/category artwork remains the last fallback.
+- Added focused repository/storage and local-ordering regressions. Extended `scripts/supabase-smoke-test.mjs` with direct-DB coverage and a self-contained `--linked` Management API mode for environments without a database password.
+- Applied hosted migration `20260712214500_first_visible_place_photo.sql`; `supabase migration list --linked` shows local and remote aligned through `20260712214500`.
+- Hosted linked smoke passed owner/follower resolution, stranger denial, authenticated-only grants, security-invoker metadata, and pinned search path. All mutations rolled back.
+- Deployed the authenticated `place-photo` Edge Function to project `rugmtlgufrhlxwfkumhw`; a no-credential POST returned `401 {"error":"missing_authorization"}`. The user-photo fallback is live now. Google still needs the approved restricted `WANDER_GOOGLE_PLACES_API_KEY` to return venue photos.
+- Validation passed:
+  - focused preferred-photo tests: 4 passed, then final post-adjustment rerun: 2 passed;
+  - complete iOS suite: 273 passed, 0 failures, 0 skipped (`/private/tmp/DerivedData-rec82-photo-fallback/Logs/Test/Test-Wander-2026.07.12_15-38-28--0700.xcresult`);
+  - generic iOS Simulator build passed;
+  - `xcodegen generate`, `git diff --check`, and Node smoke-script syntax checks passed.
+- Reviewed simulator screenshots on iPhone 17 Pro (collapsed card: `/private/tmp/rec82-17pro-collapsed.png`) and iPhone 17e (full profile: `/private/tmp/rec82-17e-full.png`). No regression was visible in card sizing, crop boundary, header controls, safe areas, or small-phone layout. These demo fixtures intentionally had no provider/user photo, so the screenshots validate the final fallback layouts; actual image rendering is covered by the data/resolver tests and is ready for Ryan's Xcode photo-upload test.
+
+Known external configuration:
+
+- Google Places is free only within its separate monthly Text Search and Place Details Photo caps, requires billing, and charges overage. Yelp remains unsuitable because its free tier is evaluation-only. Google is therefore implemented behind a restricted server key and low quotas, but no approved key has been supplied yet.
+- No TestFlight build, build-number bump, or tester Slack announcement was requested or performed.

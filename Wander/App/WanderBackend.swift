@@ -34,7 +34,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
-            self.placePhotoRepository = SupabasePlacePhotoRepository(functions: client)
+            self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
         } else {
             self.profileRepository = nil
@@ -115,6 +115,13 @@ final class WanderBackend: ObservableObject {
             throw WanderRemoteError.notConfigured
         }
         return try await placePhotoRepository.photo(for: request)
+    }
+
+    func placePhotoImageData(for photo: PlacePhoto) async throws -> Data {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await placePhotoRepository.imageData(for: photo)
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
