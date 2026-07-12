@@ -810,6 +810,153 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
     }
 
+    func testNotificationRepositoryCallsPreferenceAndTokenRPCs() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["get_notification_preferences"] = """
+        {
+          "push_enabled": true,
+          "social_graph_enabled": true,
+          "shared_lists_enabled": true,
+          "recommendations_enabled": true,
+          "capture_enabled": true,
+          "discovery_digest_enabled": false,
+          "followed_activity_enabled": true
+        }
+        """.data(using: .utf8)
+        rpc.responses["update_notification_preferences"] = """
+        {
+          "push_enabled": true,
+          "social_graph_enabled": true,
+          "shared_lists_enabled": true,
+          "recommendations_enabled": true,
+          "capture_enabled": true,
+          "discovery_digest_enabled": true,
+          "followed_activity_enabled": false
+        }
+        """.data(using: .utf8)
+        rpc.responses["register_push_token"] = #""token-row-id""#.data(using: .utf8)
+        let repository = SupabaseNotificationRepository(rpc: rpc)
+
+        let preferences = try await repository.preferences()
+        let updated = try await repository.updatePreferences(
+            NotificationPreferencesUpdate(discoveryDigestEnabled: true, followedActivityEnabled: false)
+        )
+        let tokenID = try await repository.registerPushToken(
+            "abcdef1234567890",
+            environment: .sandbox,
+            appBundleID: "com.grayline.wander"
+        )
+        try await repository.unregisterPushToken("abcdef1234567890", environment: .sandbox)
+
+        XCTAssertTrue(preferences.socialGraphEnabled)
+        XCTAssertTrue(preferences.followedActivityEnabled)
+        XCTAssertFalse(preferences.discoveryDigestEnabled)
+        XCTAssertTrue(updated.discoveryDigestEnabled)
+        XCTAssertFalse(updated.followedActivityEnabled)
+        XCTAssertEqual(tokenID, "token-row-id")
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            [
+                "get_notification_preferences",
+                "update_notification_preferences",
+                "register_push_token",
+                "unregister_push_token"
+            ]
+        )
+
+        let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
+        XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
+        XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
+
+        XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
+        XCTAssertEqual(rpc.rawBodies[2]["input_environment"] as? String, "sandbox")
+        XCTAssertEqual(rpc.rawBodies[2]["input_app_bundle_id"] as? String, "com.grayline.wander")
+
+        XCTAssertEqual(rpc.rawBodies[3]["input_device_token"] as? String, "abcdef1234567890")
+        XCTAssertEqual(rpc.rawBodies[3]["input_environment"] as? String, "sandbox")
+    }
+
+    func testPushNotificationDeviceTokenHexEncoding() {
+        XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
+    }
+
+    func testNotificationPreferencePresetsToggleEveryTypeTogether() {
+        XCTAssertEqual(
+            NotificationPreferences.allEnabled,
+            NotificationPreferences(
+                pushEnabled: true,
+                socialGraphEnabled: true,
+                sharedListsEnabled: true,
+                recommendationsEnabled: true,
+                captureEnabled: true,
+                discoveryDigestEnabled: true,
+                followedActivityEnabled: true
+            )
+        )
+        XCTAssertEqual(NotificationPreferences.allDisabled, NotificationPreferences(
+            pushEnabled: false,
+            socialGraphEnabled: false,
+            sharedListsEnabled: false,
+            recommendationsEnabled: false,
+            captureEnabled: false,
+            discoveryDigestEnabled: false,
+            followedActivityEnabled: false
+        ))
+    }
+
+    func testNotificationDeeplinksMapToConcreteAppDestinations() {
+        XCTAssertEqual(
+            PushNotificationManager.destination(
+                from: URL(string: "recme://profiles/user_joe")!,
+                notificationType: "mutual_follow"
+            ),
+            .people(.friends)
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "recme://lists/44000000-0000-0000-0000-000000000001")!),
+            .list(id: "44000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "recme://places/40000000-0000-0000-0000-000000000001")!),
+            .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "recme://extraction-jobs/43000000-0000-0000-0000-000000000001")!),
+            .drafts(extractionJobID: "43000000-0000-0000-0000-000000000001")
+        )
+    }
+
+    func testNotificationPayloadFallsBackToTypeDataWhenDeeplinkIsMissing() {
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "notification_type": "place_saved_from_your_map",
+                "data": ["place_id": "place_bar_nido"]
+            ]
+        ]
+
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: userInfo),
+            .place(id: "place_bar_nido")
+        )
+    }
+
+    func testEveryNotificationTypeHasAnAppDestination() {
+        func destination(_ type: String, data: [String: Any] = [:]) -> NotificationDestination? {
+            PushNotificationManager.destination(from: [
+                "recme": ["notification_type": type, "data": data]
+            ])
+        }
+
+        XCTAssertEqual(destination("followed_you"), .people(.followers))
+        XCTAssertEqual(destination("mutual_follow"), .people(.friends))
+        XCTAssertEqual(destination("list_collaborator_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
+        XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
+        XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(destination("capture_ready", data: ["extraction_job_id": "job-1"]), .drafts(extractionJobID: "job-1"))
+        XCTAssertEqual(destination("followed_activity_digest"), .discover)
+    }
+
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
         let parser = RemoteDiscoverFilterParser(repository: FailingDiscoverFilterRepository())
 

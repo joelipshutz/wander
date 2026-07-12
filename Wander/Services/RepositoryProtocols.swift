@@ -783,6 +783,89 @@ struct ProfileAvatarResult: Equatable {
     let storagePath: String
 }
 
+enum PushTokenEnvironment: String, Equatable {
+    case sandbox
+    case production
+}
+
+struct NotificationPreferences: Equatable {
+    var pushEnabled: Bool = true
+    var socialGraphEnabled: Bool = true
+    var sharedListsEnabled: Bool = true
+    var recommendationsEnabled: Bool = true
+    var captureEnabled: Bool = true
+    var discoveryDigestEnabled: Bool = false
+    var followedActivityEnabled: Bool = true
+
+    static let allEnabled = NotificationPreferences(
+        pushEnabled: true,
+        socialGraphEnabled: true,
+        sharedListsEnabled: true,
+        recommendationsEnabled: true,
+        captureEnabled: true,
+        discoveryDigestEnabled: true,
+        followedActivityEnabled: true
+    )
+
+    static let allDisabled = NotificationPreferences(
+        pushEnabled: false,
+        socialGraphEnabled: false,
+        sharedListsEnabled: false,
+        recommendationsEnabled: false,
+        captureEnabled: false,
+        discoveryDigestEnabled: false,
+        followedActivityEnabled: false
+    )
+}
+
+struct NotificationPreferencesUpdate: Equatable {
+    var pushEnabled: Bool?
+    var socialGraphEnabled: Bool?
+    var sharedListsEnabled: Bool?
+    var recommendationsEnabled: Bool?
+    var captureEnabled: Bool?
+    var discoveryDigestEnabled: Bool?
+    var followedActivityEnabled: Bool?
+
+    init(
+        pushEnabled: Bool? = nil,
+        socialGraphEnabled: Bool? = nil,
+        sharedListsEnabled: Bool? = nil,
+        recommendationsEnabled: Bool? = nil,
+        captureEnabled: Bool? = nil,
+        discoveryDigestEnabled: Bool? = nil,
+        followedActivityEnabled: Bool? = nil
+    ) {
+        self.pushEnabled = pushEnabled
+        self.socialGraphEnabled = socialGraphEnabled
+        self.sharedListsEnabled = sharedListsEnabled
+        self.recommendationsEnabled = recommendationsEnabled
+        self.captureEnabled = captureEnabled
+        self.discoveryDigestEnabled = discoveryDigestEnabled
+        self.followedActivityEnabled = followedActivityEnabled
+    }
+
+    static let allEnabled = NotificationPreferencesUpdate(
+        pushEnabled: true,
+        socialGraphEnabled: true,
+        sharedListsEnabled: true,
+        recommendationsEnabled: true,
+        captureEnabled: true,
+        discoveryDigestEnabled: true,
+        followedActivityEnabled: true
+    )
+
+    static let allDisabled = NotificationPreferencesUpdate(
+        pushEnabled: false,
+        socialGraphEnabled: false,
+        sharedListsEnabled: false,
+        recommendationsEnabled: false,
+        captureEnabled: false,
+        discoveryDigestEnabled: false,
+        followedActivityEnabled: false
+    )
+}
+
 @MainActor
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
@@ -884,4 +967,12 @@ protocol DiscoverFilterParsingRepository {
 @MainActor
 protocol ListSuggestionRepository {
     func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse
+}
+
+@MainActor
+protocol NotificationRepository {
+    func preferences() async throws -> NotificationPreferences
+    func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences
+    func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String
+    func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws
 }

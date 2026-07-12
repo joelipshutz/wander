@@ -14,6 +14,7 @@ final class WanderBackend: ObservableObject {
     let extractionRepository: (any ExtractionRepository)?
     let placeListRepository: (any PlaceListRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
+    let notificationRepository: (any NotificationRepository)?
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
@@ -32,6 +33,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
+            self.notificationRepository = SupabaseNotificationRepository(rpc: client)
         } else {
             self.profileRepository = nil
             self.profileAvatarRepository = nil
@@ -44,6 +46,7 @@ final class WanderBackend: ObservableObject {
             self.extractionRepository = nil
             self.placeListRepository = nil
             self.listSuggestionRepository = nil
+            self.notificationRepository = nil
         }
     }
 
@@ -64,7 +67,8 @@ final class WanderBackend: ObservableObject {
         visitRepository: (any VisitRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
         placeListRepository: (any PlaceListRepository)? = nil,
-        listSuggestionRepository: (any ListSuggestionRepository)? = nil
+        listSuggestionRepository: (any ListSuggestionRepository)? = nil,
+        notificationRepository: (any NotificationRepository)? = nil
     ) {
         self.configuration = configuration
         self.profileRepository = profileRepository
@@ -78,6 +82,7 @@ final class WanderBackend: ObservableObject {
         self.extractionRepository = extractionRepository
         self.placeListRepository = placeListRepository
         self.listSuggestionRepository = listSuggestionRepository
+        self.notificationRepository = notificationRepository
     }
 
     var canUseRemoteData: Bool {
@@ -92,6 +97,7 @@ final class WanderBackend: ObservableObject {
             || extractionRepository != nil
             || placeListRepository != nil
             || listSuggestionRepository != nil
+            || notificationRepository != nil
     }
 
     var canSyncProfileAvatars: Bool {
@@ -371,5 +377,41 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await listSuggestionRepository.suggestions(payload: payload)
+    }
+
+    var canRegisterPushNotifications: Bool {
+        notificationRepository != nil
+    }
+
+    func notificationPreferences() async throws -> NotificationPreferences {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.preferences()
+    }
+
+    func updateNotificationPreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.updatePreferences(update)
+    }
+
+    func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await notificationRepository.registerPushToken(token, environment: environment, appBundleID: appBundleID)
+    }
+
+    func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws {
+        guard let notificationRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await notificationRepository.unregisterPushToken(token, environment: environment)
     }
 }

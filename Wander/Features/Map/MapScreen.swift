@@ -7,6 +7,7 @@ struct MapScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -357,6 +358,45 @@ struct MapScreen: View {
             }
             .toolbar(.hidden, for: .navigationBar)
         }
+        .task {
+            await handleNotificationRoute(pushNotifications.navigationRequest)
+        }
+        .onChange(of: pushNotifications.navigationRequest) { _, request in
+            Task {
+                await handleNotificationRoute(request)
+            }
+        }
+    }
+
+    private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
+        guard let request, case .place(let placeID) = request.destination else { return }
+
+        let notificationLookupViewport = MapViewport(
+            minLatitude: -90,
+            minLongitude: -180,
+            maxLatitude: 90,
+            maxLongitude: 180
+        )
+        await store.refreshRemoteSocialSurfaces(in: notificationLookupViewport, backend: backend)
+        guard let visiblePlace = store.visiblePlaces().first(where: {
+            $0.place.id == placeID || $0.place.localID == placeID || $0.place.serverID == placeID
+        }) else { return }
+
+        selectedFilters = [.you, .social, .been, .wanna]
+        selectedSocialOwnerID = nil
+        mapQuery = ""
+        selectVisiblePlace(visiblePlace)
+        isPlaceProfilePresented = false
+        position = .region(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: visiblePlace.place.latitude,
+                    longitude: visiblePlace.place.longitude
+                ),
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+            )
+        )
+        pushNotifications.consumeNavigationRequest(id: request.id)
     }
 
     private func toggle(_ filter: MapFilter) {

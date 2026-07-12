@@ -7,6 +7,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var showsSettings = false
     @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
@@ -24,64 +25,71 @@ struct ProfileScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    pageTitle
-                    ownerHeader
-                    statsGrid
-                    monthCard
-                    draftsSection
-                    recentSection
-                    peopleSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        pageTitle
+                        ownerHeader
+                        statsGrid
+                        monthCard
+                        draftsSection
+                        recentSection
+                        peopleSection
+                    }
+                    .padding(WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing8)
                 }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
-            }
-            .overlayPreferenceValue(ProfilePhotoAvatarBoundsPreferenceKey.self) { anchor in
-                GeometryReader { proxy in
-                    profilePhotoMenuOverlay(anchor: anchor, proxy: proxy)
-                }
-            }
-            .wanderScreen()
-            .sheet(isPresented: $showsSettings) {
-                SettingsScreen()
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-            }
-            .sheet(isPresented: $showsProfileCamera) {
-                ProfileCameraPicker { image in
-                    Task {
-                        await saveProfilePhoto(image: image)
+                .overlayPreferenceValue(ProfilePhotoAvatarBoundsPreferenceKey.self) { anchor in
+                    GeometryReader { proxy in
+                        profilePhotoMenuOverlay(anchor: anchor, proxy: proxy)
                     }
                 }
-            }
-            .sheet(item: $listMode) { mode in
-                GraphListScreen(mode: mode)
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-            }
-            .photosPicker(
-                isPresented: $showsProfilePhotoLibrary,
-                selection: $selectedProfilePhotoItem,
-                matching: .images
-            )
-            .onChange(of: selectedProfilePhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    await importProfilePhoto(from: item)
+                .wanderScreen()
+                .sheet(isPresented: $showsSettings) {
+                    SettingsScreen()
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                        .environmentObject(pushNotifications)
                 }
-            }
-            .navigationDestination(item: $savedListMode) { mode in
-                SavedPlacesListScreen(mode: mode)
-                    .environmentObject(store)
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-            }
-            .task(id: auth.isSignedIn) {
-                guard auth.isSignedIn else { return }
-                await store.refreshRemoteSocialGraph(backend: backend)
+                .sheet(isPresented: $showsProfileCamera) {
+                    ProfileCameraPicker { image in
+                        Task {
+                            await saveProfilePhoto(image: image)
+                        }
+                    }
+                }
+                .sheet(item: $listMode) { mode in
+                    GraphListScreen(mode: mode)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+                .photosPicker(
+                    isPresented: $showsProfilePhotoLibrary,
+                    selection: $selectedProfilePhotoItem,
+                    matching: .images
+                )
+                .onChange(of: selectedProfilePhotoItem) { _, item in
+                    guard let item else { return }
+                    Task {
+                        await importProfilePhoto(from: item)
+                    }
+                }
+                .navigationDestination(item: $savedListMode) { mode in
+                    SavedPlacesListScreen(mode: mode)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+                .task(id: auth.isSignedIn) {
+                    guard auth.isSignedIn else { return }
+                    await store.refreshRemoteSocialGraph(backend: backend)
+                    handleNotificationRoute(pushNotifications.navigationRequest, proxy: proxy)
+                }
+                .onChange(of: pushNotifications.navigationRequest) { _, request in
+                    handleNotificationRoute(request, proxy: proxy)
+                }
             }
         }
     }
@@ -275,9 +283,11 @@ struct ProfileScreen: View {
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .id("profile.draft.\(draft.extractionJobID ?? draft.id)")
                 }
             }
         }
+        .id("profile.drafts")
     }
 
     private var recentSection: some View {
@@ -320,6 +330,39 @@ struct ProfileScreen: View {
                 }
             }
         }
+        .id("profile.people")
+    }
+
+    private func handleNotificationRoute(
+        _ request: NotificationNavigationRequest?,
+        proxy: ScrollViewProxy
+    ) {
+        guard let request else { return }
+
+        let target: String
+        switch request.destination {
+        case .people(let mode):
+            selectedPeopleMode = switch mode {
+            case .following: .following
+            case .followers: .followers
+            case .friends: .friends
+            }
+            target = "profile.people"
+        case .drafts(let extractionJobID):
+            if let extractionJobID,
+               store.unresolvedDrafts.contains(where: { $0.extractionJobID == extractionJobID }) {
+                target = "profile.draft.\(extractionJobID)"
+            } else {
+                target = "profile.drafts"
+            }
+        default:
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(target, anchor: .top)
+        }
+        pushNotifications.consumeNavigationRequest(id: request.id)
     }
 
     private func people(for mode: GraphListMode) -> [LocalProfile] {

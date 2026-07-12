@@ -9215,6 +9215,69 @@ Next:
 
 - Test build 62 from TestFlight for REC-75 flows: open saved and unsaved places, verify primary category tiles, verify Restaurants & Food separates Cuisine and Subcategory, try cocktail bar/Thai restaurant/waterfall/hotel/coffee lounge/chocolate lounge, toggle Been/Wanna, and confirm category metadata plus tags/My Labels persist after save/reopen.
 
+## 2026-07-09 16:16 PDT - Codex - REC-60 Notification Platform Hardening
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` - Add push notifications for follower and list activity
+Starting status: clean branch tracking `origin/codex/rec-60-notifications` at PR #60 head; root checkout is on active `codex/rec-81-collab-visibility` and is not used for REC-60 edits.
+
+Goal: implement the baseline hardening needed before relying broadly on REC-60 notifications: claim expiry/retry, attempt accounting, worker observability, and a concise internal guide for adding new notification producers.
+
+Context carried forward from PR #60:
+
+- REC-60 already includes APNs token registration, notification settings, notification event queueing, current follow/list/social-save/capture producers, and the APNs Edge Function worker.
+- Hosted rollback validation previously passed all 23 pgTAP assertions, but the REC-60 migration has not been persistently applied to hosted.
+- The branch has now merged latest `origin/main` through build 62 / current project build 63 before hardening edits.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Supabase notification migration/test files
+- `supabase/functions/push-notification-worker/index.ts`
+- Notification docs or implementation notes
+
+Plan:
+
+- Add retry-safe claim lifecycle fields and SQL behavior.
+- Update the worker response/error handling to expose useful processing metrics.
+- Extend SQL tests to cover retry/attempt behavior.
+- Add a practical notification extension checklist for future triggers.
+
+Hardening checkpoint, 2026-07-09 16:37 PDT:
+
+- Merged latest `origin/main` into `codex/rec-60-notifications` before the hardening edits; conflict resolution preserved main's place-list repository work and REC-60's notification repository wiring.
+- Added push event claim leases, attempt counting, max-attempt terminal failure, retryable failure backoff, and expired-claim reclaiming to `20260701190000_push_notifications.sql`.
+- Updated `push-notification-worker` to return per-run summary counts, distinguish retryable all-token failures as `retrying`, pass retryability into `mark_push_notification_result`, and include token deactivation counts.
+- Extended `supabase/tests/notifications.sql` from 23 to 31 assertions covering attempt increments, claim expiry, reclaiming expired claims, retryable failures, backoff, and retry claims.
+- Added `docs/notifications-platform.md` with the baseline testing checklist and producer checklist for future notification triggers.
+- Validation passed:
+  - `git diff --check`
+  - `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts`
+  - Hosted rollback harness applying the updated migration plus `supabase/tests/notifications.sql` in one transaction: 31/31 assertions passed and rolled back.
+  - `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-hardening-build CODE_SIGNING_ALLOWED=NO -jobs 1`
+  - Focused notification XCTest run on available local simulator `iPhone 17 Pro, OS 26.5`: `testNotificationRepositoryCallsPreferenceAndTokenRPCs` and `testPushNotificationDeviceTokenHexEncoding` passed.
+- Validation gaps/caveats:
+  - Docker is not installed on this machine, so `supabase test db` and a true local Supabase stack could not run.
+  - `supabase db push --linked --include-all --dry-run --yes` is blocked by remote-only hosted migration `20260709160829`; no migration repair or pull was performed because that would change hosted migration history/workspace state.
+- REC-60 remains not persistently applied to hosted; hosted validation was rollback-only.
+
+## 2026-07-11 10:32 PDT - Codex - REC-60 Hosted Supabase Test Prep
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` - Add push notifications for follower and list activity
+
+Goal: perform the next hosted/local Supabase testing steps if the branch and target state look good: reconcile migration history, apply the notification migration, deploy the worker, and prepare real-device push testing.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected worktrees and status, and reviewed recent `docs/agent-log.md`.
+- Root checkout `/Users/ryanlieblein/Developer/wander` is on unrelated `codex/rec-81-collab-visibility` and remains unused for REC-60 edits.
+- REC-60 worktree is clean and matches `origin/codex/rec-60-notifications` at `9283d526d`.
+- PR #60 is open but currently `CONFLICTING` with updated `origin/main` (`790b9672b`, build 64 log), so hosted application should not proceed until the branch is reconciled.
 ## 2026-07-09 14:55 PDT - Codex - REC-81 Collaborator Visibility Investigation
 
 Agent: Codex
@@ -9234,6 +9297,14 @@ Starting status:
 Expected files:
 
 - `docs/agent-log.md`
+- Potential merge conflict resolutions in Supabase migrations, project files, or recently changed docs
+
+Plan:
+
+- Merge latest `origin/main` into REC-60 and resolve conflicts without dropping REC-60 notification hardening.
+- Re-check Supabase migration list/dry-run after the merge.
+- Only apply hosted migrations/deploy the worker if migration history is coherent and the dry-run looks safe.
+
 - Potentially `Wander/Features/Lists/ListsScreen.swift`
 - Potentially `Wander/Services/WanderLocalStore.swift`
 - Potentially Supabase RPC/migration/test files if the bug is backend-side
@@ -9655,6 +9726,35 @@ Completion, 2026-07-10 00:26 PDT:
   - Live-device design QA for the new visit/photo flow was not rerun in this release session.
   - No Linear issue was moved because the branch/PR context used placeholder `REC-XX` rather than a concrete issue key.
 
+## 2026-07-11 10:40 PDT - Codex - REC-60 Hosted Supabase Apply
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60`
+
+Outcome:
+
+- Merged latest `origin/main` (`790b9672b`, build 64) into REC-60 to clear the PR conflict. Resolved `docs/agent-log.md` manually and regenerated `Wander.xcodeproj/project.pbxproj` from `project.yml`.
+- The merge brought local migration history into alignment with hosted for `20260709160829_fix_place_list_rpc_grants.sql` and `20260709220000_place_visits_visit_photos.sql`.
+- Hosted migration dry-run then showed only `20260701190000_push_notifications.sql`.
+- Rollback-wrapped hosted REC-60 verification passed: `supabase/tests/notifications.sql` returned `ok 31 - service worker can mark a claimed push event sent`.
+- First persistent apply failed at `notification_device_tokens.token_hash` because hosted migration execution did not resolve unqualified `digest(...)`; confirmed no partial notification tables remained.
+- Patched `20260701190000_push_notifications.sql` to use `extensions.digest(...)` for token hashing and register-token lookup.
+- Re-ran dry-run and rollback verification successfully, then applied `20260701190000_push_notifications.sql` to hosted Supabase with `pnpm dlx supabase db push --linked --include-all --yes`.
+- Verified hosted/local migration history is aligned through `20260709220000`, including REC-60 `20260701190000`.
+- Ran hosted notification pgTAP after apply: 31/31 assertions passed inside the test transaction/rollback.
+- Added missing `[functions.push-notification-worker]` config with `verify_jwt = false`, redeployed the Edge Function, and verified the deployed URL now reaches worker code and returns `{"error":"missing_worker_secret"}` without the worker secret.
+- `pnpm dlx deno check --config supabase/functions/push-notification-worker/deno.json supabase/functions/push-notification-worker/index.ts` passed.
+- Post-apply `supabase db push --linked --include-all --dry-run --yes` reports the remote database is up to date.
+
+Known blockers / next:
+
+- Hosted Edge Function secrets are missing `WANDER_WORKER_SECRET` and APNs credentials (`APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_PRIVATE_KEY` or the `WANDER_` equivalents). Real push delivery cannot be tested until those are set.
+- I did not set a generated worker secret because the team needs a durable secret value available to whoever invokes/schedules the worker.
+- Real-device testing still needs a TestFlight/dev build to register an APNs token, then one real trigger plus one preference-disabled no-push trigger.
+- Post-merge `xcodebuild build -quiet -project Wander.xcodeproj -scheme Wander -destination 'generic/platform=iOS Simulator' -derivedDataPath /private/tmp/DerivedData-rec60-hosted-prep-build CODE_SIGNING_ALLOWED=NO -jobs 1` was interrupted after hanging in Xcode package/build orchestration with no compiler subprocess visible. Treat as inconclusive, not a pass or source failure.
+
 ## 2026-07-11 10:34 PDT - Codex - REC-73 Merge And TestFlight Build 65
 
 Agent: Codex
@@ -9803,6 +9903,140 @@ Completion, 2026-07-10 00:21 PDT:
 - Linear `REC-73` linked to PR #69, moved to `In Review`, and updated with root cause plus validation notes.
 - Known issue: this session validated the data paths with focused and full tests, but did not run manual visual verification against Ryan's live/signed-in friend data. Ryan should test the branch in Xcode with a friend/profile-photo account before making PR #69 ready.
 - No TestFlight release was requested or performed.
+## 2026-07-12 11:08 PDT - Codex - REC-60 Hosted Push Activation
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60`
+
+Goal: finish the hosted notification backend activation for REC-60 by securely configuring the worker/APNs credentials, establishing automatic worker invocation, redeploying, and running the strongest available hosted smoke verification before handing off literal real-device testing steps.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected the dirty unrelated root checkout and all worktrees, read the latest agent log, and continued in the existing clean REC-60 worktree.
+- Hosted notification migration and pgTAP verification were already complete; `push-notification-worker` was deployed and correctly rejected unauthenticated calls with `missing_worker_secret`.
+- Linear `REC-60` remains `In Review`, linked to PR #60.
+- No TestFlight release was requested by name, so this pass does not merge the PR, increment the build, archive, upload, or post a tester release announcement.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Potentially `supabase/migrations/*` and `supabase/tests/notifications.sql` if durable worker scheduling requires a database migration
+- Potentially `docs/notifications-platform.md` for operations/testing instructions
+
+Completion, 2026-07-12 11:30 PDT:
+
+- Added `20260712112000_schedule_push_notification_worker.sql`, which enables `pg_cron` and `pg_net` and installs one active `recme-push-notification-worker` job running every minute. The job reads `recme_project_url` and `recme_push_worker_secret` from encrypted Supabase Vault and makes no request when either value is absent.
+- Hosted dry run showed only the new schedule migration. A rollback-wrapped hosted execution test successfully enabled both extensions, installed the schedule, verified its cadence/configuration, and rolled back.
+- Applied the schedule migration to linked project `rugmtlgufrhlxwfkumhw` and verified the cron job was active and initially inert.
+- Updated `supabase/tests/notifications.sql` from 31 to 33 assertions to cover the active once-per-minute schedule and ensure its command reads runtime configuration from Vault rather than embedding hosted values. Hosted pgTAP passed 33/33 after the persistent apply.
+- Signed into Apple Developer for Grayline Studio, LLC, created APNs key `RB7JZ42U2U` named `recme push notifications`, scoped it team-wide for sandbox and production, downloaded it, validated its PKCS#8 format, and moved it to `/Users/ryanlieblein/.openclaw/workspace/AuthKey_RB7JZ42U2U.p8` with owner-only permissions. No key material was written to Git or logs.
+- Generated a 256-bit worker secret, set hosted Edge Function secrets `WANDER_WORKER_SECRET`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and `APNS_TOPIC`, and stored the matching project URL and worker secret in Supabase Vault.
+- Redeployed `push-notification-worker`. An authenticated manual smoke call returned HTTP 200 with zero pending events. The automatic cron invocation then returned HTTP 200 through `pg_net` with no timeout, proving the scheduled path reaches the deployed worker.
+- Direct APNs HTTP/2 credential smoke test authenticated successfully; Apple returned the expected `BadDeviceToken` response for a deliberately invalid token, confirming the key/team/topic while sending no notification to a real device.
+- Updated `docs/notifications-platform.md` with the automatic cadence and hosted runtime contract.
+- Validation passed:
+  - `git diff --check`
+  - hosted notification pgTAP: 33/33
+  - Deno check for `push-notification-worker`
+  - generic iOS Simulator build with `CODE_SIGNING_ALLOWED=NO`
+  - full iOS test suite on `iPhone 16 Plus, OS=18.6` with `CODE_SIGNING_ALLOWED=NO`
+- The first sandboxed Deno/build attempts were blocked by package DNS and CoreSimulator permissions; both passed when rerun with normal network/simulator access.
+- PR remains #60 (`codex/rec-60-notifications`) and Linear remains `In Review`. No merge, build-number bump, TestFlight upload, or tester Slack announcement was performed because this request did not explicitly ask for a TestFlight release.
+
+Remaining real-device validation:
+
+- Build PR #60 on a physical iPhone, sign in, allow notifications, and confirm the production/sandbox device token row appears.
+- Trigger one real positive event and one preference-disabled no-push event. The hosted worker is now automatic; testers do not manually invoke it.
+
+## 2026-07-12 11:46 PDT - Codex - REC-60 Device Signing Repair
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60`
+
+Goal: fix Ryan's physical-iPhone Xcode build failure reporting no Apple accounts and a provisioning profile without Push Notifications / `aps-environment`.
+
+Root cause evidence:
+
+- The branch correctly declares `Wander/Resources/Wander.entitlements`, `APS_ENVIRONMENT=development` for Debug, team `Y7TVK75RZ8`, and bundle id `com.grayline.wander`.
+- Xcode was selecting a stale development profile created before Push Notifications was enabled for the app, while its UI also had no Apple account available to refresh signing automatically.
+- Outside the sandbox, the login keychain contains a valid `Apple Development: Created via API (BU88FB5ZG4)` signing identity.
+- An authenticated `xcodebuild` provisioning refresh using the existing App Store Connect API key created profile `fd1e9d8d-2350-452f-b9f8-f96298102f6f` on 2026-07-12.
+- The refreshed profile is Xcode-managed, includes Ry's iPhone, expires 2027-07-12, matches `Y7TVK75RZ8.com.grayline.wander`, and explicitly contains `aps-environment=development` plus associated domains.
+
+Fix / verification in progress:
+
+- Running a clean signed Debug device build with `-allowProvisioningUpdates` and App Store Connect API authentication.
+- Next: inspect the signed app's embedded profile, install it on Ry's connected iPhone, reopen Xcode to clear stale signing diagnostics, then commit/push this log update.
+
+Completion, 2026-07-12 11:49 PDT:
+
+- Clean signed Debug device build completed successfully after the authenticated provisioning refresh.
+- Verified the built app's code signature contains `application-identifier=Y7TVK75RZ8.com.grayline.wander`, `aps-environment=development`, associated domains, and the expected team identifier.
+- Verified the embedded profile is the new Xcode-managed profile and includes the Push Notifications entitlement plus Ry's iPhone UDID.
+- Re-ran the normal Xcode signing path without API-key or provisioning-update flags. It passed with exit code 0, proving the local certificate/profile pair now resolves the original Xcode errors.
+- Installed the signed app on connected `Ry’s iPhone` (`iPhone 15 Pro`) with `xcrun devicectl`; bundle installation succeeded for `com.grayline.wander`.
+- Automatic launch was denied only because the physical phone was locked. Unlocking the phone and opening rec.me completes the launch step.
+- Reopened the REC-60 project in Xcode after profile refresh so the IDE can discard its stale signing diagnostics.
+- No app source, project settings, signing team, or committed secrets changed. This repair updated local Apple signing assets only.
+
+## 2026-07-12 12:08 PDT - Codex - REC-60 Joe Local Signing Refresh
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/Users/joelipshutz/Developer/Wander (nametbd)`
+Linear: `REC-60`
+
+Goal: clear Joe's Xcode device-build failure showing no Apple account and a stale profile without Push Notifications / `aps-environment`.
+
+Outcome:
+
+- Confirmed the branch was clean, on `codex/rec-60-notifications`, and already declared `Wander/Resources/Wander.entitlements` with `aps-environment`.
+- Ran an authenticated signed Debug device build with `-allowProvisioningUpdates` and the local App Store Connect API key. Xcode refreshed/selected profile `f9b2a766-e10e-4a94-a05e-578ab47a009c`.
+- Verified the embedded profile contains `aps-environment=development` for `Y7TVK75RZ8.com.grayline.wander`.
+- Re-ran the normal signed Debug device build without API-key or provisioning-update flags. It passed with `** BUILD SUCCEEDED **`, using signing identity `Apple Development: jolipshutz@gmail.com (W77GVFZNW7)` and profile `f9b2a766-e10e-4a94-a05e-578ab47a009c`.
+- Reopened `Wander.xcodeproj` in Xcode so the IDE can refresh stale signing diagnostics.
+- Mission Control task creation was attempted, but local `http://localhost:4000` was not running.
+- No app source, project settings, or committed secrets changed. This repair only refreshed local Apple signing assets and recorded the outcome.
+## 2026-07-12 13:00 PDT - Codex - REC-60 Followed Place Activity Notification
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` (`In Progress`)
+Starting status: clean and synchronized with `origin/codex/rec-60-notifications` at `5112395f9`.
+
+Goal: notify a user's eligible followers when that user saves a place as visited or records a new check-in, using the shared notifications platform.
+
+Expected files:
+
+- `supabase/migrations/*followed_place_visit_notifications.sql`
+- `supabase/tests/notifications.sql`
+- `Wander/Services/RepositoryProtocols.swift`
+- `Wander/Services/Remote/SupabaseRepositories.swift`
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `WanderTests/RemoteRepositoryTests.swift`
+- `docs/notifications-platform.md`
+- `docs/agent-log.md`
+
+Coordination: the primary checkout is dirty with unrelated REC-81 work. This isolated REC-60 worktree is clean; no overlapping active work was found in the files above.
+
+Completion, 2026-07-12 13:20 PDT:
+
+- Added the `followed_place_visit` event and a dedicated default-on `followed_activity_enabled` preference exposed as **People you follow** in Notification Settings.
+- Added one `place_visits` insert producer so both an initial visited-place save and each later explicit check-in use the same path without duplicate producers.
+- Fanout is limited to followers who pass `app.can_read_user_place` for the current place visibility and block graph. Queue safeguards still enforce active tokens, global push state, the category preference, actor/recipient validity, and per-visit/recipient dedupe.
+- Push copy is `<display name> saved a place` with the canonical place name as the body. Payload data contains only visit, user-place, place, and actor IDs; notes, ratings, coordinates, and other private visit data are excluded.
+- Hosted migration `20260712130000_followed_place_visit_notifications.sql` was applied to project `rugmtlgufrhlxwfkumhw`. The dry run first required restoring already-merged migration `20260712122500_restrict_place_list_rpc_execution.sql` from `origin/main`; no hosted migration repair was performed.
+- Hosted pgTAP passed 40/40, covering initial saves, later check-ins, preference opt-out, self-only visibility, payload safety, and all prior notification behavior.
+- Hosted metadata verification confirmed `queue_notification_event`, `notification_type_enabled`, and `notify_followed_place_visit_insert` remain security-definer, pin `search_path=public, app`, and are not executable by `anon` or `authenticated`.
+- `xcodegen generate` and `git diff --check` passed.
+- The required iPhone 16 Plus / iOS 18.6 simulator was unavailable. The full suite passed on the installed iPhone 17 / iOS 26.5 simulator: 254 tests, 0 failures.
+- No TestFlight build, build-number bump, merge to `main`, or tester Slack announcement was requested or performed.
+- Merged latest `origin/main` (`6b3e093f9`) before push, preserving main's list-sync startup work alongside REC-60 push-token registration. Regenerated XcodeGen output and reran the full suite successfully on iPhone 17 / iOS 26.5 after conflict resolution.
 
 ## 2026-07-12 11:42 PDT - Codex - REC-81 List Cover Polish And TestFlight Release
 
@@ -9899,3 +10133,52 @@ Completion, 2026-07-12 13:04 PDT:
 - Linear `REC-81` updated with release evidence and moved to Done.
 - Known issue communicated to testers: collaborator push notifications are not part of build 66; cross-account visibility should be tested after opening/refreshing Lists.
 - Next test focus: owner creates a list and adds a friend; collaborator sees it in My Lists and Collabs, adds a place, owner sees updated count, then owner removes collaborator and the shared list/detail disappears for them.
+## 2026-07-12 13:28 PDT - Codex - REC-60 Unified Permission And Notification Routing
+
+Agent: Codex
+Branch: `codex/rec-60-notifications`
+Worktree: `/private/tmp/recme-rec60-platform-audit`
+Linear: `REC-60` (`In Progress`)
+Starting status: clean at `a19c4c59c`, synchronized with `origin/codex/rec-60-notifications`.
+
+Goal: make Allow Notifications a single permission/preferences/device-registration action, make Disable Notifications turn off and gray all notification types, remove the separate device-sync action, and route every notification type to a useful in-app destination.
+
+Expected files:
+
+- `Wander/Features/Settings/SettingsScreen.swift`
+- `Wander/Services/PushNotificationManager.swift`
+- `Wander/App/WanderApp.swift`
+- `Wander/App/WanderRootView.swift`
+- Notification/deeplink models and focused tests as discovered
+- `supabase/migrations/*notification_deeplinks.sql`
+- `supabase/tests/notifications.sql`
+- `docs/notifications-platform.md`
+- `docs/agent-log.md`
+
+Coordination: the main checkout remains dirty with unrelated REC-81 work. This isolated worktree is clean and no overlapping active edit was found in the planned REC-60 files.
+
+Completion, 2026-07-12 13:45 PDT:
+
+- Replaced the separate global push toggle and `Sync this device` action with one setup state machine. Before setup, every category renders off, disabled, and visually muted.
+- **Allow notifications** now requests iOS alert/sound/badge permission, enables every backend notification preference (including digest), requests APNs registration, and immediately registers a stored token when available. APNs callback registration remains automatic when the token arrives later.
+- **Disable notifications** first sets every backend preference false, then deactivates the stored device token. The UI turns every category off and disables it. iOS system permission remains granted because apps cannot revoke it; reopening setup does not require another prompt.
+- If iOS permission was previously denied, Allow opens this app's iOS Settings and automatically finishes setup when the user returns with permission enabled.
+- Added explicit user-facing errors for permission failure, backend preference failure, APNs registration failure, and token-deactivation failure. Backend preferences are disabled before token cleanup so a cleanup failure cannot continue queueing pushes.
+- Added `UNUserNotificationCenterDelegate` response handling, foreground presentation, and a cold-launch pending payload handoff.
+- Added typed destination parsing from `recme.deeplink_url` with `notification_type` + safe payload-ID fallback for older events.
+- Wired all notification destinations:
+  - follow -> Profile people/followers;
+  - mutual follow -> Profile people/friends;
+  - collaborator/list-place events -> exact list detail;
+  - map-save/followed-place events -> exact Map place card and camera;
+  - capture ready -> matching Profile draft or drafts section;
+  - discovery digest -> Discover.
+- Place notification lookup uses a one-time global visible-place refresh on tap so a referenced place outside the current map viewport can still open.
+- Existing hosted notification payloads already contain the required deeplinks and safe IDs, so no schema/function migration or worker redeploy was needed in this pass.
+- Added preference-preset, exhaustive type-routing, URL parsing, payload fallback, and owning-tab contract tests.
+- Validation passed:
+  - `xcodegen generate`
+  - `git diff --check`
+  - focused `RemoteRepositoryTests`
+  - full iOS suite on installed iPhone 17 / iOS 26.5: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec60-unified/Logs/Test/Test-Wander-2026.07.12_13-42-03--0700.xcresult`)
+- The repo-default iPhone 16 Plus / iOS 18.6 runtime remains unavailable on this machine. No TestFlight release, build-number bump, or merge to `main` was requested or performed.

@@ -50,6 +50,7 @@ enum AuthGateIntent: String, Equatable, Identifiable {
     case socialSave
     case followPeople
     case manageBlocks
+    case manageNotifications
     case syncPending
 
     var id: String { rawValue }
@@ -81,6 +82,13 @@ enum AuthGateIntent: String, Equatable, Identifiable {
             AuthGateCopy(
                 title: "Sign in to manage blocks",
                 message: "Blocks apply across search, profiles, and maps, so they need an account.",
+                primaryAction: "Sign in",
+                secondaryAction: "Cancel"
+            )
+        case .manageNotifications:
+            AuthGateCopy(
+                title: "Sign in for notifications",
+                message: "Notification settings follow your account and device.",
                 primaryAction: "Sign in",
                 secondaryAction: "Cancel"
             )
