@@ -3306,6 +3306,132 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.profileState(for: "user_maya")?.shell.avatarURL, mayaAvatarURL)
     }
 
+    func testRemotePlaceListRefreshRemovesListAfterCollaboratorLosesAccess() async {
+        let store = makeStore()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: "user_ryan",
+                        name: "Ryan remote tables",
+                        description: "live list",
+                        visibility: .followers,
+                        syncState: .synced
+                    ),
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [
+                        PlaceListCollaboratorRecord(
+                            userID: store.currentUser.id,
+                            handle: store.currentUser.handle,
+                            displayName: store.currentUser.displayName,
+                            avatarURL: nil,
+                            role: .collaborator
+                        )
+                    ],
+                    itemCount: 0
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+        XCTAssertTrue(store.visiblePlaceLists(scope: .collabs).contains { $0.id == listID })
+
+        repository.setVisibleLists([])
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertFalse(store.visiblePlaceLists.contains { $0.id == listID })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == listID })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == listID })
+    }
+
+    func testRemotePlaceListRefreshPreservesFailedLocalCollaboratorRemoval() async {
+        let joe = LocalProfile(localID: "local_joe", serverID: "user_joe", handle: "joe", displayName: "Joe", syncState: .synced)
+        let ryan = LocalProfile(localID: "local_ryan", serverID: "user_ryan", handle: "ryan", displayName: "Ryan", syncState: .synced)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let list = LocalPlaceList(
+            localID: "local_list_joe",
+            serverID: listID,
+            ownerUserID: joe.id,
+            name: "Dinner",
+            description: "local removal pending",
+            visibility: .followers,
+            syncState: .failed
+        )
+        let removedMembership = LocalPlaceListMember(
+            localID: "local_member_ryan",
+            listID: list.id,
+            userID: ryan.id,
+            role: .collaborator,
+            deletedAt: .now
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: joe,
+                profiles: [joe, ryan],
+                places: [],
+                userPlaces: [],
+                placeAttributes: [],
+                follows: [],
+                blocks: [],
+                placeLists: [list],
+                placeListMembers: [removedMembership],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: LocalPlaceList(
+                        localID: "remote_list_\(listID)",
+                        serverID: listID,
+                        ownerUserID: joe.id,
+                        name: "Dinner",
+                        description: "old remote state",
+                        visibility: .followers,
+                        syncState: .synced
+                    ),
+                    owner: ProfileShell(
+                        id: joe.id,
+                        handle: joe.handle,
+                        displayName: joe.displayName,
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [
+                        PlaceListCollaboratorRecord(
+                            userID: ryan.id,
+                            handle: ryan.handle,
+                            displayName: ryan.displayName,
+                            avatarURL: nil,
+                            role: .collaborator
+                        )
+                    ],
+                    itemCount: 0
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(store.placeLists.first?.syncState, .failed)
+        XCTAssertTrue(store.collaborators(for: list).isEmpty)
+        XCTAssertNotNil(store.placeListMembers.first?.deletedAt)
+    }
+
     func testSyncPendingPlaceListsCreatesRemoteListAndCollaborators() async {
         let store = makeStore()
         let remoteListID = "11111111-1111-4111-8111-111111111111"
@@ -3325,6 +3451,119 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(repository.collaboratorRequests, [FakePlaceListRepository.CollaboratorRequest(listID: remoteListID, userIDs: ["user_ryan"])])
         XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.serverID, remoteListID)
         XCTAssertEqual(store.placeLists.first { $0.localID == created.localID }?.syncState, .synced)
+    }
+
+    func testSyncPendingPlaceListsCoalescesConcurrentCalls() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID, upsertDelayNanoseconds: 100_000_000)
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = store.createPlaceList(name: "One remote list", description: "single flight", visibility: .followers)
+
+        let first = Task { await store.syncPendingPlaceLists(backend: backend) }
+        let second = Task { await store.syncPendingPlaceLists(backend: backend) }
+        let results = await [first.value, second.value]
+
+        XCTAssertEqual(results, [1, 1])
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["One remote list"])
+    }
+
+    func testSyncPendingPlaceListsDrainsListCreatedDuringBatch() async {
+        let store = makeStore()
+        let repository = FakePlaceListRepository(
+            upsertResults: [
+                "11111111-1111-4111-8111-111111111111",
+                "22222222-2222-4222-8222-222222222222"
+            ],
+            upsertDelayNanoseconds: 100_000_000
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = store.createPlaceList(name: "First list", description: "starts batch", visibility: .followers)
+
+        let batch = Task { await store.syncPendingPlaceLists(backend: backend) }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        _ = store.createPlaceList(name: "Second list", description: "created mid batch", visibility: .followers)
+        let syncedCount = await batch.value
+
+        XCTAssertEqual(syncedCount, 2)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["First list", "Second list"])
+        XCTAssertTrue(
+            store.placeLists
+                .filter { $0.name == "First list" || $0.name == "Second list" }
+                .allSatisfy { $0.syncState == .synced }
+        )
+    }
+
+    func testSyncPendingPlaceListsResendsOwnerEditMadeInFlight() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID, upsertDelayNanoseconds: 100_000_000)
+        let backend = WanderBackend(placeListRepository: repository)
+        let list = store.createPlaceList(name: "Original name", description: "before request", visibility: .followers)!
+
+        let sync = Task { await store.syncPendingPlaceLists(backend: backend) }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(
+            store.updatePlaceList(
+                id: list.id,
+                name: "Updated name",
+                description: "changed in flight",
+                visibility: .followers,
+                collaboratorUserIDs: []
+            )
+        )
+        _ = await sync.value
+
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["Original name", "Updated name"])
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .synced)
+    }
+
+    func testDirectListItemAddAndBatchSyncShareOneRemoteListCreate() async {
+        let store = makeStore()
+        let remoteListID = "11111111-1111-4111-8111-111111111111"
+        let repository = FakePlaceListRepository(upsertResult: remoteListID, upsertDelayNanoseconds: 100_000_000)
+        let backend = WanderBackend(placeListRepository: repository)
+        let list = store.createPlaceList(name: "One direct list", description: "single flight", visibility: .followers)!
+        let place = store.currentUserVisiblePlaces.first!
+
+        let add = Task { await store.addVisiblePlace(place, to: list, backend: backend) }
+        let batch = Task { await store.syncPendingPlaceLists(backend: backend) }
+        let addResult = await add.value
+        _ = await batch.value
+
+        XCTAssertEqual(addResult.outcome, .added)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["One direct list"])
+    }
+
+    func testSignInClaimsGuestListAndItemBeforeBackfill() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let guestUserID = store.currentUser.id
+        let list = store.createPlaceList(name: "Guest coffee", description: "saved before sign in", visibility: .followers)!
+        let candidate = PlaceCandidate(
+            id: "guest_coffee",
+            name: "Guest Coffee",
+            category: "Coffee Shop",
+            latitude: 34.05,
+            longitude: -118.24,
+            sourceProviderPlaceID: "guest_coffee",
+            confidence: 0.9
+        )
+        _ = await store.addCandidate(candidate, to: list, backend: nil)
+        XCTAssertTrue(store.placeListItems.contains { $0.addedByUserID == guestUserID })
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+
+        let claimedList = store.placeLists.first { $0.localID == list.localID }
+        XCTAssertEqual(claimedList?.ownerUserID, "user_live")
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.addedByUserID != guestUserID })
+        XCTAssertTrue(store.placeListItems.contains { $0.addedByUserID == "user_live" })
+
+        let repository = FakePlaceListRepository(upsertResult: "11111111-1111-4111-8111-111111111111")
+        let backend = WanderBackend(placeListRepository: repository)
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(repository.upsertedDrafts.map(\.name), ["Guest coffee"])
     }
 
     func testSyncPendingPlaceListsBackfillsPersistentLegacyLocalList() async {
@@ -3871,10 +4110,11 @@ private final class FakePlaceListRepository: PlaceListRepository {
         let draft: PlaceListItemDraft
     }
 
-    private let visibleListsResult: [RemotePlaceListSummary]
+    private var visibleListsResult: [RemotePlaceListSummary]
     private let detailsByListID: [String: RemotePlaceListDetail]
-    private let upsertResult: String
+    private let upsertResults: [String]
     private let itemResult: String
+    private let upsertDelayNanoseconds: UInt64
     private(set) var detailListIDs: [String] = []
     private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
     private(set) var deletedListIDs: [String] = []
@@ -3886,12 +4126,19 @@ private final class FakePlaceListRepository: PlaceListRepository {
         visibleLists: [RemotePlaceListSummary] = [],
         details: [String: RemotePlaceListDetail] = [:],
         upsertResult: String = "11111111-1111-4111-8111-111111111111",
-        itemResult: String = "22222222-2222-4222-8222-222222222222"
+        upsertResults: [String]? = nil,
+        itemResult: String = "22222222-2222-4222-8222-222222222222",
+        upsertDelayNanoseconds: UInt64 = 0
     ) {
         self.visibleListsResult = visibleLists
         self.detailsByListID = details
-        self.upsertResult = upsertResult
+        self.upsertResults = upsertResults ?? [upsertResult]
         self.itemResult = itemResult
+        self.upsertDelayNanoseconds = upsertDelayNanoseconds
+    }
+
+    func setVisibleLists(_ visibleLists: [RemotePlaceListSummary]) {
+        visibleListsResult = visibleLists
     }
 
     func visibleLists() async throws -> [RemotePlaceListSummary] {
@@ -3904,8 +4151,11 @@ private final class FakePlaceListRepository: PlaceListRepository {
     }
 
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
+        if upsertDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: upsertDelayNanoseconds)
+        }
         upsertedDrafts.append(draft)
-        return upsertResult
+        return upsertResults[min(upsertedDrafts.count - 1, upsertResults.count - 1)]
     }
 
     func delete(listID: String) async throws {

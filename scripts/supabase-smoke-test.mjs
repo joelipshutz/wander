@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 
-import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import pg from "pg";
 
 const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
 const DEFAULT_SMOKE_COLLABORATOR_ID = "user_codex_supabase_smoke_collab";
-const PG_CACHE_DIR = join(tmpdir(), "recme-supabase-smoke-pg");
+const DEFAULT_SMOKE_STRANGER_ID = "user_codex_supabase_smoke_stranger";
+const ENV_KEYS = new Set([
+  "WANDER_SUPABASE_DB_URL",
+  "WANDER_SUPABASE_PROJECT_REF",
+  "WANDER_SUPABASE_DB_PASSWORD",
+]);
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
@@ -30,23 +28,31 @@ async function main() {
 
   loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? DEFAULT_ENV_FILE);
 
-  const smokeUserID = options.userID ?? process.env.WANDER_SUPABASE_SMOKE_USER_ID ?? DEFAULT_SMOKE_USER_ID;
-  const collaboratorUserID = options.collaboratorUserID ??
-    process.env.WANDER_SUPABASE_SMOKE_COLLABORATOR_ID ??
-    DEFAULT_SMOKE_COLLABORATOR_ID;
+  const smokeUserID = DEFAULT_SMOKE_USER_ID;
+  const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
+  const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
   const dbURL = options.dbURL ?? process.env.WANDER_SUPABASE_DB_URL ?? buildDirectDatabaseURL();
-  const { Client } = await loadPg();
+  assertSafeDatabaseURL(dbURL);
+  const { Client } = pg;
 
   const client = new Client({
     connectionString: dbURL,
-    ssl: { rejectUnauthorized: false },
+    ssl: {
+      ca: readFileSync(new URL("./certs/prod-ca-2021.crt", import.meta.url), "utf8"),
+      rejectUnauthorized: true,
+    },
   });
 
   try {
     await client.connect();
-    await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID));
-    await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID);
-    console.log("Supabase smoke test passed: authenticated place-list RPCs are callable.");
+    await client.query("begin");
+    try {
+      await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
+      await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+      console.log("Supabase smoke test passed: place-list RPC grants and owner/collaborator boundaries are valid.");
+    } finally {
+      await client.query("rollback");
+    }
   } catch (error) {
     throw sanitizeError(error, dbURL);
   } finally {
@@ -70,14 +76,6 @@ function parseArgs(args) {
         break;
       case "--db-url":
         parsed.dbURL = requiredValue(args, index, arg);
-        index += 1;
-        break;
-      case "--user-id":
-        parsed.userID = requiredValue(args, index, arg);
-        index += 1;
-        break;
-      case "--collaborator-user-id":
-        parsed.collaboratorUserID = requiredValue(args, index, arg);
         index += 1;
         break;
       default:
@@ -105,21 +103,14 @@ Usage:
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
-  --user-id <clerk-like-id>        Authenticated smoke profile id.
-  --collaborator-user-id <id>      Collaborator smoke profile id.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
   WANDER_SUPABASE_DB_PASSWORD
 
-Optional env:
-  WANDER_SUPABASE_SMOKE_USER_ID
-  WANDER_SUPABASE_SMOKE_COLLABORATOR_ID
-  npm_config_cache
-
 Notes:
-  The script installs pg into ${PG_CACHE_DIR} if it is not already cached.
-  It seeds two smoke profiles plus one smoke place/user_place, then rolls back list mutations.
+  Run npm --prefix scripts ci --ignore-scripts once to install the pinned pg dependency.
+  Every fixture and behavior mutation runs in one transaction and is rolled back.
 `);
 }
 
@@ -143,7 +134,7 @@ function loadEnvFile(filePath) {
       value = value.slice(1, -1);
     }
 
-    if (!process.env[key]) {
+    if (ENV_KEYS.has(key) && !process.env[key]) {
       process.env[key] = value;
     }
   }
@@ -163,37 +154,19 @@ function buildDirectDatabaseURL() {
   return `postgresql://postgres:${encodeURIComponent(password)}@db.${projectRef}.supabase.co:5432/postgres`;
 }
 
-async function loadPg() {
-  const requireFromCache = createRequire(join(PG_CACHE_DIR, "index.cjs"));
-  const pgPackagePath = join(PG_CACHE_DIR, "node_modules", "pg", "package.json");
-
-  if (!existsSync(pgPackagePath)) {
-    mkdirSync(PG_CACHE_DIR, { recursive: true });
-    writeFileSync(join(PG_CACHE_DIR, "package.json"), JSON.stringify({
-      private: true,
-      dependencies: { pg: "^8.13.1" },
-    }, null, 2));
-
-    console.log(`Installing pg smoke-test dependency into ${PG_CACHE_DIR}...`);
-    const install = spawnSync("npm", ["install", "--silent", "--no-audit", "--no-fund"], {
-      cwd: PG_CACHE_DIR,
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024 * 10,
-    });
-
-    if (install.status !== 0) {
-      if (install.stdout) process.stdout.write(install.stdout);
-      if (install.stderr) process.stderr.write(install.stderr);
-      throw new Error(`Failed to install pg smoke-test dependency with exit code ${install.status ?? "unknown"}.`);
-    }
+function assertSafeDatabaseURL(dbURL) {
+  const parsed = new URL(dbURL);
+  const tlsOverrides = ["ssl", "sslmode", "sslrootcert", "sslcert", "sslkey"];
+  const suppliedOverrides = tlsOverrides.filter((key) => parsed.searchParams.has(key));
+  if (suppliedOverrides.length > 0) {
+    throw new Error(`Database URL must not override pinned TLS settings: ${suppliedOverrides.join(", ")}`);
   }
-
-  return requireFromCache("pg");
 }
 
-function buildSmokeFixtureSQL(smokeUserID, collaboratorUserID) {
+function buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID) {
   const smokeUser = sqlString(smokeUserID);
   const collaboratorUser = sqlString(collaboratorUserID);
+  const strangerUser = sqlString(strangerUserID);
   const sourceProvider = sqlString("codex_smoke");
   const sourceProviderPlaceID = sqlString("place-list-rpc-smoke");
 
@@ -209,7 +182,8 @@ insert into public.profiles (
 )
 values
   (${smokeUser}, 'codex_smoke', 'Codex Smoke Test', 'Backend smoke-test profile.', 'Test', 'followers', null),
-  (${collaboratorUser}, 'codex_smoke_collab', 'Codex Smoke Collaborator', 'Backend smoke-test collaborator.', 'Test', 'followers', null)
+  (${collaboratorUser}, 'codex_smoke_collab', 'Codex Smoke Collaborator', 'Backend smoke-test collaborator.', 'Test', 'followers', null),
+  (${strangerUser}, 'codex_smoke_stranger', 'Codex Smoke Stranger', 'Backend smoke-test stranger.', 'Test', 'followers', null)
 on conflict (id) do update
 set
   handle = excluded.handle,
@@ -275,7 +249,7 @@ insert into public.user_places (
   deleted_at
 )
 select
-  ${smokeUser},
+  fixture_user.user_id,
   p.id,
   'wanna_go',
   'Smoke test fixture',
@@ -289,6 +263,9 @@ select
   null,
   null
 from public.places p
+cross join (
+  values (${smokeUser}), (${collaboratorUser})
+) as fixture_user(user_id)
 where p.source_provider = ${sourceProvider}
   and p.source_provider_place_id = ${sourceProviderPlaceID}
 on conflict (user_id, place_id) do update
@@ -302,88 +279,298 @@ set
 `;
 }
 
-async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID) {
+async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID) {
   const fixture = await expectQuery(
     client,
-    "load smoke place fixture",
+    "load smoke place fixtures",
     `
-      select up.id as user_place_id, up.place_id
+      select up.user_id, up.id as user_place_id, up.place_id
       from public.user_places up
       join public.places p on p.id = up.place_id
-      where up.user_id = $1
+      where up.user_id = any($1::text[])
         and p.source_provider = 'codex_smoke'
         and p.source_provider_place_id = 'place-list-rpc-smoke'
         and up.deleted_at is null
-      limit 1
     `,
-    [smokeUserID],
-    (result) => result.rows.length === 1,
+    [[smokeUserID, collaboratorUserID]],
+    (result) => result.rows.length === 2,
   );
-  const smokeUserPlaceID = fixture.rows[0].user_place_id;
+  const userPlaceByUserID = new Map(fixture.rows.map((row) => [row.user_id, row.user_place_id]));
+  const smokeUserPlaceID = userPlaceByUserID.get(smokeUserID);
+  const collaboratorUserPlaceID = userPlaceByUserID.get(collaboratorUserID);
   const smokePlaceID = fixture.rows[0].place_id;
 
-  await client.query("begin");
-  try {
-    await client.query("set local role authenticated");
-    await client.query("select set_config('request.jwt.claim.sub', $1, true)", [smokeUserID]);
-    await client.query("select set_config('request.jwt.claim.role', 'authenticated', true)");
+  await assertPlaceListRPCMetadata(client);
+  await setAuthenticatedUser(client, smokeUserID);
 
-    await expectQuery(
-      client,
-      "public.visible_place_lists",
-      "select count(*)::integer as count from public.visible_place_lists()",
-      [],
-      (result) => Number.isInteger(result.rows[0]?.count),
-    );
+  await expectQuery(
+    client,
+    "owner public.visible_place_lists",
+    "select count(*)::integer as count from public.visible_place_lists()",
+    [],
+    (result) => Number.isInteger(result.rows[0]?.count),
+  );
 
-    await createSmokeList(client, "Codex smoke grant check");
+  await createSmokeList(client, "Codex smoke grant check");
 
-    const detailListID = await createSmokeList(client, "Codex smoke detail check");
-    await expectQuery(
-      client,
-      "public.place_list_detail",
-      "select public.place_list_detail($1::uuid) as detail",
-      [detailListID],
-      (result) => result.rows[0]?.detail !== null,
-    );
+  const detailListID = await createSmokeList(client, "Codex smoke detail check");
+  await expectQuery(
+    client,
+    "owner public.place_list_detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [detailListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
 
-    const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");
-    await expectQuery(
-      client,
-      "public.set_place_list_collaborators",
-      "select public.set_place_list_collaborators($1::uuid, $2::text[]) as result",
-      [collaboratorListID, [collaboratorUserID]],
-      () => true,
-    );
+  const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");
+  await expectQuery(
+    client,
+    "owner can update list",
+    "select public.upsert_place_list($1::jsonb) as list_id",
+    [JSON.stringify({
+      id: collaboratorListID,
+      name: "Codex smoke collaborator updated",
+      description: "Owner update contract",
+      visibility: "followers",
+    })],
+    (result) => result.rows[0]?.list_id === collaboratorListID,
+  );
+  await expectQuery(
+    client,
+    "owner update persists",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail?.list?.name === "Codex smoke collaborator updated",
+  );
+  await expectQuery(
+    client,
+    "owner public.set_place_list_collaborators",
+    "select public.set_place_list_collaborators($1::uuid, $2::text[]) as result",
+    [collaboratorListID, [collaboratorUserID]],
+    () => true,
+  );
 
-    const addItemListID = await createSmokeList(client, "Codex smoke add item check");
-    const addItem = await expectQuery(
-      client,
-      "public.add_place_list_item",
-      "select public.add_place_list_item($1::uuid, $2::uuid, $3::uuid, null::uuid) as item_id",
-      [addItemListID, smokePlaceID, smokeUserPlaceID],
-      (result) => result.rows[0]?.item_id !== null,
-    );
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "collaborator can see shared list",
+    "select exists(select 1 from public.visible_place_lists() where id = $1::uuid) as visible",
+    [collaboratorListID],
+    (result) => result.rows[0]?.visible === true,
+  );
+  await expectQuery(
+    client,
+    "collaborator can load list detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
+  const collaboratorItem = await expectQuery(
+    client,
+    "collaborator can add list item",
+    "select public.add_place_list_item($1::uuid, $2::uuid, $3::uuid, null::uuid) as item_id",
+    [collaboratorListID, smokePlaceID, collaboratorUserPlaceID],
+    (result) => result.rows[0]?.item_id !== null,
+  );
+  await expectQueryFailure(
+    client,
+    "collaborator cannot manage collaborators",
+    "select public.set_place_list_collaborators($1::uuid, $2::text[]) as result",
+    [collaboratorListID, []],
+    /place_list_not_found_or_forbidden/,
+  );
+  await expectQueryFailure(
+    client,
+    "collaborator cannot update list",
+    "select public.upsert_place_list($1::jsonb) as list_id",
+    [JSON.stringify({
+      id: collaboratorListID,
+      name: "Unauthorized collaborator update",
+      description: "must fail",
+      visibility: "followers",
+    })],
+    /place_list_not_found_or_forbidden/,
+  );
+  await expectQuery(
+    client,
+    "collaborator delete is a no-op",
+    "select public.delete_place_list($1::uuid) as result",
+    [collaboratorListID],
+    () => true,
+  );
+  await expectQuery(
+    client,
+    "collaborator delete leaves list visible",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
+  await expectQueryFailure(
+    client,
+    "collaborator cannot remove list item",
+    "select public.remove_place_list_item($1::uuid, $2::uuid) as result",
+    [collaboratorListID, collaboratorItem.rows[0].item_id],
+    /place_list_not_found_or_forbidden/,
+  );
 
-    await expectQuery(
-      client,
-      "public.remove_place_list_item",
-      "select public.remove_place_list_item($1::uuid, $2::uuid) as result",
-      [addItemListID, addItem.rows[0].item_id],
-      () => true,
-    );
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQuery(
+    client,
+    "stranger cannot see shared list",
+    "select exists(select 1 from public.visible_place_lists() where id = $1::uuid) as visible",
+    [collaboratorListID],
+    (result) => result.rows[0]?.visible === false,
+  );
+  await expectQuery(
+    client,
+    "stranger cannot load list detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail === null,
+  );
+  await expectQueryFailure(
+    client,
+    "stranger cannot add list item",
+    "select public.add_place_list_item($1::uuid, $2::uuid, $3::uuid, null::uuid) as item_id",
+    [collaboratorListID, smokePlaceID, smokeUserPlaceID],
+    /place_list_not_found_or_forbidden/,
+  );
+  await expectQueryFailure(
+    client,
+    "stranger cannot update list",
+    "select public.upsert_place_list($1::jsonb) as list_id",
+    [JSON.stringify({
+      id: collaboratorListID,
+      name: "Unauthorized stranger update",
+      description: "must fail",
+      visibility: "followers",
+    })],
+    /place_list_not_found_or_forbidden/,
+  );
+  await expectQuery(
+    client,
+    "stranger delete is a no-op",
+    "select public.delete_place_list($1::uuid) as result",
+    [collaboratorListID],
+    () => true,
+  );
 
-    const deleteListID = await createSmokeList(client, "Codex smoke delete check");
-    await expectQuery(
-      client,
-      "public.delete_place_list",
-      "select public.delete_place_list($1::uuid) as result",
-      [deleteListID],
-      () => true,
-    );
-  } finally {
-    await client.query("rollback");
-  }
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "unauthorized deletes leave owner list active",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
+  await expectQuery(
+    client,
+    "owner can remove collaborator-added item",
+    "select public.remove_place_list_item($1::uuid, $2::uuid) as result",
+    [collaboratorListID, collaboratorItem.rows[0].item_id],
+    () => true,
+  );
+
+  const deleteListID = await createSmokeList(client, "Codex smoke delete check");
+  await expectQuery(
+    client,
+    "owner public.delete_place_list",
+    "select public.delete_place_list($1::uuid) as result",
+    [deleteListID],
+    () => true,
+  );
+  await expectQuery(
+    client,
+    "owner delete removes list from detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [deleteListID],
+    (result) => result.rows[0]?.detail === null,
+  );
+
+  await client.query("set local role anon");
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call list RPCs",
+    "select count(*) from public.visible_place_lists()",
+    [],
+    /permission denied/,
+  );
+}
+
+async function setAuthenticatedUser(client, userID) {
+  await client.query("set local role authenticated");
+  await client.query("select set_config('request.jwt.claim.sub', $1, true)", [userID]);
+  await client.query("select set_config('request.jwt.claim.role', 'authenticated', true)");
+}
+
+async function assertPlaceListRPCMetadata(client) {
+  const publicSignatures = [
+    "public.visible_place_lists()",
+    "public.place_list_detail(uuid)",
+    "public.upsert_place_list(jsonb)",
+    "public.delete_place_list(uuid)",
+    "public.set_place_list_collaborators(uuid,text[])",
+    "public.add_place_list_item(uuid,uuid,uuid,uuid)",
+    "public.remove_place_list_item(uuid,uuid)",
+  ];
+  await expectQuery(
+    client,
+    "authenticated role has every public list RPC grant",
+    `
+      select bool_and(has_function_privilege('authenticated', signature, 'execute')) as valid
+      from unnest($1::text[]) as signature
+    `,
+    [publicSignatures],
+    (result) => result.rows[0]?.valid === true,
+  );
+
+  const appSignatures = publicSignatures.map((signature) => signature.replace("public.", "app."));
+  await expectQuery(
+    client,
+    "anonymous role has no app list RPC grants",
+    `
+      select bool_and(not has_function_privilege('anon', signature, 'execute')) as valid
+      from unnest($1::text[]) as signature
+    `,
+    [appSignatures],
+    (result) => result.rows[0]?.valid === true,
+  );
+  await expectQuery(
+    client,
+    "anonymous role has no public list RPC grants",
+    `
+      select bool_and(not has_function_privilege('anon', signature, 'execute')) as valid
+      from unnest($1::text[]) as signature
+    `,
+    [publicSignatures],
+    (result) => result.rows[0]?.valid === true,
+  );
+
+  const securityDefinerFunctions = [
+    "is_place_list_owner",
+    "is_place_list_member",
+    "can_read_place_list",
+    "upsert_place_list",
+    "delete_place_list",
+    "set_place_list_collaborators",
+    "add_place_list_item",
+    "remove_place_list_item",
+  ];
+  await expectQuery(
+    client,
+    "security-definer list mutations pin search_path",
+    `
+      select count(*)::integer as count
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app'
+        and p.proname = any($1::text[])
+        and p.prosecdef
+        and 'search_path=public, app' = any(p.proconfig)
+    `,
+    [securityDefinerFunctions],
+    (result) => result.rows[0]?.count === securityDefinerFunctions.length,
+  );
 }
 
 async function createSmokeList(client, name) {
@@ -415,6 +602,25 @@ async function expectQuery(client, label, sql, params, validate) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${label} failed: ${message}`);
   }
+}
+
+async function expectQueryFailure(client, label, sql, params, expectedMessage) {
+  await client.query("savepoint expected_failure");
+  try {
+    await client.query(sql, params);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await client.query("rollback to savepoint expected_failure");
+    await client.query("release savepoint expected_failure");
+    if (!expectedMessage.test(message)) {
+      throw new Error(`${label} failed with unexpected error: ${message}`);
+    }
+    console.log(`ok - ${label}`);
+    return;
+  }
+
+  await client.query("release savepoint expected_failure");
+  throw new Error(`${label} unexpectedly succeeded.`);
 }
 
 function sqlString(value) {

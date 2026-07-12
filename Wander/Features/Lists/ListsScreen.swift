@@ -364,7 +364,11 @@ struct ListsScreen: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("Open \(list.name)")
+                .accessibilityLabel(
+                    list.isCollaborative
+                        ? "Open \(list.name), collaborative list"
+                        : "Open \(list.name)"
+                )
             }
         }
     }
@@ -614,6 +618,7 @@ private struct ListPreviewMosaic: View {
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     var onEdit: (PlaceListMock) -> Void
     var onCollaborators: (PlaceListMock) -> Void
@@ -723,6 +728,11 @@ private struct ListDetailScreen: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
         .onDisappear {
             autoSaveToastTask?.cancel()
+        }
+        .onChange(of: sourceList?.id) { _, visibleListID in
+            if list.sourceListID != nil && visibleListID == nil {
+                dismiss()
+            }
         }
     }
 
@@ -865,7 +875,7 @@ private struct ListDetailScreen: View {
 
     private var sourceList: LocalPlaceList? {
         guard let sourceListID = list.sourceListID else { return nil }
-        return store.placeLists.first {
+        return store.visiblePlaceLists.first {
             $0.id == sourceListID || $0.localID == sourceListID || $0.serverID == sourceListID
         }
     }

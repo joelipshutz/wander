@@ -9826,3 +9826,31 @@ Expected files:
 - `Wander/Features/Lists/ListsScreen.swift`
 - `docs/agent-log.md`
 - Release bump files after PR merge: `project.yml`, `Wander.xcodeproj/project.pbxproj`
+
+Checkpoint, 2026-07-12 12:26 PDT:
+
+- Fixed list-cover width collapse by making every list card claim its grid column. Replaced fabricated `+` cells with adaptive 0/1/2/3/4+ place cover compositions; zero-place lists use a quiet name monogram.
+- Added the collaborative group glyph to owned/shared list titles and included collaborative status in the card VoiceOver label.
+- Simulator QA passed on iPhone 16 Plus, iOS 18.6, for both My Lists and Collabs. Evidence:
+  - `/private/tmp/rec81-list-covers-my-lists.png`
+  - `/private/tmp/rec81-list-covers-collabs-2.png`
+  - Design audit: `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/design-audit-20260712/report.md`
+- Pre-merge review found and fixed release-blocking state risks:
+  - Batch and per-list synchronization are now single-flight, preventing duplicate hosted list creation when startup, list screens, and direct item adds overlap.
+  - Successful remote refreshes tombstone previously synced lists that disappear from the authoritative response, so removed collaborators do not retain cached list access.
+  - Remote summaries/details do not overwrite dirty owner edits after a failed sync.
+  - Sign-in claims guest-owned lists, member identities, and item `addedByUserID` values before backfill.
+- Added seven focused regressions covering concurrent sync entry points, new lists and owner edits created while a request is in flight, collaborator access removal, failed local collaborator removal, and guest-list claim/backfill. Focused result: 7 passed, 0 failed.
+- In-flight owner edits now preserve pending state and immediately resend the newer snapshot; batch sync drains lists created while the batch is running.
+- Open list detail screens now resolve only through visible lists and dismiss when remote access is revoked.
+- Final full iOS suite passed on iPhone 16 Plus, iOS 18.6: 262 tests, 0 failures. Result bundle: `/private/tmp/DerivedData-rec81-final/Logs/Test/`.
+- Hardened `scripts/supabase-smoke-test.mjs`:
+  - pinned `pg@8.22.0` with a committed lockfile and no runtime install;
+  - loads only Wander database env keys;
+  - verifies the hosted certificate with Supabase Root 2021 CA and rejects URL TLS overrides;
+  - seeds reserved owner/collaborator/stranger identities inside one rollback-only transaction;
+  - verifies direct grants, security-definer `search_path`, anonymous denial, owner-only list management, collaborator read/add, and stranger denial.
+- Added and applied hosted migration `20260712122500_restrict_place_list_rpc_execution.sql`, explicitly revoking `PUBLIC`/`anon` execution from app helpers and public wrappers before granting `authenticated`.
+- Hosted Supabase authorization smoke test passed every list RPC and role boundary after the migration. No fixture or behavior mutation was committed.
+- Final smoke hardening rejects every node-postgres connection-string TLS override, verifies owner update/delete effects, and asserts direct anonymous denial on both app helpers and public wrappers.
+- `git diff --check`, `node --check scripts/supabase-smoke-test.mjs`, and `npm --prefix scripts ls --depth=0` pass.
