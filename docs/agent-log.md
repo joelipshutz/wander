@@ -10851,3 +10851,31 @@ REC-82 synchronized completion, 2026-07-13 11:51 PDT:
 - Final validation remains 7/7 Google selector tests and 284/284 integrated iOS tests with 0 failures. The hosted Saba selector fix is deployed.
 - Xcode is focused on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`. Ryan's signed-in Saba full/collapsed-card check is the only remaining product validation; no implementation or configuration work remains before that test.
 - Linear `REC-82` remains `In Review`. No merge or additional TestFlight release was requested for REC-82 in this task.
+
+## 2026-07-13 13:49 PDT - Codex - REC-82 Merge And TestFlight Build 70
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82`, kept `In Review` through the requested TestFlight release
+
+Goal: run the final landing gate for PR #75, squash-merge the confirmed place-photo behavior to `main`, then package latest `main` as the next TestFlight build and make it available to public testers.
+
+Starting status:
+
+- Ryan confirmed the complete REC-82 behavior now works as expected, including Saba, Intelligentsia, and Tavern On Main, and explicitly requested both the squash merge and a new TestFlight build.
+- PR #75 is open and ready at `f90eac5ba`; the feature worktree is clean and synchronized with its remote branch.
+- The required release sweep confirms build 69 is already uploaded, `VALID`, attached to `Wander Alpha`, externally approved, and announced. The next build is therefore 70; no prior release work remains unfinished.
+- Latest `origin/main` is `302324d9f`, whose only change after the branch's last main integration is the build-69 release completion log. The branch must absorb that log before merging.
+- Existing build-69 release/completion worktrees are clean with deleted remote branches. No overlapping uncommitted release work was found.
+
+Expected files before merge:
+
+- `docs/agent-log.md` for this landing/release record and the latest-main log merge.
+- No feature-source change is expected unless the required pre-landing review finds a blocker.
+
+Expected release files after merge, on a fresh build-70 branch/worktree from latest `origin/main`:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
