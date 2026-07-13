@@ -10923,3 +10923,18 @@ REC-82 final hardening validation checkpoint, 2026-07-13 16:23 PDT:
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec82-hardening-build`; only the existing traditional-headermap warning was emitted.
 - Final Edge selector/privacy result remains 9/9 passing, required hosted Supabase smoke remains passing, the hardened `place-photo` function and quota contract remain deployed, `git diff --check` passes, and a tracked-file scan found no Google API credential.
 - The branch is ready to commit, push, mark PR #75 ready, synchronize with latest `origin/main`, and squash-merge before the requested build-70 release.
+
+REC-82 build-70 release worktree, 2026-07-13 16:31 PDT:
+
+- PR #75 was marked ready and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/75. The merge commit is `d8b5fb00ed4193b0f9af2634ffdadae62278a9f6`.
+- Created isolated release worktree `/private/tmp/recme-testflight-build70` on `codex/testflight-build-70` from that exact latest `origin/main`; it is clean and does not overlap any active uncommitted work.
+- Current App Store build number is 69. This requested release increments it exactly once to 70 and packages all merged app changes through REC-82.
+- Expected files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this coordination log. No tester data will be deleted, reset, or rewritten.
+- Next: regenerate with XcodeGen, inspect the diff, run the full iOS suite and generic build, open and squash-merge the build-number PR, then archive/upload latest `main` and complete TestFlight/Slack/Linear handoff.
+
+Build-70 release validation checkpoint, 2026-07-13 16:38 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 69 to 70 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj`. The generated diff is limited to the matching Debug and Release build numbers; there is no signing or source-membership churn.
+- Full `WanderTests` suite passed on iPhone 17 Pro / iOS 26.5: 287 passed, 0 failed (`/private/tmp/DerivedData-build70-test/Logs/Test/Test-Wander-2026.07.13_16-32-43--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-build70-build`; only the existing traditional-headermap warning was emitted.
+- Next: final diff check, commit/push, ready build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
