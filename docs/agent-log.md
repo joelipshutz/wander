@@ -10371,3 +10371,23 @@ Handoff, 2026-07-12 16:29 PDT:
 - Linear `REC-83` moved to `In Review`, with PR, root cause, validation, and visual-check limitation documented in a Linear comment.
 - Known local-only artifact: `DerivedData-rec83/` remains untracked in this temporary worktree and was not staged or pushed.
 - Next step: review/merge PR #80 to `main`; if Ryan wants this in TestFlight, package latest `main` as a new build after merge rather than reusing build 68.
+
+Reopened investigation checkpoint, 2026-07-12 20:31 PDT:
+
+- Ryan tested PR #80 in Xcode and reports the full-view bottom cutoff still reproduces; the prior safe-area/inset patch is now treated as a failed hypothesis.
+- Clarified current symptom: a beige layer appears over the bottom of the full-view place card, visually cutting off the last half inch of content.
+- Linear `REC-83` was moved back to `In Progress` and updated with the failed-hypothesis note.
+- Added temporary launch-argument instrumentation in `PlaceProfileFullView` to force-scroll to the bottom for simulator screenshots. This is diagnostic only unless explicitly kept for QA.
+- Built and installed the instrumented debug app on the booted iPhone 17 Pro simulator. Bottom screenshots show the forced bottom state is reachable for demo fixtures, but the previous fix did not specifically target the beige overlay/layering symptom Ryan described.
+- Current investigation hypothesis: the full profile is still hosted inside the tab/navigation presentation stack, so the parent container can paint or reserve a beige bottom layer over the final content; fixing the leaf view's scroll inset alone is insufficient.
+- Expected files remain narrow: `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Features/Map/MapScreen.swift` if presentation ownership moves, `WanderTests/NavigationContractTests.swift`, and this log.
+
+Completion checkpoint, 2026-07-12 20:41 PDT:
+
+- Confirmed the previous PR #80 change did not specifically fix Ryan's beige-overlay symptom; it only changed the full profile scroll/safe-area inset.
+- Root cause for this follow-up: map place profiles were still pushed with `.navigationDestination` inside the tab-hosted map `NavigationStack`. Even with the destination hiding the tab bar, the parent tab/navigation host can still reserve or paint the warm beige bottom area over the bottom of the pushed profile.
+- Fix: changed the map full place profile presentation from `navigationDestination` to `fullScreenCover`, so the full profile owns the screen instead of rendering under the tab container.
+- Removed the temporary forced-bottom-scroll launch instrumentation before committing.
+- Added `NavigationContractTests.testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush` to keep this from regressing back to a navigation push.
+- Visual verification: with temporary instrumentation before removal, installed the rebuilt app and captured bottom-of-profile screenshot at `/tmp/rec83-bottom-fullscreen-cover.png`.
+- Validation: focused `NavigationContractTests` passed 12/12 on `iPhone 17 Pro, OS 26.5`; full `WanderTests` passed 271/271 on the same simulator with `CODE_SIGNING_ALLOWED=NO`.
