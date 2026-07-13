@@ -11096,3 +11096,9 @@ Mockup validation checkpoint, 2026-07-13 16:32 PDT:
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec89-build`; only the existing traditional-headermap warning was emitted.
 - Full test suite passed on iPhone 17 Pro / iOS 26.5: 280 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec89-tests/Logs/Test/Test-Wander-2026.07.13_16-26-56--0700.xcresult`). `git diff --check` passes.
 - Physical-device and Dynamic Type XXL review remain blocked by the unavailable paired iPhone and absent DebugBridge instrumentation. Production functionality remains intentionally deferred until Ryan approves these mockups.
+
+Pre-PR integration checkpoint, 2026-07-13 16:39 PDT:
+
+- Rebasing onto latest `origin/main` (`d8b5fb00e`) incorporated REC-82 place-photo work. The only conflict was the append-only shared agent log; both REC-82 and REC-89 histories were preserved. Source and generated project changes replayed cleanly.
+- Regenerated `Wander.xcodeproj` from `project.yml`; the worktree remained clean and project membership stayed limited to the new mockup source.
+- Re-ran the full suite against the exact rebased PR tip: 289 passed, 0 failed, 0 skipped on iPhone 17 Pro / iOS 26.5 (`/private/tmp/DerivedData-rec89-tip-tests/Logs/Test/Test-Wander-2026.07.13_16-33-34--0700.xcresult`). Only existing simulator binary-stripping and traditional-headermap warnings were emitted.
