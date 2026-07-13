@@ -666,26 +666,45 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        if request.skipsGooglePlacesLookup {
+            return try await visibleUserPhoto(for: request)
+        }
+
         do {
             return try await functions.invoke(
                 "place-photo",
                 body: request
             )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            guard let rpc,
-                  let placeID = request.placeID,
-                  UUID(uuidString: placeID) != nil
-            else {
-                throw error
+            let providerError = error
+            do {
+                return try await visibleUserPhoto(for: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw providerError
             }
-
-            let rows: [FirstVisiblePlacePhotoRow] = try await rpc.call(
-                "first_visible_place_photo",
-                params: FirstVisiblePlacePhotoParams(inputPlaceID: placeID)
-            )
-            guard let row = rows.first else { throw error }
-            return row.photo
         }
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        guard let rpc,
+              let placeID = request.placeID,
+              UUID(uuidString: placeID) != nil
+        else {
+            throw WanderRemoteError.invalidResponse("Place has no shared user-photo fallback")
+        }
+
+        let rows: [FirstVisiblePlacePhotoRow] = try await rpc.call(
+            "first_visible_place_photo",
+            params: FirstVisiblePlacePhotoParams(inputPlaceID: placeID)
+        )
+        guard let row = rows.first else {
+            throw WanderRemoteError.invalidResponse("Place has no visible user photo")
+        }
+        return row.photo
     }
 
     func imageData(for photo: PlacePhoto) async throws -> Data {

@@ -2,6 +2,7 @@ import {
   type GooglePlace,
   representativePhoto,
   selectGooglePlace,
+  shouldUseGooglePlaces,
 } from "./google-places.ts";
 
 const input = {
@@ -124,6 +125,22 @@ Deno.test("representativePhoto uses the first usable photo returned by the provi
     ],
   });
   if (selected?.name !== "storefront") throw new Error(`selected ${selected?.name ?? "nothing"}`);
+});
+
+Deno.test("shouldUseGooglePlaces rejects coordinate-backed dropped pins", () => {
+  const shouldUse = shouldUseGooglePlaces({
+    name: "Dropped pin",
+    address: "34.09435, -118.44982",
+    latitude: 34.09435,
+    longitude: -118.44982,
+    sourceProvider: "coordinate",
+    sourceProviderPlaceID: "coordinate_34.09435_-118.44982",
+  });
+  if (shouldUse) throw new Error("coordinate pin would be sent to Google");
+});
+
+Deno.test("shouldUseGooglePlaces keeps MapKit venue lookups enabled", () => {
+  if (!shouldUseGooglePlaces(input)) throw new Error("MapKit venue lookup was disabled");
 });
 
 function place(name: string, latitude: number, longitude: number): GooglePlace {

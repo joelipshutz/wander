@@ -117,6 +117,13 @@ final class WanderBackend: ObservableObject {
         return try await placePhotoRepository.photo(for: request)
     }
 
+    func visibleUserPlacePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await placePhotoRepository.visibleUserPhoto(for: request)
+    }
+
     func placePhotoImageData(for photo: PlacePhoto) async throws -> Data {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured

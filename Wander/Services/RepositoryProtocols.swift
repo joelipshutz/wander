@@ -732,6 +732,18 @@ struct PlacePhotoRequest: Encodable, Equatable {
             .filter { !$0.isEmpty }
             .joined(separator: "|")
     }
+
+    var skipsGooglePlacesLookup: Bool {
+        let provider = sourceProvider?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let normalizedName = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return provider == "coordinate"
+            || sourceProviderPlaceID?.lowercased().hasPrefix("coordinate_") == true
+            || normalizedName == "dropped pin"
+    }
 }
 
 struct PlacePhoto: Decodable, Equatable {
@@ -1013,6 +1025,7 @@ protocol SocialPlaceSaveRepository {
 @MainActor
 protocol PlacePhotoRepository {
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func imageData(for photo: PlacePhoto) async throws -> Data
 }
 

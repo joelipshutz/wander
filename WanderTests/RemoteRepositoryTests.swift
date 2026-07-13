@@ -903,9 +903,37 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(photo.providerPlaceID, "55000000-0000-0000-0000-000000000001")
         XCTAssertEqual(photo.storageBucket, "visit-photos")
         XCTAssertEqual(data, Data([0xFF, 0xD8, 0xFF]))
-        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo", "first_visible_place_photo"])
-        XCTAssertEqual(rpc.rawBodies[1]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
         XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
+    }
+
+    func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000002",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/coordinate.jpg",
+          "width": 900,
+          "height": 1200
+        }]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: RecordingStorage())
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000002",
+            name: "A custom pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "coordinate",
+            sourceProviderPlaceID: "coordinate_34.09435_-118.44982"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
     }
 
     func testPlacePhotoLookupKeyUsesProviderIdentityAndCoordinates() {
@@ -922,6 +950,19 @@ final class RemoteRepositoryTests: XCTestCase {
             request.lookupKey,
             "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
         )
+    }
+
+    func testDroppedPinPhotoRequestSkipsGooglePlacesLookup() {
+        let request = PlacePhotoRequest(
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        XCTAssertTrue(request.skipsGooglePlacesLookup)
     }
 
     func testNotificationRepositoryCallsPreferenceAndTokenRPCs() async throws {

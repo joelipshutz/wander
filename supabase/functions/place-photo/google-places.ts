@@ -59,6 +59,15 @@ export function isGoogleProvider(sourceProvider: string | null): boolean {
   return provider === "google" || provider === "google maps" || provider === "google places";
 }
 
+export function shouldUseGooglePlaces(input: PlacePhotoInput): boolean {
+  const provider = normalize(input.sourceProvider ?? "");
+  const providerPlaceID = normalize(input.sourceProviderPlaceID ?? "");
+  const name = normalize(input.name);
+  return provider !== "coordinate" &&
+    !providerPlaceID.startsWith("coordinate ") &&
+    name !== "dropped pin";
+}
+
 function placeScore(
   place: GooglePlace,
   input: PlacePhotoInput,

@@ -119,11 +119,17 @@ private struct PlaceProfilePreviewCard: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto? = nil
+    @State private var failedGooglePhotoID: String?
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                PlaceProfilePhotoThumb(place: place, photo: photo, size: 82)
+                PlaceProfilePhotoThumb(
+                    place: place,
+                    photo: photo,
+                    size: 82,
+                    onLoadFailure: handlePhotoLoadFailure
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     if let previewSignal {
@@ -206,18 +212,44 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var photoResolutionKey: String {
-        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
     }
 
     private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
         let localPhoto = localPhoto
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
         photo = localPhoto
         do {
             let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
-            if remotePhoto.providerPlaceID != localPhoto?.providerPlaceID {
-                photo = remotePhoto
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
             }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                photo = resolvedPhoto
+            }
+        } catch is CancellationError {
+            return
         } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = localPhoto
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+            photo = nil
+        } else {
             photo = localPhoto
         }
     }
@@ -283,6 +315,7 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto?
+    @State private var failedGooglePhotoID: String?
 
     var body: some View {
         GeometryReader { proxy in
@@ -298,7 +331,8 @@ private struct PlaceProfileFullView: View {
                     shareText: shareText,
                     topInset: headerTopInset,
                     onBack: onBack,
-                    onAction: onAction
+                    onAction: onAction,
+                    onPhotoLoadFailure: handlePhotoLoadFailure
                 )
 
                 ScrollView(showsIndicators: false) {
@@ -339,21 +373,7 @@ private struct PlaceProfileFullView: View {
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
         .task(id: photoResolutionKey) {
-            let localPhoto = localPhoto
-            photo = localPhoto
-            do {
-                let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
-                if remotePhoto.providerPlaceID != localPhoto?.providerPlaceID {
-                    photo = remotePhoto
-                }
-            } catch {
-                photo = localPhoto
-                #if DEBUG
-                WanderDebugLog.remote.debug(
-                    "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
-                )
-                #endif
-            }
+            await resolvePhoto()
         }
     }
 
@@ -362,7 +382,51 @@ private struct PlaceProfileFullView: View {
     }
 
     private var photoResolutionKey: String {
-        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
+    }
+
+    private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
+        let localPhoto = localPhoto
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+        photo = localPhoto
+        do {
+            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                photo = resolvedPhoto
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = localPhoto
+            #if DEBUG
+            WanderDebugLog.remote.debug(
+                "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+            photo = nil
+        } else {
+            photo = localPhoto
+        }
     }
 
     private var heading: some View {
@@ -658,13 +722,18 @@ private struct PlaceProfileMapHeader: View {
     let topInset: CGFloat
     let onBack: () -> Void
     let onAction: () -> Void
+    let onPhotoLoadFailure: (PlacePhoto) -> Void
 
     var body: some View {
         ZStack {
             mapFallback
 
             if let photo {
-                PlaceProfilePhotoImage(photo: photo, placeName: place.name)
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.name,
+                    onLoadFailure: onPhotoLoadFailure
+                )
             }
 
             LinearGradient(
@@ -793,10 +862,10 @@ private struct PlacePhotoAttribution: View {
                 Text("Google Maps")
             }
         }
-        .font(.system(size: 10, weight: .bold))
+        .font(.system(size: 12, weight: .regular))
         .lineLimit(1)
         .padding(.horizontal, 9)
-        .frame(minHeight: 28)
+        .frame(minHeight: 44)
         .background(Color.black.opacity(0.68))
         .foregroundStyle(Color.white)
         .tint(Color.white)
@@ -822,6 +891,7 @@ private struct PlacePhotoAttribution: View {
 struct PlaceProfilePhotoImage: View {
     let photo: PlacePhoto
     let placeName: String
+    var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
     @State private var image: Image?
 
@@ -854,7 +924,11 @@ struct PlaceProfilePhotoImage: View {
                 uiImage = nil
             }
 
-            guard let uiImage, !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
+            guard let uiImage else {
+                onLoadFailure?(photo)
+                return
+            }
 
             withAnimation(.easeOut(duration: 0.24)) {
                 image = Image(uiImage: uiImage)
@@ -867,14 +941,34 @@ private struct PlaceProfilePhotoThumb: View {
     let place: PlaceSheetPlace
     let photo: PlacePhoto?
     let size: CGFloat
+    let onLoadFailure: (PlacePhoto) -> Void
 
     var body: some View {
         ZStack {
             PlaceProfileCategoryThumb(category: place.primaryCategory, size: size)
             if let photo {
-                PlaceProfilePhotoImage(photo: photo, placeName: place.name)
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.name,
+                    onLoadFailure: onLoadFailure
+                )
                     .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+
+                if photo.isGooglePlacesPhoto {
+                    VStack {
+                        Spacer()
+                        Text("Google Maps")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                            .frame(maxWidth: .infinity, minHeight: 20)
+                            .background(Color.black.opacity(0.68))
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+                    .allowsHitTesting(false)
+                }
             }
         }
         .frame(width: size, height: size)

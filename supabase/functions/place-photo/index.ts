@@ -6,6 +6,7 @@ import {
   type PlacePhotoInput,
   representativePhoto,
   selectGooglePlace,
+  shouldUseGooglePlaces,
 } from "./google-places.ts";
 
 const googlePlacesBaseURL = "https://places.googleapis.com/v1";
@@ -35,6 +36,12 @@ async function handleRequest(request: Request): Promise<Response> {
   const input = placePhotoInput(await readBody(request));
   if (!input) {
     return Response.json({ error: "invalid_place" }, { status: 400, headers: noStoreHeaders });
+  }
+  if (!shouldUseGooglePlaces(input)) {
+    return Response.json({ error: "photo_not_found" }, { status: 404, headers: noStoreHeaders });
+  }
+  if (!await consumePlacePhotoQuota(authorization)) {
+    return Response.json({ error: "rate_limited" }, { status: 429, headers: noStoreHeaders });
   }
 
   const apiKey = googlePlacesAPIKey();
@@ -96,7 +103,7 @@ async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<Goo
 
   const searchBody: Record<string, unknown> = {
     textQuery: [input.name, input.address].filter(Boolean).join(" "),
-    maxResultCount: 5,
+    pageSize: 5,
   };
   if (input.latitude !== null && input.longitude !== null) {
     searchBody.locationBias = {
@@ -185,6 +192,28 @@ async function hasValidSupabaseSession(authorization: string): Promise<boolean> 
       body: "{}",
     });
     return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function consumePlacePhotoQuota(authorization: string): Promise<boolean> {
+  const supabaseURL = cleanString(Deno.env.get("SUPABASE_URL"));
+  const publishableKey = cleanString(Deno.env.get("SUPABASE_ANON_KEY"));
+  if (!supabaseURL || !publishableKey) return false;
+
+  try {
+    const response = await fetch(`${supabaseURL}/rest/v1/rpc/consume_place_photo_quota`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: publishableKey,
+        Authorization: authorization,
+      },
+      body: "{}",
+    });
+    if (!response.ok) return false;
+    return await response.json() === true;
   } catch {
     return false;
   }

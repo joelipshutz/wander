@@ -142,7 +142,7 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
     if (result.status !== 0) {
       throw new Error((result.stderr || result.stdout || "linked Supabase query failed").trim());
     }
-    console.log("Supabase smoke test passed: linked preferred-place-photo metadata/visibility checks are valid.");
+    console.log("Supabase smoke test passed: linked preferred-place-photo visibility and provider-quota contracts are valid.");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -223,6 +223,41 @@ begin
 end
 $metadata$;
 
+do $quota_metadata$
+declare
+  valid boolean;
+begin
+  select
+    p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+    and not has_table_privilege('authenticated', 'app.place_photo_request_counters', 'select')
+    and not has_table_privilege('authenticated', 'app.place_photo_request_counters', 'insert')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'consume_place_photo_quota'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if valid is distinct from true then
+    raise exception 'place-photo quota metadata contract failed';
+  end if;
+end
+$quota_metadata$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $quota_behavior$
+begin
+  if public.consume_place_photo_quota() is distinct from true then
+    raise exception 'place-photo quota rejected an authenticated request below the caps';
+  end if;
+end
+$quota_behavior$;
+
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);

@@ -49,6 +49,47 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testPlacePhotoImageReportsRemoteDecodeFailureForUserPhotoFallback() async throws {
+        let failureReported = expectation(description: "Place photo failure reported")
+        let repository = FailingPlacePhotoRenderingRepository()
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "failed-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/failed-photo",
+            width: 1600,
+            height: 1200,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/failed-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let host = UIHostingController(
+            rootView: PlaceProfilePhotoImage(
+                photo: photo,
+                placeName: "Failed Test Place",
+                onLoadFailure: { failedPhoto in
+                    XCTAssertEqual(failedPhoto, photo)
+                    failureReported.fulfill()
+                }
+            )
+            .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [failureReported], timeout: 1.0)
+        window.isHidden = true
+    }
+
+    @MainActor
     func testWidePlacePhotoKeepsHeaderControlsInsidePhoneWidth() async throws {
         let loadStarted = expectation(description: "Wide place photo load started")
         let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2_400, height: 600)).image { context in
@@ -391,10 +432,29 @@ private final class RecordingPlacePhotoRenderingRepository: PlacePhotoRepository
         throw WanderRemoteError.invalidResponse("Unexpected metadata request")
     }
 
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected fallback metadata request")
+    }
+
     func imageData(for photo: PlacePhoto) async throws -> Data {
         requestedPhotos.append(photo)
         loadStarted.fulfill()
         return imageData
+    }
+}
+
+@MainActor
+private final class FailingPlacePhotoRenderingRepository: PlacePhotoRepository {
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected metadata request")
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected fallback metadata request")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        Data([0x00, 0x01, 0x02])
     }
 }
 
