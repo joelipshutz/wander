@@ -10221,10 +10221,17 @@ Post-rebase validation, 2026-07-12 14:18 PDT:
 - Full iOS suite passed on the installed iPhone 17 Pro / iOS 26.5 runtime:
   - `xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath /private/tmp/DerivedData-rec83-postrebase CODE_SIGNING_ALLOWED=NO -jobs 1`
   - Result bundle: `/private/tmp/DerivedData-rec83-postrebase/Logs/Test/Test-Wander-2026.07.12_14-15-14--0700.xcresult`
-  - `xcresulttool` summary: 269 passed, 0 failed, 0 skipped.
+- `xcresulttool` summary: 269 passed, 0 failed, 0 skipped.
 - Post-rebase simulator screenshot captured at `/private/tmp/rec83-postrebase-elysian.png`; visible place-profile/rating/best-for cards render cleanly. Place Details still sits below the first iPhone viewport for this demo place, so the lower-card check relies on the details-row layout fix and compile/test coverage rather than an automated scroll capture.
 - PR opened for the `main` landing step: https://github.com/joelipshutz/wander/pull/76.
-- Next steps: squash-merge PR #76 to `main`, update Linear `REC-83`, and leave TestFlight untouched because this request only asked to push the fix to `main`.
+
+Completion, 2026-07-12 14:27 PDT:
+
+- PR #76 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/76.
+- Main commit: `c93560ab75801de1a757b1009ebdd8959e6ed3a6` (`Fix place profile details card cutoff`).
+- Remote branch `codex/rec-83-card-cutoff` deleted after merge; local worktree branch retained only as disposable workspace state.
+- Linear `REC-83` is Done and was updated with merge/validation evidence.
+- No TestFlight release, build-number bump, archive, upload, or Slack tester note was performed because Ryan asked only to push the fix to `main`.
 
 ## 2026-07-12 13:56 PDT - Codex - TestFlight Build 67 Release
 
@@ -10432,3 +10439,54 @@ Known follow-up:
 
 - Google Cloud API-key restrictions, quotas, and budget alerts cannot be inspected from the key value or Supabase. The user was given the exact Console setup steps; keep the key restricted to Places API (New) and rotate it if it is exposed outside approved secret storage.
 - No TestFlight build, build-number bump, merge, or tester Slack announcement was requested.
+
+## 2026-07-12 15:29 PDT - Codex - TestFlight Build 68 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-68`
+Worktree: `/private/tmp/recme-build68-release`
+Linear: `REC-83`
+
+Goal: package latest `main` into TestFlight build 68 so the REC-83 place-card cutoff fix is available to testers.
+
+Starting status:
+
+- User explicitly requested a new TestFlight build with the latest `main` changes.
+- Latest completed TestFlight release in this log is build 67, which shipped REC-60 notifications.
+- `origin/main` is at `b4b7b13e5` and includes PR #76 (`c93560ab7`, place profile details card cutoff fix) plus PR #77 (`b4b7b13e5`, REC-83 completion log).
+- `project.yml` and the generated Xcode project currently declare `CURRENT_PROJECT_VERSION = 67`; this release should bump exactly once to build 68.
+- REC-83 was moved back to `In Review` for release validation and should return to `Done` only after build 68 is uploaded/attached/approved or otherwise available in TestFlight.
+
+Included tester-facing scope since build 67:
+
+- Place profile cards, especially Place Details rows, should no longer appear cut off by the beige page background at the bottom of the card.
+- No new backend, auth, sync, notification, or data migration behavior is included in this release batch.
+
+Release plan:
+
+- Bump build 67 to 68 in `project.yml`, regenerate `Wander.xcodeproj`, and confirm the generated diff is limited to build-number settings plus this log.
+- Run the complete simulator build/test gate from build-68 source.
+- Open and squash-merge the build-68 bump PR to `main`.
+- Archive latest `main`, upload with Xcode build-number management disabled, run `scripts/testflight-release.mjs`, attach to `Wander Alpha`, update REC-83, and post the required `#testflight-feedback` tester note.
+
+Release checkpoint, 2026-07-12 15:37 PDT:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 67 to 68 in `project.yml` and regenerated `Wander.xcodeproj` with XcodeGen; generated project changes are limited to the two build-number settings.
+- `git diff --check` passed before validation.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` from `/private/tmp/recme-build68-release`.
+- Full iOS suite passed on the installed iPhone 17 Pro / iOS 26.5 runtime: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build68/Logs/Test/Test-Wander-2026.07.12_15-35-42--0700.xcresult`). The AGENTS.md iPhone 16 Plus / iOS 18.6 destination is not installed on this machine.
+- Next step is the build-68 bump PR and squash merge before archiving latest `main`.
+
+Completion, 2026-07-12 15:48 PDT:
+
+- Build bump PR #78 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/78. Release source commit: `56cb1aa35b60215870a1a8d9d39f51f1934c4dba`.
+- Archived rec.me `0.1 (68)` from a clean detached `origin/main` worktree at `/private/tmp/Wander-0.1-build68.xcarchive`. Archive metadata and app Info.plist independently confirmed build 68, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Initial account-based `xcodebuild -exportArchive` failed with `Failed to Use Accounts`; retried the unchanged archive with Ryan's local App Store Connect API key from `/Users/ryanlieblein/.openclaw/workspace/.env.keys`.
+- Exported and uploaded with `/private/tmp/WanderExportUpload68.plist`, `destination=upload`, and `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 68, then reported build id `eabac244-de57-48d5-ba6d-31d2f45ca9cc`, processing `VALID`, `usesNonExemptEncryption=false`, What to Test updated for `en-US`, attached to `Wander Alpha`, external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note posted to `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783896472153349.
+- Linear `REC-83` is Done and has release evidence, PR links, validation, TestFlight status, and tester focus.
+- Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; signed archive passed.
+- Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
+- Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
