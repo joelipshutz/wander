@@ -1,7 +1,53 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    @MainActor
+    func testPlacePhotoImageStartsRemoteLoadFromEmptyState() async throws {
+        let loadStarted = expectation(description: "Place photo load started")
+        let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let repository = RecordingPlacePhotoRenderingRepository(
+            imageData: try XCTUnwrap(renderedImage.pngData()),
+            loadStarted: loadStarted
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "test-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/test-photo",
+            width: 1600,
+            height: 1200,
+            authorName: "Test Photographer",
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/test-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let host = UIHostingController(
+            rootView: PlaceProfilePhotoImage(photo: photo, placeName: "Test Place")
+                .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [loadStarted], timeout: 1.0)
+
+        XCTAssertEqual(repository.requestedPhotos, [photo])
+        window.isHidden = true
+    }
+
     func testCommonTagsRequireUserAndTrustedOrTwoTrustedSupports() {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
@@ -276,5 +322,27 @@ final class PlaceProfilePresentationTests: XCTestCase {
     private func json<T: Encodable>(_ value: T) -> String {
         let data = try! JSONEncoder().encode(value)
         return String(data: data, encoding: .utf8)!
+    }
+}
+
+@MainActor
+private final class RecordingPlacePhotoRenderingRepository: PlacePhotoRepository {
+    let imageData: Data
+    let loadStarted: XCTestExpectation
+    private(set) var requestedPhotos: [PlacePhoto] = []
+
+    init(imageData: Data, loadStarted: XCTestExpectation) {
+        self.imageData = imageData
+        self.loadStarted = loadStarted
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected metadata request")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        requestedPhotos.append(photo)
+        loadStarted.fulfill()
+        return imageData
     }
 }

@@ -813,14 +813,16 @@ private struct PlacePhotoAttribution: View {
     }
 }
 
-private struct PlaceProfilePhotoImage: View {
+struct PlaceProfilePhotoImage: View {
     let photo: PlacePhoto
     let placeName: String
     @EnvironmentObject private var backend: WanderBackend
     @State private var image: Image?
 
     var body: some View {
-        Group {
+        ZStack {
+            Color.clear
+
             if let image {
                 image
                     .resizable()

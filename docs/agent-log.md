@@ -10498,3 +10498,36 @@ Completion, 2026-07-12 15:48 PDT:
 - Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; signed archive passed.
 - Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
 - Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
+
+## 2026-07-12 21:40 PDT - Codex - REC-82 Image Rendering Investigation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), `In Progress`
+
+Goal: reproduce and fix the device-only failure where Google photo attribution resolves for a place but the actual photo stays blank in both the expanded header and collapsed place card.
+
+Starting status:
+
+- Ran required `git fetch origin`, clean branch status check, worktree inspection, and latest agent-log review. REC-82 remains isolated in its clean worktree; no overlapping agent is editing the branch.
+- Reviewed Ryan's two device screenshots from 21:34 PDT. CAVA resolves `Photo by Josh Gordon · Google Maps`, proving the Edge Function and preferred-photo metadata path complete, while both image surfaces remain on category/map fallback artwork.
+- REC-82 is back in `In Progress`. Investigation will trace the returned media URL through the authenticated repository response, image loader, and both SwiftUI surfaces before any fix is applied.
+
+Expected files: the narrow preferred-photo/image-loading implementation and its focused tests, plus this coordination log. Exact files will be recorded after root cause confirmation.
+
+Root cause and fix, 2026-07-12 22:14 PDT:
+
+- Confirmed the Google transport path independently with the same Apple `URLSession` behavior used by the app: CAVA Text Search returned 200, the media lookup returned 200, and the `lh3.googleusercontent.com` response was a 593,119-byte JPEG that ImageIO decoded successfully at 1600×1200. The credential, media URL, MIME type, and decoder were not the failure.
+- Reproduced the SwiftUI lifecycle defect in a controlled host: a `.task` attached to the existing initially empty `Group` ran 0 times, while the same task attached to a concrete container ran once. Because `PlaceProfilePhotoImage.image` starts nil, SwiftUI removed the empty subtree before its downloader could start. Attribution lived outside that subtree, exactly matching Ryan's screenshots.
+- Replaced the empty `Group` with a stable clear-backed `ZStack` in `PlaceProfilePhotoImage`. That shared view drives both the expanded header and collapsed 82-point thumbnail, so one narrow fix restores both surfaces without changing provider selection, storage, attribution, or caching policy.
+- Added `testPlacePhotoImageStartsRemoteLoadFromEmptyState`, which hosts the real SwiftUI image view with a recording repository and fails if the initial empty state does not start an image request.
+- Focused regression passed. Complete iOS suite passed 274 tests, 0 failures, 0 skipped on iPhone 17 Pro / iOS 26.5 simulator. Result: `/private/tmp/DerivedData-rec82-rendering-fix/Logs/Test/Test-Wander-2026.07.12_22-04-18--0700.xcresult`.
+- `xcodegen generate` produced no project diff; `git diff --check` passed.
+- Xcode is left on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`, branch `codex/rec-82-seed-place-photos`, destination `Ry’s iPhone`. The device build compiled, but two wireless installs failed with CoreDevice 3002 / `installcoordination_proxy`, followed by Xcode reporting the phone unavailable until it is unlocked and connected by cable or reachable on the same LAN. Physical-device visual confirmation remains blocked only by that device transport state; no third install retry was attempted.
+
+Files changed:
+
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `docs/agent-log.md`
