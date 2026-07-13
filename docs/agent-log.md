@@ -10879,3 +10879,14 @@ Expected release files after merge, on a fresh build-70 branch/worktree from lat
 - `project.yml`
 - `Wander.xcodeproj/project.pbxproj`
 - `docs/agent-log.md`
+Release completion, 2026-07-13 11:53 PDT:
+
+- Build-number PR #83 was reviewed clean and squash-merged: https://github.com/joelipshutz/wander/pull/83. Latest release source is `main` commit `db9dab1cdc211db3a5f2284631475ac44d482076`.
+- Created signed archive `/private/tmp/Wander-0.1-build69.xcarchive` from that exact commit. Archive and embedded app metadata independently confirmed rec.me `0.1 (69)`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Exported and uploaded the unchanged archive with `/private/tmp/WanderExportUpload69.plist`, `destination=upload`, and `manageAppVersionAndBuildNumber=false`. Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 69 and App Store Connect build id `8598215c-0c00-4076-8e9b-b997a831815d`; processing is `VALID`, `usesNonExemptEncryption=false`, What to Test is updated for `en-US`, the build is attached to `Wander Alpha`, and external review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required live/approved tester note with concrete Ryan/Joe cross-account and full-profile checks in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783968716300219.
+- Linear `REC-87` is Done with PR, test, archive, App Store Connect, TestFlight, and Slack evidence. `REC-83` received a follow-up comment confirming its corrected full-screen fix is included in build 69.
+- No tester data was deleted, reset, or rewritten. The REC-87 schema migration remains additive. Broader foreground/reader-cache refresh behavior is intentionally tracked separately under `REC-45`.
+- Release validation for Ryan and Joe: install build 69, force-quit/reopen, save a new Been restaurant with default personal label/cuisine on Ryan's account, then reopen Joe's app and confirm social visibility. Also verify retained Ugo recovery and the bottom of full place profiles.
