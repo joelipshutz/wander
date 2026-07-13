@@ -80,11 +80,14 @@ function placeScore(
   const requestedAddress = normalize(input.address ?? "");
   const candidateAddress = normalize(place.formattedAddress ?? "");
   const addressSimilarity = requestedAddress && candidateAddress
-    ? tokenSimilarity(requestedAddress, candidateAddress)
+    ? tokenContainment(requestedAddress, candidateAddress)
     : 0;
   const hasComparableAddresses = Boolean(requestedAddress && candidateAddress);
+  const conflictingStreetNumbers = hasComparableAddresses &&
+    haveConflictingAddressNumbers(requestedAddress, candidateAddress);
   const nearbyAlias = sharedDistinctiveTokens > 0 &&
     distance !== null &&
+    !conflictingStreetNumbers &&
     (
       (distance <= 75 && (!hasComparableAddresses || addressSimilarity >= 0.5)) ||
       (distance <= 250 && addressSimilarity >= 0.5)
@@ -181,6 +184,26 @@ function tokenSimilarity(lhs: string, rhs: string): number {
     if (rhsTokens.has(token)) overlap += 1;
   }
   return overlap / Math.max(lhsTokens.size, rhsTokens.size);
+}
+
+function tokenContainment(lhs: string, rhs: string): number {
+  const lhsTokens = new Set(lhs.split(" ").filter(Boolean));
+  const rhsTokens = new Set(rhs.split(" ").filter(Boolean));
+  if (!lhsTokens.size || !rhsTokens.size) return 0;
+
+  let overlap = 0;
+  for (const token of lhsTokens) {
+    if (rhsTokens.has(token)) overlap += 1;
+  }
+  return overlap / Math.min(lhsTokens.size, rhsTokens.size);
+}
+
+function haveConflictingAddressNumbers(lhs: string, rhs: string): boolean {
+  const lhsStreetNumber = lhs.split(" ").find((token) => /^\d+[a-z]?$/.test(token));
+  const rhsStreetNumber = rhs.split(" ").find((token) => /^\d+[a-z]?$/.test(token));
+  return Boolean(
+    lhsStreetNumber && rhsStreetNumber && lhsStreetNumber !== rhsStreetNumber,
+  );
 }
 
 function distanceMeters(

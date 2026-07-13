@@ -10674,3 +10674,43 @@ REC-82 final bug-fix handoff, 2026-07-13 10:50 PDT:
 - Opened `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`, which is the isolated REC-82 worktree on the correct branch, for Ryan's physical-device validation.
 - Known remaining validation is manual/device-only: confirm Google photo + attribution for Saba Cafe and Surf, confirm Intelligentsia/Tavern header controls stay visible, confirm collapsed cards show the same preferred photo, and confirm an unmatched dropped pin shares its first visible user photo with another authorized account.
 - No TestFlight build, merge, build-number increment, archive, upload, or Slack release note was requested; PR #75 remains the review/merge boundary.
+
+## 2026-07-13 11:08 PDT - Codex - REC-82 Saba Follow-Up Investigation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), reopened to `In Progress`
+
+Goal: investigate why Saba Cafe and Surf still receives no Google photo after the renamed-venue selector fix, implement the confirmed root-cause fix, deploy it if the hosted function changes, and return the branch to Ryan for device testing.
+
+Starting status:
+
+- Ryan's fresh physical-device validation confirms Intelligentsia and Tavern On Main now render correctly and their header buttons remain onscreen. The wide-photo layout fix is accepted; only Saba remains in scope.
+- Saba still shows the fallback with no Google attribution, so the provider-photo pipeline is returning no selected photo before image rendering.
+- Branch/worktree are clean and synchronized with `origin/codex/rec-82-seed-place-photos` at `15728f3f7`; the existing isolated worktree remains the correct place to continue. No overlapping local changes were found.
+- The prior `Saba Cafe and Surf` to `Saba Coffee Shop` alias fix passed controlled selector tests and was deployed, but the real device result proves that hypothesis did not cover the production request/response path. Do not broaden matching again until the live payload and deployed response are reproduced.
+
+Expected files:
+
+- `supabase/functions/place-photo/google-places.ts` and its focused tests if the live Google candidate/selector path is at fault.
+- `supabase/functions/place-photo/index.ts` or the iOS request model only if tracing proves the production payload differs from the controlled selector fixture.
+- `docs/agent-log.md`.
+
+Root-cause checkpoint, 2026-07-13 11:19 PDT:
+
+- A read-only linked Supabase query found the exact Saba place row used by the app. The canonical name and coordinates are correct, but the stored address is only the street line; the earlier selector fixture incorrectly supplied a full city/state/ZIP address.
+- With the real stored payload and Google's previously verified `Saba Coffee Shop` candidate, the old address score was 3 shared tokens divided by Google's 8-token full address, or 0.375. The renamed-venue path required 0.5, so it returned no selection even though the distinctive `Saba` token matched and the coordinates were within roughly 10 meters.
+- Converted that exact production shape into a regression. It failed on the old implementation with `selected nothing`, proving the prior alias-only fix missed the production boundary.
+- Fix: address evidence for nearby renamed venues now measures containment against the shorter address, so a stored street line can match Google's full postal address. A separate first-address-number conflict guard prevents the looser containment score from accepting a different street number, even when both addresses share the same ZIP.
+- Safety audit/regressions now cover exact nearby selection, unrelated same-coordinate rejection, generic-only overlap rejection, production-shaped Saba street-only acceptance, no-address Saba acceptance, conflicting-street-number rejection, and representative-photo choice. All 7 selector tests pass.
+- No iOS request/model change is needed. The phone and database carry the correct name, street address, provider identity, and coordinates; the defect is isolated to hosted Google candidate scoring.
+
+Validation/deployment checkpoint, 2026-07-13 11:28 PDT:
+
+- Deployed the updated authenticated `place-photo` Edge Function to Supabase project `rugmtlgufrhlxwfkumhw`; the deployment uploaded only its existing configuration, entry point, and Google selector module.
+- A post-deploy unauthenticated probe returned 401, confirming the function is reachable and remains protected. No migration, RPC, grant, RLS, or schema contract changed, so the hosted RPC smoke test is not required for this selector-only deployment.
+- Fresh reproduction: the production-shaped Saba regression failed before the fix with `selected nothing` and passes after the fix. The conflicting-street-number safety regression also passes when both addresses share the same ZIP.
+- Provider selector suite passed 7/7 using Node 24's TypeScript stripping with a Deno test shim.
+- Complete `WanderTests` suite passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-saba-final/Logs/Test/Test-Wander-2026.07.13_11-24-09--0700.xcresult`.
+- `git diff --check` passed. Remaining verification is Ryan's signed-in physical-device reopen of Saba, because an authenticated hosted probe was intentionally not attempted with extracted privileged credentials.

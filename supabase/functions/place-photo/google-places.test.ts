@@ -36,7 +36,7 @@ Deno.test("selectGooglePlace rejects a nearby venue that only shares a generic n
   if (selected !== null) throw new Error("accepted generic-only name overlap");
 });
 
-Deno.test("selectGooglePlace accepts a nearby renamed venue when its distinctive name and address agree", () => {
+Deno.test("selectGooglePlace accepts Saba's renamed listing with the stored street-only address", () => {
   const selected = selectGooglePlace(
     [{
       id: "google-saba",
@@ -51,9 +51,9 @@ Deno.test("selectGooglePlace accepts a nearby renamed venue when its distinctive
     }],
     {
       name: "Saba Cafe and Surf",
-      address: "12912 Venice Blvd., Los Angeles, CA 90066",
-      latitude: 33.9993338,
-      longitude: -118.4414794,
+      address: "12912 Venice Blvd",
+      latitude: 33.9994182,
+      longitude: -118.4415397,
       sourceProvider: "mapkit",
       sourceProviderPlaceID: "mapkit-saba",
     },
@@ -88,6 +88,31 @@ Deno.test("selectGooglePlace accepts a renamed venue at the same coordinate when
   if (selected?.id !== "google-saba-no-address") {
     throw new Error(`selected ${selected?.id ?? "nothing"}`);
   }
+});
+
+Deno.test("selectGooglePlace rejects a renamed nearby venue with a conflicting street number", () => {
+  const selected = selectGooglePlace(
+    [{
+      id: "google-wrong-saba",
+      displayName: { text: "Saba Coffee Shop" },
+      formattedAddress: "12914 Venice Blvd., Los Angeles, CA 90066, USA",
+      location: { latitude: 33.9994182, longitude: -118.4415397 },
+      photos: [{
+        name: "places/wrong-saba/photos/representative",
+        widthPx: 1_600,
+        heightPx: 1_200,
+      }],
+    }],
+    {
+      name: "Saba Cafe and Surf",
+      address: "12912 Venice Blvd, Los Angeles, CA 90066",
+      latitude: 33.9994182,
+      longitude: -118.4415397,
+      sourceProvider: "mapkit",
+      sourceProviderPlaceID: "mapkit-saba",
+    },
+  );
+  if (selected !== null) throw new Error("accepted conflicting street number");
 });
 
 Deno.test("representativePhoto uses the first usable photo returned by the provider", () => {
