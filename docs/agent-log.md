@@ -10364,3 +10364,5 @@ Implementation and validation, 2026-07-12 22:11 PDT:
 - Focused iOS regressions passed: 6 tests, 0 failures.
 - Full iOS suite passed on iPhone 16 Plus / iOS 18.6: 272 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec86-full/Logs/Test/Test-Wander-2026.07.12_22-06-17--0700.xcresult`.
 - `git diff --check` passed. No TestFlight build, build-number bump, archive, upload, or tester announcement was requested or performed.
+- Implementation commit: `6a1bad9` (`fix: restore saved activity timestamps`).
+- Ready PR: https://github.com/joelipshutz/wander/pull/81. Merge PR #75 first so the repository contains the already-hosted REC-82 migration immediately preceding REC-86.
