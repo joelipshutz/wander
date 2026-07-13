@@ -10440,6 +10440,14 @@ Known follow-up:
 - Google Cloud API-key restrictions, quotas, and budget alerts cannot be inspected from the key value or Supabase. The user was given the exact Console setup steps; keep the key restricted to Places API (New) and rotate it if it is exposed outside approved secret storage.
 - No TestFlight build, build-number bump, merge, or tester Slack announcement was requested.
 
+Handoff, 2026-07-12 21:11 PDT:
+
+- Committed and pushed the provider-activation documentation as `83b31a328` (`Activate REC-82 Google place photos`).
+- Merged latest `origin/main` through build 68, preserving both REC-82 and release log entries, in `6f07368c3`. `xcodegen generate` produced no diff afterward.
+- Post-merge focused photo regressions passed 2/2 with 0 failures (`/private/tmp/DerivedData-rec82-google-live/Logs/Test/Test-Wander-2026.07.12_21-08-03--0700.xcresult`).
+- Updated PR #75 with the live activation evidence and marked it ready for review: https://github.com/joelipshutz/wander/pull/75.
+- Added Linear activation/validation comment `ec451852-65a0-494e-8c98-c468cffc3126`; REC-82 remains correctly in `In Review` pending manual device QA/review rather than being marked Done before merge.
+
 ## 2026-07-12 15:29 PDT - Codex - TestFlight Build 68 Release
 
 Agent: Codex
