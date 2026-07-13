@@ -10406,3 +10406,11 @@ Merge-gate checkpoint, 2026-07-13 10:24 PDT:
 - Pre-landing review scope check: clean. Diff is limited to full place-profile presentation/inset behavior, focused navigation contract tests, and agent log. No SQL, Supabase/RLS, auth/sync, enum, shell, LLM boundary, CI, signing, or project membership changes.
 - Greptile check: no line-level or top-level Greptile comments on PR #80.
 - Validation used for merge gate: `git diff --check` passed; focused `NavigationContractTests` passed 12/12 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-39-24--0700.xcresult`); full `WanderTests` passed 271/271 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-40-02--0700.xcresult`).
+
+Merge completion, 2026-07-13 10:27 PDT:
+
+- PR #80 was squash-merged to `main`: https://github.com/joelipshutz/wander/pull/80.
+- Main merge commit: `2cee8a741d2f3f7a409337b02d61ad311d89955c` (`Fix full place profile bottom overlay`).
+- Remote PR branch `codex/rec-83-full-view-bottom-cutoff` was deleted after merge.
+- Linear `REC-83` was moved to `Done` with merge commit and validation evidence.
+- No TestFlight release was requested in this step, so build number remains unchanged and no archive/upload/Slack release note was produced. The fix will ride in the next explicit TestFlight build request.
