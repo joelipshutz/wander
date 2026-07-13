@@ -83,6 +83,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
+    func testVisitFriendMockupsHaveDeterministicLaunchPages() {
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitFriendsEditor"]),
+            .visitFriendsEditor
+        )
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitWithFriend"]),
+            .visitWithFriend
+        )
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)

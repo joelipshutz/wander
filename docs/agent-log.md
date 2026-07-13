@@ -11032,7 +11032,6 @@ Release validation checkpoint, 2026-07-13 17:43 PDT:
 - Full `WanderTests` suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build71-test/Logs/Test/Test-Wander-2026.07.13_17-38-43--0700.xcresult`).
 - Generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using the same validated DerivedData.
 - `git diff --check` passes. Next: final diff inspection, build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
-
 Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 
 - Build-number PR #89 was reviewed clean and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/89. Exact release source commit: `7b4d64082efae189a09abc9fd2831adecdbac671`.
@@ -11045,3 +11044,47 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
+
+## 2026-07-13 13:41 PDT - Codex - REC-88 Visit Friend Invite Mockup
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+
+Goal: create a visual-only SwiftUI mockup of inviting friends to a saved visit before implementing persistence, backend behavior, or invite wiring.
+
+Starting status:
+
+- Created REC-88 from the chat request and assigned it to Ryan.
+- Fetched latest `origin/main` and created this clean isolated worktree at `302324d9f` because the root checkout has unrelated untracked pnpm cache content and multiple agents/worktrees are active.
+- No overlapping active work was found in the planned DEBUG-only mockup file.
+- Design direction follows `DESIGN.md` and the existing New List collaborator block: warm bone surface, 44-point terracotta plus button, friend avatar/name rows, and compact social attribution.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceActivityMockups.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Mockup scope:
+
+- Add an `add friends to this visit` section directly below rating and above tags/labels in the DEBUG visit editor mockup.
+- Add a compact `with Maya` treatment to a visit card.
+- Add deterministic launch pages and navigation-contract coverage, build the app, and capture iPhone screenshots for review.
+- Do not change production models, save submission payloads, Supabase schema/RPCs, notifications, or invite behavior in this pass.
+
+Completion, 2026-07-13 13:57 PDT:
+
+- Added two deterministic DEBUG-only SwiftUI review pages:
+  - `-WanderPlaceActivityMockup visitFriendsEditor` renders the requested `save this place` screen with `add friends to this visit` directly below rating and above tags.
+  - `-WanderPlaceActivityMockup visitWithFriend` renders a visit card with avatar-backed `with Maya Chen` attribution below the rating.
+- The invite block mirrors New List collaborator styling: warm bone section, concise helper copy, 44-point terracotta plus button, friend avatar/name/handle, and remove affordance. It deliberately does not mutate state or open a picker in this visual pass.
+- Added navigation-contract tests for both deterministic mockup launch arguments.
+- Visual verification passed with no clipping or overlap on:
+  - iPhone 17 Pro / iOS 26.5: `/private/tmp/rec88-save-place-friends-final.png` and `/private/tmp/rec88-visit-with-friend-final.png`.
+  - Smaller iPhone 17e / iOS 26.5: `/private/tmp/rec88-save-place-friends-17e.png`.
+- Focused `NavigationContractTests` passed: 13 passed, 0 failed.
+- Full iOS suite passed: 279 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec88/Logs/Test/Test-Wander-2026.07.13_13-50-53--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
+- No production save/card UI, persistence models, backend contracts, Supabase migrations, notification triggers, or invite behavior changed. Functional implementation remains intentionally deferred until this visual direction is approved.
