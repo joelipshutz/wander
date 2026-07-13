@@ -185,7 +185,7 @@ npx supabase secrets set WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> --
 npx supabase functions deploy place-photo --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 ```
 
-The function and `first_visible_place_photo` RPC were deployed to the linked rec.me project on 2026-07-12. The user-photo fallback is live. Google responses remain disabled until `WANDER_GOOGLE_PLACES_API_KEY` is configured; the deployed function safely returns a provider-configuration error and iOS continues to the RLS-backed user-photo fallback.
+The function and `first_visible_place_photo` RPC were deployed to the linked rec.me project on 2026-07-12. The user-photo fallback is live. `WANDER_GOOGLE_PLACES_API_KEY` was installed as a managed Supabase secret and `place-photo` was redeployed on 2026-07-12. A live Text Search plus Place Details Photo check matched Ronan and returned an attributed Google media URL. Keep the Google Cloud key restricted to Places API (New), retain low quotas and budget alerts, and rotate the credential if it is ever exposed outside approved secret storage.
 
 Do not store Google photo names, image bytes, or returned image URLs in SwiftData, Supabase, fixtures, or analytics. Google Place IDs may be retained. The UI must keep the Google Maps attribution, photo author attribution when present, and source-photo link visible with the image.
 

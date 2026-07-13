@@ -10397,3 +10397,38 @@ Handoff, 2026-07-12 15:49 PDT:
 - Updated draft PR #75 with the final behavior, hosted migration/function state, validation, and two-account Xcode test steps: https://github.com/joelipshutz/wander/pull/75.
 - Updated Linear REC-82's durable comment and moved it back to In Review.
 - Exact manual test: open `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`; save a dropped pin as Been with a photo; verify the same crop appears in the collapsed tile and full header; relaunch to confirm remote fallback; then sign into an authorized second account and verify the same default photo. Google-specific visual QA can begin after the restricted quota-capped key is approved and set.
+
+## 2026-07-12 20:49 PDT - Codex - REC-82 Google Provider Activation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: securely install the user-approved Google Places server credential, redeploy the hosted `place-photo` function, validate real provider photo resolution, and move the completed implementation from draft/testing handoff to review-ready.
+
+Starting status:
+
+- Ran the required `git fetch origin`, clean branch status check, worktree inspection, and latest agent-log review. REC-82 remains isolated in its clean worktree; no overlapping work was found.
+- The user supplied and explicitly authorized the Google credential. The secret value will be stored only in managed/local ignored secret storage and will not be written to git, docs, Linear, GitHub, analytics, or command output.
+- The hosted preferred-photo migration and user-photo fallback are already live. This pass is limited to provider activation, live validation, durable non-secret status, and PR/Linear readiness.
+
+Expected files:
+
+- `docs/setup.md` to replace the stale provider-disabled note with non-secret live status
+- `docs/agent-log.md` for required coordination and validation evidence
+
+Completion, 2026-07-12 21:01 PDT:
+
+- Stored `WANDER_GOOGLE_PLACES_API_KEY` in the rec.me Supabase project's managed Edge Function secrets and in Ryan's owner-only local `/Users/ryanlieblein/.openclaw/workspace/.env.keys`. The credential value was not written to git, docs, Linear, GitHub, analytics, or command output. Temporary transfer/check files were deleted immediately after use.
+- Redeployed `place-photo` to Supabase project `rugmtlgufrhlxwfkumhw`. A follow-up secret listing confirmed the managed secret exists with a new digest/timestamp; no secret value was returned.
+- Ran a live provider check using the same Text Search and Place Details Photo fields as the Edge Function. Google returned HTTP 200 for both calls, matched `Ronan` at `7315 Melrose Ave, Los Angeles`, included the Google Maps source attribution, and returned an image from `lh3.googleusercontent.com`.
+- Re-ran the complete iOS suite on iPhone 17 Pro, iOS 26.5: 273 tests passed, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82-google-live/Logs/Test/Test-Wander-2026.07.12_20-57-02--0700.xcresult`.
+- Opened the REC-82 project in Xcode, confirmed branch `codex/rec-82-seed-place-photos`, selected Ryan's connected iPhone, and successfully rebuilt/launched the app for immediate manual photo QA.
+- Updated `docs/setup.md` so future agents no longer treat the Google credential as an outstanding blocker. `git diff --check` passed.
+- Implementation remains commit `8fa834833` (`Complete REC-82 place photo fallback`) on draft PR #75. This activation pass changes only non-secret setup/status documentation; no app, migration, or function source changed after the previously validated implementation.
+
+Known follow-up:
+
+- Google Cloud API-key restrictions, quotas, and budget alerts cannot be inspected from the key value or Supabase. The user was given the exact Console setup steps; keep the key restricted to Places API (New) and rotate it if it is exposed outside approved secret storage.
+- No TestFlight build, build-number bump, merge, or tester Slack announcement was requested.
