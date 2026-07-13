@@ -54,8 +54,9 @@ async function main() {
     await client.query("begin");
     try {
       await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
+      await runOwnPlaceSmokeChecks(client, smokeUserID);
       await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
-      console.log("Supabase smoke test passed: place-list and preferred-place-photo RPC grants and visibility boundaries are valid.");
+      console.log("Supabase smoke test passed: semantic own-place saves, place-list access, and preferred-place-photo visibility boundaries are valid.");
     } finally {
       await client.query("rollback");
     }
@@ -445,6 +446,98 @@ set
 `;
 }
 
+async function runOwnPlaceSmokeChecks(client, smokeUserID) {
+  await assertOwnPlaceRPCMetadata(client);
+  await setAuthenticatedUser(client, smokeUserID);
+
+  const place = {
+    canonical_name: "Codex Smoke Semantic Save",
+    category: "restaurants_food",
+    primary_category: "restaurants_food",
+    subcategory: "Restaurant",
+    category_source: "deterministic",
+    category_confidence: 1,
+    raw_provider_type: "restaurant",
+    latitude: 34.05231,
+    longitude: -118.24371,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "semantic-place-attribute-save",
+    confidence: 1,
+  };
+  const userPlace = {
+    status: "been",
+    visibility: "followers",
+    nearby_confirmed: false,
+    source_type: "manual",
+    rating_score: 3,
+  };
+  const attributes = [
+    {
+      question_key: "personal_labels",
+      value_type: "personal_label",
+      value: ["date night"],
+    },
+    {
+      question_key: "restaurant_cuisine",
+      value_type: "restaurant_cuisine",
+      value: "Thai",
+    },
+  ];
+
+  const saved = await expectQuery(
+    client,
+    "authenticated public.save_own_place accepts semantic map attributes",
+    "select public.save_own_place($1::jsonb, $2::jsonb, $3::jsonb) as saved",
+    [JSON.stringify(place), JSON.stringify(userPlace), JSON.stringify(attributes)],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id && result.rows[0]?.saved?.place_id),
+  );
+  const savedUserPlaceID = saved.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "semantic map save commits the place and user save atomically",
+    `
+      select p.canonical_name, up.status, up.rating_score::double precision as rating_score
+      from public.user_places up
+      join public.places p on p.id = up.place_id
+      where up.id = $1::uuid
+        and up.user_id = $2
+        and up.deleted_at is null
+    `,
+    [savedUserPlaceID, smokeUserID],
+    (result) => result.rows.length === 1
+      && result.rows[0].canonical_name === place.canonical_name
+      && result.rows[0].status === "been"
+      && result.rows[0].rating_score === 3,
+  );
+
+  await expectQuery(
+    client,
+    "semantic map save preserves both attribute types and values",
+    `
+      select question_key, value_type, value
+      from public.place_attributes
+      where user_place_id = $1::uuid
+      order by question_key
+    `,
+    [savedUserPlaceID],
+    (result) => {
+      const byQuestion = new Map(result.rows.map((row) => [row.question_key, row]));
+      const labels = byQuestion.get("personal_labels");
+      const cuisine = byQuestion.get("restaurant_cuisine");
+      return result.rows.length === 2
+        && labels?.value_type === "personal_label"
+        && Array.isArray(labels.value)
+        && labels.value.length === 1
+        && labels.value[0] === "date night"
+        && cuisine?.value_type === "restaurant_cuisine"
+        && cuisine.value === "Thai";
+    },
+  );
+
+  await client.query("reset role");
+}
+
 async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID) {
   const fixture = await expectQuery(
     client,
@@ -781,6 +874,34 @@ async function runFirstVisiblePlacePhotoChecks(
     "select * from public.first_visible_place_photo($1::uuid)",
     [smokePlaceID],
     /permission denied/,
+  );
+}
+
+async function assertOwnPlaceRPCMetadata(client) {
+  await expectQuery(
+    client,
+    "own-place RPC grants match the iOS auth boundary",
+    `
+      select
+        has_function_privilege('authenticated', 'public.save_own_place(jsonb,jsonb,jsonb)', 'execute') as authenticated_public,
+        has_function_privilege('authenticated', 'app.save_own_place(jsonb,jsonb,jsonb)', 'execute') as authenticated_app,
+        not has_function_privilege('anon', 'public.save_own_place(jsonb,jsonb,jsonb)', 'execute') as anon_public_denied,
+        not has_function_privilege('anon', 'app.save_own_place(jsonb,jsonb,jsonb)', 'execute') as anon_app_denied
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
+    "app.save_own_place keeps its security-definer search path",
+    `
+      select p.prosecdef, 'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path
+      from pg_proc p
+      where p.oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
+    `,
+    [],
+    (result) => result.rows[0]?.prosecdef === true && result.rows[0]?.pinned_search_path === true,
   );
 }
 

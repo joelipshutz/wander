@@ -10722,3 +10722,81 @@ Handoff, 2026-07-13 11:34 PDT:
 - Linear `REC-82` received the same evidence and was returned to `In Review`. Ryan's confirmation that Intelligentsia and Tavern On Main now work is recorded there; only the signed-in Saba photo check remains.
 - Xcode was reopened on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj` for physical-device testing of the deployed Saba fix.
 - No TestFlight build, merge, build-number change, archive, upload, or Slack release note was requested. The PR remains the review/merge boundary.
+## 2026-07-12 22:27 PDT - Codex - REC-87 Map Save Sync Contract Regression
+
+Agent: Codex
+Branch: `codex/rec-87-map-save-sync-contract`
+Worktree: `/private/tmp/recme-map-save-sync-contract`
+Linear: `REC-87` (`Map saves with default labels fail remote sync after REC-75`), assigned to Ryan and moved to In Progress.
+
+Goal: implement the verified TestFlight build 68 fix so map saves containing REC-75 default labels sync remotely, retained failed saves such as Ugo can recover, and Joe can see a newly added Been place from `ryan_lieblein`.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected the root checkout and all worktrees, and reviewed the latest `docs/agent-log.md` entries.
+- Root checkout is on stale `codex/rec-81-collab-visibility`, 13 commits behind its remote, with untracked `.pnpm-store/`; no root files will be edited.
+- Created this isolated worktree from latest `origin/main` at `a81b97168` and renamed the branch to include `REC-87`.
+- Prior read-only diagnostics live uncommitted in `/private/tmp/recme-social-save-diagnostics`; their verified evidence is being carried into this implementation log without modifying or discarding that worktree.
+- Joe concurrently reopened `REC-45` and is working in `/Users/joelipshutz/Developer/Wander-worktrees/rec-45-save-regression` on broader transient retry and reader-cache behavior. This branch will not duplicate that coordinator/foreground-refresh work. Potential overlap in Map save failure UX and sync tests is called out before editing.
+- Verified root cause: REC-75 map payloads now send `personal_label` and, for restaurants, `restaurant_cuisine`; hosted `place_attributes.value_type` rejects both, so `app.save_own_place` rolls back the place, user save, and attributes while local-first state remains.
+- The required TestFlight bug-catcher, Linear backend-triage, and `plan-eng-review` workflows are in progress before schema/sync implementation.
+
+Expected files:
+
+- `supabase/migrations/<timestamp>_allow_semantic_place_attribute_value_types.sql`
+- `supabase/tests/save_own_place.sql` or the closest existing constraint/RPC regression file
+- `scripts/supabase-smoke-test.mjs`
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift` only if failure copy is not already centralized; coordinate against Joe's overlapping REC-45 work
+- Focused `WanderTests/` coverage for save failure feedback and retained failed-save retry
+- `docs/decisions.md` if the final value-type contract warrants a durable architecture decision
+- `docs/agent-log.md`
+
+Initial plan:
+
+1. Complete the required engineering review and explicitly lock the backward-compatible contract and rollout.
+2. Inspect every prior migration defining the value-type constraints and `app.save_own_place`, plus existing hosted smoke coverage.
+3. Implement the smallest complete schema/client UX fix without duplicating REC-45's broader refresh coordinator.
+4. Run migration tests where available, the hosted Supabase smoke test, focused iOS tests, the full iOS suite, and a generic simulator build.
+5. Push the branch and open a ready PR to `main`; do not merge, bump a build number, or upload TestFlight unless Ryan explicitly requests a release.
+
+Implementation checkpoint, 2026-07-13 10:52 PDT:
+
+- Completed `plan-eng-review` with a backward-compatible rollout: widen the two value-type constraints, preserve all existing rows, and rely on the existing signed-in startup backfill to retry retained failed saves. No data reset, delete, or rewrite is required.
+- Added `20260713101000_allow_semantic_place_attribute_value_types.sql`, which adds `personal_label` and `restaurant_cuisine` to both `question_definitions` and `place_attributes` while preserving the existing constraint names and comments. The migration does not recreate `app.save_own_place` or change its security/grants.
+- Applied that migration to linked hosted project `rugmtlgufrhlxwfkumhw`. Preserved the two remote-only migration history rows already owned by REC-82/REC-86; temporary local history markers used for the dry run were removed and are not part of this branch.
+- Hosted validation passed: both widened constraints are active; `app.save_own_place` remains security definer with pinned `search_path` and authenticated execute; a rollback-only authenticated semantic save transaction passed; and the expanded `supabase/tests/save_own_place.sql` suite passed all 14 pgTAP assertions. The final test assertion was scoped to its legacy fixture after the new semantic fixture exposed that the prior query was broader than its description.
+- Extended `scripts/supabase-smoke-test.mjs` to exercise the exact authenticated `public.save_own_place` payload with both semantic value types inside a rolled-back transaction. Ryan's environment does not expose the project ref/database password required by the standalone Node entry point, so that exact script invocation remains credential-blocked; the linked CLI metadata query, direct rollback transaction, and full hosted pgTAP suite provide the hosted verification for this handoff. Local `supabase test db` is unavailable because Docker is not installed; this is not counted as a pass.
+- Centralized sync-result presentation in `SaveSyncFeedback`; Add and Map now distinguish remote success from retained local failure/queued state, and Map uses the feedback-specific timeout plus a warning haptic for failed/server-denied saves.
+- Added JSON-shape-aware semantic attribute presentation across Map and profile surfaces so `personal_label` arrays and `restaurant_cuisine` strings remain visible after persistence/relaunch.
+- Strengthened recovery coverage to recreate `WanderStore` from file persistence and call the production `syncUnsyncedOwnPlaces` startup path. Added exact production HTTP encoder assertions for both semantic types plus presentation parsing tests.
+- Ran the required pre-landing review. Its SQL/data specialist found no issue; iOS/API/testing specialists found the Map presentation, feedback-duration/haptic, relaunch, and encoder-test gaps above. All findings were fixed before handoff.
+- Post-fix focused iOS regression run passed for sync state, feedback, semantic presentation, exact RPC encoding, and persisted relaunch recovery on iPhone 17 Pro / iOS 26.5. `git diff --check` passes.
+- Next: commit, rebase onto the two newer `origin/main` commits, rerun the full iOS suite and generic simulator build, then push and open the ready REC-87 PR.
+
+Final validation checkpoint, 2026-07-13 10:59 PDT:
+
+- Rebased the implementation cleanly onto latest `origin/main` at `90ec9a19b`; preserved the concurrently landed REC-83 agent-log history during the only conflict.
+- Full iOS suite passed on iPhone 17 Pro / iOS 26.5: 278 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec87-focused/Logs/Test/Test-Wander-2026.07.13_10-54-35--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec87-build`; only the existing traditional-headermap warning was emitted.
+- `node --check scripts/supabase-smoke-test.mjs`, `git diff --check`, the hosted migration list, hosted security/constraint metadata checks, the rollback-only semantic save transaction, and the 14/14 hosted pgTAP assertions all pass.
+- Final pre-landing review is clean after auto-fixing all five specialist findings. No RPC definition, RLS policy, grant, auth claim helper, data row, build number, project membership, or unrelated generated file changed.
+- Hosted migration `20260713101000` is already live and additive, so build 68 can create new semantic saves now. A retained failed save such as Ugo should retry through the existing signed-in startup backfill after force-quit/reopen. The branch's clearer failure UX and expanded presentation/test guardrails require a future explicit TestFlight release after merge.
+- Ryan/Joe validation: force-quit and reopen build 68 while signed in as `ryan_lieblein`, save a new Been restaurant with its default personal label/cuisine, then have Joe reopen/refresh and verify the place is visible. No database deletion or historical reset was performed.
+- Build-number bump, archive, TestFlight upload, and Slack release note were intentionally skipped because this request is implementation/PR only, not an explicit release request.
+
+Handoff, 2026-07-13 11:04 PDT:
+
+- Implementation commit: `8a491d55e` (`fix: restore semantic map save sync`).
+- Pushed `codex/rec-87-map-save-sync-contract` and opened ready PR #82: https://github.com/joelipshutz/wander/pull/82.
+- The GitHub app connector returned `403 Resource not accessible by integration`; the repo's authenticated `gh` fallback created the ready PR successfully. This did not affect branch contents or validation.
+- Linear `REC-87` was moved to `In Review` and PR #82 was attached. The separate validation-comment write timed out twice in automatic permission review; the same evidence and test instructions are preserved in the issue description, PR body, and this log. Keep the issue In Review until PR #82 is reviewed/merged and the requested Ryan/Joe cross-account save is verified; do not mark it Done merely because the additive hosted migration is live.
+- Concrete next step: Ryan force-quits/reopens build 68, confirms Ugo retries or saves a new Been restaurant, and Joe reopens/refreshes to verify visibility. If successful and a TestFlight binary with the UX/test guardrails is desired, merge PR #82 first and make a separate explicit TestFlight release request.
+
+REC-82 latest-main integration, 2026-07-13 11:45 PDT:
+
+- The final PR check showed that `origin/main` had advanced to `3eccea438` (`Fix semantic map save sync (#82)`), making PR #75 conflicting after the Saba implementation was pushed.
+- Merged latest `origin/main`. The only textual conflicts were the shared `docs/agent-log.md` and `scripts/supabase-smoke-test.mjs`; preserved both REC-82 and REC-87 log histories and combined the smoke runner so it retains semantic own-place save coverage, place-list access checks, and preferred-place-photo visibility/grant checks.
+- `xcodegen generate` produced no project diff. `node --check scripts/supabase-smoke-test.mjs`, `git diff --check`, and all 7 Google selector tests pass after conflict resolution.
+- Full integrated iOS suite passed 284/284 with 0 failures on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-saba-main-sync/Logs/Test/Test-Wander-2026.07.13_11-41-26--0700.xcresult`.
+- Next: commit/push this latest-main merge, confirm PR #75 is mergeable and ready, refresh Linear with the final head, and reopen Xcode on the synchronized worktree. Manual signed-in Saba photo validation remains the only product check.

@@ -981,7 +981,10 @@ struct MapScreen: View {
             selectedSearchCandidateID = nil
             selectSavedResult(result)
             mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
-            showTransientMapSearchMessage("Added to your map.")
+            showMapSaveFeedback(
+                SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
+                successMessage: "Added to your map."
+            )
 
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -1003,7 +1006,10 @@ struct MapScreen: View {
             )
             selectedSearchCandidateID = nil
             selectSavedResult(result)
-            showTransientMapSearchMessage(scopedSaveMessage(for: submission.context))
+            showMapSaveFeedback(
+                SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
+                successMessage: scopedSaveMessage(for: submission.context)
+            )
 
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -1063,11 +1069,23 @@ struct MapScreen: View {
         }
     }
 
-    private func showTransientMapSearchMessage(_ message: String) {
+    private func showMapSaveFeedback(_ feedback: SaveSyncFeedback, successMessage: String) {
+        let feedbackGenerator = UINotificationFeedbackGenerator()
+        feedbackGenerator.notificationOccurred(feedback.usesWarningHaptic ? .warning : .success)
+        showTransientMapSearchMessage(
+            feedback.mapMessage(successMessage: successMessage),
+            dismissDelayNanoseconds: feedback.dismissDelayNanoseconds
+        )
+    }
+
+    private func showTransientMapSearchMessage(
+        _ message: String,
+        dismissDelayNanoseconds: UInt64 = 2_000_000_000
+    ) {
         mapSearchMessage = message
 
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: dismissDelayNanoseconds)
             if mapSearchMessage == message {
                 mapSearchMessage = nil
             }
@@ -5149,16 +5167,9 @@ struct PlaceSheet: View {
     }
 
     private static func facts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
-
-        if attribute.valueType == "multi_tag" {
-            return decodedStringArray(from: attribute.valueJSON).map { value in
-                PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
-            }
+        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+            PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
-
-        guard let value = decodedString(from: attribute.valueJSON) else { return [] }
-        return [PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))]
     }
 
     private static func icon(for questionKey: String) -> String {
@@ -5169,18 +5180,9 @@ struct PlaceSheet: View {
         case "strenuousness": "figure.hiking"
         case "price": "dollarsign.circle.fill"
         case "occasion", "best_for": "sparkles"
+        case PlaceMemoryAttributeKeys.restaurantCuisine: "fork.knife"
         default: "tag.fill"
         }
-    }
-
-    private static func decodedString(from valueJSON: String) -> String? {
-        guard let data = valueJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private static func decodedStringArray(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
     private func handleSheetDrag(_ value: DragGesture.Value) {
@@ -6372,16 +6374,9 @@ private struct SaveReviewCard: View {
     }
 
     private func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
-
-        if attribute.valueType == "multi_tag" {
-            return decodedStringArray(from: attribute.valueJSON).map { value in
-                PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
-            }
+        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+            PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
-
-        guard let value = decodedString(from: attribute.valueJSON) else { return [] }
-        return [PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))]
     }
 
     private func icon(for questionKey: String) -> String {
@@ -6392,18 +6387,9 @@ private struct SaveReviewCard: View {
         case "strenuousness": "figure.hiking"
         case "price": "dollarsign.circle.fill"
         case "occasion", "best_for": "sparkles"
+        case PlaceMemoryAttributeKeys.restaurantCuisine: "fork.knife"
         default: "tag.fill"
         }
-    }
-
-    private func decodedString(from valueJSON: String) -> String? {
-        guard let data = valueJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private func decodedStringArray(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }
 
