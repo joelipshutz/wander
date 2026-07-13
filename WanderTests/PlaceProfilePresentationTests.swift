@@ -48,6 +48,57 @@ final class PlaceProfilePresentationTests: XCTestCase {
         window.isHidden = true
     }
 
+    @MainActor
+    func testWidePlacePhotoKeepsHeaderControlsInsidePhoneWidth() async throws {
+        let loadStarted = expectation(description: "Wide place photo load started")
+        let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2_400, height: 600)).image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2_400, height: 600))
+        }
+        let repository = RecordingPlacePhotoRenderingRepository(
+            imageData: try XCTUnwrap(renderedImage.jpegData(compressionQuality: 0.8)),
+            loadStarted: loadStarted
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "wide-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/wide-photo",
+            width: 2_400,
+            height: 600,
+            authorName: "Test Photographer",
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/wide-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let recorder = PlacePhotoControlFrameRecorder()
+        let host = UIHostingController(
+            rootView: PlacePhotoControlLayoutProbe(photo: photo, recorder: recorder)
+                .environmentObject(backend)
+        )
+        let phoneWidth: CGFloat = 393
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: phoneWidth, height: 268))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [loadStarted], timeout: 1.0)
+        try await Task.sleep(for: .milliseconds(350))
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        let trailingControlFrame = try XCTUnwrap(recorder.frames.last)
+        XCTAssertGreaterThanOrEqual(trailingControlFrame.minX, 0)
+        XCTAssertLessThanOrEqual(trailingControlFrame.maxX, phoneWidth)
+        window.isHidden = true
+    }
+
     func testCommonTagsRequireUserAndTrustedOrTwoTrustedSupports() {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
@@ -344,5 +395,55 @@ private final class RecordingPlacePhotoRenderingRepository: PlacePhotoRepository
         requestedPhotos.append(photo)
         loadStarted.fulfill()
         return imageData
+    }
+}
+
+@MainActor
+private final class PlacePhotoControlFrameRecorder {
+    var frames: [CGRect] = []
+}
+
+private struct PlacePhotoControlLayoutProbe: View {
+    let photo: PlacePhoto
+    let recorder: PlacePhotoControlFrameRecorder
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            PlaceProfilePhotoImage(photo: photo, placeName: "Wide Test Place")
+
+            HStack {
+                Color.blue
+                    .frame(width: 42, height: 42)
+
+                Spacer()
+
+                Color.green
+                    .frame(width: 42, height: 42)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: PlacePhotoTrailingControlFrameKey.self,
+                                value: proxy.frame(in: .global)
+                            )
+                        }
+                    }
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 268)
+        .clipped()
+        .onPreferenceChange(PlacePhotoTrailingControlFrameKey.self) { frame in
+            recorder.frames.append(frame)
+        }
+    }
+}
+
+private struct PlacePhotoTrailingControlFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .null
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }

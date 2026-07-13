@@ -688,7 +688,7 @@ private struct PlaceProfileMapHeader: View {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .black))
-                            .frame(width: 42, height: 42)
+                            .frame(width: 44, height: 44)
                             .background(WanderTheme.surfaceBone.color.opacity(0.96))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .clipShape(Circle())
@@ -704,7 +704,7 @@ private struct PlaceProfileMapHeader: View {
                             Button(action: onAction) {
                                 Image(systemName: action.systemImage)
                                     .font(.system(size: action.isPrimaryAction ? 20 : 17, weight: .black))
-                                    .frame(width: 42, height: 42)
+                                    .frame(width: 44, height: 44)
                                     .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
                                     .foregroundStyle(WanderTheme.textOnAction.color)
                                     .clipShape(Circle())
@@ -718,7 +718,7 @@ private struct PlaceProfileMapHeader: View {
                             ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
                                 Image(systemName: "square.and.arrow.up")
                                     .font(.system(size: 16, weight: .black))
-                                    .frame(width: 42, height: 42)
+                                    .frame(width: 44, height: 44)
                                     .background(WanderTheme.surfaceBone.color.opacity(0.96))
                                     .foregroundStyle(WanderTheme.textInk.color)
                                     .clipShape(Circle())
@@ -820,18 +820,21 @@ struct PlaceProfilePhotoImage: View {
     @State private var image: Image?
 
     var body: some View {
-        ZStack {
-            Color.clear
+        GeometryReader { proxy in
+            ZStack {
+                Color.clear
 
-            if let image {
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .transition(.opacity)
-                    .accessibilityLabel("Photo of \(placeName)")
+                if let image {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .transition(.opacity)
+                        .accessibilityLabel("Photo of \(placeName)")
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .task(id: photo) {
             image = nil
@@ -845,7 +848,7 @@ struct PlaceProfilePhotoImage: View {
                 uiImage = nil
             }
 
-            guard let uiImage else { return }
+            guard let uiImage, !Task.isCancelled else { return }
 
             withAnimation(.easeOut(duration: 0.24)) {
                 image = Image(uiImage: uiImage)

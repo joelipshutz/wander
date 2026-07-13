@@ -70,16 +70,35 @@ function placeScore(
   const exactName = candidateName === requestedName;
   const nameSimilarity = tokenSimilarity(candidateName, requestedName);
   const includesName = candidateName.includes(requestedName) || requestedName.includes(candidateName);
-  if (!exactName && !includesName && nameSimilarity < 0.4) return -1;
-
-  let score = exactName ? 120 : includesName ? 72 : Math.round(nameSimilarity * 52);
-
+  const sharedDistinctiveTokens = sharedDistinctiveNameTokens(candidateName, requestedName);
   const distance = distanceMeters(
     input.latitude,
     input.longitude,
     place.location?.latitude ?? null,
     place.location?.longitude ?? null,
   );
+  const requestedAddress = normalize(input.address ?? "");
+  const candidateAddress = normalize(place.formattedAddress ?? "");
+  const addressSimilarity = requestedAddress && candidateAddress
+    ? tokenSimilarity(requestedAddress, candidateAddress)
+    : 0;
+  const hasComparableAddresses = Boolean(requestedAddress && candidateAddress);
+  const nearbyAlias = sharedDistinctiveTokens > 0 &&
+    distance !== null &&
+    (
+      (distance <= 75 && (!hasComparableAddresses || addressSimilarity >= 0.5)) ||
+      (distance <= 250 && addressSimilarity >= 0.5)
+    );
+
+  const similarDistinctiveName = nameSimilarity >= 0.4 && sharedDistinctiveTokens > 0;
+  if (!exactName && !includesName && !similarDistinctiveName && !nearbyAlias) return -1;
+
+  let score = exactName
+    ? 120
+    : includesName
+    ? 72
+    : Math.round(nameSimilarity * 52) + (nearbyAlias ? 40 : 0);
+
   if (distance !== null) {
     if (distance <= 75) score += 48;
     else if (distance <= 250) score += 32;
@@ -87,10 +106,8 @@ function placeScore(
     else if (distance > 5_000) return -1;
   }
 
-  const requestedAddress = normalize(input.address ?? "");
-  const candidateAddress = normalize(place.formattedAddress ?? "");
-  if (requestedAddress && candidateAddress) {
-    score += Math.round(tokenSimilarity(requestedAddress, candidateAddress) * 24);
+  if (addressSimilarity > 0) {
+    score += Math.round(addressSimilarity * 24);
   }
 
   // A coordinate-backed nearby result may have a shortened display name, but a
@@ -99,6 +116,50 @@ function placeScore(
   if (distance !== null && distance > 1_000 && !exactName && nameSimilarity < 0.7) return -1;
 
   return score;
+}
+
+const genericVenueNameTokens = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "bakery",
+  "bar",
+  "bars",
+  "cafe",
+  "club",
+  "coffee",
+  "eatery",
+  "food",
+  "foods",
+  "grill",
+  "hotel",
+  "house",
+  "kitchen",
+  "lounge",
+  "market",
+  "of",
+  "pub",
+  "restaurant",
+  "restaurants",
+  "shop",
+  "store",
+  "the",
+]);
+
+function sharedDistinctiveNameTokens(lhs: string, rhs: string): number {
+  const lhsTokens = new Set(
+    lhs.split(" ").filter((token) => token && !genericVenueNameTokens.has(token)),
+  );
+  const rhsTokens = new Set(
+    rhs.split(" ").filter((token) => token && !genericVenueNameTokens.has(token)),
+  );
+
+  let overlap = 0;
+  for (const token of lhsTokens) {
+    if (rhsTokens.has(token)) overlap += 1;
+  }
+  return overlap;
 }
 
 function normalize(value: string): string {

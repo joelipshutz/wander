@@ -10538,3 +10538,34 @@ Handoff, 2026-07-12 22:20 PDT:
 - Updated ready PR #75 with the device-reported symptom, confirmed lifecycle root cause, CAVA media proof, new regression, 274-test result, and exact device reconnect steps: https://github.com/joelipshutz/wander/pull/75. The PR remains clean and mergeable against `main` at handoff.
 - Added Linear evidence comment `72504ce2-e7dc-4e4d-b03a-b35e3ebc095a` and returned REC-82 to `In Review`.
 - Remaining manual step: unlock Ry’s iPhone and attach it by cable or restore same-LAN wireless reachability, press Run in the already-open REC-82 Xcode project, then reopen CAVA to confirm its Google image appears in both the collapsed tile and full header. No backend redeploy, migration, TestFlight build, build-number bump, or Slack release note is required for this client-only fix.
+
+## 2026-07-13 10:01 PDT - Codex - REC-82 Device Bug Follow-up
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), `In Progress`
+
+Goal: investigate and fix the new physical-device failures reported after Google photos began rendering: Saba Cafe and Surf receives no Google result, while loaded Intelligentsia and Tavern On Main photos push the header controls partly or completely outside the screen. Audit adjacent photo aspect-ratio, attribution, empty/error, and collapsed-card states before returning the branch for testing.
+
+Starting status:
+
+- Ran the required `git fetch origin`, clean branch status check, worktree inspection, latest agent-log review, and REC-82/Linear comment review. The isolated REC-82 worktree is clean at `74e33f5ee`; no other worktree is editing this branch.
+- Reviewed all three original device screenshots at full resolution. Saba stays on the map fallback with no attribution, which means no preferred provider photo was selected. Intelligentsia clips the back control and both trailing controls after a wide image loads; Tavern On Main loses all header controls, consistent with image content expanding the header's layout width before the header is clipped to the device.
+- REC-82 was moved from `In Review` back to `In Progress`. No code change will be made until both root-cause hypotheses are reproduced.
+
+Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`, the Google selector/Edge Function only if the Saba miss is confirmed there, focused REC-82 tests, and this coordination log. Any hosted function change will receive its required smoke/live verification before handoff.
+
+Root cause, audit, and validation, 2026-07-13 10:33 PDT:
+
+- Google Places currently returns the reported venue as `Saba Coffee Shop`, while rec.me stores `Saba Cafe and Surf`. The old selector rejected the real result before considering same-location/address evidence because the normalized names shared only `saba` (1/4 tokens). A controlled selector probe reproduced `selected nothing`.
+- The prior loading fix left `PlaceProfilePhotoImage` height-constrained but horizontally content-driven. A hosted production-view regression with a 2400×600 image moved the trailing control to `maxX = 716.5` inside a 393pt host, reproducing Intelligentsia/Tavern control clipping without relying on screenshots alone.
+- `PlaceProfilePhotoImage` now uses the parent GeometryReader size as the explicit image frame before `scaledToFill` is clipped. The shared view therefore keeps arbitrary photo aspect ratios layout-neutral in both the full header and explicitly square collapsed card. Canceled loads are ignored so stale image work cannot overwrite a newer preferred photo.
+- Google matching now accepts a nearby renamed venue only when at least one non-generic name token overlaps and proximity/address evidence agrees. A same-coordinate alias still works when rec.me has no address, while unrelated venues and generic-only overlaps such as two different `coffee` names remain rejected.
+- Audited adjacent states: the map/category fallback remains visible during loading, provider/image errors, and no-match responses; the collapsed tile still has an explicit square frame; Google attribution remains conditional on a selected Google photo; exact and contained provider names preserve their prior scoring. Header back/action/share targets were raised from 42pt to the 44pt iOS minimum.
+- Selector tests: 6 passed, including Saba address/no-address aliases, unrelated same-coordinate rejection, generic-only rejection, exact-nearby preference, and first-usable-photo choice.
+- SwiftUI probes: the old code failed the wide-photo regression at 716.5pt; the corrected code passed both the wide-photo layout regression and the prior initial-empty-state loading regression.
+- `xcodegen generate` completed with no project diff; `git diff --check` passed.
+- Complete iOS suite passed 275 tests, 0 failures, 0 skipped on iPhone 17 Pro / iOS 26.5 simulator. Result: `/private/tmp/DerivedData-rec82-bug-probes/Logs/Test/Test-Wander-2026.07.13_10-31-41--0700.xcresult`.
+- Deployed the updated authenticated `place-photo` Edge Function to Supabase project `rugmtlgufrhlxwfkumhw`. The hosted endpoint is reachable and still returns 401 without authorization. No migration or RPC contract changed.
+- Latest `origin/main` is two commits ahead and includes the REC-83 full-profile bottom-overlay fix in the same Swift file plus coordination-log updates. After committing this isolated REC-82 fix, merge latest `origin/main`, preserve both behavior sets/log entries, rerun focused validation if the merge changes the generated project, then update PR #75.
