@@ -10938,3 +10938,13 @@ Build-70 release validation checkpoint, 2026-07-13 16:38 PDT:
 - Full `WanderTests` suite passed on iPhone 17 Pro / iOS 26.5: 287 passed, 0 failed (`/private/tmp/DerivedData-build70-test/Logs/Test/Test-Wander-2026.07.13_16-32-43--0700.xcresult`).
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-build70-build`; only the existing traditional-headermap warning was emitted.
 - Next: final diff check, commit/push, ready build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
+
+REC-82 / TestFlight build-70 release completion, 2026-07-13 16:57 PDT:
+
+- Feature PR #75 was squash-merged to `main` at `d8b5fb00ed4193b0f9af2634ffdadae62278a9f6`: https://github.com/joelipshutz/wander/pull/75. Build-number PR #87 was reviewed clean and squash-merged at `77d0c9672cccd0ecf237cfb38f11c3b4d9fb167f`: https://github.com/joelipshutz/wander/pull/87.
+- Created signed archive `/private/tmp/Wander-0.1-build70.xcarchive` from exact latest `main` commit `77d0c9672cccd0ecf237cfb38f11c3b4d9fb167f`. Archive and embedded app metadata independently confirmed rec.me `0.1 (70)`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- The first export attempt reached Xcode's account gate before transfer and reported no local App Store Connect account for the team. Retried the same unchanged archive using the existing App Store Connect API-key authentication arguments, with `/private/tmp/WanderExportUpload70.plist` retaining `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 70 and App Store Connect build id `19ea939c-fe95-4646-9396-d18490b39b05`; processing is `VALID`, `usesNonExemptEncryption=false`, What to Test is updated for `en-US`, the build is attached to `Wander Alpha`, and external review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t. Posted the required live/approved tester note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783986998884269.
+- Linear `REC-82` is Done with PR, hosted deployment, validation, archive, App Store Connect, TestFlight, and Slack evidence. No tester data was deleted, reset, or rewritten.
+- Final validation: Ryan's on-device confirmation; 9/9 Google selector/privacy tests; authenticated hosted Supabase smoke; 46/46 focused iOS tests; 287/287 full iOS tests; generic iOS Simulator build; signed archive metadata/signature checks. Only the existing traditional-headermap build warning remains.
