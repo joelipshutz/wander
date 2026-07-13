@@ -433,7 +433,17 @@ final class RemoteRepositoryTests: XCTestCase {
             nearbyConfirmed: true,
             sourceType: "current_location",
             attributes: [
-                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"]),
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: ["work favorite", "joe rec"]
+                ),
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Thai"
+                )
             ]
         )
 
@@ -456,8 +466,17 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(userPlace?["rating_signal"])
 
         let attributes = body["input_attributes"] as? [[String: Any]]
-        XCTAssertEqual(attributes?.map { $0["question_key"] as? String }, ["coffee_tags"])
+        XCTAssertEqual(
+            attributes?.map { $0["question_key"] as? String },
+            ["coffee_tags", PlaceMemoryAttributeKeys.personalLabels, PlaceMemoryAttributeKeys.restaurantCuisine]
+        )
+        XCTAssertEqual(
+            attributes?.map { $0["value_type"] as? String },
+            ["multi_tag", "personal_label", "restaurant_cuisine"]
+        )
         XCTAssertEqual(attributes?.first?["value"] as? [String], ["wifi solid", "quiet"])
+        XCTAssertEqual(attributes?[1]["value"] as? [String], ["work favorite", "joe rec"])
+        XCTAssertEqual(attributes?[2]["value"] as? String, "Thai")
     }
 
     func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(8);
+select plan(14);
 
 select is(
   (
@@ -26,6 +26,28 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'app.save_own_place(jsonb,jsonb,jsonb)', 'execute'),
   'authenticated can execute app.save_own_place'
+);
+
+select ok(
+  (
+    select pg_get_constraintdef(oid) like '%personal_label%'
+      and pg_get_constraintdef(oid) like '%restaurant_cuisine%'
+    from pg_constraint
+    where conrelid = 'public.question_definitions'::regclass
+      and conname = 'question_definitions_value_type_check'
+  ),
+  'question definition value types include semantic map-save attributes'
+);
+
+select ok(
+  (
+    select pg_get_constraintdef(oid) like '%personal_label%'
+      and pg_get_constraintdef(oid) like '%restaurant_cuisine%'
+    from pg_constraint
+    where conrelid = 'public.place_attributes'::regclass
+      and conname = 'place_attributes_value_type_check'
+  ),
+  'place attribute value types include semantic map-save attributes'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -72,6 +94,86 @@ select is(
   ),
   4.5::numeric,
   'save_own_place stores half-step numeric rating score for been places'
+);
+
+select isnt_empty(
+  $$
+    select *
+    from app.save_own_place(
+      '{
+        "canonical_name": "Semantic Save RPC Test",
+        "category": "restaurants_food",
+        "primary_category": "restaurants_food",
+        "subcategory": "Restaurant",
+        "latitude": 34.0503,
+        "longitude": -118.2503,
+        "source_provider": "mapkit",
+        "source_provider_place_id": "semantic-save-rpc-test",
+        "confidence": 0.9
+      }'::jsonb,
+      '{
+        "status": "been",
+        "visibility": "followers",
+        "nearby_confirmed": false,
+        "source_type": "manual",
+        "rating_score": 3
+      }'::jsonb,
+      '[
+        {
+          "question_key": "personal_labels",
+          "value_type": "personal_label",
+          "value": ["date night"]
+        },
+        {
+          "question_key": "restaurant_cuisine",
+          "value_type": "restaurant_cuisine",
+          "value": "Thai"
+        }
+      ]'::jsonb
+    )
+  $$,
+  'save_own_place accepts the semantic attributes emitted by the map form'
+);
+
+select is(
+  (
+    select count(*)
+    from public.place_attributes pa
+    join public.user_places up on up.id = pa.user_place_id
+    join public.places p on p.id = up.place_id
+    where up.user_id = 'user_save_owner'
+      and p.source_provider_place_id = 'semantic-save-rpc-test'
+  ),
+  2::bigint,
+  'semantic map save commits both attributes atomically'
+);
+
+select is(
+  (
+    select pa.value_type
+    from public.place_attributes pa
+    join public.user_places up on up.id = pa.user_place_id
+    join public.places p on p.id = up.place_id
+    where up.user_id = 'user_save_owner'
+      and p.source_provider_place_id = 'semantic-save-rpc-test'
+      and pa.question_key = 'personal_labels'
+  ),
+  'personal_label',
+  'semantic map save preserves personal label value type'
+);
+
+select is(
+  (
+    select pa.value_type
+    from public.place_attributes pa
+    join public.user_places up on up.id = pa.user_place_id
+    join public.places p on p.id = up.place_id
+    where up.user_id = 'user_save_owner'
+      and p.source_provider_place_id = 'semantic-save-rpc-test'
+      and pa.question_key = 'restaurant_cuisine'
+  ),
+  'restaurant_cuisine',
+  'semantic map save preserves restaurant cuisine value type'
 );
 
 select throws_ok(
@@ -131,9 +233,12 @@ select isnt_empty(
 select is_empty(
   $$
     select 1
-    from public.user_places
-    where user_id = 'user_save_owner'
-      and rating_score is not null
+    from public.user_places up
+    join public.places p on p.id = up.place_id
+    where up.user_id = 'user_save_owner'
+      and p.source_provider = 'mapkit'
+      and p.source_provider_place_id = 'save-rpc-test'
+      and up.rating_score is not null
   $$,
   'save_own_place clears rating score for wanna go places'
 );
