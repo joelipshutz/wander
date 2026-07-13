@@ -10390,6 +10390,18 @@ Checkpoint, 2026-07-12 18:22 PDT:
 - The casing sweep found one single-line label in `PlaceProfileMapSurface.swift`, which PR #80 also touches for bottom inset behavior. The changes are in separate regions; refresh/rebase again if #80 lands before handoff.
 - `xcodegen generate` picked up `AppBrand.swift` but emitted unrelated project-default churn. Preserved only the four generated source-membership lines; no signing/build-setting churn remains.
 
+Completion, 2026-07-12 18:27 PDT:
+
+- Implementation commit: `0545ba9` (`feat: rename app to rec.me`).
+- Built-in image generation produced the final project-bound icon master, then `sips` generated every rendition referenced by `AppIcon.appiconset/Contents.json`. Final project master: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
+- Final icon prompt direction: one full-bleed iOS icon combining the premium pin/orbit and folded-map/bookmark concepts, with a dominant cream location pin, espresso bookmark cutout, sky-blue social dot, restrained map fold, terracotta field, no text, and no alpha.
+- Static validation passed: `plutil -lint`, `git diff --check`, exact icon dimension/alpha inspection, and targeted visible-brand scans for legacy `Wander`, `Rec.me`, and `REC.me` copy.
+- Focused `BuildConfigurationTests` passed 11/11, including canonical brand/stable identifier assertions and all app-icon rendition checks.
+- Final full suite passed on iPhone 16 Plus / iOS 18.6: 271 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec84/Logs/Test/Test-Wander-2026.07.12_18-24-22--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` after removing only REC-84 disposable build intermediates to recover disk space. The first generic attempt failed because the data volume had only 118 MB free; no source failure was involved.
+- Installed the exact built app on iPhone 16 Plus and iPhone 16e simulators. Built Info.plist confirmed `CFBundleDisplayName=rec.me`, `CFBundleName=Wander`, `CFBundleIdentifier=com.grayline.wander`, and rec.me permission copy. Home-screen QA screenshot: `/private/tmp/rec84-simulator-system.png`; smaller-device system screenshot: `/private/tmp/rec84-iphone16e-home.png`.
+- No build-number bump, merge, TestFlight upload, App Store Connect mutation, or Slack release note was performed. PR #46 is the implementation review surface; Linear `REC-84` should remain In Review until landing/release is requested.
+
 Outcome, 2026-06-28 11:58 PDT:
 
 - Committed the spec as `1c4edbe` (`docs: spec recme app rename`), pushed branch `codex/recme-app-rename-spec`, and opened PR #46: `https://github.com/joelipshutz/wander/pull/46`.
