@@ -10665,3 +10665,12 @@ REC-82 latest-main integration checkpoint, 2026-07-13 10:45 PDT:
 - Post-merge focused validation passed 14/14 tests: both place-photo presentation regressions plus all 12 `NavigationContractTests`. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-40-31--0700.xcresult`.
 - Post-merge complete `WanderTests` validation passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-44-07--0700.xcresult`.
 - Remaining handoff actions: commit/push the resolved merge, refresh PR #75 and Linear REC-82 with the final evidence, and leave Xcode focused on this worktree for Ryan's physical-device checks of Saba Cafe and Surf, Intelligentsia, Tavern On Main, and the collapsed place cards.
+
+REC-82 final bug-fix handoff, 2026-07-13 10:50 PDT:
+
+- Latest-main merge commit: `1ebe69a70` (`Merge remote-tracking branch 'origin/main' into codex/rec-82-seed-place-photos`), following implementation commit `ab27a4c82` (`Fix REC-82 provider matching and photo layout`).
+- Pushed `codex/rec-82-seed-place-photos` through `1ebe69a70` and refreshed ready PR #75 with the Saba alias, wide-image layout, deployment, and final 277-test evidence: https://github.com/joelipshutz/wander/pull/75.
+- Added the final root-cause, hosted-state, validation, and manual-retest checklist to Linear `REC-82`; moved the issue from `In Progress` to `In Review`.
+- Opened `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`, which is the isolated REC-82 worktree on the correct branch, for Ryan's physical-device validation.
+- Known remaining validation is manual/device-only: confirm Google photo + attribution for Saba Cafe and Surf, confirm Intelligentsia/Tavern header controls stay visible, confirm collapsed cards show the same preferred photo, and confirm an unmatched dropped pin shares its first visible user photo with another authorized account.
+- No TestFlight build, merge, build-number increment, archive, upload, or Slack release note was requested; PR #75 remains the review/merge boundary.
