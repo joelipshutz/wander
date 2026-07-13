@@ -10391,3 +10391,8 @@ Completion checkpoint, 2026-07-12 20:41 PDT:
 - Added `NavigationContractTests.testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush` to keep this from regressing back to a navigation push.
 - Visual verification: with temporary instrumentation before removal, installed the rebuilt app and captured bottom-of-profile screenshot at `/tmp/rec83-bottom-fullscreen-cover.png`.
 - Validation: focused `NavigationContractTests` passed 12/12 on `iPhone 17 Pro, OS 26.5`; full `WanderTests` passed 271/271 on the same simulator with `CODE_SIGNING_ALLOWED=NO`.
+
+Post-push note, 2026-07-12 20:44 PDT:
+
+- Pushed PR #80 branch update `a7dec01ea` (`Fix place profile full-screen presentation`) to `origin/codex/rec-83-full-view-bottom-cutoff`.
+- Remaining local artifact: `DerivedData-rec83/` is untracked in the temporary worktree and intentionally not staged.
