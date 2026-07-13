@@ -353,7 +353,7 @@ struct MapScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .navigationDestination(isPresented: placeProfileDestinationBinding) {
+            .fullScreenCover(isPresented: placeProfileDestinationBinding) {
                 selectedPlaceProfileDestination
             }
             .toolbar(.hidden, for: .navigationBar)

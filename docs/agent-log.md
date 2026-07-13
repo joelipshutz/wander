@@ -10569,3 +10569,99 @@ Root cause, audit, and validation, 2026-07-13 10:33 PDT:
 - Complete iOS suite passed 275 tests, 0 failures, 0 skipped on iPhone 17 Pro / iOS 26.5 simulator. Result: `/private/tmp/DerivedData-rec82-bug-probes/Logs/Test/Test-Wander-2026.07.13_10-31-41--0700.xcresult`.
 - Deployed the updated authenticated `place-photo` Edge Function to Supabase project `rugmtlgufrhlxwfkumhw`. The hosted endpoint is reachable and still returns 401 without authorization. No migration or RPC contract changed.
 - Latest `origin/main` is two commits ahead and includes the REC-83 full-profile bottom-overlay fix in the same Swift file plus coordination-log updates. After committing this isolated REC-82 fix, merge latest `origin/main`, preserve both behavior sets/log entries, rerun focused validation if the merge changes the generated project, then update PR #75.
+
+## 2026-07-12 16:15 PDT - Codex - REC-83 Full-View Bottom Cutoff Investigation
+
+Agent: Codex
+Branch: `codex/rec-83-full-view-bottom-cutoff`
+Worktree: `/private/tmp/recme-rec83-full-cutoff`
+Linear: `REC-83`
+
+Goal: investigate and fix Ryan's follow-up report that the full place-card view still has roughly a half inch clipped at the bottom after build 68.
+
+Starting status:
+
+- User reports the cutoff still reproduces in TestFlight build 68, so the prior row-level fix did not address the root cause.
+- `REC-83` was moved back to `In Progress` with a comment noting this new full-view/safe-area investigation.
+- Fresh worktree created from latest `origin/main` at `a81b97168`.
+- Root checkout remains on stale `codex/rec-81-collab-visibility`; this investigation is isolated in the new worktree.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- Potentially focused tests under `WanderTests/` if a stable layout/state contract can be asserted.
+
+Investigation plan:
+
+- Trace the full place-card presentation and scroll/container hierarchy before editing.
+- Compare the prior REC-83 diff against the current symptom to identify why the previous fix missed page-level clipping.
+- Reproduce or approximate the layout on simulator if possible, then fix the actual safe-area/container root cause.
+
+Root-cause checkpoint, 2026-07-12 16:26 PDT:
+
+- The prior REC-83 fix (`c93560ab7`) only changed the repeated Place Details rows/card styling. It did not change the full-screen place-profile container.
+- The still-reproducing symptom is page-level: `PlaceProfileFullView` ignored both the top and bottom container safe areas, then tried to compute scroll bottom padding from `proxy.safeAreaInsets.bottom`. In that ignored-safe-area context, the bottom inset can be zero or otherwise not reserve the actual system/home-indicator space.
+- Fixed the shared full-screen place profile by keeping top-edge full bleed for the map header only, no longer ignoring the bottom safe area, and adding a deterministic minimum 64pt scroll bottom inset via `PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from:)`.
+- Added a focused regression test for the bottom inset contract in `NavigationContractTests`.
+- Validation: focused simulator XCTest passed on `iPhone 17 Pro, OS 26.5`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-rec83 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests/testPlaceProfileFullViewKeepsScrollableBottomInset`.
+- Visual check: installed the debug build to the booted iPhone 17 Pro simulator and launched `com.grayline.wander -WanderUseDemoFixtures -WanderMapSheetExpanded -WanderMapPlace 'Woodcat Coffee'`; top-of-full-card screenshot captured at `/tmp/rec83-full-place-demo-after-fix.png`. `simctl` does not expose general touch/scroll input on this machine, so bottom-scroll visual proof is covered by code inspection plus the layout contract test rather than an automated bottom screenshot.
+
+Handoff, 2026-07-12 16:29 PDT:
+
+- Implementation commit: `24182ef5f` (`Fix full place profile bottom inset`).
+- PR opened: https://github.com/joelipshutz/wander/pull/80.
+- Linear `REC-83` moved to `In Review`, with PR, root cause, validation, and visual-check limitation documented in a Linear comment.
+- Known local-only artifact: `DerivedData-rec83/` remains untracked in this temporary worktree and was not staged or pushed.
+- Next step: review/merge PR #80 to `main`; if Ryan wants this in TestFlight, package latest `main` as a new build after merge rather than reusing build 68.
+
+Reopened investigation checkpoint, 2026-07-12 20:31 PDT:
+
+- Ryan tested PR #80 in Xcode and reports the full-view bottom cutoff still reproduces; the prior safe-area/inset patch is now treated as a failed hypothesis.
+- Clarified current symptom: a beige layer appears over the bottom of the full-view place card, visually cutting off the last half inch of content.
+- Linear `REC-83` was moved back to `In Progress` and updated with the failed-hypothesis note.
+- Added temporary launch-argument instrumentation in `PlaceProfileFullView` to force-scroll to the bottom for simulator screenshots. This is diagnostic only unless explicitly kept for QA.
+- Built and installed the instrumented debug app on the booted iPhone 17 Pro simulator. Bottom screenshots show the forced bottom state is reachable for demo fixtures, but the previous fix did not specifically target the beige overlay/layering symptom Ryan described.
+- Current investigation hypothesis: the full profile is still hosted inside the tab/navigation presentation stack, so the parent container can paint or reserve a beige bottom layer over the final content; fixing the leaf view's scroll inset alone is insufficient.
+- Expected files remain narrow: `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Features/Map/MapScreen.swift` if presentation ownership moves, `WanderTests/NavigationContractTests.swift`, and this log.
+
+Completion checkpoint, 2026-07-12 20:41 PDT:
+
+- Confirmed the previous PR #80 change did not specifically fix Ryan's beige-overlay symptom; it only changed the full profile scroll/safe-area inset.
+- Root cause for this follow-up: map place profiles were still pushed with `.navigationDestination` inside the tab-hosted map `NavigationStack`. Even with the destination hiding the tab bar, the parent tab/navigation host can still reserve or paint the warm beige bottom area over the bottom of the pushed profile.
+- Fix: changed the map full place profile presentation from `navigationDestination` to `fullScreenCover`, so the full profile owns the screen instead of rendering under the tab container.
+- Removed the temporary forced-bottom-scroll launch instrumentation before committing.
+- Added `NavigationContractTests.testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush` to keep this from regressing back to a navigation push.
+- Visual verification: with temporary instrumentation before removal, installed the rebuilt app and captured bottom-of-profile screenshot at `/tmp/rec83-bottom-fullscreen-cover.png`.
+- Validation: focused `NavigationContractTests` passed 12/12 on `iPhone 17 Pro, OS 26.5`; full `WanderTests` passed 271/271 on the same simulator with `CODE_SIGNING_ALLOWED=NO`.
+
+Post-push note, 2026-07-12 20:44 PDT:
+
+- Pushed PR #80 branch update `a7dec01ea` (`Fix place profile full-screen presentation`) to `origin/codex/rec-83-full-view-bottom-cutoff`.
+- Remaining local artifact: `DerivedData-rec83/` is untracked in the temporary worktree and intentionally not staged.
+
+Merge-gate checkpoint, 2026-07-13 10:24 PDT:
+
+- Ryan confirmed the full-view place-card bottom overlay is fixed and asked to squash-merge PR #80 to `main`.
+- Used the repo `recme-pr-review-merge-release` workflow. This is a merge-only request, not an explicit TestFlight release request, so no build-number bump/archive/upload/Slack release note is part of this step.
+- PR #80 is open, mergeable, not draft, targets `main`, and head is `acdc1466d`.
+- Updated the PR body to replace the failed safe-area-only hypothesis with the corrected `fullScreenCover`/tab-host root cause and latest validation.
+- Pre-landing review scope check: clean. Diff is limited to full place-profile presentation/inset behavior, focused navigation contract tests, and agent log. No SQL, Supabase/RLS, auth/sync, enum, shell, LLM boundary, CI, signing, or project membership changes.
+- Greptile check: no line-level or top-level Greptile comments on PR #80.
+- Validation used for merge gate: `git diff --check` passed; focused `NavigationContractTests` passed 12/12 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-39-24--0700.xcresult`); full `WanderTests` passed 271/271 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-40-02--0700.xcresult`).
+
+Merge completion, 2026-07-13 10:27 PDT:
+
+- PR #80 was squash-merged to `main`: https://github.com/joelipshutz/wander/pull/80.
+- Main merge commit: `2cee8a741d2f3f7a409337b02d61ad311d89955c` (`Fix full place profile bottom overlay`).
+- Remote PR branch `codex/rec-83-full-view-bottom-cutoff` was deleted after merge.
+- Linear `REC-83` was moved to `Done` with merge commit and validation evidence.
+- No TestFlight release was requested in this step, so build number remains unchanged and no archive/upload/Slack release note was produced. The fix will ride in the next explicit TestFlight build request.
+
+REC-82 latest-main integration checkpoint, 2026-07-13 10:45 PDT:
+
+- Merged latest `origin/main` into `codex/rec-82-seed-place-photos` and resolved the shared `PlaceProfileMapSurface.swift` overlap by preserving both REC-82 photo resolution/layout behavior and REC-83's top-only safe-area behavior.
+- Regenerated `Wander.xcodeproj` with XcodeGen; no generated project diff resulted. `git diff --check` passed.
+- Post-merge focused validation passed 14/14 tests: both place-photo presentation regressions plus all 12 `NavigationContractTests`. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-40-31--0700.xcresult`.
+- Post-merge complete `WanderTests` validation passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-44-07--0700.xcresult`.
+- Remaining handoff actions: commit/push the resolved merge, refresh PR #75 and Linear REC-82 with the final evidence, and leave Xcode focused on this worktree for Ryan's physical-device checks of Saba Cafe and Surf, Intelligentsia, Tavern On Main, and the collapsed place cards.

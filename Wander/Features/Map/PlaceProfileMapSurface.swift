@@ -44,6 +44,7 @@ struct PlaceProfileFullScreen: View {
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+    private static let minimumFullViewBottomContentInset: CGFloat = 64
 
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
@@ -88,6 +89,10 @@ struct PlaceProfileFullScreen: View {
 
     static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
         PlaceProfileMapHeader.resolvedTopInset(from: safeAreaTopInset)
+    }
+
+    static func resolvedFullViewBottomContentInset(from safeAreaBottomInset: CGFloat) -> CGFloat {
+        max(minimumFullViewBottomContentInset, safeAreaBottomInset + WanderTheme.spacing8)
     }
 
     private var edgeSwipeBackGesture: some Gesture {
@@ -282,6 +287,7 @@ private struct PlaceProfileFullView: View {
     var body: some View {
         GeometryReader { proxy in
             let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
+            let bottomContentInset = PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: proxy.safeAreaInsets.bottom)
 
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
@@ -321,17 +327,17 @@ private struct PlaceProfileFullView: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing8 + proxy.safeAreaInsets.bottom)
+                    .padding(.bottom, bottomContentInset)
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(WanderTheme.surfaceBone.color)
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
+            .ignoresSafeArea(.container, edges: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .ignoresSafeArea(.container, edges: .top)
         .task(id: photoResolutionKey) {
             let localPhoto = localPhoto
             photo = localPhoto
