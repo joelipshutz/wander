@@ -5366,13 +5366,13 @@ struct PlaceActivityEntry: Identifiable {
     var timestamp: Date {
         switch kind {
         case .visit:
-            visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.updatedAt
+            visit?.visitedAt ?? userPlace.visitedAt ?? userPlace.savedAt
         case .currentWant:
             userPlace.updatedAt
         case .historicalWant:
             userPlace.historicalWantedAt ?? userPlace.savedAt
         case .legacyBeenSummary:
-            userPlace.visitedAt ?? userPlace.updatedAt
+            userPlace.visitedAt ?? userPlace.savedAt
         }
     }
 

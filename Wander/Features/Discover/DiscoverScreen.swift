@@ -67,11 +67,9 @@ struct DiscoverScreen: View {
     }
 
     private var latestActivityPlaces: [VisiblePlace] {
-        Array(
-            store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
+        DiscoverLatestActivityPresentation.places(
+            from: store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
                 .filter { $0.owner.id != store.currentUser.id }
-                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
-                .prefix(10)
         )
     }
 
@@ -944,7 +942,8 @@ private struct LatestActivityRow: View {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
+            DiscoverLatestActivityPresentation.timestampText(for: visiblePlace.userPlace.savedAt)
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)

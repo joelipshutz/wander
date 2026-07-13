@@ -2,6 +2,33 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testLegacyBeenActivityUsesVisitedDateThenSavedDateInsteadOfLastEdit() {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let place = place(id: "place_coffee", category: "coffee")
+        let summary = summary(owner: currentUser, place: place, ratingScore: 4, tags: [])
+        let savedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let visitedAt = Date(timeIntervalSince1970: 1_700_100_000)
+        summary.visiblePlace.userPlace.savedAt = savedAt
+        summary.visiblePlace.userPlace.updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let savedFallback = PlaceActivityEntry(
+            summary: summary,
+            visit: nil,
+            kind: .legacyBeenSummary,
+            currentUserID: currentUser.id
+        )
+        XCTAssertEqual(savedFallback.timestamp, savedAt)
+
+        summary.visiblePlace.userPlace.visitedAt = visitedAt
+        let explicitVisitDate = PlaceActivityEntry(
+            summary: summary,
+            visit: nil,
+            kind: .legacyBeenSummary,
+            currentUserID: currentUser.id
+        )
+        XCTAssertEqual(explicitVisitDate.timestamp, visitedAt)
+    }
+
     func testCommonTagsRequireUserAndTrustedOrTwoTrustedSupports() {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
