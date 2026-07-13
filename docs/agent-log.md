@@ -10396,3 +10396,13 @@ Post-push note, 2026-07-12 20:44 PDT:
 
 - Pushed PR #80 branch update `a7dec01ea` (`Fix place profile full-screen presentation`) to `origin/codex/rec-83-full-view-bottom-cutoff`.
 - Remaining local artifact: `DerivedData-rec83/` is untracked in the temporary worktree and intentionally not staged.
+
+Merge-gate checkpoint, 2026-07-13 10:24 PDT:
+
+- Ryan confirmed the full-view place-card bottom overlay is fixed and asked to squash-merge PR #80 to `main`.
+- Used the repo `recme-pr-review-merge-release` workflow. This is a merge-only request, not an explicit TestFlight release request, so no build-number bump/archive/upload/Slack release note is part of this step.
+- PR #80 is open, mergeable, not draft, targets `main`, and head is `acdc1466d`.
+- Updated the PR body to replace the failed safe-area-only hypothesis with the corrected `fullScreenCover`/tab-host root cause and latest validation.
+- Pre-landing review scope check: clean. Diff is limited to full place-profile presentation/inset behavior, focused navigation contract tests, and agent log. No SQL, Supabase/RLS, auth/sync, enum, shell, LLM boundary, CI, signing, or project membership changes.
+- Greptile check: no line-level or top-level Greptile comments on PR #80.
+- Validation used for merge gate: `git diff --check` passed; focused `NavigationContractTests` passed 12/12 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-39-24--0700.xcresult`); full `WanderTests` passed 271/271 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-40-02--0700.xcresult`).
