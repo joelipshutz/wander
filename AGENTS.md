@@ -209,6 +209,17 @@ Rules:
   direct hosted verification query that checks the relevant policy/security
   posture. For recreated RPCs, add metadata assertions for `prosecdef`,
   `proconfig`, and grants when relevant.
+- Treat `question_definitions.value_type`, `place_attributes.value_type`, and
+  every iOS `PlaceAttributeDraft.valueType` as one shared cross-layer contract.
+  Any new or changed iOS attribute value type must update both Supabase check
+  constraints in the same branch, add SQL regression coverage, and exercise the
+  exact production payload through authenticated `public.save_own_place` in
+  `scripts/supabase-smoke-test.mjs`. An iOS unit test or a successful local-only
+  save is not sufficient because a constraint failure rolls back the entire
+  remote place/user-place transaction.
+- Before merging or releasing a change to save-form questions, tags, cuisines,
+  or personal labels, search the diff for new `valueType:` literals and verify
+  each one against the hosted constraint plus the rolled-back smoke transaction.
 - Any migration that creates, replaces, grants, revokes, or otherwise changes an
   iOS-called Supabase RPC must run the hosted smoke test before handoff:
   `npm --prefix scripts ci --ignore-scripts`, then

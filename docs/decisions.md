@@ -72,6 +72,7 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Screen titles | Locked | Main surfaces use plain titles like Discover and Settings; avoid oversized informal slogans as page titles. |
 | Discover hierarchy | Locked | People stay near the top under search; Places are the primary Discover content with a segmented `mine` / `friends` / `everyone` scope switch at the top of the Places section. |
 | Add question answers | Locked | M2 persists starter contextual answers into flexible `LocalPlaceAttribute` rows using `question_key`, `value_type`, and JSON values. Starter templates are category-aware: coffee = work setup/tags, hike = strenuousness/tags, restaurant = price/occasion/tags, plus a rating/excitement signal. Expanded place sheets read persisted attributes rather than inferred placeholder chips. Future user-created/custom questions should add question-definition metadata, not hardcode new answer columns. |
+| Place attribute value-type contract | Locked | iOS `PlaceAttributeDraft.valueType`, `question_definitions.value_type`, and `place_attributes.value_type` are one cross-layer contract. Semantic `personal_label` and `restaurant_cuisine` types are first-class alongside generic input types. Every new type must update both constraints and pass the authenticated hosted `public.save_own_place` smoke transaction before merge/release. |
 
 ## Reset Decisions
 

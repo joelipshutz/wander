@@ -1249,16 +1249,9 @@ private enum PlaceProfileCopy {
     }
 
     static func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
-
-        if attribute.valueType == "multi_tag" {
-            return decodedStringArray(from: attribute.valueJSON).map { value in
-                PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
-            }
+        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+            PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
-
-        guard let value = decodedString(from: attribute.valueJSON) else { return [] }
-        return [PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))]
     }
 
     static func trimmed(_ value: String?) -> String? {
@@ -1290,19 +1283,11 @@ private enum PlaceProfileCopy {
             "dollarsign.circle.fill"
         case "occasion", "best_for":
             "sparkles"
+        case PlaceMemoryAttributeKeys.restaurantCuisine:
+            "fork.knife"
         default:
             "tag.fill"
         }
-    }
-
-    private static func decodedString(from valueJSON: String) -> String? {
-        guard let data = valueJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private static func decodedStringArray(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }
 
