@@ -10714,3 +10714,11 @@ Validation/deployment checkpoint, 2026-07-13 11:28 PDT:
 - Provider selector suite passed 7/7 using Node 24's TypeScript stripping with a Deno test shim.
 - Complete `WanderTests` suite passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-saba-final/Logs/Test/Test-Wander-2026.07.13_11-24-09--0700.xcresult`.
 - `git diff --check` passed. Remaining verification is Ryan's signed-in physical-device reopen of Saba, because an authenticated hosted probe was intentionally not attempted with extracted privileged credentials.
+
+Handoff, 2026-07-13 11:34 PDT:
+
+- Implementation commit `707277945` (`Fix Saba street-only address matching`) was pushed to `origin/codex/rec-82-seed-place-photos`.
+- Ready PR #75 was refreshed with the corrected production root cause, false-positive guard, deployment state, and final validation: https://github.com/joelipshutz/wander/pull/75.
+- Linear `REC-82` received the same evidence and was returned to `In Review`. Ryan's confirmation that Intelligentsia and Tavern On Main now work is recorded there; only the signed-in Saba photo check remains.
+- Xcode was reopened on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj` for physical-device testing of the deployed Saba fix.
+- No TestFlight build, merge, build-number change, archive, upload, or Slack release note was requested. The PR remains the review/merge boundary.
