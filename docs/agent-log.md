@@ -10476,3 +10476,11 @@ Final validation checkpoint, 2026-07-13 10:59 PDT:
 - Hosted migration `20260713101000` is already live and additive, so build 68 can create new semantic saves now. A retained failed save such as Ugo should retry through the existing signed-in startup backfill after force-quit/reopen. The branch's clearer failure UX and expanded presentation/test guardrails require a future explicit TestFlight release after merge.
 - Ryan/Joe validation: force-quit and reopen build 68 while signed in as `ryan_lieblein`, save a new Been restaurant with its default personal label/cuisine, then have Joe reopen/refresh and verify the place is visible. No database deletion or historical reset was performed.
 - Build-number bump, archive, TestFlight upload, and Slack release note were intentionally skipped because this request is implementation/PR only, not an explicit release request.
+
+Handoff, 2026-07-13 11:04 PDT:
+
+- Implementation commit: `8a491d55e` (`fix: restore semantic map save sync`).
+- Pushed `codex/rec-87-map-save-sync-contract` and opened ready PR #82: https://github.com/joelipshutz/wander/pull/82.
+- The GitHub app connector returned `403 Resource not accessible by integration`; the repo's authenticated `gh` fallback created the ready PR successfully. This did not affect branch contents or validation.
+- Linear `REC-87` should remain `In Review` until PR #82 is reviewed/merged and the requested Ryan/Joe cross-account save is verified. Do not mark it Done merely because the additive hosted migration is live.
+- Concrete next step: Ryan force-quits/reopens build 68, confirms Ugo retries or saves a new Been restaurant, and Joe reopens/refreshes to verify visibility. If successful and a TestFlight binary with the UX/test guardrails is desired, merge PR #82 first and make a separate explicit TestFlight release request.
