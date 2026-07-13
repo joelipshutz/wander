@@ -10890,3 +10890,14 @@ Release completion, 2026-07-13 11:53 PDT:
 - Linear `REC-87` is Done with PR, test, archive, App Store Connect, TestFlight, and Slack evidence. `REC-83` received a follow-up comment confirming its corrected full-screen fix is included in build 69.
 - No tester data was deleted, reset, or rewritten. The REC-87 schema migration remains additive. Broader foreground/reader-cache refresh behavior is intentionally tracked separately under `REC-45`.
 - Release validation for Ryan and Joe: install build 69, force-quit/reopen, save a new Been restaurant with default personal label/cuisine on Ryan's account, then reopen Joe's app and confirm social visibility. Also verify retained Ugo recovery and the bottom of full place profiles.
+
+REC-82 pre-landing blocker checkpoint, 2026-07-13 14:18 PDT:
+
+- Ran the required fresh pre-landing review before the requested squash merge and TestFlight build 70. The merge and release are intentionally paused; PR #75 must not land in its current form.
+- Verified against Google's current Places policy (updated 2026-07-10) that Places results displayed on a map must be displayed on a Google Map. The REC-82 collapsed Google photo is rendered over Apple MapKit, so the shipped design is not terms-compatible without moving that surface to Google Maps SDK or removing Google photos from Apple-map surfaces.
+- The collapsed Google-photo container also lacks Google Maps attribution, and the full attribution uses fixed 10pt bold text rather than Google's current 12–16sp normal-weight guidance.
+- Security review found that coordinate/dropped-pin requests currently send the pin name, coordinate-formatted address, and exact latitude/longitude to Google before trying the visible user-photo fallback. Coordinate-only pins must bypass Google entirely.
+- The authenticated Edge Function has no server-side per-user/global quota enforcement before billable Google calls. An authenticated caller can automate calls against the shared credential; hard server-side limits and 429 regression coverage are required.
+- iOS review found that a successful Google metadata response followed by media download/decode failure produces attribution with no image and never attempts the visible user-photo fallback. Cancellation handling can also allow stale place-photo work to continue after rapid selection changes.
+- Additional verified cleanup: replace deprecated Text Search `maxResultCount` with `pageSize`, correct docs from Text Search Enterprise/1,000 free monthly to the actual Text Search Pro field mask/pricing tier, and make thumbnail requests size-aware instead of downloading 1600x1200 twice.
+- No app source, hosted schema, Edge Function, build number, archive, upload, TestFlight state, or Slack announcement was changed during this review checkpoint. Product decision required: either ship user-photo-only on Apple MapKit now, or make the larger Google Maps SDK/compliant attribution migration before release.
