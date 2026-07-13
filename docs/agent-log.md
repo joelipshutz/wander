@@ -11102,3 +11102,10 @@ Pre-PR integration checkpoint, 2026-07-13 16:39 PDT:
 - Rebasing onto latest `origin/main` (`d8b5fb00e`) incorporated REC-82 place-photo work. The only conflict was the append-only shared agent log; both REC-82 and REC-89 histories were preserved. Source and generated project changes replayed cleanly.
 - Regenerated `Wander.xcodeproj` from `project.yml`; the worktree remained clean and project membership stayed limited to the new mockup source.
 - Re-ran the full suite against the exact rebased PR tip: 289 passed, 0 failed, 0 skipped on iPhone 17 Pro / iOS 26.5 (`/private/tmp/DerivedData-rec89-tip-tests/Logs/Test/Test-Wander-2026.07.13_16-33-34--0700.xcresult`). Only existing simulator binary-stripping and traditional-headermap warnings were emitted.
+
+Handoff, 2026-07-13 16:41 PDT:
+
+- Pushed `codex/rec-89-profile-redesign` and opened draft PR #86 for visual approval: https://github.com/joelipshutz/wander/pull/86.
+- Moved Linear REC-89 to In Review, attached PR #86, and posted the complete simulator/build/test evidence plus the explicit no-production-wiring boundary.
+- Ryan can review every state in Xcode with scheme launch arguments `-WanderProfileRedesignMockup <page>`; supported page values are documented by `ProfileRedesignMockupPage` and covered by launch-contract tests.
+- Next step after visual approval: convert the accepted mockups into production Profile/Settings destinations using the architecture and test matrix in `docs/plans/2026-07-13-rec-89-profile-redesign-eng-plan.md`. Do not implement mute or permanent account deletion until their server contracts are in place.
