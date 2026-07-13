@@ -10354,6 +10354,42 @@ Validation checkpoint, 2026-06-28 11:56 PDT:
 - `git diff --check` passed.
 - No `xcodebuild` run because this change is docs-only and does not modify app code or generated project files.
 
+## 2026-07-12 17:53 PDT - Codex - REC-84 rec.me Rebrand And App Icon
+
+Agent: Codex
+Branch: `codex/recme-app-rename-spec`
+Worktree: `/private/tmp/recme-rec84-rebrand`
+Linear: `REC-84` (`In Progress`)
+Starting status: rebased the existing PR #46 branch onto `origin/main` at `a81b971`; the only conflict was the append-only shared agent log, resolved by preserving current main history and carrying the original rename-spec entry forward. Root checkout remains on the completed REC-60 branch and is not used for edits.
+Mission Control: create-task attempt failed because `http://localhost:4000` was unavailable (`curl` exit 7).
+
+Goal: execute the focused rename spec by changing the installed/user-facing identity to `rec.me`, replacing visible Wander copy, creating a production app icon, adding regression coverage, and updating PR #46. Preserve bundle id, target/scheme/module names, backend/env keys, notification contracts, and internal `Wander*` identifiers.
+
+Coordination:
+
+- Open PR #80 is active but targets the place-profile bottom inset path; it does not overlap the planned app identity/config/icon files.
+- Other open PRs are stale/draft and no active worktree is editing this branch.
+- `project.yml`, generated project settings, `MapScreen.swift`, and `docs/agent-log.md` are high-conflict files; edits remain isolated here and the branch will be refreshed from latest `origin/main` before handoff.
+
+Expected files:
+
+- `project.yml`
+- `Wander/Resources/Info.plist`
+- `Wander.xcodeproj/project.pbxproj` (generated identity settings only)
+- `Wander/Resources/Assets.xcassets/AppIcon.appiconset/*`
+- Targeted Swift files containing user-facing Wander copy
+- `WanderTests/BuildConfigurationTests.swift`
+- `docs/specs/2026-06-28-recme-app-rename-spec.md`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-12 18:22 PDT:
+
+- Generated and installed the new pin/bookmark/orbit/fold app icon in all nine required app-icon renditions. Every PNG has the exact required dimensions and no alpha channel.
+- Added `CFBundleDisplayName = rec.me` while preserving `PRODUCT_NAME = Wander`, executable/module/scheme names, bundle id `com.grayline.wander`, env keys, and backend contracts.
+- Updated camera/location permission text, auth social-save copy, location-denied copy, map social-proof fallbacks, and legacy `Rec.me rating` labels to canonical lowercase `rec.me`.
+- The casing sweep found one single-line label in `PlaceProfileMapSurface.swift`, which PR #80 also touches for bottom inset behavior. The changes are in separate regions; refresh/rebase again if #80 lands before handoff.
+- `xcodegen generate` picked up `AppBrand.swift` but emitted unrelated project-default churn. Preserved only the four generated source-membership lines; no signing/build-setting churn remains.
+
 Outcome, 2026-06-28 11:58 PDT:
 
 - Committed the spec as `1c4edbe` (`docs: spec recme app rename`), pushed branch `codex/recme-app-rename-spec`, and opened PR #46: `https://github.com/joelipshutz/wander/pull/46`.

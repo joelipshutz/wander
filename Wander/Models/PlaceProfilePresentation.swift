@@ -26,7 +26,7 @@ struct PlaceActualRating: Equatable {
         case .own:
             "Your rating"
         case .trusted:
-            "Rec.me rating"
+            "rec.me rating"
         }
     }
 

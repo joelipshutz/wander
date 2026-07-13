@@ -22,6 +22,7 @@ Canonical casing:
 | --- | --- | --- |
 | P0 | User-facing app identity | Change installed app display name and visible app strings from Wander to `rec.me`. |
 | P0 | Permission and system copy | Update location permission copy and any auth/save error copy users can see. |
+| P0 | App icon | Replace the letter-based Wander icon with a text-free rec.me map/save/social mark. |
 | P0 | Rename safety tests | Add focused tests or config assertions so app display name and user-facing brand copy cannot regress silently. |
 | P1 | Release and tester surfaces | Rename App Store/TestFlight-facing text, Slack release note templates, and TestFlight group naming once external state is ready. |
 | P1 | Living docs | Update current product docs, README, setup, and agent guidance to use `rec.me, formerly Wander`. |
@@ -70,6 +71,7 @@ Expected test assertions:
 Update visible strings that mention Wander:
 
 - `Wander/Resources/Info.plist`
+  - `NSCameraUsageDescription`
   - `NSLocationWhenInUseUsageDescription`
 - `project.yml`
   - mirrored location usage description
@@ -106,7 +108,18 @@ Where copy is centralized behind `AppBrand`, add a simple test that confirms the
 
 Avoid brittle full-UI snapshot tests for this rename. A config/copy test is enough to catch the likely regression.
 
-### 4. Manual QA
+### 4. App Icon
+
+Replace the legacy `W` icon with a full-bleed, text-free mark built around the product's actual behavior:
+
+- a location pin for places;
+- a bookmark cutout for remembering/saving;
+- a small blue orbit dot for the trusted social layer;
+- a restrained folded-map corner for the map surface.
+
+Keep the existing terracotta, cream, espresso, and sky-blue palette. Generate every raster rendition referenced by `AppIcon.appiconset/Contents.json`, require exact dimensions, and remove alpha from every file. Do not bake rounded corners into the artwork; iOS applies the system mask.
+
+### 5. Manual QA
 
 Run the normal simulator build/test path after implementation:
 
@@ -327,7 +340,7 @@ Avoid those in P0.
 - Supabase database/project ref rename.
 - Clerk issuer/audience changes.
 - Rewriting historical logs and old plans.
-- New logo, app icon, or visual identity system unless current assets visibly say Wander.
+- Broader logo/wordmark or visual identity work beyond the new app icon.
 - Marketing website/domain work beyond app-store-facing copy.
 
 ## Suggested Work Split
@@ -351,7 +364,7 @@ Merge order:
 | Exact public brand casing | `rec.me` | Decided by Joe on 2026-06-28. |
 | Rename TestFlight group now or later | Later, unless someone is already in App Store Connect. | Joe/Ryan/release owner |
 | Rename GitHub repo | Defer until active PRs clear. | Joe/Ryan |
-| Add app icon/logo changes | Audit current icon first; defer if icon is abstract and does not say Wander. | Design/product |
+| Add app icon/logo changes | Yes for the app icon: replace the legacy `W` with the map/save/social mark. Defer broader logo/wordmark work. | Decided by Joe on 2026-07-12. |
 | Keep `Wander` internal names | Yes for P0/P1. | Engineering |
 
 ## GSTACK REVIEW REPORT
