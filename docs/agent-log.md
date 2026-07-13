@@ -10531,3 +10531,10 @@ Files changed:
 - `Wander/Features/Map/PlaceProfileMapSurface.swift`
 - `WanderTests/PlaceProfilePresentationTests.swift`
 - `docs/agent-log.md`
+
+Handoff, 2026-07-12 22:20 PDT:
+
+- Committed and pushed the rendering fix as `1ba06e813` (`Fix REC-82 place photo rendering`).
+- Updated ready PR #75 with the device-reported symptom, confirmed lifecycle root cause, CAVA media proof, new regression, 274-test result, and exact device reconnect steps: https://github.com/joelipshutz/wander/pull/75. The PR remains clean and mergeable against `main` at handoff.
+- Added Linear evidence comment `72504ce2-e7dc-4e4d-b03a-b35e3ebc095a` and returned REC-82 to `In Review`.
+- Remaining manual step: unlock Ry’s iPhone and attach it by cable or restore same-LAN wireless reachability, press Run in the already-open REC-82 Xcode project, then reopen CAVA to confirm its Google image appears in both the collapsed tile and full header. No backend redeploy, migration, TestFlight build, build-number bump, or Slack release note is required for this client-only fix.
