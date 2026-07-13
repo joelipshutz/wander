@@ -2280,6 +2280,8 @@ struct PlaceSheetPlace {
     let websiteURLString: String?
     let phoneNumber: String?
     let actionLinksJSON: String?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
     let compactSubtitleOverride: String?
     let status: PlaceStatus?
     let visibility: PlaceVisibility?
@@ -2296,6 +2298,20 @@ struct PlaceSheetPlace {
             rawProviderType: rawProviderType
         )
     }
+
+    var photoRequest: PlacePhotoRequest {
+        PlacePhotoRequest(
+            placeID: id,
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID
+        )
+    }
+
+    var photoLookupKey: String { photoRequest.lookupKey }
 
     init(visiblePlace: VisiblePlace) {
         self.id = visiblePlace.place.id
@@ -2314,6 +2330,8 @@ struct PlaceSheetPlace {
         self.websiteURLString = visiblePlace.place.websiteURLString
         self.phoneNumber = visiblePlace.place.phoneNumber
         self.actionLinksJSON = visiblePlace.place.actionLinksJSON
+        self.sourceProvider = visiblePlace.place.sourceProvider
+        self.sourceProviderPlaceID = visiblePlace.place.sourceProviderPlaceID
         self.compactSubtitleOverride = nil
         self.status = visiblePlace.userPlace.status
         self.visibility = visiblePlace.userPlace.visibility
@@ -2339,6 +2357,8 @@ struct PlaceSheetPlace {
         self.websiteURLString = candidate.websiteURLString
         self.phoneNumber = candidate.phoneNumber
         self.actionLinksJSON = candidate.actionLinksJSON
+        self.sourceProvider = candidate.sourceProvider
+        self.sourceProviderPlaceID = candidate.sourceProviderPlaceID
         self.compactSubtitleOverride = candidate.previewSubtitle()
         self.status = nil
         self.visibility = nil

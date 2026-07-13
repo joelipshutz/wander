@@ -829,6 +829,142 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
     }
 
+    func testPlacePhotoRepositoryInvokesEdgeFunctionAndMapsAttribution() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "provider": "google_places",
+          "provider_place_id": "ChIJwoodcat",
+          "photo_url": "https://lh3.googleusercontent.com/example",
+          "width": 1600,
+          "height": 1000,
+          "author_name": "Woodcat Coffee",
+          "author_profile_url": "https://maps.google.com/maps/contrib/example",
+          "author_avatar_url": "https://lh3.googleusercontent.com/avatar",
+          "source_photo_url": "https://www.google.com/maps/photos/example",
+          "flag_content_url": "https://www.google.com/maps/photos/flag/example"
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: "1532 Sunset Blvd, Los Angeles, CA",
+            latitude: 34.0777,
+            longitude: -118.2588,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-woodcat"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "google_places")
+        XCTAssertEqual(photo.providerPlaceID, "ChIJwoodcat")
+        XCTAssertEqual(photo.authorName, "Woodcat Coffee")
+        XCTAssertEqual(photo.sourcePhotoURL?.host, "www.google.com")
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["name"] as? String, "Woodcat Coffee")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider"] as? String, "mapkit")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider_place_id"] as? String, "mapkit-woodcat")
+        XCTAssertEqual(
+            try XCTUnwrap(rpc.rawBodies[0]["latitude"] as? Double),
+            34.0777,
+            accuracy: 0.00001
+        )
+    }
+
+    func testPlacePhotoRepositoryFallsBackToFirstVisibleVisitPhotoAndAuthenticatedStorage() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000001",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg",
+          "width": 1200,
+          "height": 900
+        }]
+        """.data(using: .utf8)
+        let storage = RecordingStorage()
+        storage.downloadData = Data([0xFF, 0xD8, 0xFF])
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: storage)
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000001",
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        let photo = try await repository.photo(for: request)
+        let data = try await repository.imageData(for: photo)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(photo.providerPlaceID, "55000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(photo.storageBucket, "visit-photos")
+        XCTAssertEqual(data, Data([0xFF, 0xD8, 0xFF]))
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
+    }
+
+    func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000002",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/coordinate.jpg",
+          "width": 900,
+          "height": 1200
+        }]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: RecordingStorage())
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000002",
+            name: "A custom pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "coordinate",
+            sourceProviderPlaceID: "coordinate_34.09435_-118.44982"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
+    }
+
+    func testPlacePhotoLookupKeyUsesProviderIdentityAndCoordinates() {
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: nil,
+            latitude: 34.077712,
+            longitude: -118.258812,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "ChIJwoodcat"
+        )
+
+        XCTAssertEqual(
+            request.lookupKey,
+            "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
+        )
+    }
+
+    func testDroppedPinPhotoRequestSkipsGooglePlacesLookup() {
+        let request = PlacePhotoRequest(
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        XCTAssertTrue(request.skipsGooglePlacesLookup)
+    }
+
     func testNotificationRepositoryCallsPreferenceAndTokenRPCs() async throws {
         let rpc = RecordingRPC()
         rpc.responses["get_notification_preferences"] = """
@@ -1007,6 +1143,8 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     private(set) var uploads: [Upload] = []
     private(set) var deletes: [Delete] = []
+    private(set) var downloads: [Delete] = []
+    var downloadData = Data()
 
     func uploadObject(
         bucket: String,
@@ -1028,6 +1166,11 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     func deleteObject(bucket: String, path: String) async throws {
         deletes.append(Delete(bucket: bucket, path: path))
+    }
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        downloads.append(Delete(bucket: bucket, path: path))
+        return downloadData
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {

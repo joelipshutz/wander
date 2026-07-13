@@ -686,6 +686,104 @@ struct VisitPhotoResult: Equatable {
     let uploadState: VisitPhotoUploadState
 }
 
+struct PlacePhotoRequest: Encodable, Equatable {
+    let placeID: String?
+    let name: String
+    let address: String?
+    let latitude: Double?
+    let longitude: Double?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
+
+    init(
+        placeID: String? = nil,
+        name: String,
+        address: String?,
+        latitude: Double?,
+        longitude: Double?,
+        sourceProvider: String?,
+        sourceProviderPlaceID: String?
+    ) {
+        self.placeID = placeID
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case placeID = "place_id"
+        case name
+        case address
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+    }
+
+    var lookupKey: String {
+        let coordinate = [latitude, longitude]
+            .compactMap { $0.map { String(format: "%.5f", $0) } }
+            .joined(separator: ",")
+        return [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+            .joined(separator: "|")
+    }
+
+    var skipsGooglePlacesLookup: Bool {
+        let provider = sourceProvider?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let normalizedName = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return provider == "coordinate"
+            || sourceProviderPlaceID?.lowercased().hasPrefix("coordinate_") == true
+            || normalizedName == "dropped pin"
+    }
+}
+
+struct PlacePhoto: Decodable, Equatable {
+    let provider: String
+    let providerPlaceID: String
+    let photoURLString: String
+    let width: Int?
+    let height: Int?
+    let authorName: String?
+    let authorProfileURLString: String?
+    let authorAvatarURLString: String?
+    let sourcePhotoURLString: String?
+    let flagContentURLString: String?
+    let storageBucket: String?
+    let storagePath: String?
+    let localAssetRef: String?
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case providerPlaceID = "provider_place_id"
+        case photoURLString = "photo_url"
+        case width
+        case height
+        case authorName = "author_name"
+        case authorProfileURLString = "author_profile_url"
+        case authorAvatarURLString = "author_avatar_url"
+        case sourcePhotoURLString = "source_photo_url"
+        case flagContentURLString = "flag_content_url"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case localAssetRef = "local_asset_ref"
+    }
+
+    var photoURL: URL? { URL(string: photoURLString) }
+    var authorProfileURL: URL? { authorProfileURLString.flatMap(URL.init(string:)) }
+    var authorAvatarURL: URL? { authorAvatarURLString.flatMap(URL.init(string:)) }
+    var sourcePhotoURL: URL? { sourcePhotoURLString.flatMap(URL.init(string:)) }
+    var isGooglePlacesPhoto: Bool { provider == "google_places" }
+}
+
 struct SaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
@@ -922,6 +1020,13 @@ protocol UserPlaceRepository {
 @MainActor
 protocol SocialPlaceSaveRepository {
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult
+}
+
+@MainActor
+protocol PlacePhotoRepository {
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func imageData(for photo: PlacePhoto) async throws -> Data
 }
 
 @MainActor

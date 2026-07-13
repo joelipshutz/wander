@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import pg from "pg";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
@@ -31,8 +32,13 @@ async function main() {
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
+  if (options.linked) {
+    runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID);
+    return;
+  }
   const dbURL = options.dbURL ?? process.env.WANDER_SUPABASE_DB_URL ?? buildDirectDatabaseURL();
   assertSafeDatabaseURL(dbURL);
+  const { default: pg } = await import("pg");
   const { Client } = pg;
 
   const client = new Client({
@@ -50,7 +56,7 @@ async function main() {
       await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
       await runOwnPlaceSmokeChecks(client, smokeUserID);
       await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
-      console.log("Supabase smoke test passed: semantic own-place saves and place-list access boundaries are valid.");
+      console.log("Supabase smoke test passed: semantic own-place saves, place-list access, and preferred-place-photo visibility boundaries are valid.");
     } finally {
       await client.query("rollback");
     }
@@ -79,6 +85,9 @@ function parseArgs(args) {
         parsed.dbURL = requiredValue(args, index, arg);
         index += 1;
         break;
+      case "--linked":
+        parsed.linked = true;
+        break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
@@ -100,10 +109,12 @@ function printHelp() {
   console.log(`
 Usage:
   node scripts/supabase-smoke-test.mjs
+  node scripts/supabase-smoke-test.mjs --linked
 
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
+  --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
@@ -113,6 +124,196 @@ Notes:
   Run npm --prefix scripts ci --ignore-scripts once to install the pinned pg dependency.
   Every fixture and behavior mutation runs in one transaction and is rolled back.
 `);
+}
+
+function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
+  const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
+  const filePath = join(directory, "linked-smoke.sql");
+  try {
+    writeFileSync(filePath, buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    const result = spawnSync(
+      "pnpm",
+      ["dlx", "supabase", "db", "query", "--linked", "--file", filePath],
+      { cwd: process.cwd(), encoding: "utf8", env: process.env },
+    );
+    if (result.status !== 0) {
+      throw new Error((result.stderr || result.stdout || "linked Supabase query failed").trim());
+    }
+    console.log("Supabase smoke test passed: linked preferred-place-photo visibility and provider-quota contracts are valid.");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID) {
+  const smokeUser = sqlString(smokeUserID);
+  const collaboratorUser = sqlString(collaboratorUserID);
+  const strangerUser = sqlString(strangerUserID);
+  const smokeVisitID = "56000000-0000-0000-0000-000000000001";
+  const smokePhotoID = "57000000-0000-0000-0000-000000000001";
+
+  return `
+begin;
+
+${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
+
+insert into public.follows (follower_user_id, followed_user_id, source)
+values (${collaboratorUser}, ${smokeUser}, 'profile')
+on conflict (follower_user_id, followed_user_id) do nothing;
+
+update public.user_places up
+set status = 'been', visibility = 'followers', deleted_at = null
+from public.places p
+where up.place_id = p.id
+  and up.user_id = ${smokeUser}
+  and p.source_provider = 'codex_smoke'
+  and p.source_provider_place_id = 'place-list-rpc-smoke';
+
+insert into public.place_visits (id, user_place_id, visited_at, note, backfilled_from_user_place, deleted_at)
+select
+  '${smokeVisitID}'::uuid,
+  up.id,
+  now(),
+  'Rolled back linked preferred-photo smoke visit',
+  false,
+  null
+from public.user_places up
+join public.places p on p.id = up.place_id
+where up.user_id = ${smokeUser}
+  and p.source_provider = 'codex_smoke'
+  and p.source_provider_place_id = 'place-list-rpc-smoke'
+on conflict (id) do update set deleted_at = null, updated_at = now();
+
+insert into public.visit_photos (
+  id, visit_id, storage_bucket, storage_path, content_type, sort_order, upload_state, deleted_at
+)
+values (
+  '${smokePhotoID}'::uuid,
+  '${smokeVisitID}'::uuid,
+  'visit-photos',
+  ${smokeUser} || '/${smokeVisitID}/${smokePhotoID}.jpg',
+  'image/jpeg',
+  0,
+  'uploaded',
+  null
+)
+on conflict (id) do update set upload_state = 'uploaded', deleted_at = null, updated_at = now();
+
+do $metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'first_visible_place_photo'
+    and pg_get_function_identity_arguments(p.oid) = 'input_place_id uuid';
+  if valid is distinct from true then
+    raise exception 'preferred-place-photo metadata contract failed';
+  end if;
+end
+$metadata$;
+
+do $quota_metadata$
+declare
+  valid boolean;
+begin
+  select
+    p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+    and not has_table_privilege('authenticated', 'app.place_photo_request_counters', 'select')
+    and not has_table_privilege('authenticated', 'app.place_photo_request_counters', 'insert')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'consume_place_photo_quota'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if valid is distinct from true then
+    raise exception 'place-photo quota metadata contract failed';
+  end if;
+end
+$quota_metadata$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $quota_behavior$
+begin
+  if public.consume_place_photo_quota() is distinct from true then
+    raise exception 'place-photo quota rejected an authenticated request below the caps';
+  end if;
+end
+$quota_behavior$;
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $owner$
+declare resolved uuid;
+begin
+  select photo_id into resolved
+  from public.first_visible_place_photo((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ));
+  if resolved is distinct from '${smokePhotoID}'::uuid then
+    raise exception 'owner preferred-place-photo visibility failed';
+  end if;
+end
+$owner$;
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $follower$
+declare resolved uuid;
+begin
+  select photo_id into resolved
+  from public.first_visible_place_photo((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ));
+  if resolved is distinct from '${smokePhotoID}'::uuid then
+    raise exception 'follower preferred-place-photo visibility failed';
+  end if;
+end
+$follower$;
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${strangerUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $stranger$
+declare visible_count integer;
+begin
+  select count(*)::integer into visible_count
+  from public.first_visible_place_photo((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ));
+  if visible_count <> 0 then
+    raise exception 'stranger preferred-place-photo visibility failed';
+  end if;
+end
+$stranger$;
+
+reset role;
+rollback;
+`;
 }
 
 function loadEnvFile(filePath) {
@@ -394,6 +595,14 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
   const smokePlaceID = fixture.rows[0].place_id;
 
   await assertPlaceListRPCMetadata(client);
+  await runFirstVisiblePlacePhotoChecks(
+    client,
+    smokeUserID,
+    collaboratorUserID,
+    strangerUserID,
+    smokeUserPlaceID,
+    smokePlaceID,
+  );
   await setAuthenticatedUser(client, smokeUserID);
 
   await expectQuery(
@@ -586,6 +795,119 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     "anonymous role cannot call list RPCs",
     "select count(*) from public.visible_place_lists()",
     [],
+    /permission denied/,
+  );
+}
+
+async function runFirstVisiblePlacePhotoChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+  smokeUserPlaceID,
+  smokePlaceID,
+) {
+  await expectQuery(
+    client,
+    "preferred-place-photo RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'first_visible_place_photo'
+        and pg_get_function_identity_arguments(p.oid) = 'input_place_id uuid'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
+  await client.query(
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values ($1, $2, 'profile')
+      on conflict (follower_user_id, followed_user_id) do nothing
+    `,
+    [collaboratorUserID, smokeUserID],
+  );
+  await client.query(
+    "update public.user_places set status = 'been', visibility = 'followers' where id = $1::uuid",
+    [smokeUserPlaceID],
+  );
+  const photoFixture = await expectQuery(
+    client,
+    "create rolled-back preferred place photo fixture",
+    `
+      with inserted_visit as (
+        insert into public.place_visits (user_place_id, visited_at, note, backfilled_from_user_place)
+        values ($1::uuid, now(), 'Rolled back preferred-photo smoke visit', false)
+        returning id
+      ), ids as (
+        select inserted_visit.id as visit_id, gen_random_uuid() as photo_id
+        from inserted_visit
+      )
+      insert into public.visit_photos (
+        id, visit_id, storage_bucket, storage_path, content_type, sort_order, upload_state
+      )
+      select
+        ids.photo_id,
+        ids.visit_id,
+        'visit-photos',
+        $2 || '/' || ids.visit_id::text || '/' || ids.photo_id::text || '.jpg',
+        'image/jpeg',
+        0,
+        'uploaded'
+      from ids
+      returning id
+    `,
+    [smokeUserPlaceID, smokeUserID],
+    (result) => result.rows.length === 1,
+  );
+  const expectedPhotoID = photoFixture.rows[0].id;
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner can resolve first visible place photo",
+    "select * from public.first_visible_place_photo($1::uuid)",
+    [smokePlaceID],
+    (result) => result.rows[0]?.photo_id === expectedPhotoID,
+  );
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "follower can resolve first visible place photo",
+    "select * from public.first_visible_place_photo($1::uuid)",
+    [smokePlaceID],
+    (result) => result.rows[0]?.photo_id === expectedPhotoID,
+  );
+
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQuery(
+    client,
+    "stranger cannot resolve hidden place photo",
+    "select count(*)::integer as count from public.first_visible_place_photo($1::uuid)",
+    [smokePlaceID],
+    (result) => result.rows[0]?.count === 0,
+  );
+
+  await client.query("set local role anon");
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call preferred-place-photo RPC",
+    "select * from public.first_visible_place_photo($1::uuid)",
+    [smokePlaceID],
     /permission denied/,
   );
 }
