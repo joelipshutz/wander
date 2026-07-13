@@ -11032,7 +11032,6 @@ Release validation checkpoint, 2026-07-13 17:43 PDT:
 - Full `WanderTests` suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build71-test/Logs/Test/Test-Wander-2026.07.13_17-38-43--0700.xcresult`).
 - Generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using the same validated DerivedData.
 - `git diff --check` passes. Next: final diff inspection, build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
-
 Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 
 - Build-number PR #89 was reviewed clean and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/89. Exact release source commit: `7b4d64082efae189a09abc9fd2831adecdbac671`.
@@ -11045,3 +11044,55 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
+
+## 2026-07-13 14:22 PDT - Codex - REC-89 Profile Redesign Mockups
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89` (`Reimagine Profile, social graph, dining calendar, map, and account settings`), In Progress
+
+Goal: audit the current Profile and Settings experience, run the requested iOS design and engineering plan reviews, then build SwiftUI-only mockups for approval before production functionality, persistence, authentication, deletion, contacts, or backend wiring begins.
+
+Starting status:
+
+- Created a clean isolated worktree from latest `origin/main` at `302324d9f`; the root REC-81 checkout remains untouched.
+- Root checkout has an unrelated untracked `.pnpm-store/` and is 13 commits behind its REC-81 remote branch. Those files are not part of REC-89.
+- User supplied six Beli reference screenshots covering profile hierarchy, edit profile, dining calendar, dining map, and blocked/muted empty states.
+- Requested design-only surfaces: owner profile, social graph tabs, edit profile, settings home, Privacy & Trust, Blocked & Muted, and both destructive account-deletion confirmations.
+- Existing Been/Wanna destination pages must remain unchanged. This phase may reuse their current profile tiles but will not wire new behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/plans/` and/or `docs/reviews/` for durable design/engineering decisions
+- `Wander/Features/Profile/` mockup-only SwiftUI surfaces
+- `Wander/Features/Settings/` mockup-only SwiftUI surfaces
+- Focused mockup/contract tests if needed
+
+Review and mockup plan:
+
+1. Run `ios-design-review` against the current app/profile surfaces and the supplied references.
+2. Run `plan-eng-review` against existing Profile, Settings, store, identity, save-date, category, follow/block, and navigation contracts.
+3. Build isolated SwiftUI mockups with deterministic fixture data and no production persistence/backend wiring.
+4. Capture every mockup on the current simulator target and a smaller iPhone, then present the screenshots for approval.
+5. Stop before production functionality and wiring; implementation starts only after Ryan approves the mockups.
+
+Review checkpoint, 2026-07-13 16:22 PDT:
+
+- Completed the requested static iOS design review and engineering plan review. Durable outputs are `docs/reviews/2026-07-13-rec-89-profile-redesign-ios-design-review.md` and `docs/plans/2026-07-13-rec-89-profile-redesign-eng-plan.md`.
+- Live-device inspection is blocked because the paired iPhone is currently unavailable and this checkout has no DebugBridge/StateServer instrumentation. The design review therefore uses the six supplied Beli references plus current SwiftUI source; simulator captures remain required before handoff.
+- Locked the design direction to Beli-inspired information hierarchy in rec.me's warm palette: owner identity and actions, social graph, unchanged Been/Wanna destinations, visit calendar, noninteractive dining map, edit profile, account/security settings, Privacy & Trust, blocked/muted states, and native two-stage deletion alerts.
+- Locked the implementation boundary for this branch: deterministic `#if DEBUG` SwiftUI mockups and launch-argument tests only. No production navigation, persistence, Clerk, Supabase, contacts, share routing, deletion, mute, or notification behavior will be changed before visual approval.
+- Engineering review found two critical future contracts: mutes do not exist yet, and the current Clerk deletion webhook soft-deletes profiles instead of satisfying permanent account deletion. Both are explicitly deferred from this visual branch and documented in the plan.
+- Existing `LocalProfile`, Been saves/visits, canonical categories, place coordinates, one-way follows, mutual-friend derivation, blocks, and avatar upload provide most future inputs. The future calendar will use Been visit dates, while Wanna saves remain excluded.
+- No overlapping agent work was found in this isolated worktree. The root REC-81 checkout and its unrelated untracked `.pnpm-store/` remain untouched.
+
+Mockup validation checkpoint, 2026-07-13 16:32 PDT:
+
+- Added a deterministic `#if DEBUG` SwiftUI approval harness with 14 launchable states: owner profile, calendar, dining map, populated/empty social graph, edit profile, settings, Privacy & Trust, populated/empty blocked and muted tabs, and both native deletion alerts. Launch with `-WanderProfileRedesignMockup <page>`; no production routing or data behavior is changed.
+- Generated the Xcode project. The project diff only adds `ProfileRedesignMockups.swift` to the Profile group and app target; no signing or unrelated generated churn is present.
+- Captured and manually inspected all 14 states on iPhone 17 Pro and iPhone 17e simulators. Fixed duplicate weekday identities in the calendar and corrected the dining-map camera so all five Been-only fixture dots remain visible. The smaller-device pass found no remaining overlap or truncation in actions, tabs, rows, empty states, or native alerts.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec89-build`; only the existing traditional-headermap warning was emitted.
+- Full test suite passed on iPhone 17 Pro / iOS 26.5: 280 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec89-tests/Logs/Test/Test-Wander-2026.07.13_16-26-56--0700.xcresult`). `git diff --check` passes.
+- Physical-device and Dynamic Type XXL review remain blocked by the unavailable paired iPhone and absent DebugBridge instrumentation. Production functionality remains intentionally deferred until Ryan approves these mockups.

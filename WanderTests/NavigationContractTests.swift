@@ -89,6 +89,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
     }
 
+    func testProfileRedesignMockupLaunchArgumentResolvesEveryApprovalState() {
+        for page in ProfileRedesignMockupPage.allCases {
+            XCTAssertEqual(
+                ProfileRedesignMockupPage.resolved(
+                    from: ["Wander", "-WanderProfileRedesignMockup", page.rawValue]
+                ),
+                page
+            )
+        }
+    }
+
+    func testProfileRedesignMockupLaunchArgumentFallsBackWithoutAValidPage() {
+        XCTAssertNil(ProfileRedesignMockupPage.resolved(from: ["Wander"]))
+        XCTAssertEqual(
+            ProfileRedesignMockupPage.resolved(from: ["Wander", "-WanderProfileRedesignMockup"]),
+            .ownerProfile
+        )
+        XCTAssertEqual(
+            ProfileRedesignMockupPage.resolved(
+                from: ["Wander", "-WanderProfileRedesignMockup", "not-a-page"]
+            ),
+            .ownerProfile
+        )
+    }
+
     @MainActor
     func testMapScreenCanResolvePlaceProfileLaunchArgumentsForVisualQA() {
         XCTAssertEqual(
