@@ -11654,3 +11654,8 @@ Production implementation and validation checkpoint, 2026-07-13 23:25 PDT:
 - Focused regressions passed 3/3. The final iPhone 17 Pro / iOS 26.5 suite passed 328 tests with 0 failures: `/private/tmp/DerivedData-rec92-production/Logs/Test/Test-Wander-2026.07.13_23-20-13--0700.xcresult`. The generic iOS Simulator build passed for arm64 and x86_64; the only warning is the existing traditional-headermap warning.
 - Production Profile visual QA passed on iPhone 17 Pro and smaller iPhone 17e with no clipping or overlap. Screenshots: `/private/tmp/rec92-production-profile-17pro.png` and `/private/tmp/rec92-production-profile-17e.png`. The approved populated inbox/banner mock screenshots remain `/private/tmp/rec92-inbox-latest-17pro.png`, `/private/tmp/rec92-inbox-latest-17e.png`, `/private/tmp/rec92-profile-banner-latest-17pro.png`, and `/private/tmp/rec92-profile-banner-latest-17e.png`.
 - No TestFlight build was requested or created. Remaining release evidence is the deliberate physical two-account test: receive a fresh invite, let the banner expire, recover it from Profile, review/edit/save the recipient copy with a photo, and verify decline on a second invite.
+
+Latest-main integration and handoff, 2026-07-13 23:28 PDT:
+
+- Production implementation commit: `b27c800f5`. Integrated `origin/main` through `d959504d6` with merge commit `41f74858d`; the only incoming file was this append-only build 73 release log, and both histories were preserved chronologically.
+- PR #95 remains the physical-test handoff: https://github.com/joelipshutz/wander/pull/95. Keep REC-92 `In Review` while Ryan and Joe run the two-account checklist; the exact branch is `codex/rec-92-invitation-inbox` in `/private/tmp/recme-rec92-invitation-inbox`.
