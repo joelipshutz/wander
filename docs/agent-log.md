@@ -11343,3 +11343,23 @@ Release completion, 2026-07-13 21:10 PDT:
 - Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784002212136389. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
 - Added final release evidence to Linear `REC-85` and `REC-91` and moved both issues from `In Review` to `Done`. Mission Control remained unavailable at `http://localhost:4000` throughout this release.
 - Validation shipped with 296 tests / 0 failures, a passing generic iOS Simulator build, and a passing signed Release archive. Known follow-up remains the post-fix physical Instruments comparison because the paired iPhone disconnected; this is called out in both TestFlight What to Test and Slack rather than treated as passed.
+
+## 2026-07-13 21:48 PDT - Codex - REC-88 Physical-Test Follow-Up Completion
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup` (to be fast-forwarded into `codex/rec-88-visit-friends-mockup`)
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`; move to `In Review` after push)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Final outcome:
+
+- Fixed all three failures from the first physical Shared Visits test. Pending invitees now render immediately on the sender card; notification responses are synchronously buffered, deduplicated, auth-aware, and retained across retryable cold-launch failures; and Edit This Visit now safely loads and exactly reconciles add/remove/clear membership.
+- Deployed hosted migration `20260714043000_manage_shared_visit_invitees.sql` to project `rugmtlgufrhlxwfkumhw`. The owner-only exact-membership RPC removes pending delivery/snapshots without deleting an already accepted recipient-owned visit, and source companion attribution includes pending invitees.
+- Hosted rollback pgTAP passed 70/70 before merge. Metadata checks confirmed the three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`. The linked rollback smoke passed again after merging latest `origin/main`: photo visibility, provider quota, and Shared Visits contracts are valid.
+- Merged latest `origin/main` at `258414060`, preserving build 72 plus the REC-85/REC-91 Lists/Discover performance fixes. The only conflicts were additive changes in `WanderLocalStore.swift` and chronological entries in this log; both implementations and histories were retained in merge commit `ab6f6fa8f`.
+- Final iPhone 17 Pro / iOS 26.5 suite passed 305 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec88-followup-final/Logs/Test/Test-Wander-2026.07.13_21-41-56--0700.xcresult`.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning remains.
+- Visual verification passed with no clipping or overlap on iPhone 17 Pro and smaller iPhone 17e. Screenshots: `/private/tmp/rec88-followup-editor-17pro.png`, `/private/tmp/rec88-followup-editor-17e.png`, and `/private/tmp/rec88-followup-card-17pro.png`.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
+- No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.
