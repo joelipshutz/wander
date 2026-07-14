@@ -14,7 +14,6 @@ struct DiscoverScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var selectedOwnerCandidateID: String?
-    @State private var tickerIndex = 0
     @FocusState private var searchFieldFocused: Bool
 
     private let tickerSuggestions = [
@@ -138,7 +137,6 @@ struct DiscoverScreen: View {
                 await refreshRemotePlacesIfNeeded()
                 await refreshPlaces()
                 await refreshMembers()
-                await runTicker()
             }
             .onChange(of: auth.isSignedIn) { _, _ in
                 Task {
@@ -255,7 +253,7 @@ struct DiscoverScreen: View {
     private var placesSearchField: some View {
         DiscoverSearchField(
             text: $placesQuery,
-            placeholder: tickerSuggestions[tickerIndex],
+            placeholders: tickerSuggestions,
             isTicker: true,
             accessibilityLabel: "Search places"
         )
@@ -265,7 +263,7 @@ struct DiscoverScreen: View {
     private var membersSearchField: some View {
         DiscoverSearchField(
             text: $memberQuery,
-            placeholder: "Search rec.me members",
+            placeholders: ["Search rec.me members"],
             isTicker: false,
             accessibilityLabel: "Search rec.me members"
         )
@@ -630,15 +628,6 @@ struct DiscoverScreen: View {
         return store.shell(for: localProfile)
     }
 
-    private func runTicker() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 2_600_000_000)
-            guard !isPlacesSearchActive, selectedMode == .places else { continue }
-            withAnimation(.easeInOut(duration: 0.24)) {
-                tickerIndex = (tickerIndex + 1) % tickerSuggestions.count
-            }
-        }
-    }
 }
 
 private enum DiscoverMode: String, CaseIterable, Identifiable {
@@ -710,9 +699,15 @@ private struct EmptyPanel: View {
 
 private struct DiscoverSearchField: View {
     @Binding var text: String
-    let placeholder: String
+    let placeholders: [String]
     let isTicker: Bool
     let accessibilityLabel: String
+    @State private var placeholderIndex = 0
+
+    private var placeholder: String {
+        guard !placeholders.isEmpty else { return "" }
+        return placeholders[placeholderIndex % placeholders.count]
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -761,6 +756,25 @@ private struct DiscoverSearchField: View {
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
         .accessibilityLabel(accessibilityLabel)
+        .task {
+            await runPlaceholderTicker()
+        }
+    }
+
+    private func runPlaceholderTicker() async {
+        guard isTicker, placeholders.count > 1 else { return }
+
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 2_600_000_000)
+            } catch {
+                return
+            }
+            guard text.isEmpty else { continue }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                placeholderIndex = (placeholderIndex + 1) % placeholders.count
+            }
+        }
     }
 }
 

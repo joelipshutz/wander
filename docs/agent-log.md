@@ -11045,3 +11045,128 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
+
+## 2026-07-12 18:08 PDT - Codex - REC-85 Lists performance investigation
+
+Agent: Codex
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85`
+
+Goal: reproduce and root-cause reported janky scrolling and back navigation in Lists on current TestFlight/main before choosing a fix or adding diagnostics.
+
+Starting status:
+
+- Worktree is clean at `origin/main` commit `a81b971`; current TestFlight is build 68.
+- Investigation will compare demo-fixture and live-data behavior to separate rendering/navigation cost from remote list refresh and state-publication churn.
+- Likely files to inspect are `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, Lists backend/repository code, and focused tests. No runtime files will be edited until a root cause is supported by profiling or code-path evidence.
+- Engineering review gate is not required for read-only diagnosis. It will run before implementation if the recommended fix changes shared sync/state behavior or cross-screen contracts.
+
+Investigation checkpoint, 2026-07-12 18:29 PDT:
+
+- Built current `origin/main` successfully for iPhone 16 Plus / iOS 18.6 after clearing completed task-only DerivedData caches that had left 116 MB free. No source, app data, archive, or branch data was removed.
+- Launched the populated fixture Lists home and detail scenarios and captured a 20-second Time Profiler trace at `/private/tmp/rec85-list-detail-launch.trace`.
+- The fixture launch reported no potential hang above 250 ms. This does not clear the live path: demo fixtures disable persistence and the unauthenticated remote refresh fails before hydrating a real list set.
+- Supported bottleneck chain from code and trace evidence:
+  - Lists home runs sync plus a full remote list refresh whenever the screen task appears.
+  - Every list detail repeats sync plus the same full remote list refresh before loading suggestions.
+  - `refreshRemotePlaceLists` fetches summaries, then each owner profile's visible places, then every visible list detail sequentially.
+  - Summary hydration publishes and persists once; each list detail then publishes and persists again. Persistence constructs and pretty-prints the complete store snapshot and performs an atomic file write synchronously from the main-actor store.
+  - Each store publication invalidates all tab children. The trace sampled hidden `MapScreen.visiblePlaces`/grouping work and `ListsScreen.body` during Lists detail launch.
+  - Lists rebuilds `PlaceListMock` values after publication; each list calls `store.visiblePlaces(in:)`, which rebuilds the entire visible social place set before matching that list's items.
+- macOS Accessibility permission is unavailable to `osascript`, so automated simulator swipes/back gestures cannot be generated from this environment without adding a UI-test harness. Joe's iPhone 16 Pro is connected and developer-enabled, so the highest-signal next step is a short physical-device Time Profiler/Animation Hitches capture while Joe reproduces My Lists scroll, list detail scroll, and back navigation.
+- Recommendation: do not add broad print/network logging. If the physical trace needs more attribution, add narrow `os_signpost` intervals around Lists home/detail tasks, remote summary/detail hydration, full-snapshot persistence, list view-model projection, and navigation push/pop.
+
+Investigation checkpoint, 2026-07-13 19:00 PDT:
+
+- Rebased the dedicated REC-85 worktree onto current `origin/main` / TestFlight build 71. The Lists refresh, projection, and persistence paths are unchanged by the intervening build 69-71 work; REC-82 only added place-photo metadata plumbing to Lists.
+- Reconfirmed the supported root-cause chain on current main: Lists home and detail each start a full list sync/refresh; refresh publishes summaries, refreshes each owner, and hydrates every list detail; the main-actor store persists after the summary batch and again after every detail; `PlaceListMock` projection recomputes the full visible social place set per list after publications.
+- Pulled the build 68 test device's local store into `/private/tmp` for aggregate measurement only, then deleted the temporary source and benchmark copies. No place names, notes, coordinates, account identifiers, or other private values were printed or persisted to the repo. The snapshot is 106,525 bytes with 14 visible/server-backed lists, two list owners, 23 list items, 10 places, and 130 attributes.
+- A 50-iteration local approximation of the current pretty-printed, sorted, atomic snapshot-write path averaged 2.21 ms per 106 KB write on the Mac before snapshot-model construction or SwiftUI invalidation cost. With the current device data, one refresh can cause about 20 persistence passes: one summary pass, owner metadata/attribute passes, and one pass per list detail. That is enough synchronous main-actor work to consume multiple 16.7 ms frame budgets.
+- Apple's current SwiftUI performance guidance matches the trace/code pattern: frequent dependency-driven view updates and long body work cause hitches; the next validation should use the SwiftUI Instruments template on a real device, then Time Profiler within the long-update range.
+- The connected iPhone has build 68 installed, but two automated launch attempts were denied because the phone was locked. A physical SwiftUI/Time Profiler trace remains the highest-signal before/after validation once the phone is unlocked and rec.me is open.
+- Root-cause hypothesis: scroll and Back jank in Lists comes from a burst of coarse `WanderStore` publications plus repeated synchronous full-store persistence and repeated list projection on the main actor while the navigation/scroll surfaces are rendering. Network latency extends the refresh window but is not itself the frame hitch.
+- Scope lock was intentionally skipped because the supported cause crosses `Wander/Features/Lists`, `Wander/Services/WanderLocalStore.swift`, and `Wander/Services/WanderStorePersistence.swift`; any implementation should still stay within those modules plus focused tests and docs.
+- Mission Control could not be updated because `http://localhost:4000` is not running. Linear `REC-85` remains the durable tracker and stays In Progress pending the physical trace and implementation decision.
+
+Handoff, 2026-07-13 19:03 PDT:
+
+- Pushed `codex/rec-85-lists-jank` and opened draft PR #91: https://github.com/joelipshutz/wander/pull/91. Linked the PR and the current-main measurement checkpoint to Linear `REC-85`.
+- No runtime code changed, so no iOS build/test run was required for this docs-only checkpoint. `git diff --check` passed before the final handoff note.
+- Exact restart: unlock the connected iPhone, open rec.me build 68, record the `SwiftUI` Instruments template for 45 seconds while scrolling My Lists, opening a list, scrolling detail, and navigating Back repeatedly; inspect Long View Body Updates/Hitches and use Time Profiler in that range.
+- If the physical trace confirms the supported chain, implementation should coalesce remote list hydration into one store publication/persistence pass, avoid a full global list refresh on every detail appearance, move file encoding/writes off the main actor while preserving ordering, and cache/index list projections so each list does not rebuild the full visible-place set.
+- Add narrow signposts only if SwiftUI + Time Profiler cannot distinguish those intervals. Do not add broad print, network, or analytics logging for this UI performance bug.
+
+Physical-device profiling checkpoint, 2026-07-13 19:21 PDT:
+
+- Unlocked and launched the installed rec.me build 68 on Joe's connected iPhone, then recorded a 46.36-second physical-device `SwiftUI` Instruments trace while Joe scrolled Lists, opened a list, scrolled detail, and navigated Back. The trace is temporarily retained at `/private/tmp/rec85-device-swiftui.trace`; no private app payloads were copied into the repo or printed in the findings.
+- Instruments recorded repeated `Potentially expensive app update(s)` hitches during the Lists interaction window, including stalls of 133.36 ms, 162.53 ms, 200.03 ms, 250.04 ms, 266.71 ms, 275.05 ms, 283.38 ms, and a 350.06 ms peak.
+- The trace contained 217,022 SwiftUI updates, with 3,023 updates at or above 0.5 ms. There were 59 long `ListsScreen` dynamic-body updates totaling 2.12 seconds; every one exceeded the 16.67 ms frame budget and most took 33-45 ms. `ListDetailScreen` body updates reached 15.6 ms, while the row bodies were secondary (`ListPlaceRow`: 40 long updates / 22.5 ms total; `ListVisiblePlaceAddRow`: 16 / 47.9 ms total).
+- The shared store invalidation also repeatedly recomputed hidden `MapScreen` body work. Its 59 captured long intervals totaled 972 ms and reached roughly 16-17.5 ms, confirming that coarse `WanderStore` publication makes non-visible tabs compete with the active Lists surface.
+- Time Profiler contained 1,391 `JSONEncoder`/`JSONWriter` samples. Fifty-three of the 59 over-budget `ListsScreen` body updates were preceded by JSON encoding within 50 ms; in the common case the gap was only 1-6 ms. This directly connects the previously identified main-actor full-store persistence bursts to the long SwiftUI invalidations and user-visible hitches.
+- Root cause is confirmed: the primary problem is repeated remote hydration publishing and synchronously persisting the whole store, followed by expensive global view/projection recomputation. Network latency lengthens the refresh window but is not the frame-blocking work; eager detail rows are a secondary contributor, not the main cause.
+- Additional broad logging is not warranted. Instruments already distinguishes the relevant intervals. Narrow development-only signposts around refresh, hydration, persistence, and projection could be added later as regression instrumentation, but they are not required to choose or validate the fix.
+- Recommended implementation order: (1) hydrate a remote list refresh into local staging state and commit/persist once, (2) stop running the full global list refresh whenever a detail appears, (3) serialize/coalesce persistence and move JSON encoding plus file I/O off the main actor without allowing stale snapshots to win, and (4) cache/index visible-place-to-list projections and narrow observation so unrelated/hidden tab bodies do not rebuild. Consider lazy detail rows only after those primary changes.
+- Required validation for the fix: focused tests that assert one publication/persistence boundary per refresh and preserve sync ordering, the full iOS suite, then the same real-device SwiftUI trace. Acceptance should show no repeated `ListsScreen` body intervals over one frame during steady scrolling/back navigation and materially lower hitch duration/count.
+- No runtime code changed in this investigation. Linear `REC-85` and PR #91 are the durable evidence/handoff surfaces; Mission Control remains unavailable at `http://localhost:4000`.
+
+Local device-build checkpoint, 2026-07-13 19:34 PDT:
+
+- At Joe's request, built commit `f186817` as a signed Debug app for the connected iPhone 16 Pro (`00008140-0018152C08A2201C`) with Xcode's device destination and automatic provisioning. The build succeeded in 64.474 seconds with only the existing traditional-headermap warning.
+- Installed `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app` over bundle `com.grayline.wander` and launched it successfully on the phone. No app-data reset or uninstall command was run. This build contains the diagnosed current behavior; the REC-85 performance fix is not implemented yet.
+
+Lists/Discover follow-up capture, 2026-07-13 19:40 PDT:
+
+- Joe confirmed that Lists remains choppy in the local Debug baseline, which is expected because PR #91 contains investigation documentation only and no REC-85 runtime fix. Captured another 45-second physical-device SwiftUI trace after Joe also reported choppy Discover scrolling; the original trace is temporarily retained at `/private/tmp/rec85-lists-discover-device.trace`.
+- Discover showed a separate deterministic invalidation source rather than the Lists persistence burst. `DiscoverScreen` rebuilt 18 times at an almost exact 2.6-second cadence, totaling 117.41 ms and reaching 9.58 ms per body. `LatestActivityRow` rebuilt 180 times—exactly ten visible rows per screen update—totaling 493.97 ms and reaching 9.62 ms per row.
+- The cadence exactly matches `runTicker()`: it sleeps for 2.6 seconds, then animates the parent `tickerIndex` solely to rotate the search-field placeholder. Because that state belongs to `DiscoverScreen`, every placeholder tick invalidates the entire visible activity feed during scrolling. No individual Discover body exceeded 16.67 ms and Instruments recorded no formal hitch in this capture, but the periodic batch explains the reported micro-stutter.
+- Created high-priority bug `REC-91` for implementation: isolate ticker state/animation inside `DiscoverSearchField` or a dedicated small ticker view so placeholder changes cannot rebuild activity rows; preserve stable row identity and make the feed lazy if it can grow. Physical-device acceptance requires that ticker rotation produce zero `LatestActivityRow` updates during steady scrolling.
+- Added the REC-91 evidence and link to Linear REC-85. REC-85 remains the Lists/global-store persistence fix; REC-91 is the distinct Discover placeholder-ticker fix. No runtime code changed during this follow-up diagnosis.
+
+## 2026-07-13 20:09 PDT - Codex - REC-85 + REC-91 implementation
+
+Agent: Codex using the `ios-fix` workflow
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85` and `REC-91`, both moved to `In Progress`
+
+Goal: implement the confirmed Lists persistence/publication fix and the separate Discover ticker-isolation fix, validate both with focused/full tests and repeat physical-device traces, then release the validated latest `main` to TestFlight as explicitly requested.
+
+Starting status:
+
+- Fetched `origin`; the branch is clean, six investigation commits ahead of and zero commits behind current `origin/main`. Existing worktrees do not overlap this isolated branch. PR #91 was returned to draft for implementation.
+- Pre-fix evidence is retained in physical Instruments traces at `/private/tmp/rec85-device-swiftui.trace` and `/private/tmp/rec85-lists-discover-device.trace`. The first showed 59/59 `ListsScreen` updates over one frame with JSON persistence immediately preceding 53/59; the second showed 180 activity-row rebuilds at the exact 2.6-second placeholder-ticker cadence.
+- The `ios-fix` workflow normally captures a debug `StateServer` snapshot fixture before editing. This repo has no `StateServer`, `DebugBridge`, or restore API by prior documented decision, so the physical traces are the reproducing pre-fix snapshots and deterministic Swift test fixtures will provide the durable regression guard. No debug-server scope will be added.
+- Expected implementation files are `Wander/Features/Discover/DiscoverScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, focused files under `WanderTests/`, and this coordination log. `project.yml`, auth, payments, schema/RLS, and app build number are out of the implementation diff; build number changes only in the later explicit TestFlight release step.
+- Mission Control remains unavailable at `http://localhost:4000`; Linear and PR #91 are the durable trackers.
+
+Engineering review checkpoint, 2026-07-13 20:16 PDT:
+
+- Reviewed the implementation boundary against the confirmed device traces before editing shared store code. The smallest safe design is: fetch remote list payloads first, apply them synchronously inside one persistence transaction, keep remote-owner failures best-effort, replace the detail screen's global refresh with a selected-list refresh, and build all list-card projections from one shared visible-place candidate pass.
+- The persistence transaction will only wrap the synchronous apply phase, never the network awaits. This preserves immediate durability for unrelated user mutations while collapsing the existing nested summary/profile/attribute/detail saves into one ordered snapshot write.
+- The Discover fix owns placeholder index and timer state inside `DiscoverSearchField`; the parent `DiscoverScreen` no longer observes ticker state, so a placeholder animation cannot invalidate the activity feed.
+- Regression coverage will assert one persistence save per full remote-list refresh, selected-list detail refresh without a global summary request, batched list projection equivalence, and structural ownership of Discover ticker state. Existing remote-list merge/pending-local-change tests remain the behavior guard.
+- Explicitly not in this fix: a global store-observation rewrite, asynchronous persistence semantics, new logging/signposts, backend/schema changes, lazy-row redesign, or a new debug state server. Those are larger changes and are not needed to address the measured causes.
+
+Implementation checkpoint, 2026-07-13 20:25 PDT:
+
+- Discover now keeps the 2.6-second placeholder index and animation task inside `DiscoverSearchField`; `DiscoverScreen` no longer owns or awaits ticker state. The search experience and animation are unchanged, but ticker ticks cannot invalidate the activity feed.
+- Lists now stages remote summaries, owner places/relationships, and details before a synchronous apply. Nested profile/attribute/list persistence requests are deferred during that apply and flushed as one final snapshot write. Auxiliary owner hydration remains best-effort, preserving the prior list-refresh success behavior.
+- List detail appearance refreshes only the selected remote list instead of the entire list collection, and its task identity is stable across local-to-server id reconciliation. Lists home computes the visible social-place candidate set once and reuses it for all card projections.
+- Added regression coverage for ticker state ownership, batched list-projection equivalence, one persisted snapshot per full hydration batch, and selected-list detail refresh without a global summary request.
+- Focused REC-85/REC-91 run passed: 5 tests, 0 failures. Full iPhone 16 Plus / iOS 18.6 simulator suite passed: 295 tests, 0 failures. Both used `/private/tmp/DerivedData-rec85-focused`; the only build warning is the existing traditional-headermap warning.
+
+Device-build checkpoint, 2026-07-13 20:36 PDT:
+
+- The first signed-device attempt exposed a host problem rather than a code failure: the data volume had only 116 MB free, leaving an incomplete `Wander.debug.dylib` that `codesign` reported as an internal subsystem error. A disposable signing probe confirmed the development identity itself remained valid.
+- Removed only failed REC-85 device DerivedData and stale Wander Xcode DerivedData caches, recovering 7.3 GB. Source, archives, installed app data, and the passing simulator result bundle were not touched.
+- Rebuilt the patched branch for generic iOS with automatic provisioning and one build job. The signed Debug device build succeeded in 158.812 seconds with only the existing traditional-headermap warning; app path: `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app`.
+- The iPhone 16 Pro remains visible to Xcode/Instruments but is currently marked offline, so installation and the required post-fix physical SwiftUI trace are pending unlock/reconnect. No app uninstall or data reset will be used when it returns online.
+
+Pre-landing review checkpoint, 2026-07-13 20:49 PDT:
+
+- Applied the repo's `recme-pr-review-merge-release` and gstack pre-landing review gates to the complete PR #91 diff. Scope is clean; persistence ordering, partial refresh behavior, selected-list refresh, SwiftUI task/state lifetime, security/privacy, performance, migration, design-system, and adversarial failure-mode checks found no blocking issue. Greptile has no comments on the PR.
+- This Codex session is explicitly prohibited from spawning subagents, so the gstack specialist and independent-adversarial checklists were applied locally instead of dispatching review subagents. This limitation and the evidence are recorded on both Linear issues.
+- Review found one cheap coverage gap and added `testRemotePlaceListRefreshKeepsSummariesWhenOneDetailFails`, proving the staged refresh still applies summaries, records the detail error, and persists exactly once. Its focused run passed: 1 test, 0 failures.
+- Final branch suite passed on iPhone 16 Plus / iOS 18.6: 296 tests, 0 failures. Result: `/private/tmp/DerivedData-rec85-focused/Logs/Test/Test-Wander-2026.07.13_20-46-54--0700.xcresult`. `git diff --check` passes; the only build warning remains the existing traditional-headermap warning.
+- After repeated checks, the paired iPhone is still `unavailable` in CoreDevice and is absent from USB/local-network reachability. The requested TestFlight release will not be held on the cable; REC-85/REC-91 remain `In Review`, and the first build-72 tester task is to repeat Lists scroll/detail/Back and Discover steady scrolling on-device. If the phone reconnects before archive completion, the local after trace will still run first.
