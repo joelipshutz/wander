@@ -19,7 +19,7 @@ struct ProfileOwnerHome: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
                 savedPlacesSection
                 ProfileCalendarSection(
@@ -276,7 +276,6 @@ private struct ProfileCalendarSection: View {
 
     private var calendar: Calendar { .current }
     private var weekdays: [String] { calendar.veryShortStandaloneWeekdaySymbols }
-    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 6), count: 7) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -301,26 +300,31 @@ private struct ProfileCalendarSection: View {
                 ProfileCalendarMetric(value: insights.monthCityCount, label: "cities")
             }
 
-            LazyVGrid(columns: columns, spacing: WanderTheme.spacing2) {
-                ForEach(Array(weekdays.enumerated()), id: \.offset) { _, weekday in
-                    Text(weekday)
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .frame(maxWidth: .infinity, minHeight: 28)
+            Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2) {
+                GridRow {
+                    ForEach(Array(weekdays.enumerated()), id: \.offset) { _, weekday in
+                        Text(weekday)
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                    }
                 }
 
-                ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
-                    if let date {
-                        let day = calendar.startOfDay(for: date)
-                        Button {
-                            dateAction(date, insights.monthPlaceIDs[day] ?? [])
-                        } label: {
-                            ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                ForEach(Array(monthWeeks.enumerated()), id: \.offset) { _, week in
+                    GridRow {
+                        ForEach(Array(week.enumerated()), id: \.offset) { _, date in
+                            if let date {
+                                let day = calendar.startOfDay(for: date)
+                                ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selectDate(date, day: day) }
+                                    .accessibilityAddTraits(.isButton)
+                                    .accessibilityHint("Shows places from this date")
+                                    .accessibilityAction { selectDate(date, day: day) }
+                            } else {
+                                ProfileCalendarDayCell(date: nil, visitCount: nil)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows places from this date")
-                    } else {
-                        ProfileCalendarDayCell(date: nil, visitCount: nil)
                     }
                 }
             }
@@ -360,11 +364,24 @@ private struct ProfileCalendarSection: View {
         return leading + dates
     }
 
+    private var monthWeeks: [[Date?]] {
+        var days = monthDays
+        let trailingCount = (7 - (days.count % 7)) % 7
+        days.append(contentsOf: Array<Date?>(repeating: nil, count: trailingCount))
+        return stride(from: 0, to: days.count, by: 7).map { start in
+            Array(days[start..<(start + 7)])
+        }
+    }
+
     private func shiftMonth(_ value: Int) {
         guard let next = calendar.date(byAdding: .month, value: value, to: selectedMonth) else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             selectedMonth = next
         }
+    }
+
+    private func selectDate(_ date: Date, day: Date) {
+        dateAction(date, insights.monthPlaceIDs[day] ?? [])
     }
 }
 
