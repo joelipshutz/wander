@@ -11363,3 +11363,36 @@ Final outcome:
 - Visual verification passed with no clipping or overlap on iPhone 17 Pro and smaller iPhone 17e. Screenshots: `/private/tmp/rec88-followup-editor-17pro.png`, `/private/tmp/rec88-followup-editor-17e.png`, and `/private/tmp/rec88-followup-card-17pro.png`.
 - Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
 - No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.
+
+## 2026-07-13 22:16 PDT - Codex - REC-92 Shared Visit Invitation Inbox Mockup
+
+Agent: Codex
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`, related to `REC-88`)
+Base: latest `origin/main` commit `672b60894`
+
+Goal: mock the replacement for the persistent Shared Visit card: a brief, tappable in-app banner with no dismiss control plus a durable Profile invitation inbox with clear review/save and decline actions.
+
+Starting coordination and decisions:
+
+- The root Xcode checkout remains on the merged REC-88 branch with unrelated untracked `.pnpm-store/`; it will not be touched. REC-88's recipient timestamp failure is separately preserved in `/private/tmp/recme-rec88-accept-timestamp` and paused before app-code edits.
+- No active worktree reports edits to the proposed mockup files. `docs/agent-log.md` is inherently shared; this entry is appended chronologically from latest `origin/main`.
+- The durable entry belongs immediately after Profile identity/stats rather than inside People: the pending object is a place action, not a relationship-management task. The page title and row label will be `visit invitations`.
+- The primary action is `Review & save`, not `Accept`, because opening an invite still requires the recipient to review and create an independent visit. `Decline` remains an explicit secondary action.
+- Mockup scope is DEBUG-only and deterministic. Expected files: a new Shared Visits mockup source, `Wander/App/WanderApp.swift`, `WanderTests/NavigationContractTests.swift`, generated project membership if needed, and this log. Live Map/Profile behavior, persistence, backend, and notification routing remain unchanged pending visual approval.
+
+Plan:
+
+1. Build Profile/banner and invitation-inbox mockup states against existing Wander tokens and components.
+2. Add deterministic launch-argument coverage and regenerate with XcodeGen.
+3. Run focused/full iOS validation plus generic build, then capture current and smaller-phone screenshots for review.
+
+Mockup completion, 2026-07-13 22:27 PDT:
+
+- Added three DEBUG-only deterministic states: `profileBanner`, `inbox`, and `emptyInbox`, launched with `-WanderSharedVisitInvitationMockup <state>`. Production Map/Profile behavior and Shared Visit persistence remain unchanged.
+- The transient treatment is a compact, tappable banner with inviter avatar, place name, timestamp, and chevron; it intentionally has no X. The production implementation is specified to auto-dismiss after about three seconds while the durable invite remains in the inbox.
+- Profile now has a mock `visit invitations` action directly after stats with a pending-count badge. The dedicated inbox uses place context, inviter identity, tags, and large `Review & save` / `Decline` actions. `Review & save` preserves the independent-recipient-save contract instead of implying an instant accept.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e / iOS 26.5 with no clipped text, overlapping controls, or undersized actions in the populated states. Screenshots: `/private/tmp/rec92-profile-banner-17pro.png`, `/private/tmp/rec92-profile-banner-17e.png`, `/private/tmp/rec92-inbox-17pro.png`, and `/private/tmp/rec92-inbox-17e.png`.
+- Focused launch-contract test passed 1/1. Full suite passed 306 tests with 0 failures: `/private/tmp/DerivedData-rec92/Logs/Test/Test-Wander-2026.07.13_22-23-37--0700.xcresult`. Generic iOS Simulator build also passed; only the existing traditional-headermap warning remains.
+- No backend, migration, notification routing, app-state behavior, TestFlight build, or hosted state changed. Next step after design approval is production wiring: durable pending-invite Profile navigation, three-second banner state, review routing, decline confirmation/failure handling, badge refresh, and accessibility/reduced-motion behavior.

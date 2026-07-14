@@ -98,6 +98,28 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testSharedVisitInvitationMockupsHaveDeterministicLaunchPages() {
+        XCTAssertEqual(
+            SharedVisitInvitationMockupPage.resolved(
+                from: ["Wander", "-WanderSharedVisitInvitationMockup", "profileBanner"]
+            ),
+            .profileBanner
+        )
+        XCTAssertEqual(
+            SharedVisitInvitationMockupPage.resolved(
+                from: ["Wander", "-WanderSharedVisitInvitationMockup", "inbox"]
+            ),
+            .inbox
+        )
+        XCTAssertEqual(
+            SharedVisitInvitationMockupPage.resolved(
+                from: ["Wander", "-WanderSharedVisitInvitationMockup", "emptyInbox"]
+            ),
+            .emptyInbox
+        )
+        XCTAssertNil(SharedVisitInvitationMockupPage.resolved(from: ["Wander"]))
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)

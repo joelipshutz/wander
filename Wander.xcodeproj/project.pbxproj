@@ -37,6 +37,7 @@
 		540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */; };
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		5E4B71CB254F3580D462444C /* WanderStorePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */; };
+		5ECA86C8754452C7BDA640D8 /* SharedVisitInvitationMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371EAC3EDF40B93525734DEB /* SharedVisitInvitationMockups.swift */; };
 		624B7434FC70AF6F3EE1EB94 /* ProfileAvatarStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */; };
 		63D03A5DB6608EC245B1087E /* RemoteRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B79CCA80D059C362EF9946 /* RemoteRepositoryTests.swift */; };
 		6C035ED0288DBF6D7F44666C /* WanderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */; };
@@ -112,6 +113,7 @@
 		317CB1CBE1C6774523775204 /* WanderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WanderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		34977B260344994771BCC93E /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
 		3697512B32B506276A012FE2 /* MapRegionFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitterTests.swift; sourceTree = "<group>"; };
+		371EAC3EDF40B93525734DEB /* SharedVisitInvitationMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVisitInvitationMockups.swift; sourceTree = "<group>"; };
 		38B79CCA80D059C362EF9946 /* RemoteRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRepositoryTests.swift; sourceTree = "<group>"; };
 		3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarStorage.swift; sourceTree = "<group>"; };
 		3A8893E8CF16E21653DE03BA /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 			isa = PBXGroup;
 			children = (
 				F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */,
+				371EAC3EDF40B93525734DEB /* SharedVisitInvitationMockups.swift */,
 			);
 			path = SharedVisits;
 			sourceTree = "<group>";
@@ -557,6 +560,7 @@
 				A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
 				9A2B61C3874341AE3A94072F /* SharedVisitComponents.swift in Sources */,
+				5ECA86C8754452C7BDA640D8 /* SharedVisitInvitationMockups.swift in Sources */,
 				E4B474B631166BEA26F3C833 /* SupabaseDTOs.swift in Sources */,
 				FDC3BBDAB70F2C27C113113B /* SupabaseRepositories.swift in Sources */,
 				52B8AC44581CEA630201DEB3 /* SyncStateMachine.swift in Sources */,

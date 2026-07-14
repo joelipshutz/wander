@@ -22,7 +22,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let activityMockupPage = PlaceActivityMockupPage.resolved() {
+            if let invitationMockupPage = SharedVisitInvitationMockupPage.resolved() {
+                SharedVisitInvitationMockupRoot(page: invitationMockupPage)
+            } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if let mockupPage = CategoryTaxonomyMockupPage.resolved() {
                 CategoryTaxonomyMockupRoot(page: mockupPage)
