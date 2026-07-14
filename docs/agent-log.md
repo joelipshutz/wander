@@ -11653,3 +11653,18 @@ Physical-fix publishing completion, 2026-07-14 13:31 PDT:
 - Committed the stable-container implementation, focused regression contract, and physical trace record as `5f201cb0c` (`fix: stabilize profile calendar scrolling`) and pushed it to the existing `codex/rec-94-profile-calendar-scroll` branch. Ready PR #99 now contains the complete physical-watchdog fix: https://github.com/joelipshutz/wander/pull/99.
 - Added the non-PII watchdog signature, accepted root cause, exact fix, physical-device pass, 325-test result, and universal simulator-build result to Linear REC-94, then moved it from `In Progress` back to `In Review`. The issue remains open until PR/release handling is explicitly requested and completed.
 - Logged the verified iOS 26 lazy SwiftUI/MapKit watchdog pattern to the local gstack investigation knowledge store for future Profile debugging. No sysdiagnose archive, extracted diagnostic, DerivedData output, signing material, or other local trace artifact is tracked by Git or included in the PR.
+
+## 2026-07-14 13:35 PDT - Codex - REC-94 Landing And TestFlight Build 74
+
+Agent: Codex using `recme-pr-review-merge-release` and `review`
+Branch: `codex/rec-94-profile-calendar-scroll`, followed by an isolated build-74 release branch from merged `main`
+Linear: `REC-94` (`In Review`)
+
+Goal: squash-merge ready PR #99 after a final pre-landing review, then package exact latest `main` into explicit TestFlight build 74, attach it to `Wander Alpha`, publish tester-facing notes, and close REC-94 only after TestFlight availability is confirmed.
+
+Starting status:
+
+- Ryan explicitly requested both squash merge and a new TestFlight build. PR #99 is ready, mergeable, and clean against exact latest `origin/main` at `d959504d6`; it has no hold label, draft state, unresolved review, failing required check, backend/schema change, or project/signing churn.
+- Latest completed TestFlight is build 73. `project.yml` still has `CURRENT_PROJECT_VERSION: "73"`, and the release log records build 73 as uploaded, attached to the public `Wander Alpha` group, and externally approved. No unfinished build-number bump or pending explicit release exists.
+- Eligible app change since build 73 is REC-94 only: stable eager Profile/calendar containers plus the prior scroll-compatible date interaction. The affected physical iPhone passed the formerly deterministic second-scroll freeze sequence and remained tappable afterward; the branch also passed 325/325 tests and a generic arm64/x86_64 simulator build.
+- The PR body still states the superseded simulator-only diagnosis that lazy containers were restored. Before merge, update it to the physical watchdog root cause and final eager-container implementation so the durable PR record matches the shipped code and Linear evidence.
