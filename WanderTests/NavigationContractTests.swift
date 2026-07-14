@@ -53,6 +53,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("ScrollView {"))
+        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: WanderTheme.spacing6)"))
+        XCTAssertTrue(source.contains("Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2)"))
+        XCTAssertFalse(source.contains("LazyVStack"))
+        XCTAssertFalse(source.contains("LazyVGrid"))
         XCTAssertTrue(source.contains(".onTapGesture { selectDate(date, day: day) }"))
         XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
         XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
