@@ -1702,7 +1702,7 @@ final class WanderStoreTests: XCTestCase {
 
         store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
         repository.resumeInbox()
-        await refreshTask.value
+        _ = await refreshTask.value
 
         XCTAssertEqual(store.currentUser.id, "user_sarah")
         XCTAssertNil(store.sharedVisitInboxUserID)

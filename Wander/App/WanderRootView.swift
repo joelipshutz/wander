@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -15,6 +16,9 @@ struct WanderRootView: View {
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
     @State private var signedInMaintenanceUserID: String?
+    @State private var sharedVisitBannerInvitation: SharedVisitInvitation?
+    @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
+    @State private var sharedVisitBannerTask: Task<Void, Never>?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
@@ -68,6 +72,23 @@ struct WanderRootView: View {
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
         .environmentObject(store)
+        .overlay {
+            GeometryReader { proxy in
+                if let invitation = sharedVisitBannerInvitation {
+                    SharedVisitNotificationBanner(invitation: invitation) {
+                        openSharedVisitFromBanner(invitation)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.top, proxy.safeAreaInsets.top + WanderTheme.spacing2)
+                    .transition(
+                        accessibilityReduceMotion
+                            ? .opacity
+                            : .move(edge: .top).combined(with: .opacity)
+                    )
+                    .zIndex(10)
+                }
+            }
+        }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             addTabResetToken = UUID()
         }) {
@@ -101,6 +122,9 @@ struct WanderRootView: View {
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
+        }
+        .onAppear {
+            seedSharedVisitBannerTracker()
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -144,6 +168,9 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)
         }
+        .onChange(of: store.sharedVisitInvitations) { _, invitations in
+            presentSharedVisitBannerIfNeeded(from: invitations)
+        }
         .onOpenURL { url in
             if let route = Self.sharedProfileRoute(for: url) {
                 sharedProfile = route
@@ -152,6 +179,9 @@ struct WanderRootView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             scheduleSignedInMaintenance(for: auth.state)
+        }
+        .onDisappear {
+            sharedVisitBannerTask?.cancel()
         }
     }
 
@@ -207,6 +237,7 @@ struct WanderRootView: View {
             return
         }
         store.apply(authState: state)
+        resetSharedVisitBannerTracking()
 
         if case .signedIn(let session) = state {
             if let maintenanceUserID = signedInMaintenanceUserID,
@@ -219,6 +250,55 @@ struct WanderRootView: View {
             #if DEBUG
             WanderDebugLog.sync.debug("auth state applied without backfill state=\(state.debugSummary, privacy: .public)")
             #endif
+        }
+    }
+
+    private func seedSharedVisitBannerTracker() {
+        sharedVisitBannerTracker.seed(
+            invitationKeys: store.sharedVisitInvitations.map(SharedVisitBannerTracker.key)
+        )
+    }
+
+    private func resetSharedVisitBannerTracking() {
+        sharedVisitBannerTask?.cancel()
+        sharedVisitBannerTask = nil
+        sharedVisitBannerInvitation = nil
+        seedSharedVisitBannerTracker()
+    }
+
+    private func presentSharedVisitBannerIfNeeded(from invitations: [SharedVisitInvitation]) {
+        let keys = invitations.map(SharedVisitBannerTracker.key)
+        guard let nextKey = sharedVisitBannerTracker.nextUnseenKey(in: keys),
+              let invitation = invitations.first(where: { SharedVisitBannerTracker.key(for: $0) == nextKey })
+        else { return }
+
+        sharedVisitBannerTask?.cancel()
+        withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.22)) {
+            sharedVisitBannerInvitation = invitation
+        }
+
+        sharedVisitBannerTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled,
+                  sharedVisitBannerInvitation.map(SharedVisitBannerTracker.key) == nextKey
+            else { return }
+            dismissSharedVisitBanner()
+        }
+    }
+
+    private func openSharedVisitFromBanner(_ invitation: SharedVisitInvitation) {
+        dismissSharedVisitBanner()
+        pushNotifications.openSharedVisit(
+            participantID: invitation.participantID,
+            generation: invitation.invitationGeneration
+        )
+    }
+
+    private func dismissSharedVisitBanner() {
+        sharedVisitBannerTask?.cancel()
+        sharedVisitBannerTask = nil
+        withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
+            sharedVisitBannerInvitation = nil
         }
     }
 

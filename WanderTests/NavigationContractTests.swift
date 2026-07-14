@@ -161,6 +161,27 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertNil(SharedVisitInvitationMockupPage.resolved(from: ["Wander"]))
     }
 
+    func testSharedVisitBannerOnlySurfacesNewInvitationGenerations() {
+        let generationOne = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 1)
+        let generationTwo = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 2)
+        var tracker = SharedVisitBannerTracker()
+
+        tracker.seed(invitationKeys: [generationOne])
+
+        XCTAssertNil(tracker.nextUnseenKey(in: [generationOne]))
+        XCTAssertEqual(tracker.nextUnseenKey(in: [generationTwo, generationOne]), generationTwo)
+        XCTAssertNil(tracker.nextUnseenKey(in: [generationTwo, generationOne]))
+    }
+
+    func testSharedVisitBannerPresentsOnlyNewestInviteWhenRefreshAddsSeveral() {
+        let newest = SharedVisitBannerTracker.key(participantID: "participant-newest", generation: 1)
+        let older = SharedVisitBannerTracker.key(participantID: "participant-older", generation: 1)
+        var tracker = SharedVisitBannerTracker()
+
+        XCTAssertEqual(tracker.nextUnseenKey(in: [newest, older]), newest)
+        XCTAssertNil(tracker.nextUnseenKey(in: [newest, older]))
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)

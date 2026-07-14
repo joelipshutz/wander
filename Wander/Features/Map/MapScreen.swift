@@ -287,19 +287,6 @@ struct MapScreen: View {
                         }
                         .frame(height: 48)
 
-                        if let invitation = store.sharedVisitInvitations.first {
-                            SharedVisitInboxCard(
-                                invitation: invitation,
-                                additionalCount: max(0, store.sharedVisitInvitations.count - 1),
-                                onOpen: {
-                                    Task { await openSharedVisitInvitation(invitation) }
-                                },
-                                onDecline: {
-                                    Task { await declineSharedVisitInvitation(invitation) }
-                                }
-                            )
-                            .padding(.horizontal, WanderTheme.spacing3)
-                        }
                     }
 
                     Spacer()
@@ -524,28 +511,6 @@ struct MapScreen: View {
             )
         )
         pushNotifications.consumeNavigationRequest(id: requestID)
-    }
-
-    private func openSharedVisitInvitation(_ cachedInvitation: SharedVisitInvitation) async {
-        let invitation = await store.refreshSharedVisitContext(
-            participantID: cachedInvitation.participantID,
-            generation: cachedInvitation.invitationGeneration,
-            backend: backend
-        )
-        guard let invitation else {
-            mapSearchMessage = "That shared visit is no longer available."
-            return
-        }
-        mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
-    }
-
-    private func declineSharedVisitInvitation(_ invitation: SharedVisitInvitation) async {
-        let declined = await store.declineSharedVisit(
-            participantID: invitation.participantID,
-            generation: invitation.invitationGeneration,
-            backend: backend
-        )
-        mapSearchMessage = declined ? "Shared visit declined." : "Could not decline that shared visit. Try again."
     }
 
     private func toggle(_ filter: MapFilter) {

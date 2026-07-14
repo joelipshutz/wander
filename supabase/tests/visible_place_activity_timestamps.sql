@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(27);
+select plan(29);
 
 select is(
   (select prosecdef from pg_proc where oid = 'app.sync_user_place_latest_visit()'::regprocedure),
@@ -71,8 +71,20 @@ select ok(
 );
 
 select ok(
-  (select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[])) from pg_proc where oid = 'public.profile_visible_places(text,text[],text[])'::regprocedure),
+  (select 'search_path=app, public' = any(coalesce(proconfig, array[]::text[])) from pg_proc where oid = 'public.profile_visible_places(text,text[],text[])'::regprocedure),
   'public profile_visible_places pins search_path'
+);
+
+select ok(
+  (select pg_get_function_result('app.profile_visible_places(text,text[],text[])'::regprocedure))
+    like '%saved_at timestamp with time zone%',
+  'app profile_visible_places preserves persisted save timestamps in its return contract'
+);
+
+select ok(
+  (select pg_get_function_result('public.profile_visible_places(text,text[],text[])'::regprocedure))
+    like '%saved_at timestamp with time zone%',
+  'public profile_visible_places preserves persisted save timestamps in its return contract'
 );
 
 select ok(

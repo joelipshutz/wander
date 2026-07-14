@@ -224,8 +224,9 @@ final class WanderStore: ObservableObject {
         persistence.save(WanderStoreSnapshot(store: self))
     }
 
-    func refreshSharedVisitInbox(backend: WanderBackend?) async {
-        guard let backend, backend.canUseSharedVisits else { return }
+    @discardableResult
+    func refreshSharedVisitInbox(backend: WanderBackend?) async -> Bool {
+        guard let backend, backend.canUseSharedVisits else { return false }
         let requestUserID = currentUser.id
 
         let taskID: UUID
@@ -251,14 +252,16 @@ final class WanderStore: ObservableObject {
 
         do {
             let invitations = try await task.value
-            guard currentUser.id == requestUserID else { return }
+            guard currentUser.id == requestUserID else { return false }
             sharedVisitInvitations = invitations
             sharedVisitInboxUserID = requestUserID
             lastRemoteError = nil
             persist()
+            return true
         } catch {
-            guard currentUser.id == requestUserID else { return }
+            guard currentUser.id == requestUserID else { return false }
             lastRemoteError = remoteErrorMessage(error)
+            return false
         }
     }
 

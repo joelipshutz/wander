@@ -6,6 +6,7 @@ struct ProfileOwnerHome: View {
     let stats: ProfileStats
     let followerCount: Int
     let followingCount: Int
+    let sharedVisitInvitationCount: Int
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
     let isAvatarSaving: Bool
@@ -13,6 +14,7 @@ struct ProfileOwnerHome: View {
     let editAction: () -> Void
     let settingsAction: () -> Void
     let graphAction: (ProfileSocialGraphTab) -> Void
+    let sharedVisitInvitationsAction: () -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
     let calendarDateAction: (Date, [String]) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
@@ -21,6 +23,10 @@ struct ProfileOwnerHome: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
+                ProfileSharedVisitInboxRow(
+                    invitationCount: sharedVisitInvitationCount,
+                    action: sharedVisitInvitationsAction
+                )
                 savedPlacesSection
                 ProfileCalendarSection(
                     insights: insights,

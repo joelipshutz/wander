@@ -935,7 +935,8 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
     client,
     "profile insight payload includes geography and owner avatar column",
     `
-      select locality, region, country, owner_avatar_url
+      select locality, region, country, owner_avatar_url,
+             visited_at, saved_at, created_at, updated_at
       from public.profile_visible_places($1, null, null)
       limit 1
     `,
@@ -943,7 +944,11 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
     (result) => result.rows[0]?.locality === "Los Angeles"
       && result.rows[0]?.region === "CA"
       && result.rows[0]?.country === "United States"
-      && Object.hasOwn(result.rows[0] ?? {}, "owner_avatar_url"),
+      && Object.hasOwn(result.rows[0] ?? {}, "owner_avatar_url")
+      && Object.hasOwn(result.rows[0] ?? {}, "visited_at")
+      && Boolean(result.rows[0]?.saved_at)
+      && Boolean(result.rows[0]?.created_at)
+      && Boolean(result.rows[0]?.updated_at),
   );
 
   await expectQuery(

@@ -20,6 +20,7 @@ struct ProfileScreen: View {
     @State private var selectedPeopleMode: GraphListMode = .following
     @State private var savedListMode: SavedPlacesListMode?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
+    @State private var showsVisitInvitations = false
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
 
@@ -40,6 +41,7 @@ struct ProfileScreen: View {
                 stats: profileStats,
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
+                sharedVisitInvitationCount: store.sharedVisitInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
                 isAvatarSaving: isProfilePhotoSaving,
@@ -47,6 +49,7 @@ struct ProfileScreen: View {
                 editAction: { showsEditProfile = true },
                 settingsAction: { showsSettings = true },
                 graphAction: { socialGraphTab = $0 },
+                sharedVisitInvitationsAction: { showsVisitInvitations = true },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
                 },
@@ -106,11 +109,23 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
+                .navigationDestination(isPresented: $showsVisitInvitations) {
+                    SharedVisitInvitationInboxScreen { invitation in
+                        showsVisitInvitations = false
+                        pushNotifications.openSharedVisit(
+                            participantID: invitation.participantID,
+                            generation: invitation.invitationGeneration
+                        )
+                    }
+                    .environmentObject(store)
+                    .environmentObject(backend)
+                }
                 .task(id: auth.isSignedIn) {
                     guard auth.isSignedIn else { return }
                     await store.refreshRemoteCurrentProfile(backend: backend)
                     await store.refreshRemoteSocialGraph(backend: backend)
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
+                    await store.refreshSharedVisitInbox(backend: backend)
                     handleNotificationRoute(pushNotifications.navigationRequest)
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in

@@ -152,6 +152,10 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         self.configuration.isSupabaseConfigured
     }
 
+    static func encodeRequestBody<Value: Encodable>(_ value: Value) throws -> Data {
+        try RemoteEncoding.encoder.encode(value)
+    }
+
     func authenticatedHeaders() async throws -> [String: String] {
         guard self.configuration.isSupabaseConfigured else {
             #if DEBUG
@@ -208,7 +212,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
-        request.httpBody = try JSONEncoder().encode(params)
+        request.httpBody = try Self.encodeRequestBody(params)
 
         #if DEBUG
         WanderDebugLog.remote.debug("rpc request name=\(name, privacy: .public) path=\(endpoint.path, privacy: .public)")
@@ -296,7 +300,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.encodeRequestBody(body)
 
         #if DEBUG
         WanderDebugLog.remote.debug("function request name=\(name, privacy: .public) path=\(endpoint.path, privacy: .public)")

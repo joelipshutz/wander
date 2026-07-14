@@ -11609,3 +11609,37 @@ Linear: `REC-92` (`In Progress`; move to `In Review` after draft PR)
 - Scope remains a DEBUG-only visual/product mock. No production banner timer, pending-invitation persistence, Profile navigation, decline mutation, notification routing, backend migration, hosted state, or TestFlight build was changed.
 - Pushed remote branch `codex/rec-92-invitation-inbox` and opened draft PR #95: https://github.com/joelipshutz/wander/pull/95. Linked the PR and validation evidence on Linear `REC-92`, then moved the issue to `In Review`.
 - Next step is product approval of the transient banner, Profile placement, and `Review & save` / `Decline` inbox treatment. Production implementation should then add the three-second lifecycle, durable invite query/badge, review deep link, idempotent decline, error/retry handling, and accessibility/reduced-motion coverage.
+
+## 2026-07-13 22:55 PDT - Codex - REC-92 Production Invitation Inbox And Acceptance Repair
+
+Agent: Codex
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (draft)
+
+Goal: replace the approved DEBUG-only invitation mock with production Profile inbox/banner wiring, and repair the two failures observed during Joe's physical Shared Visit acceptance test.
+
+Starting status and evidence:
+
+- The isolated worktree is clean at `0105efbe3` and tracks the remote branch. The root checkout has unrelated untracked `.pnpm-store/` content and remains untouched. No overlapping edits were reported in the production files expected for this pass.
+- Joe's captured Supabase response identifies a concrete acceptance defect: `accept_shared_visit` received `visited_at` as an Apple reference-date number (`805697890.004973`) and PostgreSQL rejected it as `timestamptz`. `WanderSupabaseClient.call` and `invoke` use a default `JSONEncoder` even though `RemoteEncoding.encoder` already defines ISO-8601 dates.
+- The same session captured `profile_visible_places` omitting required `saved_at`, causing `RemoteVisiblePlaceDTO` decoding to fail. All prior definitions of that RPC will be inspected before adding any compatibility migration or client fallback.
+- Expected production files include the Supabase client/DTO or migration contract, Shared Visit/Profile/root presentation, focused repository/navigation tests, hosted smoke coverage if an RPC changes, generated project membership if needed, and this log.
+
+Implementation plan:
+
+1. Repair and regression-test production request date encoding, then reconcile the latest `profile_visible_places` return contract with the iOS DTO.
+2. Add the durable Profile invitation inbox, three-second tappable banner, review deep link, decline progress/error handling, and lifecycle refresh using the existing Shared Visit repository.
+3. Run focused/full iOS tests, generic build, hosted migration/security/smoke verification when applicable, visual QA on current and smaller iPhones, then push and update PR/Linear before opening the exact branch in Xcode.
+
+Production implementation and validation checkpoint, 2026-07-13 23:25 PDT:
+
+- Replaced the persistent Map invitation card/X treatment with a global, tappable Shared Visit banner. Only newly fetched participant-generation pairs surface, the banner dismisses after three seconds, Reduce Motion uses an opacity transition, and tapping it reuses the existing generation-scoped Shared Visit notification route.
+- Added the durable `visit invitations` row to the owner Profile and a production inbox with persisted pending invitations, pull-to-refresh/retry, `Review & save` routing, idempotent decline progress/error handling, and an honest empty state. Invitations remain available after the transient banner disappears and are removed by the existing accept/decline backend mutations.
+- Fixed Joe's acceptance failure at its source: all Supabase RPC and Edge Function request bodies now use the shared ISO-8601 encoder. The regression test exercises the nested `input_visit.visited_at` payload and confirms it is an ISO-8601 string rather than the rejected Apple reference-date number (`805697890.004973`).
+- Added and deployed hosted migration `20260714050000_restore_profile_visible_place_activity.sql`. It restores `visited_at`, `saved_at`, `created_at`, and `updated_at` while preserving the latest profile geography/avatar contract, explicit `security invoker` posture, pinned search paths, and authenticated-only grants. Post-deploy metadata confirmed both app/public signatures, grants, volatility, search paths, and timestamp columns.
+- Hosted verification passed: the profile activity pgTAP suite completed 29/29 assertions in a rollback transaction, and `node scripts/supabase-smoke-test.mjs --linked` passed its rollback-only profile, visibility, photo, quota, and Shared Visits contracts. The first smoke attempt did not reach Supabase because the CLI subprocess lacked Node on `PATH`; rerunning with the bundled Node runtime passed.
+- Focused regressions passed 3/3. The final iPhone 17 Pro / iOS 26.5 suite passed 328 tests with 0 failures: `/private/tmp/DerivedData-rec92-production/Logs/Test/Test-Wander-2026.07.13_23-20-13--0700.xcresult`. The generic iOS Simulator build passed for arm64 and x86_64; the only warning is the existing traditional-headermap warning.
+- Production Profile visual QA passed on iPhone 17 Pro and smaller iPhone 17e with no clipping or overlap. Screenshots: `/private/tmp/rec92-production-profile-17pro.png` and `/private/tmp/rec92-production-profile-17e.png`. The approved populated inbox/banner mock screenshots remain `/private/tmp/rec92-inbox-latest-17pro.png`, `/private/tmp/rec92-inbox-latest-17e.png`, `/private/tmp/rec92-profile-banner-latest-17pro.png`, and `/private/tmp/rec92-profile-banner-latest-17e.png`.
+- No TestFlight build was requested or created. Remaining release evidence is the deliberate physical two-account test: receive a fresh invite, let the banner expire, recover it from Profile, review/edit/save the recipient copy with a photo, and verify decline on a second invite.
