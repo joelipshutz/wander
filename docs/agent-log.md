@@ -11000,3 +11000,35 @@ REC-86 latest-main integration and pre-landing hardening, 2026-07-13 17:25 PDT:
 - Integrated full iOS suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped. Result: `/private/tmp/DerivedData-rec86-full/Logs/Test/Test-Wander-2026.07.13_17-21-27--0700.xcresult`.
 - Final generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec86-final-build`. An initial universal build attempt exhausted the remaining disk while writing dSYM output; after removing only completed temporary DerivedData, the clean rerun passed. This was an environment-capacity failure, not a source failure.
 - `git diff --check` passes. Next: commit/push the final docs-only main synchronization, update and squash-merge PR #81, then package latest `main` as explicitly requested TestFlight build 71.
+
+## 2026-07-13 17:39 PDT - Codex - REC-86 TestFlight Build 71
+
+Agent: Codex
+Branch: `codex/testflight-build-71`
+Worktree: `/private/tmp/recme-build71-release`
+Linear: `REC-86`, kept `In Review` through the requested TestFlight release
+
+Goal: package the merged REC-86 authoritative activity timestamp, ordering, and visit-date synchronization fixes as TestFlight build 71.
+
+Starting status:
+
+- PR #81 was independently reviewed, validated, and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/81. Release source starts at exact latest-main commit `25fd296`.
+- Build 70 is already `VALID`, attached to `Wander Alpha`, externally approved, and documented. This explicit release therefore increments the App Store build number exactly once from 70 to 71.
+- Hosted migrations `20260712214600_visible_place_activity_timestamps.sql` and `20260714001500_sync_user_place_latest_visit.sql` are already applied. Hosted pgTAP passes 27/27 assertions, and the linked database reports no pending migration.
+- Pre-release source validation passed 291/291 iOS tests and a generic iOS Simulator arm64 build. The release branch will regenerate the Xcode project and rerun the release gate after the build-number change.
+- Expected release files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this coordination log. No tester data will be deleted or reset.
+
+Release plan:
+
+1. Bump build 70 to 71, regenerate the Xcode project, and verify the generated diff is limited to matching build numbers plus this log.
+2. Run the full iOS suite and generic simulator build on the release branch.
+3. Open and squash-merge the build-number PR to `main`.
+4. Archive and upload signed build 71 from the exact resulting `main`, then run the TestFlight helper with the archive path.
+5. Post the required tester-facing Slack note and record final Linear/TestFlight evidence.
+
+Release validation checkpoint, 2026-07-13 17:43 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 70 to 71 in `project.yml` and ran XcodeGen. This machine's generator also emitted unrelated signing/compiler-default normalization, so that generated noise was discarded and the checked-in project was updated only at its matching Debug and Release build-number values. There is no signing, source-membership, or behavior churn in the release diff.
+- Full `WanderTests` suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build71-test/Logs/Test/Test-Wander-2026.07.13_17-38-43--0700.xcresult`).
+- Generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using the same validated DerivedData.
+- `git diff --check` passes. Next: final diff inspection, build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
