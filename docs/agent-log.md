@@ -11032,3 +11032,16 @@ Release validation checkpoint, 2026-07-13 17:43 PDT:
 - Full `WanderTests` suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build71-test/Logs/Test/Test-Wander-2026.07.13_17-38-43--0700.xcresult`).
 - Generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using the same validated DerivedData.
 - `git diff --check` passes. Next: final diff inspection, build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
+
+Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
+
+- Build-number PR #89 was reviewed clean and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/89. Exact release source commit: `7b4d64082efae189a09abc9fd2831adecdbac671`.
+- Created signed archive `/private/tmp/Wander-0.1-build71.xcarchive` from a clean detached worktree at that exact commit. Archive and embedded app metadata independently confirmed rec.me `0.1 (71)`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Exported and uploaded the unchanged archive with `/private/tmp/WanderExportUpload71.plist`, `destination=upload`, automatic distribution signing, and `manageAppVersionAndBuildNumber=false`. Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 71 and App Store Connect build id `aeb3caf7-0c3a-49fb-bf70-38ece28b264e`; processing is `VALID`, `usesNonExemptEncryption=false`, What to Test is updated for `en-US`, the build is attached to `Wander Alpha`, and external review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required live/approved tester note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783990497483449.
+- Linear `REC-86` is Done and has PR, migration, pgTAP, iOS validation, archive, App Store Connect, TestFlight, and Slack evidence.
+- Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
+- No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
+- Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
