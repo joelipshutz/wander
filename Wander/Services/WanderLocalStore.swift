@@ -78,6 +78,7 @@ final class WanderStore: ObservableObject {
     private(set) var sharedVisitInboxUserID: String?
     @Published private(set) var follows: [LocalFollow]
     @Published private(set) var blocks: [LocalBlock]
+    @Published private(set) var mutes: [LocalMute]
     @Published private(set) var placeLists: [LocalPlaceList]
     @Published private(set) var placeListMembers: [LocalPlaceListMember]
     @Published private(set) var placeListItems: [LocalPlaceListItem]
@@ -167,6 +168,7 @@ final class WanderStore: ObservableObject {
             self.pendingSharedVisitInvites = restored.pendingSharedVisitInvites
             self.follows = restored.follows
             self.blocks = restored.blocks
+            self.mutes = restored.mutes
             self.placeLists = restored.placeLists
             self.placeListMembers = restored.placeListMembers
             self.placeListItems = restored.placeListItems
@@ -191,6 +193,7 @@ final class WanderStore: ObservableObject {
             self.pendingSharedVisitInvites = []
             self.follows = fixtures.follows
             self.blocks = fixtures.blocks
+            self.mutes = fixtures.mutes
             self.placeLists = fixtures.placeLists
             self.placeListMembers = fixtures.placeListMembers
             self.placeListItems = fixtures.placeListItems
@@ -588,6 +591,112 @@ final class WanderStore: ObservableObject {
         }
 
         persist()
+    }
+
+    func updateCurrentUserProfile(
+        displayName: String? = nil,
+        handle: String? = nil,
+        bio: String? = nil,
+        homeArea: String? = nil
+    ) {
+        objectWillChange.send()
+        let now = Date.now
+        let currentLocalID = currentUser.localID
+        let currentProfileID = currentUser.id
+
+        if let displayName {
+            currentUser.displayName = displayName
+        }
+        if let handle {
+            currentUser.handle = handle
+            currentUser.searchHandle = handle.lowercased()
+        }
+        if let bio {
+            currentUser.bio = normalizedOptionalProfileValue(bio)
+        }
+        if let homeArea {
+            currentUser.homeArea = normalizedOptionalProfileValue(homeArea)
+        }
+        currentUser.updatedAt = now
+        currentUser.localUpdatedAt = now
+
+        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+            profile.displayName = currentUser.displayName
+            profile.handle = currentUser.handle
+            profile.searchHandle = currentUser.searchHandle
+            profile.bio = currentUser.bio
+            profile.homeArea = currentUser.homeArea
+            profile.updatedAt = now
+            profile.localUpdatedAt = now
+        }
+
+        persist()
+    }
+
+    func updateCurrentUserDetails(_ update: ProfileDetailsUpdate, backend: WanderBackend?) async throws {
+        guard let backend, backend.profileRepository != nil else {
+            updateCurrentUserProfile(
+                displayName: update.displayName,
+                handle: update.handle,
+                bio: update.bio,
+                homeArea: update.homeArea
+            )
+            return
+        }
+
+        do {
+            let remoteProfile = try await backend.updateCurrentProfile(update)
+            applyRemoteCurrentProfile(remoteProfile)
+            lastRemoteError = nil
+        } catch {
+            let message = remoteErrorMessage(error)
+            currentUser.syncStateRaw = SyncState.failed.rawValue
+            currentUser.lastSyncError = message
+            lastRemoteError = message
+            objectWillChange.send()
+            persist()
+            throw error
+        }
+    }
+
+    func resetAfterAccountDeletion() {
+        placeListSyncTask?.task.cancel()
+        individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
+        placeListSyncTask = nil
+        individualPlaceListSyncTasks.removeAll()
+
+        let empty = WanderFixtures.empty()
+        currentUser = empty.currentUser
+        profiles = empty.profiles
+        places = []
+        userPlaces = []
+        placeAttributes = []
+        placeVisits = []
+        visitPhotos = []
+        follows = []
+        blocks = []
+        mutes = []
+        placeLists = []
+        placeListMembers = []
+        placeListItems = []
+        unresolvedDrafts = []
+        sourceArtifacts = []
+        extractionJobs = []
+        remoteVisiblePlaceCache = []
+        lastRemoteError = nil
+        lastDiscoverFilters = DiscoverFilters(query: "")
+        discoverParseCache.removeAll()
+        defaultVisibility = .followers
+        isPrivateProfile = false
+        autoSaveListAddsToWant = true
+        persist()
+    }
+
+    private func normalizedOptionalProfileValue(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     var currentUserVisiblePlaces: [VisiblePlace] {
@@ -2077,6 +2186,13 @@ final class WanderStore: ObservableObject {
             .sorted { $0.handle < $1.handle }
     }
 
+    func friends(of userID: String) -> [LocalProfile] {
+        let followerIDs = Set(follows.filter { $0.followedUserID == userID }.map(\.followerUserID))
+        return following(of: userID)
+            .filter { followerIDs.contains($0.id) }
+            .sorted { $0.handle < $1.handle }
+    }
+
     func relationship(to userID: String) -> ViewerRelationship {
         if userID == currentUser.id { return .owner }
         guard !isBlockedBetweenCurrentUser(and: userID) else { return .nonFollower }
@@ -3370,6 +3486,50 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func refreshRemoteCurrentUserProfileData(backend: WanderBackend?) async {
+        guard let backend else { return }
+        await refreshRemoteProfileVisiblePlaces(profileID: currentUser.id, backend: backend)
+
+        let remoteUserPlaces = remoteVisiblePlaceCache
+            .filter { $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil }
+        let remoteUserPlaceIDs = Set(remoteUserPlaces.map(\.userPlace.id))
+        guard backend.visitRepository != nil, !remoteUserPlaceIDs.isEmpty else { return }
+
+        var hydrated: [LocalPlaceVisit] = []
+        for userPlaceID in remoteUserPlaceIDs.sorted() {
+            do {
+                let results = try await backend.visits(for: userPlaceID)
+                hydrated.append(contentsOf: results.map { result in
+                    LocalPlaceVisit(
+                        localID: "remote_profile_visit_\(result.visitID)",
+                        serverID: result.visitID,
+                        userPlaceID: result.userPlaceID,
+                        visitedAt: result.visitedAt,
+                        note: result.note,
+                        ratingScore: result.ratingScore,
+                        tags: result.tags,
+                        backfilledFromUserPlace: result.backfilledFromUserPlace,
+                        syncState: .synced
+                    )
+                })
+            } catch {
+                lastRemoteError = remoteErrorMessage(error)
+            }
+        }
+
+        let hydratedIDs = Set(hydrated.map(\.id))
+        placeVisits.removeAll { visit in
+            visit.localID.hasPrefix("remote_profile_visit_")
+                && remoteUserPlaceIDs.contains(visit.userPlaceID)
+                && !hydratedIDs.contains(visit.id)
+        }
+        for remoteVisit in hydrated where !placeVisits.contains(where: { $0.id == remoteVisit.id }) {
+            placeVisits.append(remoteVisit)
+        }
+        objectWillChange.send()
+        persist()
+    }
+
     func refreshRemoteSocialGraph(userID: String? = nil, backend: WanderBackend?) async {
         guard let backend else {
             return
@@ -3401,6 +3561,144 @@ final class WanderStore: ObservableObject {
                 }
                 return shell(for: profile)
             }
+    }
+
+    func refreshRemoteBlocks(backend: WanderBackend?) async {
+        guard let backend, backend.blockRepository != nil else { return }
+        do {
+            let shells = try await backend.blockedProfiles()
+            let blockedIDs = Set(shells.map(\.id))
+            for shell in shells {
+                preserveBlockedProfileShell(shell)
+            }
+            blocks.removeAll {
+                $0.blockerUserID == currentUser.id && !blockedIDs.contains($0.blockedUserID)
+            }
+            for profileID in blockedIDs where !blocks.contains(where: {
+                $0.blockerUserID == currentUser.id && $0.blockedUserID == profileID
+            }) {
+                blocks.append(
+                    LocalBlock(
+                        localID: "remote_block_\(currentUser.id)_\(profileID)",
+                        blockerUserID: currentUser.id,
+                        blockedUserID: profileID,
+                        syncState: .synced
+                    )
+                )
+            }
+            lastRemoteError = nil
+            objectWillChange.send()
+            persist()
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
+    func isMuted(userID: String) -> Bool {
+        mutes.contains {
+            $0.muterUserID == currentUser.id
+                && $0.mutedUserID == userID
+                && $0.syncState != .pendingDelete
+        }
+    }
+
+    func mutedProfiles() -> [ProfileShell] {
+        mutes
+            .filter { $0.muterUserID == currentUser.id && $0.syncState != .pendingDelete }
+            .map { mute in
+                profiles.first(where: { $0.id == mute.mutedUserID }).map(shell(for:))
+                    ?? ProfileShell(
+                        id: mute.mutedUserID,
+                        handle: "muted-user",
+                        displayName: "Muted user",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .nonFollower
+                    )
+            }
+    }
+
+    func mute(userID: String, backend: WanderBackend?) async {
+        guard userID != currentUser.id, !isMuted(userID: userID) else { return }
+        let mute = LocalMute(
+            localID: "local_mute_\(currentUser.id)_\(userID)",
+            muterUserID: currentUser.id,
+            mutedUserID: userID,
+            syncState: backend?.muteRepository == nil ? .localOnly : .pendingCreate
+        )
+        mutes.append(mute)
+        objectWillChange.send()
+        persist()
+
+        guard let backend, backend.muteRepository != nil else { return }
+        do {
+            try await backend.mute(userID: userID)
+            mute.syncStateRaw = SyncState.synced.rawValue
+            mute.localUpdatedAt = .now
+            mute.lastSyncError = nil
+            lastRemoteError = nil
+        } catch {
+            mute.syncStateRaw = SyncState.failed.rawValue
+            mute.lastSyncError = remoteErrorMessage(error)
+            lastRemoteError = mute.lastSyncError
+        }
+        objectWillChange.send()
+        persist()
+    }
+
+    func unmute(userID: String, backend: WanderBackend?) async {
+        guard let mute = mutes.first(where: { $0.muterUserID == currentUser.id && $0.mutedUserID == userID }) else {
+            return
+        }
+        let previousState = mute.syncState
+        mute.syncStateRaw = SyncState.pendingDelete.rawValue
+        mute.localUpdatedAt = .now
+        objectWillChange.send()
+        persist()
+
+        guard let backend, backend.muteRepository != nil else {
+            mutes.removeAll { $0.id == mute.id }
+            persist()
+            return
+        }
+        do {
+            try await backend.unmute(userID: userID)
+            mutes.removeAll { $0.id == mute.id }
+            lastRemoteError = nil
+        } catch {
+            mute.syncStateRaw = (previousState == .localOnly ? SyncState.localOnly : SyncState.failed).rawValue
+            mute.lastSyncError = remoteErrorMessage(error)
+            lastRemoteError = mute.lastSyncError
+        }
+        objectWillChange.send()
+        persist()
+    }
+
+    func refreshRemoteMutes(backend: WanderBackend?) async {
+        guard let backend, backend.muteRepository != nil else { return }
+        do {
+            let shells = try await backend.mutedProfiles()
+            upsertRemoteProfileShells(shells, preserveExistingProfileMetadataWhenMissing: true)
+            let mutedIDs = Set(shells.map(\.id))
+            mutes.removeAll {
+                $0.muterUserID == currentUser.id && !mutedIDs.contains($0.mutedUserID)
+            }
+            for profileID in mutedIDs where !isMuted(userID: profileID) {
+                mutes.append(
+                    LocalMute(
+                        localID: "remote_mute_\(currentUser.id)_\(profileID)",
+                        muterUserID: currentUser.id,
+                        mutedUserID: profileID,
+                        syncState: .synced
+                    )
+                )
+            }
+            lastRemoteError = nil
+            objectWillChange.send()
+            persist()
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+        }
     }
 
     func authGate(for action: AddSourceType) -> AuthGateCopy {
@@ -3512,8 +3810,12 @@ final class WanderStore: ObservableObject {
             sharedVisitInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
         }
-        let handle = normalizedSessionHandle(from: session)
-        let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: handle)
+        let isSameUser = previousCurrentUser.id == session.userID
+        let sessionHandle = normalizedSessionHandle(from: session)
+        let handle = isSameUser ? previousCurrentUser.handle : sessionHandle
+        let displayName = isSameUser
+            ? previousCurrentUser.displayName
+            : normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile
@@ -3523,8 +3825,11 @@ final class WanderStore: ObservableObject {
             handle: handle,
             displayName: displayName,
             avatarURL: previousCurrentUser.avatarURL,
+            bio: previousCurrentUser.bio,
+            homeArea: previousCurrentUser.homeArea,
             isPrivateProfile: preferredPrivateProfile,
-            syncState: .synced
+            syncState: .synced,
+            createdAt: previousCurrentUser.createdAt
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
@@ -3591,8 +3896,11 @@ final class WanderStore: ObservableObject {
             handle: "you",
             displayName: "You",
             avatarURL: previousCurrentUser.avatarURL,
+            bio: previousCurrentUser.bio,
+            homeArea: previousCurrentUser.homeArea,
             isPrivateProfile: preferredPrivateProfile,
-            syncState: .localOnly
+            syncState: .localOnly,
+            createdAt: previousCurrentUser.createdAt
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
@@ -4593,8 +4901,9 @@ final class WanderStore: ObservableObject {
         )
         currentUser.bio = remoteProfile.bio
         currentUser.homeArea = remoteProfile.homeArea
-        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
         currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
+        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+        currentUser.createdAt = remoteProfile.createdAt
         currentUser.syncStateRaw = SyncState.synced.rawValue
         currentUser.serverUpdatedAt = now
         currentUser.updatedAt = now
@@ -4607,8 +4916,9 @@ final class WanderStore: ObservableObject {
             profile.avatarURL = currentUser.avatarURL
             profile.bio = currentUser.bio
             profile.homeArea = currentUser.homeArea
+            profile.isPrivateProfile = currentUser.isPrivateProfile
             profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
-            profile.isPrivateProfile = remoteProfile.isPrivateProfile
+            profile.createdAt = currentUser.createdAt
             profile.syncStateRaw = SyncState.synced.rawValue
             profile.serverUpdatedAt = now
             profile.updatedAt = now

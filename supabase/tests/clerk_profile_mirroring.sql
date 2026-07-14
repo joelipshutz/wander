@@ -74,13 +74,13 @@ select is(
     null,
     null
   )->>'action',
-  'soft_deleted',
-  'delete event soft deletes profile'
+  'hard_deleted',
+  'delete event permanently deletes profile'
 );
 
 select ok(
-  (select deleted_at is not null from public.profiles where id = 'user_a'),
-  'profile has deleted_at after delete event'
+  not exists (select 1 from public.profiles where id = 'user_a'),
+  'profile row is gone after delete event'
 );
 
 select is(
@@ -98,8 +98,8 @@ select is(
 );
 
 select ok(
-  (select deleted_at is not null from public.profiles where id = 'user_a'),
-  'stale update does not resurrect soft-deleted profile'
+  not exists (select 1 from public.profiles where id = 'user_a'),
+  'stale update does not recreate permanently deleted profile'
 );
 
 select is(
@@ -112,7 +112,7 @@ select is(
     null,
     null
   )->>'action',
-  'soft_deleted',
+  'hard_deleted',
   'delete before profile create records mirror state'
 );
 

@@ -11,6 +11,7 @@ struct WanderFixtures {
     var visitPhotos: [LocalVisitPhoto] = []
     let follows: [LocalFollow]
     let blocks: [LocalBlock]
+    var mutes: [LocalMute] = []
     let placeLists: [LocalPlaceList]
     let placeListMembers: [LocalPlaceListMember]
     let placeListItems: [LocalPlaceListItem]
@@ -180,6 +181,7 @@ enum WanderModelContainer {
             LocalProfile.self,
             LocalFollow.self,
             LocalBlock.self,
+            LocalMute.self,
             LocalPlace.self,
             LocalUserPlace.self,
             LocalPlaceAttribute.self,

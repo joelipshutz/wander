@@ -13,58 +13,7 @@ struct SettingsScreen: View {
     @State private var privacyErrorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    header
-                    accountSection
-                    visibilitySection
-                    blockedSection
-                    groupedRows
-                }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
-            }
-            .wanderScreen()
-        }
-        .sheet(item: $activeDetail) { detail in
-            switch detail {
-            case .trust:
-                TrustAndPrivacySheet()
-            case .notifications:
-                NotificationSettingsSheet()
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-                    .environmentObject(pushNotifications)
-            }
-        }
-        .alert(
-            SettingsProfilePrivacySurface.warningTitle(enabling: pendingPrivateProfileValue ?? false),
-            isPresented: $showsPrivateProfileWarning
-        ) {
-            Button("Cancel", role: .cancel) {
-                pendingPrivateProfileValue = nil
-            }
-            Button(SettingsProfilePrivacySurface.warningConfirmTitle(enabling: pendingPrivateProfileValue ?? false)) {
-                if let pendingPrivateProfileValue {
-                    Task {
-                        isUpdatingPrivateProfile = true
-                        privacyErrorMessage = nil
-                        let updated = await store.updatePrivateProfile(
-                            pendingPrivateProfileValue,
-                            backend: auth.isSignedIn ? backend : nil
-                        )
-                        if !updated {
-                            privacyErrorMessage = store.lastRemoteError ?? "Could not update profile privacy. Try again."
-                        }
-                        isUpdatingPrivateProfile = false
-                    }
-                }
-                pendingPrivateProfileValue = nil
-            }
-        } message: {
-            Text(SettingsProfilePrivacySurface.warningBody(enabling: pendingPrivateProfileValue ?? false))
-        }
+        ProfileSettingsHome()
     }
 
     private var header: some View {
@@ -418,7 +367,7 @@ private struct TrustAndPrivacySheet: View {
     }
 }
 
-private struct NotificationSettingsSheet: View {
+struct NotificationSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore

@@ -5430,7 +5430,7 @@ struct PlaceSheet: View {
     @ViewBuilder
     private var shareButton: some View {
         if let shareURL {
-            ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
+            WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 17, weight: .black))
                     .frame(width: 42, height: 42)

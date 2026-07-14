@@ -79,3 +79,22 @@ struct ClerkNativeAuthView: View {
         #endif
     }
 }
+
+struct ClerkAccountManagementView: View {
+    var body: some View {
+        #if canImport(ClerkKitUI) && canImport(ClerkKit)
+        UserProfileView()
+            .environment(Clerk.shared)
+        #else
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 30, weight: .bold))
+            Text("Account management is not linked in this build.")
+                .font(.system(size: 18, weight: .black))
+                .multilineTextAlignment(.center)
+        }
+        .padding(WanderTheme.spacing4)
+        .wanderScreen()
+        #endif
+    }
+}

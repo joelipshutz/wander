@@ -11045,6 +11045,164 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
 
+## 2026-07-13 14:22 PDT - Codex - REC-89 Profile Redesign Mockups
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89` (`Reimagine Profile, social graph, dining calendar, map, and account settings`), In Progress
+
+Goal: audit the current Profile and Settings experience, run the requested iOS design and engineering plan reviews, then build SwiftUI-only mockups for approval before production functionality, persistence, authentication, deletion, contacts, or backend wiring begins.
+
+Starting status:
+
+- Created a clean isolated worktree from latest `origin/main` at `302324d9f`; the root REC-81 checkout remains untouched.
+- Root checkout has an unrelated untracked `.pnpm-store/` and is 13 commits behind its REC-81 remote branch. Those files are not part of REC-89.
+- User supplied six Beli reference screenshots covering profile hierarchy, edit profile, dining calendar, dining map, and blocked/muted empty states.
+- Requested design-only surfaces: owner profile, social graph tabs, edit profile, settings home, Privacy & Trust, Blocked & Muted, and both destructive account-deletion confirmations.
+- Existing Been/Wanna destination pages must remain unchanged. This phase may reuse their current profile tiles but will not wire new behavior.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `docs/plans/` and/or `docs/reviews/` for durable design/engineering decisions
+- `Wander/Features/Profile/` mockup-only SwiftUI surfaces
+- `Wander/Features/Settings/` mockup-only SwiftUI surfaces
+- Focused mockup/contract tests if needed
+
+Review and mockup plan:
+
+1. Run `ios-design-review` against the current app/profile surfaces and the supplied references.
+2. Run `plan-eng-review` against existing Profile, Settings, store, identity, save-date, category, follow/block, and navigation contracts.
+3. Build isolated SwiftUI mockups with deterministic fixture data and no production persistence/backend wiring.
+4. Capture every mockup on the current simulator target and a smaller iPhone, then present the screenshots for approval.
+5. Stop before production functionality and wiring; implementation starts only after Ryan approves the mockups.
+
+Review checkpoint, 2026-07-13 16:22 PDT:
+
+- Completed the requested static iOS design review and engineering plan review. Durable outputs are `docs/reviews/2026-07-13-rec-89-profile-redesign-ios-design-review.md` and `docs/plans/2026-07-13-rec-89-profile-redesign-eng-plan.md`.
+- Live-device inspection is blocked because the paired iPhone is currently unavailable and this checkout has no DebugBridge/StateServer instrumentation. The design review therefore uses the six supplied Beli references plus current SwiftUI source; simulator captures remain required before handoff.
+- Locked the design direction to Beli-inspired information hierarchy in rec.me's warm palette: owner identity and actions, social graph, unchanged Been/Wanna destinations, visit calendar, noninteractive dining map, edit profile, account/security settings, Privacy & Trust, blocked/muted states, and native two-stage deletion alerts.
+- Locked the implementation boundary for this branch: deterministic `#if DEBUG` SwiftUI mockups and launch-argument tests only. No production navigation, persistence, Clerk, Supabase, contacts, share routing, deletion, mute, or notification behavior will be changed before visual approval.
+- Engineering review found two critical future contracts: mutes do not exist yet, and the current Clerk deletion webhook soft-deletes profiles instead of satisfying permanent account deletion. Both are explicitly deferred from this visual branch and documented in the plan.
+- Existing `LocalProfile`, Been saves/visits, canonical categories, place coordinates, one-way follows, mutual-friend derivation, blocks, and avatar upload provide most future inputs. The future calendar will use Been visit dates, while Wanna saves remain excluded.
+- No overlapping agent work was found in this isolated worktree. The root REC-81 checkout and its unrelated untracked `.pnpm-store/` remain untouched.
+
+Mockup validation checkpoint, 2026-07-13 16:32 PDT:
+
+- Added a deterministic `#if DEBUG` SwiftUI approval harness with 14 launchable states: owner profile, calendar, dining map, populated/empty social graph, edit profile, settings, Privacy & Trust, populated/empty blocked and muted tabs, and both native deletion alerts. Launch with `-WanderProfileRedesignMockup <page>`; no production routing or data behavior is changed.
+- Generated the Xcode project. The project diff only adds `ProfileRedesignMockups.swift` to the Profile group and app target; no signing or unrelated generated churn is present.
+- Captured and manually inspected all 14 states on iPhone 17 Pro and iPhone 17e simulators. Fixed duplicate weekday identities in the calendar and corrected the dining-map camera so all five Been-only fixture dots remain visible. The smaller-device pass found no remaining overlap or truncation in actions, tabs, rows, empty states, or native alerts.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec89-build`; only the existing traditional-headermap warning was emitted.
+- Full test suite passed on iPhone 17 Pro / iOS 26.5: 280 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec89-tests/Logs/Test/Test-Wander-2026.07.13_16-26-56--0700.xcresult`). `git diff --check` passes.
+- Physical-device and Dynamic Type XXL review remain blocked by the unavailable paired iPhone and absent DebugBridge instrumentation. Production functionality remains intentionally deferred until Ryan approves these mockups.
+
+Pre-PR integration checkpoint, 2026-07-13 16:39 PDT:
+
+- Rebasing onto latest `origin/main` (`d8b5fb00e`) incorporated REC-82 place-photo work. The only conflict was the append-only shared agent log; both REC-82 and REC-89 histories were preserved. Source and generated project changes replayed cleanly.
+- Regenerated `Wander.xcodeproj` from `project.yml`; the worktree remained clean and project membership stayed limited to the new mockup source.
+- Re-ran the full suite against the exact rebased PR tip: 289 passed, 0 failed, 0 skipped on iPhone 17 Pro / iOS 26.5 (`/private/tmp/DerivedData-rec89-tip-tests/Logs/Test/Test-Wander-2026.07.13_16-33-34--0700.xcresult`). Only existing simulator binary-stripping and traditional-headermap warnings were emitted.
+
+Handoff, 2026-07-13 16:41 PDT:
+
+- Pushed `codex/rec-89-profile-redesign` and opened draft PR #86 for visual approval: https://github.com/joelipshutz/wander/pull/86.
+- Moved Linear REC-89 to In Review, attached PR #86, and posted the complete simulator/build/test evidence plus the explicit no-production-wiring boundary.
+- Ryan can review every state in Xcode with scheme launch arguments `-WanderProfileRedesignMockup <page>`; supported page values are documented by `ProfileRedesignMockupPage` and covered by launch-contract tests.
+- Next step after visual approval: convert the accepted mockups into production Profile/Settings destinations using the architecture and test matrix in `docs/plans/2026-07-13-rec-89-profile-redesign-eng-plan.md`. Do not implement mute or permanent account deletion until their server contracts are in place.
+
+## 2026-07-13 16:52 PDT - Codex - REC-89 Production Implementation Restart
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89`, moved from In Review back to In Progress
+PR: draft #86, https://github.com/joelipshutz/wander/pull/86
+
+Goal: implement the approved Profile redesign end to end, including production UI, persistence, navigation, social graph, profile/account editing, privacy, mutes, notification suppression, and permanent account deletion. The approved copy changes are `your calendar` and `your map`.
+
+Starting status:
+
+- Ryan approved every mockup and explicitly authorized full production implementation. Contacts import remains deferred by the original requirement; Find Friends will route to Discover > Members.
+- Fetched latest `origin/main` and rebased the branch onto build-70 commit `77d0c9672`. The only conflict was the append-only agent log; both release and REC-89 records were preserved. The worktree is clean after rebase.
+- Existing production contracts already cover follows, blocks, profile avatar storage, Been visits, place geography/categories, private profile/default stealth mode, and Clerk session routing. Missing contracts remain profile detail mutation, mutes, mute-aware notifications, stable profile deep links, and hard account purge.
+- No overlapping uncommitted work exists in this worktree. Other active branches touch high-conflict store/settings/backend files, so REC-89 will stay isolated and rebase from current main before final validation.
+
+Expected files:
+
+- Focused production views/presenters under `Wander/Features/Profile/` and `Wander/Features/Settings/`
+- `Wander/App/WanderRootView.swift`, `Wander/Features/Discover/DiscoverScreen.swift`
+- Models, repository protocols/DTOs/implementations, local store/persistence, auth boundaries, and matching XCTest files
+- Additive Supabase migrations/tests, notification contracts, Clerk webhook hard-purge logic, and hosted smoke coverage
+- `project.yml`, generated `Wander.xcodeproj/project.pbxproj`, review/plan docs, and this work log
+
+Production checkpoint, 2026-07-13 17:51 PDT:
+
+- Replaced the approval harness entry point with the production owner Profile, edit profile, followers/following/friends directory, visit calendar, Been-only map, summary tabs, share deep link, settings, Privacy & Trust, and blocked/muted destinations. Final labels are `your calendar` and `your map`.
+- Wired Find Friends to Discover > Members, added `recme://profiles/<id>` routing, remote current-user place/visit hydration, profile-detail/privacy persistence, Clerk account-management routing, remote block/mute refresh, local mute persistence, mute-aware activity filtering, and complete local cache purge after Clerk account deletion.
+- Added the Supabase profile/mute/geography/notification/deletion migration, 39 pgTAP assertions, a stale-delete-safe Storage inventory RPC, Clerk Edge Function Storage purge, and linked smoke coverage. Docker/Supabase local services are not installed on this Mac, so local `supabase test db` is blocked and is not counted as passing.
+- Generic arm64 Simulator build passes. Full iPhone 17 Pro / iOS 26.5 XCTest suite passes: 298 tests, 0 failures (`/private/tmp/DerivedData-rec89-tests/Logs/Test/Test-Wander-2026.07.13_17-43-56--0700.xcresult`). Deno account-purge tests pass (2/2), the full Clerk webhook type-check passes, `node --check scripts/supabase-smoke-test.mjs` passes, and `git diff --check` passes.
+- Linked Supabase dry run stopped safely because hosted migration versions `20260712214600` and `20260714001500` were not present in this branch. Fetched `origin/main` at `7b4d64082`; next step is to rebase with local work stashed, rerun the exact suite, then retry the linked dry run. No hosted schema changes have been applied yet.
+
+Final validation checkpoint, 2026-07-13 18:29 PDT:
+
+- Rebasing onto build-71 source `7b4d64082` preserved all REC-89 work. A final rebase onto `aa6cf212d` then added only the build-71 completion log; no app/backend bytes changed after final validation. The temporary pre-rebase stash remains as a recovery point, and no unrelated stashes or worktree changes were modified.
+- Applied hosted migration `20260714003000_profile_redesign_contracts.sql` to linked Supabase project `rugmtlgufrhlxwfkumhw`. `supabase migration list --linked` matches through that version. The hosted rollback-wrapped pgTAP suite passed all 39 assertions, and the linked profile/mute/preferred-photo/provider-quota smoke test passed.
+- Deployed the `clerk-profile-webhook` Edge Function with the stale-delete-safe Storage purge. An unsigned production endpoint probe returned HTTP 401 with `invalid_signature`, confirming the Svix boundary remains enforced. The account-purge Deno unit tests previously passed 2/2 and the complete webhook type-check passed; deployment also compiled the final function successfully.
+- Final audit found and fixed a missing app-level registration for the existing `recme://profiles/<id>` share route. `project.yml` now generates `CFBundleURLTypes` into the app Info.plist, and `BuildConfigurationTests` protects the scheme contract.
+- Final clean iPhone 17 Pro / iOS 26.5 suite passed 303 tests with 0 failures (`/private/tmp/DerivedData-rec89-final/Logs/Test/Test-Wander-2026.07.13_18-25-18--0700.xcresult`). The generic iOS Simulator build then passed for both arm64 and x86_64; artifact: `/private/tmp/DerivedData-rec89-final/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Production Profile and Settings were installed and visually inspected on iPhone 17 Pro and iPhone 17e. Profile, map, edit, social graph, Privacy & Trust, Settings, and blocked-empty states have no observed clipping or overlap; screenshots are under `/private/tmp/rec89-visual/`. Final labels are `your calendar` and `your map`.
+- Remaining validation gaps are explicit: Docker/local Supabase is unavailable, so `supabase test db` was not run; no paired physical iPhone/DebugBridge or Dynamic Type XXL session was available. Hosted schema/security checks and both simulator sizes are complete.
+- Contacts import remains intentionally deferred per the approved requirement; Find Friends routes to Discover > Members. No TestFlight build, Slack release note, merge, or build-number bump was requested or performed.
+- Implementation commit `c139ead61` was force-pushed with lease to `codex/rec-89-profile-redesign` after the final docs-only rebase.
+
+Handoff, 2026-07-13 18:39 PDT:
+
+- Updated PR #86 to the full production scope and marked it ready for review: https://github.com/joelipshutz/wander/pull/86.
+- Moved Linear REC-89 to In Review, confirmed PR #86 is attached, and added the implementation, hosted migration, webhook, XCTest, universal build, visual QA, and known-gap evidence.
+- Opened `/private/tmp/recme-rec89-profile-redesign/Wander.xcodeproj` in Xcode. That worktree is checked out on `codex/rec-89-profile-redesign`; the root REC-81 checkout remains untouched.
+- No required implementation work remains on the branch. Ryan's next step is device/account testing in Xcode; merge and TestFlight remain separate explicit actions.
+
+## 2026-07-13 19:24 PDT - Codex - REC-89 Device Feedback Follow-up
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89`, moved from In Review back to In Progress
+PR: #86, https://github.com/joelipshutz/wander/pull/86
+
+Goal: address six issues found during Xcode testing: create reusable native share infrastructure, add calendar-date place drilldowns, add map-summary place drilldowns, canonicalize country metadata, fix Clerk-backed name/username editing, and add a notification-row disclosure caret.
+
+Starting status:
+
+- Fetched `origin` and confirmed the isolated worktree is clean at `fc2482bc3`; the root REC-81 checkout and other worktrees remain untouched.
+- No overlapping uncommitted work exists in this worktree. This pass will continue on the existing REC-89 branch and PR.
+- The current calendar and map summaries are display-only, profile sharing is implemented directly with `ShareLink`, and the edit failure occurs before the local name/handle mutation when Clerk rejects the combined identity update.
+- Investigation will trace the Clerk SDK/profile ownership contract before changing identity persistence. No backend or schema change will be made without corresponding contract tests and hosted verification.
+
+Expected files:
+
+- `Wander/Features/Profile/` profile insights, navigation, edit, and place-list surfaces
+- Shared share infrastructure under `Wander/DesignSystem/` or `Wander/Services/`
+- `Wander/Services/Auth/` only if required by the confirmed identity-update root cause
+- `Wander/Features/Settings/ProfileSettingsViews.swift`
+- Matching XCTest files, generated Xcode project membership when needed, and this work log
+
+Implementation checkpoint, 2026-07-13 21:26 PDT:
+
+- Added `WanderShareButton` and typed profile/place share content as the sole native sharing boundary. Profile and both place-share surfaces now use it, and `NavigationContractTests` fails if a future direct `ShareLink` is added outside the shared component.
+- Made every real calendar date navigable to a searchable saved-place list, including honest empty dates. Made every category, city, and country summary row navigate to its exact deduplicated Been-place list and reuse the existing place detail surface.
+- Added Locale-backed country canonicalization for full names plus ISO alpha-2/alpha-3 variants, including US/U.S./USA and UK/GB/GBR. Summary counts and drilldowns now deduplicate by canonical country and place id.
+- Root-caused name/username failures to Clerk's production environment disabling mutable `first_name`, `last_name`, and `username` fields. Moved app-owned display name and handle updates into the authenticated Supabase `update_own_profile` RPC, with atomic validation, duplicate-handle rejection, partial-field preservation, and remote-first local mutation. Same-user Clerk session refreshes now preserve persisted app-owned identity across relaunches; user-id changes still adopt the new session identity.
+- Added the Settings disclosure caret for Notifications and verified its layout on iPhone 17 Pro and iPhone 17e (`/private/tmp/rec89-followup-settings-17pro.png`, `/private/tmp/rec89-followup-settings-17e.png`). No clipping or overlap was observed.
+
+Backend and validation checkpoint, 2026-07-13 21:26 PDT:
+
+- Applied hosted migration `20260714033000_profile_identity_updates.sql` to linked Supabase project `rugmtlgufrhlxwfkumhw`. The six-argument owner RPC remains compatible with existing four-argument callers, uses security invoker with a pinned path, and the recreated Clerk mirror remains a narrow security-definer function that preserves app-owned display name, handle, and avatar.
+- Hosted rollback-wrapped pgTAP passed all 44 assertions. The linked authenticated smoke test passed after isolating its reserved users and explicitly restoring the smoke save following REC-88's private-profile visibility trigger. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- Final clean iPhone 17 Pro / iOS 26.5 XCTest run passed 310 tests with 0 failures (`/private/tmp/DerivedData-rec89-followup-final/Logs/Test/Test-Wander-2026.07.13_21-23-16--0700.xcresult`). The generic Simulator build previously passed for arm64 and x86_64 at `/private/tmp/DerivedData-rec89-followup-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Migration ordering depends on REC-88 versions `20260714013000`, `20260714022000`, `20260714024500`, and `20260714031500` landing before this PR. Those hosted migrations are already present, but their source remains on `codex/rec-88-visit-friends-mockup`; no REC-88 files or commits were imported into REC-89.
+- No TestFlight upload, build-number bump, merge, or Slack announcement was requested or performed. Next step: push PR #86, return REC-89 to In Review, and let Ryan test `codex/rec-89-profile-redesign` from its isolated Xcode worktree.
+
 ## 2026-07-13 13:41 PDT - Codex - REC-88 Visit Friend Invite Mockup
 
 Agent: Codex
@@ -11363,3 +11521,18 @@ Final outcome:
 - Visual verification passed with no clipping or overlap on iPhone 17 Pro and smaller iPhone 17e. Screenshots: `/private/tmp/rec88-followup-editor-17pro.png`, `/private/tmp/rec88-followup-editor-17e.png`, and `/private/tmp/rec88-followup-card-17pro.png`.
 - Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
 - No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.
+
+## 2026-07-13 22:18 PDT - Codex - REC-89 / REC-88 Latest-Main Integration
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89` (`In Review` after landing validation)
+PR: https://github.com/joelipshutz/wander/pull/86
+
+- Merged exact `origin/main` at `672b60894`, which contains the squashed REC-88 Shared Visits implementation and physical-device follow-up, into the clean REC-89 branch. Conflicts were limited to backend composition, root routing/maintenance, redesigned Settings entry, current-profile DTOs, account/session profile hydration, the combined hosted smoke script, and this coordination log.
+- Resolutions preserve both contracts: REC-89 app-owned display name/handle and member-since fields, redesigned Settings/Profile navigation, profile deep links, and hosted profile smoke coverage; REC-88 generation-scoped inbox cleanup, lifecycle maintenance, private-profile invitation cancellation, Shared Visit notification routing, and hosted Shared Visits smoke coverage.
+- Regenerated the Xcode project with XcodeGen. The merged smoke script passes Node syntax validation with the bundled Node runtime, and `git diff --check` passes.
+- Full combined iOS suite passed on iPhone 17 Pro / iOS 26.5: 324 tests, 0 failures (`/private/tmp/DerivedData-rec89-rec88-integration/Logs/Test/Test-Wander-2026.07.13_22-08-36--0700.xcresult`). The first sandboxed attempt failed before compilation because CoreSimulator and package network access were blocked; the identical command passed with the repo-required elevated access and that pre-test infrastructure failure is not counted as a test result.
+- Generic universal iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`; artifact: `/private/tmp/DerivedData-rec89-rec88-universal/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Hosted database migrations and security verification remain the previously completed proofs: REC-89 profile pgTAP 44/44 plus linked authenticated smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. No new migration bytes were introduced by this integration merge.

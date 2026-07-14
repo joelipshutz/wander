@@ -124,6 +124,38 @@ final class LocalBlock {
 }
 
 @Model
+final class LocalMute {
+    @Attribute(.unique) var localID: String
+    var muterUserID: String
+    var mutedUserID: String
+    var syncStateRaw: String
+    var localUpdatedAt: Date
+    var lastSyncError: String?
+    var createdAt: Date
+
+    init(
+        localID: String,
+        muterUserID: String,
+        mutedUserID: String,
+        syncState: SyncState = .localOnly,
+        localUpdatedAt: Date = .now,
+        lastSyncError: String? = nil,
+        createdAt: Date = .now
+    ) {
+        self.localID = localID
+        self.muterUserID = muterUserID
+        self.mutedUserID = mutedUserID
+        self.syncStateRaw = syncState.rawValue
+        self.localUpdatedAt = localUpdatedAt
+        self.lastSyncError = lastSyncError
+        self.createdAt = createdAt
+    }
+
+    var id: String { localID }
+    var syncState: SyncState { SyncState(rawValue: syncStateRaw) ?? .localOnly }
+}
+
+@Model
 final class LocalPlace {
     @Attribute(.unique) var localID: String
     var serverID: String?
