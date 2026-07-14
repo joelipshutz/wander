@@ -122,6 +122,19 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains(".navigationDestination(isPresented: placeProfileDestinationBinding)"))
     }
 
+    func testDiscoverTickerStateIsOwnedBySearchField() throws {
+        let discoverScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let sections = discoverScreen.components(separatedBy: "private struct DiscoverSearchField: View")
+
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertFalse(sections[0].contains("@State private var tickerIndex"))
+        XCTAssertFalse(sections[0].contains("runTicker()"))
+        XCTAssertTrue(sections[1].contains("@State private var placeholderIndex"))
+        XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
+    }
+
     @MainActor
     func testPlaceProfileEdgeSwipeBackGestureOnlyTriggersFromLeftEdge() {
         XCTAssertTrue(
