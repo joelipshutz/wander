@@ -11620,3 +11620,9 @@ Publishing resumed, 2026-07-14 PDT:
 
 - Ryan requested the verified branch in Xcode for testing. GitHub CLI authentication for `ryanlane23` is healthy again with repository scope, and a fresh `git fetch origin` confirms the implementation parent still exactly matches current `origin/main` with no integration work required.
 - App and test source remain byte-for-byte identical to the 325-test, XCUI A/B, and universal simulator-build validation above. This docs-only checkpoint is being amended before the first successful push so the remote branch has a single coherent handoff commit.
+
+Publishing completion, 2026-07-14 PDT:
+
+- Pushed `codex/rec-94-profile-calendar-scroll` successfully and opened ready PR #99 to `main`: https://github.com/joelipshutz/wander/pull/99. Linked the PR on Linear REC-94 and moved the issue from `In Progress` to `In Review`.
+- Opened `/private/tmp/recme-rec94-profile-scroll/Wander.xcodeproj` in Xcode at Ryan's request. The worktree remains isolated from the root checkout and is the exact branch under review for device testing.
+- This final checkpoint is docs-only. The validated app/test source and results remain unchanged: XCUI controlled A/B passed with the fix, 325/325 tests passed, and the generic arm64/x86_64 iOS Simulator build passed. No merge, TestFlight build, Slack announcement, backend change, or Linear completion was requested or performed.
