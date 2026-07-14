@@ -11094,3 +11094,13 @@ Office-hours design-doc checkpoint, 2026-07-13 20:17 PDT:
 - Key locks include explicit recommendation consent, no protected pre-follow place previews, a narrow security-definer recommendation path by default, deterministic search/ranking/reason rules, complete product-state transitions, offline cache truthfulness, positive place-save success separated from dismissal, and powered rather than under-sampled production lift claims.
 - Joe approved the office-hours product spec and selected the recommended handoff into the pre-engineering full-state `plan-design-review`.
 - Joe added a hard visual gate: after the full-state design specification, create repo-owned mocks for the main end-to-end flows and important state variants, present them for approval, and do not proceed to `plan-eng-review` or implementation until he approves the mocks.
+
+Plan-design-review and mock-v1 checkpoint, 2026-07-13 22:22 PDT:
+
+- Joe selected the full-screen-plus-state-board mock depth: nine main journeys as complete iPhone screens and five grouped boards for data, mutation, recovery, responsive, and accessibility states.
+- Created the canonical full-state design review at `docs/reviews/2026-07-13-rec-90-discover-plan-design-review.md`. It records the stable IA, exact density/geometry, 34 named UI states, emotional/trust journey, AI-slop audit, design-system fit, responsive/accessibility contract, prototype script, tasks, and approval gate.
+- Created the repo-owned clickable design room at `preview/discover-redesign/`. It includes local-only fictitious preview profiles, 9 journey screens, 5 state boards, 390pt/320pt and type-size controls, follow/dismiss interactions, vendored Pretext text measurement, README, metadata, and rendered overview PNGs.
+- The external gstack image-variant generator was not used because sandbox review rejected sending the private REC-90 brief to an external service without a separate informed permission. The replacement local HTML workflow sent no REC-90 product details off-device.
+- Visual QA found and fixed two artifact issues: missing self-contained token variables when served from the mock directory, and product controls that initially rendered at 32–40pt instead of the 44pt iOS target.
+- Verification: `node --check` passes, `git diff --check` passes, the local mock has zero browser console errors, and a scripted audit across all nine journeys reports no horizontal screen/body overflow at 390pt or 320pt with 1.32× type. Places, People, state-board, and small-phone screenshots were reviewed visually.
+- Design status remains intentionally incomplete: mock v1 awaits Joe's visual/taste approval. Per his hard gate, `plan-eng-review` and implementation remain blocked.
