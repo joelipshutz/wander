@@ -11693,3 +11693,47 @@ Release completion, 2026-07-14 14:07 PDT:
 - Added the final merge, archive, validation, TestFlight, and Slack evidence to Linear REC-94. The issue was already `Done` after PR #99 merged; that status now matches the shipped and approved release.
 - Validation shipped with the exact affected iPhone 15 Pro physical repro passing, 325 tests with 0 failures, a generic arm64/x86_64 iOS Simulator build, and a signed Release archive/upload. No backend, schema, tester-data, auth, sync, or privacy behavior changed.
 - Known/deferred: build 74 specifically fixes the Profile calendar/map scroll freeze. The broader build 73 Profile and Shared Visits scope is unchanged and remains subject to its existing tester checklist.
+
+## 2026-07-14 14:17 PDT - Codex - Discover Reimagination Research
+
+Agent: Codex using the `design-consultation` research/critique guidance and the Linear workflow
+Branch: `codex/discover-research`
+Worktree: `/private/tmp/recme-discover-research`
+Linear: required issue lookup/creation pending before product-code implementation; this turn is research and concept definition only
+
+Goal: research strong discovery/search patterns in adjacent place, social, and recommendation products; diagnose the current Discover information architecture and deterministic query parser; and surface opinionated page/search directions for Ryan to choose from before any implementation.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from `origin/main` at `2c11be341` because the primary checkout is an active `codex/rec-88-visit-friends-mockup` branch with an untracked `.pnpm-store/`; those changes are assumed to belong to other work and will not be touched.
+- Existing worktrees include an older Discover/LLM-search worktree (`/Users/ryanlieblein/Developer/Wander-worktrees/rec-39-discover-llm-search`) on `codex/rec-40-lists-mockups`. It may contain relevant prior exploration, but this research branch will not edit that worktree or overlap its files.
+- Initial expected repo touch was this coordination log only. After discovering that REC-90's existing remote proposal does not cover the reported place-search journey, the plan expanded to one durable competitive-research/direction brief under `docs/reviews/`; product code, `DESIGN.md`, project files, Supabase, and migrations remain explicitly out of scope until Ryan chooses a direction.
+- Planned evidence: current `DiscoverScreen`, `DiscoverModels`, parser/store tests, product/design decisions, the supplied build-74 screenshot, competitor product/documentation research, and current Linear history.
+
+Research outcome, 2026-07-14 14:27 PDT:
+
+- Reused existing high-priority Linear issue `REC-90`, already `In Progress` and related to completed natural-language-search issue `REC-39`; no duplicate issue was created. Read REC-39/REC-90 issue history and the complete unmerged REC-90 product/design proposal on `origin/codex/rec-90-discover-plan`, then visually inspected its journey, People, and state-board artifacts through a detached read-only worktree.
+- Competitor review covered current first-party Beli, Mapstr, Corner, Google Maps, and Yelp material. The transferable patterns are strict Been/Want-to-try truth, natural-language moment queries, followed-map overlays, explicit per-result provenance, visible query-match annotations, contextual map visualization, and direct next actions. Public/influencer feeds, popularity ranks, anonymous-review volume, and opaque background-history assumptions do not fit rec.me.
+- Root-cause read found that `favorite` is represented only as `status = been`, so it cannot differ from ordinary visited results by opinion/rating; place searches start on every keystroke without debounce/cancellation/stale-result protection; the Edge Function accepts schema-valid but semantically wrong empty filters; deterministic owner parsing does not reliably handle apostrophe-less `Joes`; substring aliases can misclassify words; and `LA` currently bypasses area filtering. These combined gaps explain why the two reported queries can converge and why Wanna Go results can leak into a favorite query.
+- Added `docs/reviews/2026-07-14-rec-90-discover-competitive-research.md`. It recommends reframing REC-90 as a Social Answer Engine: transparent `Understood as` chips, exact query truth, evidence-bearing place cards, `Show on map`, bounded Activity, integrated people suggestions, and conditional recovery. It defines an initial favorite contract as Been plus an explicit favorite label or the queried person's rating of 4.0+, with no silent broadening.
+- No app/runtime tests were run because no production code, schema, or executable artifact changed. Documentation validation is `git diff --check` plus manual link/content review. GitHub CLI is installed, but its local `ryanlane23` token is invalid; PR creation will use the connected GitHub app after a normal git push if available.
+
+Publishing handoff, 2026-07-14 14:32 PDT:
+
+- Committed the research brief and coordination log as `927a8823d` (`docs: research Discover redesign`) and pushed `codex/discover-research` to `origin`; `git diff --check` passed before commit and the branch is clean.
+- Ready-PR creation is blocked outside the branch itself: the connected GitHub app returned `403 Resource not accessible by integration`, local `gh` authentication is invalid, and the in-app browser reached GitHub's sign-in page. Exact restart action after GitHub authentication: open `https://github.com/joelipshutz/wander/pull/new/codex/discover-research`, create a ready PR to `main`, and link it to REC-90. No implementation or TestFlight work should begin until Ryan chooses a direction.
+
+## 2026-07-14 16:49 PDT - Codex - Land Discover Research Brief
+
+Agent: Codex using `recme-pr-review-merge-release`, `review`, GitHub, and Linear workflows
+Branch: `codex/discover-research`
+Worktree: `/private/tmp/recme-discover-research`
+Linear: `REC-90` (`In Progress`)
+
+Goal: at Ryan's explicit request, review the research-only branch, open a ready PR, and squash-merge the Discover competitive research brief to `main` so Joe can review it from the integration branch.
+
+Starting status:
+
+- Fetched and inspected exact `origin/main` at `2c11be341`; it already records completed TestFlight build 74, so there is no pending explicit release to resume. Ryan requested a docs merge only, not a TestFlight release; no build-number bump, archive, upload, or Slack note is authorized.
+- The branch is clean and contains exactly two files against latest `origin/main`: the new 244-line research brief and the required 29-line prior coordination entry. The primary checkout remains on another active branch with untracked `.pnpm-store/`; this isolated worktree will continue to avoid it.
+- `docs/agent-log.md` is a high-conflict coordination file, but this branch is not behind `origin/main`, no other worktree is editing this branch, and the diff is an append-only record. No overlap is present before review.
