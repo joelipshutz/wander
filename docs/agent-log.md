@@ -11088,3 +11088,11 @@ Investigation checkpoint, 2026-07-13 19:00 PDT:
 - Root-cause hypothesis: scroll and Back jank in Lists comes from a burst of coarse `WanderStore` publications plus repeated synchronous full-store persistence and repeated list projection on the main actor while the navigation/scroll surfaces are rendering. Network latency extends the refresh window but is not itself the frame hitch.
 - Scope lock was intentionally skipped because the supported cause crosses `Wander/Features/Lists`, `Wander/Services/WanderLocalStore.swift`, and `Wander/Services/WanderStorePersistence.swift`; any implementation should still stay within those modules plus focused tests and docs.
 - Mission Control could not be updated because `http://localhost:4000` is not running. Linear `REC-85` remains the durable tracker and stays In Progress pending the physical trace and implementation decision.
+
+Handoff, 2026-07-13 19:03 PDT:
+
+- Pushed `codex/rec-85-lists-jank` and opened draft PR #91: https://github.com/joelipshutz/wander/pull/91. Linked the PR and the current-main measurement checkpoint to Linear `REC-85`.
+- No runtime code changed, so no iOS build/test run was required for this docs-only checkpoint. `git diff --check` passed before the final handoff note.
+- Exact restart: unlock the connected iPhone, open rec.me build 68, record the `SwiftUI` Instruments template for 45 seconds while scrolling My Lists, opening a list, scrolling detail, and navigating Back repeatedly; inspect Long View Body Updates/Hitches and use Time Profiler in that range.
+- If the physical trace confirms the supported chain, implementation should coalesce remote list hydration into one store publication/persistence pass, avoid a full global list refresh on every detail appearance, move file encoding/writes off the main actor while preserving ordering, and cache/index list projections so each list does not rebuild the full visible-place set.
+- Add narrow signposts only if SwiftUI + Time Profiler cannot distinguish those intervals. Do not add broad print, network, or analytics logging for this UI performance bug.
