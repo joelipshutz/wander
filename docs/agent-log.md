@@ -11570,6 +11570,30 @@ PR: https://github.com/joelipshutz/wander/pull/86
 - Generic universal iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`; artifact: `/private/tmp/DerivedData-rec89-rec88-universal/Build/Products/Debug-iphonesimulator/Wander.app`.
 - Hosted database migrations and security verification remain the previously completed proofs: REC-89 profile pgTAP 44/44 plus linked authenticated smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. No new migration bytes were introduced by this integration merge.
 
+## 2026-07-13 22:22 PDT - Codex - TestFlight Build 73
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-73`
+Worktree: `/private/tmp/recme-build73-release`
+Linear: `REC-88` and `REC-89`, both `In Review` through release validation
+
+Goal: package exact latest `main` after the REC-88 Shared Visits and REC-89 Profile redesign squash-equivalent commits into explicit TestFlight build 73, then update testers, Slack, Linear, and the durable release record.
+
+Starting status:
+
+- Exact source starts at `main` commit `4cc6fc1a6`, immediately after REC-88 commit `672b60894`. Latest completed TestFlight is build 72, documented as `VALID`, attached to `Wander Alpha`, externally approved, and announced in `#testflight-feedback`.
+- Eligible app/backend changes since build 72 are REC-88 Shared Visits plus its physical-test follow-up and REC-89 Profile redesign plus its six Xcode follow-ups. Hosted migrations through `20260714043000` are already applied and verified; this release does not delete or reset tester data.
+- Combined pre-release validation passed 324/324 iOS tests, a universal arm64/x86_64 simulator build, REC-89 hosted pgTAP 44/44 with linked smoke, and REC-88 hosted pgTAP 70/70 with linked rollback smoke.
+- Expected release edits are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. The required build increment is 72 to 73 exactly once; export must keep `manageAppVersionAndBuildNumber=false`.
+
+Release validation checkpoint, 2026-07-13 22:32 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 72 to 73 in `project.yml` and regenerated `Wander.xcodeproj`; the generated project diff contains only the two matching build-number settings, with no signing or compiler-setting churn.
+- Full iPhone 17 Pro / iOS 26.5 suite passed: 324 tests, 0 failures. Result: `/private/tmp/DerivedData-build73-test/Logs/Test/Test-Wander-2026.07.13_22-21-28--0700.xcresult`.
+- Generic iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`; artifact: `/private/tmp/DerivedData-build73-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+- `git diff --check` passes and the release diff remains limited to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this coordination log. Tester-facing What to Test copy is staged outside the repo at `/private/tmp/recme-build73-what-to-test.md`.
+- Release validation carries forward the already completed hosted security proofs: REC-89 profile pgTAP 44/44 plus linked smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. The remaining high-value tester proof is the fresh two-account/APNs Shared Visits flow on physical devices.
+
 ## 2026-07-13 22:39 PDT - Codex - REC-92 Latest-Profile Integration And Final Validation
 
 Agent: Codex
@@ -11577,9 +11601,9 @@ Branch: `codex/rec-92-invitation-inbox`
 Worktree: `/private/tmp/recme-rec92-invitation-inbox`
 Linear: `REC-92` (`In Progress`; move to `In Review` after draft PR)
 
-- Integrated `origin/main` at `4cc6fc1a6`, including the REC-89 production Profile redesign. Conflicts were additive in debug-root routing, generated Xcode project membership, and this coordination log; both mockup launch surfaces and both feature histories were retained.
+- Integrated `origin/main` through `8e123c17a`, including the REC-89 production Profile redesign and TestFlight build 73 metadata. Conflicts were additive in debug-root routing, generated Xcode project membership, and this coordination log; both mockup launch surfaces and all feature/release histories were retained.
 - Revised the Profile/banner mock to match the new owner Profile hierarchy. The durable `visit invitations` row now sits between follower/following/friend counts and BEEN/WANNA tiles, keeping a place action prominent without folding it into social-graph management.
 - Re-captured the merged mockups on iPhone 17 Pro and smaller iPhone 17e / iOS 26.5. No clipping, overlap, or undersized action issues were found. Screenshots: `/private/tmp/rec92-profile-banner-latest-17pro.png`, `/private/tmp/rec92-profile-banner-latest-17e.png`, `/private/tmp/rec92-inbox-latest-17pro.png`, and `/private/tmp/rec92-inbox-latest-17e.png`.
-- Focused launch-contract validation passed 1/1. The final combined suite passed 325 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec92-latest/Logs/Test/Test-Wander-2026.07.13_22-37-20--0700.xcresult`.
+- Focused launch-contract validation passed 1/1. After the build 73 merge, the final combined suite passed 325 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec92-latest/Logs/Test/Test-Wander-2026.07.13_22-42-28--0700.xcresult`.
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning remains.
 - Scope remains a DEBUG-only visual/product mock. No production banner timer, pending-invitation persistence, Profile navigation, decline mutation, notification routing, backend migration, hosted state, or TestFlight build was changed.
