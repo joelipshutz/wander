@@ -10499,6 +10499,46 @@ Completion, 2026-07-12 15:48 PDT:
 - Tester focus: open place profiles from map/search, scroll through Latest Activity into Place Details, and confirm save/activity cards plus Place Details rows are no longer covered or cut off by the beige background.
 - Known scope: no backend, auth, sync, notification, or data migration behavior changed in build 68.
 
+## 2026-07-12 21:27 PDT - Codex - REC-86 saved activity timestamps
+
+Agent: Codex
+Branch: `codex/rec-86-activity-time`
+Worktree: `/private/tmp/recme-rec86-activity-time`
+Linear: `REC-86`
+
+Goal: fix Been save dates rendering as `rn`, make Discover Latest Activity newest-first, and show when each place was saved.
+
+Starting status:
+
+- Clean isolated worktree at current `origin/main` commit `a81b971` (TestFlight build 68 source plus release log).
+- Investigation will trace the durable saved/visit timestamp from local and remote models through Discover activity projection and relative-date formatting before editing runtime code.
+- Expected files are Discover activity views/models, shared date formatting, remote DTO mapping, fixtures, and focused tests. No schema or hosted data change is expected.
+- Engineering review gate is skipped initially because this appears to be an isolated presentation/order regression with no new state or cross-screen contract. The gate will be reconsidered if the timestamp source requires changing persistence or sync semantics.
+
+Investigation and engineering review checkpoint, 2026-07-12 21:37 PDT:
+
+- Root cause confirmed: both visible-place RPCs omit `visited_at`, `saved_at`, `created_at`, and `updated_at`. `RemoteVisiblePlaceDTO` then accepts the row and constructs `LocalUserPlace` with `.now` defaults, making remote activity appear current and causing Discover's saved-date sort to operate on decode-time values.
+- The fix therefore does require a shared RPC contract migration. The initial no-schema assumption above is superseded.
+- Completed the plan engineering review in `docs/reviews/2026-07-12-rec-86-activity-timestamps-plan-eng-review.md`; status is clean to implement with no unresolved product or architecture decisions.
+- Contract: PostgreSQL timestamps are authoritative; Discover uses `saved_at`; Been activity uses `visited_at` with `saved_at` fallback; no remote timestamp may silently fall back to client `.now`.
+- Deployment order is backend first, then app. Added JSON fields remain compatible with build 68, while the new app DTO will require persisted non-null save/create/update timestamps.
+- The migration will also restore `owner_avatar_url`, which the category/rating RPC recreations dropped even though the iOS DTO and prior avatar migration define it as part of the visible-place payload.
+- Planned regression coverage now includes RPC security/grant metadata, exact timestamp payload values, DTO mapping, deterministic newest-first Discover ordering, compact saved-time copy, and legacy Been fallback behavior.
+
+Implementation and validation, 2026-07-12 22:11 PDT:
+
+- Added `visited_at`, `saved_at`, `created_at`, and `updated_at` to both visible-place RPC payloads and mapped them into `LocalUserPlace` without any client-time fallback.
+- Restored `owner_avatar_url` while preserving the current category, rating, attribute, visibility, RLS, security-invoker, search-path, and authenticated-grant contracts.
+- Discover Latest Activity now sorts by authoritative `saved_at` descending with a stable user-place-id tie break and shows compact save timing (`just now`, minutes, hours, days, or a calendar date).
+- Been activity now uses `visited_at` with `saved_at` fallback instead of the last edit time.
+- Hosted migration ordering found REC-82 migration `20260712214500_first_visible_place_photo.sql` already applied but not yet merged into `origin/main`. REC-86 was renumbered to `20260712214600_visible_place_activity_timestamps.sql`, validated with the REC-82 migration represented locally, and applied through `supabase db push --linked --include-all --yes`. The push reported the REC-86 migration applied successfully.
+- Hosted pgTAP ran through the repo's pinned-TLS direct Postgres path and passed all 22 assertions in a rollback transaction. Coverage includes exact timestamp/avatar payloads for both RPCs plus security-invoker, pinned `search_path`, and execute-grant posture.
+- Focused iOS regressions passed: 6 tests, 0 failures.
+- Full iOS suite passed on iPhone 16 Plus / iOS 18.6: 272 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec86-full/Logs/Test/Test-Wander-2026.07.12_22-06-17--0700.xcresult`.
+- `git diff --check` passed. No TestFlight build, build-number bump, archive, upload, or tester announcement was requested or performed.
+- Implementation commit: `6a1bad9` (`fix: restore saved activity timestamps`).
+- Ready PR: https://github.com/joelipshutz/wander/pull/81. Merge PR #75 first so the repository contains the already-hosted REC-82 migration immediately preceding REC-86.
+
 ## 2026-07-12 21:40 PDT - Codex - REC-82 Image Rendering Investigation
 
 Agent: Codex
@@ -10948,3 +10988,15 @@ REC-82 / TestFlight build-70 release completion, 2026-07-13 16:57 PDT:
 - Public TestFlight link: https://testflight.apple.com/join/knEhRa6t. Posted the required live/approved tester note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783986998884269.
 - Linear `REC-82` is Done with PR, hosted deployment, validation, archive, App Store Connect, TestFlight, and Slack evidence. No tester data was deleted, reset, or rewritten.
 - Final validation: Ryan's on-device confirmation; 9/9 Google selector/privacy tests; authenticated hosted Supabase smoke; 46/46 focused iOS tests; 287/287 full iOS tests; generic iOS Simulator build; signed archive metadata/signature checks. Only the existing traditional-headermap build warning remains.
+
+REC-86 latest-main integration and pre-landing hardening, 2026-07-13 17:25 PDT:
+
+- Merged latest `origin/main` (`77d0c96`, TestFlight build 70) into the isolated REC-86 branch and preserved the already-landed REC-82 migrations, app changes, tests, and release history. The later `4fa885a` main delta is the build-70 completion log only; it has now also been preserved. The implementation diff against current main remains scoped to activity timestamps, presentation, tests, and its two additive migrations.
+- A three-lens pre-landing review covered Swift/UI behavior, Supabase security and migration posture, and adversarial timestamp/data-flow cases. It found three actionable gaps: saved-time copy could truncate behind long metadata, explicit visit-date edits could leave `user_places.visited_at` stale, and implausible future timestamps could stay pinned above valid activity. All three are fixed; no review finding remains open.
+- Added `20260714001500_sync_user_place_latest_visit.sql`: a narrow `SECURITY DEFINER` trigger function with pinned `search_path` and no authenticated execute grant recomputes the latest active explicit visit after insert/edit/delete while skipping derived backfill rows to prevent recursive writes.
+- Applied that additive migration to linked hosted project `rugmtlgufrhlxwfkumhw`. A subsequent linked dry run reports the remote database is up to date. No tester rows were deleted or reset; existing Been summaries were updated only where their persisted latest active visit differed.
+- Hosted rollback-wrapped pgTAP now passes 27/27 assertions through the repo's pinned-TLS direct Postgres path. Coverage includes trigger metadata/grants, explicit visit edit propagation, exact timestamp/avatar payloads for both RPCs, and the preserved security-invoker/search-path/execute-grant contracts.
+- Latest Activity now truncates place metadata before its fixed saved-time label. Five minutes of clock skew is tolerated as `just now`; implausible future dates sort after valid activity and render as absolute dates.
+- Integrated full iOS suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped. Result: `/private/tmp/DerivedData-rec86-full/Logs/Test/Test-Wander-2026.07.13_17-21-27--0700.xcresult`.
+- Final generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec86-final-build`. An initial universal build attempt exhausted the remaining disk while writing dSYM output; after removing only completed temporary DerivedData, the clean rerun passed. This was an environment-capacity failure, not a source failure.
+- `git diff --check` passes. Next: commit/push the final docs-only main synchronization, update and squash-merge PR #81, then package latest `main` as explicitly requested TestFlight build 71.

@@ -225,6 +225,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "been",
             "visibility": "followers",
             "note": "Easy sunset win.",
+            "visited_at": "2026-07-09T20:00:00Z",
+            "saved_at": "2026-07-08T19:00:00Z",
+            "created_at": "2026-07-08T18:00:00Z",
+            "updated_at": "2026-07-10T21:00:00Z",
             "rating_signal": null,
             "rating_score": 4.5,
             "recommended_score": 4.5,
@@ -260,6 +264,11 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(places[0].userPlace.ratingScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedCount, 2)
+        XCTAssertEqual(places[0].userPlace.visitedAt, ISO8601DateFormatter().date(from: "2026-07-09T20:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.savedAt, ISO8601DateFormatter().date(from: "2026-07-08T19:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.createdAt, ISO8601DateFormatter().date(from: "2026-07-08T18:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.updatedAt, ISO8601DateFormatter().date(from: "2026-07-10T21:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.serverUpdatedAt, ISO8601DateFormatter().date(from: "2026-07-10T21:00:00Z"))
         XCTAssertEqual(places[0].attributes.map(\.questionKey), ["strenuousness"])
         XCTAssertEqual(places[0].attributes[0].valueJSON, "\"easy\"")
         XCTAssertEqual(rpc.calls.map(\.name), ["visible_places_in_view"])
@@ -320,6 +329,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "wanna_go",
             "visibility": "mutuals",
             "note": "rainy night",
+            "visited_at": null,
+            "saved_at": "2026-07-07T18:00:00Z",
+            "created_at": "2026-07-07T18:00:00Z",
+            "updated_at": "2026-07-08T19:00:00Z",
             "rating_signal": null,
             "rating_score": null,
             "recommended_score": null,
@@ -343,6 +356,9 @@ final class RemoteRepositoryTests: XCTestCase {
             "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=1"
         )
         XCTAssertEqual(places[0].userPlace.status, .wannaGo)
+        XCTAssertNil(places[0].userPlace.visitedAt)
+        XCTAssertEqual(places[0].userPlace.savedAt, ISO8601DateFormatter().date(from: "2026-07-07T18:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.updatedAt, ISO8601DateFormatter().date(from: "2026-07-08T19:00:00Z"))
         XCTAssertEqual(rpc.calls.map(\.name), ["profile_visible_places"])
         XCTAssertEqual(rpc.calls[0].body["profile_id"] as? String, "user_ryan")
         XCTAssertEqual(rpc.calls[0].body["status_filter"] as? [String], ["wanna_go"])
@@ -367,6 +383,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "maybe",
             "visibility": "followers",
             "note": null,
+            "visited_at": null,
+            "saved_at": "2026-07-08T18:00:00Z",
+            "created_at": "2026-07-08T18:00:00Z",
+            "updated_at": "2026-07-08T18:00:00Z",
             "rating_signal": null,
             "rating_score": null,
             "recommended_score": null,

@@ -84,6 +84,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let status: String
     let visibility: String
     let note: String?
+    let visitedAt: Date?
+    let savedAt: Date
+    let createdAt: Date
+    let updatedAt: Date
     let ratingSignal: String?
     let ratingScore: Double?
     let recommendedScore: Double?
@@ -114,6 +118,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case status
         case visibility
         case note
+        case visitedAt = "visited_at"
+        case savedAt = "saved_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case ratingSignal = "rating_signal"
         case ratingScore = "rating_score"
         case recommendedScore = "recommended_score"
@@ -172,8 +180,14 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             subcategoryOverride: subcategoryOverride,
             categoryOverrideSource: categoryOverrideSource,
             categoryOverrideConfidence: categoryOverrideConfidence,
+            visitedAt: visitedAt,
+            savedAt: savedAt,
             sourceType: sourceType,
-            syncState: .synced
+            syncState: .synced,
+            localUpdatedAt: updatedAt,
+            serverUpdatedAt: updatedAt,
+            createdAt: createdAt,
+            updatedAt: updatedAt
         )
         return VisiblePlace(
             id: userPlaceID,

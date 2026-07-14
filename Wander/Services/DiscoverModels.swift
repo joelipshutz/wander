@@ -160,6 +160,71 @@ struct DiscoverResults {
     let profiles: [ProfileShell]
 }
 
+enum DiscoverLatestActivityPresentation {
+    private static let futureClockSkewTolerance: TimeInterval = 5 * 60
+
+    static func places(
+        from places: [VisiblePlace],
+        limit: Int = 10,
+        relativeTo now: Date = .now
+    ) -> [VisiblePlace] {
+        Array(
+            places
+                .sorted { lhs, rhs in
+                    let lhsDate = sortDate(for: lhs.userPlace.savedAt, relativeTo: now)
+                    let rhsDate = sortDate(for: rhs.userPlace.savedAt, relativeTo: now)
+                    if lhsDate != rhsDate {
+                        return lhsDate > rhsDate
+                    }
+                    return lhs.userPlace.id < rhs.userPlace.id
+                }
+                .prefix(max(0, limit))
+        )
+    }
+
+    static func timestampText(
+        for savedAt: Date,
+        relativeTo now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        if savedAt.timeIntervalSince(now) > futureClockSkewTolerance {
+            return absoluteDateText(for: savedAt, relativeTo: now, calendar: calendar)
+        }
+
+        let elapsed = max(0, now.timeIntervalSince(savedAt))
+
+        if elapsed < 60 {
+            return "just now"
+        }
+        if elapsed < 60 * 60 {
+            return "\(Int(elapsed / 60))m ago"
+        }
+        if elapsed < 24 * 60 * 60 {
+            return "\(Int(elapsed / (60 * 60)))h ago"
+        }
+        if elapsed < 7 * 24 * 60 * 60 {
+            return "\(Int(elapsed / (24 * 60 * 60)))d ago"
+        }
+
+        return absoluteDateText(for: savedAt, relativeTo: now, calendar: calendar)
+    }
+
+    private static func sortDate(for savedAt: Date, relativeTo now: Date) -> Date {
+        savedAt.timeIntervalSince(now) > futureClockSkewTolerance ? .distantPast : min(savedAt, now)
+    }
+
+    private static func absoluteDateText(for savedAt: Date, relativeTo now: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = calendar.isDate(savedAt, equalTo: now, toGranularity: .year)
+            ? "MMM d"
+            : "MMM d, yyyy"
+        return formatter.string(from: savedAt)
+    }
+}
+
 struct VisiblePlaceGroup: Identifiable {
     let key: String
     let aliases: Set<String>

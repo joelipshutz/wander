@@ -67,11 +67,9 @@ struct DiscoverScreen: View {
     }
 
     private var latestActivityPlaces: [VisiblePlace] {
-        Array(
-            store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
+        DiscoverLatestActivityPresentation.places(
+            from: store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
                 .filter { $0.owner.id != store.currentUser.id }
-                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
-                .prefix(10)
         )
     }
 
@@ -921,10 +919,22 @@ private struct LatestActivityRow: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
 
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+                    HStack(spacing: WanderTheme.spacing1) {
+                        if !metadataSubtitle.isEmpty {
+                            Text(metadataSubtitle)
+                                .lineLimit(1)
+
+                            Text("·")
+                                .accessibilityHidden(true)
+                        }
+
+                        Text(savedTimeText)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .accessibilityElement(children: .combine)
                 }
 
                 Spacer()
@@ -940,7 +950,7 @@ private struct LatestActivityRow: View {
         .buttonStyle(.plain)
     }
 
-    private var subtitle: String {
+    private var metadataSubtitle: String {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
@@ -951,6 +961,10 @@ private struct LatestActivityRow: View {
                 return trimmed?.isEmpty == false ? trimmed : nil
             }
             .joined(separator: " · ")
+    }
+
+    private var savedTimeText: String {
+        DiscoverLatestActivityPresentation.timestampText(for: visiblePlace.userPlace.savedAt)
     }
 
     private var avatarColor: Color {
