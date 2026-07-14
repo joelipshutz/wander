@@ -189,7 +189,10 @@ final class RemoteRepositoryTests: XCTestCase {
             path: "user_123/visit_123/photo_123.jpg"
         )
 
-        XCTAssertTrue(url.absoluteString.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/user_123/visit_123/photo_123.jpg?v="))
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://example.supabase.co/storage/v1/object/sign/visit-photos/user_123/visit_123/photo_123.jpg?token=test"
+        )
         XCTAssertEqual(
             storage.uploads,
             [
@@ -992,6 +995,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "push_enabled": true,
           "social_graph_enabled": true,
           "shared_lists_enabled": true,
+          "shared_visits_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": false,
@@ -1003,6 +1007,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "push_enabled": true,
           "social_graph_enabled": true,
           "shared_lists_enabled": true,
+          "shared_visits_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": true,
@@ -1024,6 +1029,7 @@ final class RemoteRepositoryTests: XCTestCase {
         try await repository.unregisterPushToken("abcdef1234567890", environment: .sandbox)
 
         XCTAssertTrue(preferences.socialGraphEnabled)
+        XCTAssertTrue(preferences.sharedVisitsEnabled)
         XCTAssertTrue(preferences.followedActivityEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
@@ -1062,6 +1068,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 pushEnabled: true,
                 socialGraphEnabled: true,
                 sharedListsEnabled: true,
+                sharedVisitsEnabled: true,
                 recommendationsEnabled: true,
                 captureEnabled: true,
                 discoveryDigestEnabled: true,
@@ -1072,6 +1079,7 @@ final class RemoteRepositoryTests: XCTestCase {
             pushEnabled: false,
             socialGraphEnabled: false,
             sharedListsEnabled: false,
+            sharedVisitsEnabled: false,
             recommendationsEnabled: false,
             captureEnabled: false,
             discoveryDigestEnabled: false,
@@ -1094,6 +1102,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(
+                from: URL(string: "recme://shared-visits/48000000-0000-0000-0000-000000000001?generation=3")!
+            ),
+            .sharedVisit(participantID: "48000000-0000-0000-0000-000000000001", generation: 3)
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://extraction-jobs/43000000-0000-0000-0000-000000000001")!),
@@ -1128,8 +1142,37 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(
+            destination(
+                "shared_visit",
+                data: ["participant_id": "participant-1", "invitation_generation": 4]
+            ),
+            .sharedVisit(participantID: "participant-1", generation: 4)
+        )
         XCTAssertEqual(destination("capture_ready", data: ["extraction_job_id": "job-1"]), .drafts(extractionJobID: "job-1"))
         XCTAssertEqual(destination("followed_activity_digest"), .discover)
+    }
+
+    func testSharedVisitAcceptanceIdentifiersAreStableAndGenerationScoped() {
+        let first = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 1
+        )
+        let retry = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 1
+        )
+        let reinvite = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 2
+        )
+
+        XCTAssertEqual(first, retry)
+        XCTAssertNotEqual(first, reinvite)
+        XCTAssertNotNil(UUID(uuidString: first.operationID))
+        XCTAssertNotNil(UUID(uuidString: first.userPlaceID))
+        XCTAssertNotNil(UUID(uuidString: first.visitID))
+        XCTAssertEqual(Set([first.operationID, first.userPlaceID, first.visitID]).count, 3)
     }
 
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
@@ -1164,6 +1207,7 @@ private final class RecordingStorage: RemoteStorageCalling {
     private(set) var uploads: [Upload] = []
     private(set) var deletes: [Delete] = []
     private(set) var downloads: [Delete] = []
+    private(set) var signedURLs: [Delete] = []
     var downloadData = Data()
 
     func uploadObject(
@@ -1191,6 +1235,11 @@ private final class RecordingStorage: RemoteStorageCalling {
     func downloadObject(bucket: String, path: String) async throws -> Data {
         downloads.append(Delete(bucket: bucket, path: path))
         return downloadData
+    }
+
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        signedURLs.append(Delete(bucket: bucket, path: path))
+        return URL(string: "https://example.supabase.co/storage/v1/object/sign/\(bucket)/\(path)?token=test")!
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {

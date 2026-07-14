@@ -12,6 +12,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
+        XCTAssertEqual(
+            WanderRootView.notificationTab(for: .sharedVisit(participantID: "participant-1", generation: 2)),
+            .map
+        )
         XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
     }
 

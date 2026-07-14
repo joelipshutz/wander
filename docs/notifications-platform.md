@@ -36,13 +36,15 @@ Before relying on a new notification in TestFlight:
 
 ## Followed Place Activity
 
-`followed_place_visit` is queued when a new `place_visits` row represents either an initial visited-place save or a later check-in. It is controlled by the default-on `followed_activity_enabled` preference shown as **People you follow** in Settings.
+`followed_place_visit` is queued when a new `place_visits` row represents either an initial visited-place save or a later check-in. It is controlled by the `followed_activity_enabled` preference shown as **People you follow** in Settings. The category is enabled by the explicit one-tap enrollment flow, not by a server-side default.
 
 The producer sends only to followers who can read the associated `user_places` row under its current visibility and block rules. Its copy is `<display name> saved a place` with the canonical place name as the body. The routing payload contains only visit, user-place, place, and actor IDs.
 
 ## Permission And Routing
 
 Notification setup is one action in Profile -> Settings -> Notifications. Before setup, every category is shown off and disabled. **Allow notifications** requests iOS permission, enables every category, requests an APNs token, and registers any available stored token. **Disable notifications** turns off every backend category before deactivating the device token; iOS permission may remain granted because apps cannot revoke system permission themselves.
+
+New backend preference rows default every category to off. Existing rows keep their explicit values during schema upgrades. A stored APNs token may be reassigned invisibly to the currently signed-in account to prevent cross-account delivery, but no product event can queue until that account completes **Allow notifications** and enables its categories.
 
 Notification taps resolve as follows:
 
@@ -54,10 +56,19 @@ Notification taps resolve as follows:
 | `list_place_added` | The referenced list detail |
 | `place_saved_from_your_map` | The referenced place card on Map |
 | `followed_place_visit` | The referenced place card on Map |
+| `shared_visit` | The exact pending invitation generation in Save This Place; accepted invitations resolve to the recipient visit and terminal invitations show an unavailable state |
 | `capture_ready` | The matching Profile draft, or the drafts section |
 | `followed_activity_digest` | Discover |
 
 The app parses `recme.deeplink_url` first and falls back to `notification_type` plus safe routing IDs in `recme.data`. This keeps older queued notifications routable if their URL format changes.
+
+## Shared Visits
+
+`shared_visit` is queued when the owner of a persisted, non-stealth Been visit invites a mutual friend. It is controlled by the **Shared visits** setting, which is enabled with the rest of the categories during explicit notification enrollment. The title is `Shared visit`; the body is `<display name> saved <place> with you. Add your version of the visit.` The payload contains only participant, invitation-generation, group, source-visit, place, and actor IDs.
+
+The deep link is generation-aware. A pending invitation opens a prefilled Save This Place flow; an accepted invitation resolves to the recipient-owned visit; stale, declined, cancelled, or otherwise terminal generations do not expose their old snapshot. Generic `followed_place_visit` delivery waits two minutes so a more specific Shared Visit event can supersede it without sending two notifications for one save.
+
+Invitation delivery and acceptance are separate guarantees. The sender keeps an account-scoped local outbox until the source visit and all selected source photos are remotely available. The recipient's acceptance uses deterministic client IDs plus a server operation ledger, so foreground retries cannot create duplicate saves or visits.
 
 ## Adding A Notification
 

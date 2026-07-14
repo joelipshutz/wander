@@ -11088,3 +11088,56 @@ Completion, 2026-07-13 13:57 PDT:
 - Full iOS suite passed: 279 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec88/Logs/Test/Test-Wander-2026.07.13_13-50-53--0700.xcresult`).
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
 - No production save/card UI, persistence models, backend contracts, Supabase migrations, notification triggers, or invite behavior changed. Functional implementation remains intentionally deferred until this visual direction is approved.
+
+## 2026-07-13 17:55 PDT - Codex - REC-88 Production Shared Visits
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: implement the approved Shared Visits system end to end: independent participant saves, invite picker, pending cards, prefilled acceptance, inherited recipient-owned photos, companion attribution, privacy transitions, notification settings/deep links, lifecycle inbox sync, hosted Supabase contracts, and regression coverage.
+
+Starting status and coordination:
+
+- Fetched `origin` and rebased the clean isolated worktree onto latest `origin/main`; preserved both sides of the expected `docs/agent-log.md` conflict. Rebased mockup commit is `69dfb40b4`.
+- The root checkout remains intentionally untouched. Another active worktree is implementing REC-89 profile redesign; production edits here will avoid profile-screen redesign and keep any `MapScreen.swift` touch narrowly scoped to shared-visit bindings/routes.
+- High-conflict files reserved for this task include `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, this log, and one new Supabase migration. No overlapping edit will be reverted.
+- Updated REC-88 from mockup-only wording to the full production Shared Visits contract and kept it assigned to Ryan/In Progress with PR #85 linked.
+- Completed the FULL office-hours and engineering reviews. The approved engineering plan is `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-88-visit-friends-mockup-eng-plan-20260713-175419.md`; all 13 recommended decisions were accepted, with 0 unresolved decisions and 0 critical plan gaps.
+
+Expected implementation files:
+
+- Shared Visits schema/RLS/RPC migration, pgTAP coverage, and `scripts/supabase-smoke-test.mjs`.
+- Shared-visit local/remote models, persistence, repositories, backend composition, inbox lifecycle coordinator, private photo transport, deep links, and transactional push enrollment.
+- Focused `Wander/Features/SharedVisits/` components, reusable mutual-friend picker extraction, narrow Map save/card integration, and Settings notification/privacy integration.
+- `project.yml`, regenerated Xcode project, unit/navigation tests, and focused `WanderUITests` target.
+- `docs/decisions.md`, notification/backend documentation where contracts change, and this coordination log.
+
+Validation plan:
+
+- Run pgTAP locally when Docker is available, deploy only the reviewed linked migration, verify migration/metadata posture, and run the extended two-account hosted rollback smoke test.
+- Run XcodeGen, focused tests, the full iPhone 16 Plus / iOS 18.6 suite, focused UI automation, generic simulator build, and current/small-phone screenshots.
+- Physical two-account/APNs delivery is the final manual proof; no TestFlight build-number bump, archive, upload, or release is authorized by this request.
+
+Production checkpoint, 2026-07-13 18:55 PDT:
+
+- Completed the outside engineering hardening pass with the recommended defaults: server-authoritative private-profile enforcement, generation-scoped pending snapshots that are erased on every terminal path, deterministic client acceptance identities plus a unique server operation ledger, account-exclusive active APNs tokens, generation-aware notification resolution, and an account-scoped sender outbox that waits for the source visit and selected photos to finish syncing.
+- Wired signed-in/foreground maintenance for own-save sync, failed photo retry, invite-outbox drain, push-token registration, and recipient inbox refresh. Pending invitations appear on Map, open the prefilled Save This Place flow, support decline, and resolve terminal deep links safely. Accepted source and recipient visit cards load server companion attribution.
+- Moved local visit-photo file persistence into `Wander/Services/VisitPhotoLocalFileStore.swift` so background retries do not depend on a Map feature implementation detail. Visit photos now use private signed URLs in both production and repository contract tests.
+- Local pgTAP could not run because Docker is unavailable on this machine; this is not counted as a pass. Added 49 Shared Visits pgTAP assertions and expanded the linked hosted rollback smoke test to cover invite creation, inbox/context isolation, atomic recipient acceptance, exactly-once retry, and companion attribution.
+- The documented iPhone 16 Plus / iOS 18.6 simulator runtime is not installed in the active Xcode; available runtimes are iOS 26.5. Focused testing on iPhone 17 Pro / iOS 26.5 passed 48 tests with 0 failures after correcting the private-storage test double (`/tmp/DerivedData-rec88-tests/Logs/Test/Test-Wander-2026.07.13_18-53-54--0700.xcresult`).
+
+Hardening and final-validation checkpoint, 2026-07-13 19:45 PDT:
+
+- Added account-generation guards to every Shared Visits inbox, destination, companion, decline, acceptance, outbox, and photo-retry path. A late async completion from a previous account can no longer populate the next account's store or finish its local acceptance work. Added a focused account-switch regression test.
+- Added a block cleanup trigger that cancels affected pending or accepted participant links, erases the private snapshot, and skips any pending/claimed Shared Visit push. Companion attribution now omits blocked profiles, including co-invitees.
+- Notification preferences now default all eight categories off for new backend rows. Existing explicit preference rows are preserved; the one-tap enrollment action remains the only path that enables every category. APNs token ownership remains exclusive to the current account.
+- Selected inherited photos are offered only when the sender has local bytes available, avoiding recipient copy metadata that could never complete. Acceptance still copies selected photos into recipient-owned storage and permits the recipient to remove inherited photos before saving.
+- Deployed linked hosted migrations `20260714013000_shared_visits.sql`, `20260714022000_fix_shared_visit_acceptance_source.sql`, `20260714024500_cancel_shared_visits_on_block.sql`, and `20260714031500_notification_preferences_opt_in_defaults.sql` to project `rugmtlgufrhlxwfkumhw`.
+- Hosted rollback-wrapped pgTAP passed 56/56 Shared Visits assertions and 45/45 notification assertions. Direct metadata checks confirmed the block trigger is enabled, sensitive RPCs/functions retain pinned `search_path` and intended security/grants, and all eight notification defaults are `false`. Local pgTAP remains unavailable because Docker is unavailable and is not counted as a pass.
+- Full iOS suite passed on iPhone 17 Pro / iOS 26.5: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-39-12--0700.xcresult`). The iPhone 16 Plus / iOS 18.6 runtime required by the repo command is not installed in the active Xcode.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec88-final-build`; only the existing traditional-headermap warning was emitted.
+- Final linked smoke passed: photo visibility, provider quota, and Shared Visits contracts are valid. `supabase migration list --linked` reports local/remote alignment through `20260714031500`; REC-89's separately owned `20260714003000` migration was restored only for this read-only comparison and removed from this branch afterward.
+- Final UI verification remains clean on iPhone 17 Pro and iPhone 17e: `/private/tmp/rec88-shared-visit-editor-17pro-final.png`, `/private/tmp/rec88-shared-visit-editor-17e-final.png`, and `/private/tmp/rec88-shared-visit-card-17pro-final.png`.

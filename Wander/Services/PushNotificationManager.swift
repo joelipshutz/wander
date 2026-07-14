@@ -14,6 +14,7 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
     static let didRegisterForRemoteNotifications = Notification.Name("WanderDidRegisterForRemoteNotifications")
     static let didFailToRegisterForRemoteNotifications = Notification.Name("WanderDidFailToRegisterForRemoteNotifications")
     nonisolated static let didReceiveNotificationResponse = Notification.Name("WanderDidReceiveNotificationResponse")
+    nonisolated static let didReceiveRemoteNotification = Notification.Name("WanderDidReceiveRemoteNotification")
     static let deviceTokenKey = "deviceToken"
     static let errorKey = "error"
     nonisolated static let userInfoKey = "userInfo"
@@ -59,6 +60,14 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        let boxedUserInfo = NotificationUserInfoBox(notification.request.content.userInfo)
+        Task { @MainActor in
+            NotificationCenter.default.post(
+                name: Self.didReceiveRemoteNotification,
+                object: nil,
+                userInfo: [Self.userInfoKey: boxedUserInfo.value]
+            )
+        }
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -90,6 +99,7 @@ enum NotificationDestination: Equatable {
     case people(NotificationPeopleMode)
     case list(id: String)
     case place(id: String)
+    case sharedVisit(participantID: String, generation: Int)
     case drafts(extractionJobID: String?)
     case discover
 }
@@ -170,6 +180,69 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
+    func enableNotifications(
+        backend: WanderBackend,
+        authState: AuthState
+    ) async -> NotificationPreferences? {
+        guard case .signedIn = authState, backend.canRegisterPushNotifications else {
+            lastErrorMessage = "Sign in to turn on notifications."
+            return nil
+        }
+
+        lastErrorMessage = nil
+        await refreshAuthorizationStatus()
+        if authorizationStatus == .denied {
+            lastErrorMessage = "Enable alerts in iOS Settings, then try again."
+            return nil
+        }
+
+        if authorizationStatus == .notDetermined {
+            guard await requestAuthorizationAndRegister() else { return nil }
+        } else {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
+        guard let token = await storedDeviceTokenWaitingForRegistration() else {
+            lastErrorMessage = "This device did not finish registering with Apple. Try again."
+            await disablePreferencesAfterFailedEnrollment(backend: backend)
+            return nil
+        }
+
+        isRegisteringToken = true
+        defer { isRegisteringToken = false }
+
+        do {
+            _ = try await backend.registerPushToken(
+                token,
+                environment: Self.environment,
+                appBundleID: Bundle.main.bundleIdentifier ?? "com.grayline.wander"
+            )
+            return try await backend.updateNotificationPreferences(.allEnabled)
+        } catch {
+            try? await backend.unregisterPushToken(token, environment: Self.environment)
+            await disablePreferencesAfterFailedEnrollment(backend: backend)
+            lastErrorMessage = "rec.me could not finish notification setup. Try again."
+            #if DEBUG
+            WanderDebugLog.remote.error("transactional push enrollment failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
+            return nil
+        }
+    }
+
+    func disableNotifications(backend: WanderBackend) async -> NotificationPreferences? {
+        guard backend.canRegisterPushNotifications else { return nil }
+        lastErrorMessage = nil
+
+        do {
+            let preferences = try await backend.updateNotificationPreferences(.allDisabled)
+            _ = await unregisterStoredDeviceTokenIfPossible(backend: backend)
+            return preferences
+        } catch {
+            lastErrorMessage = "Could not disable notifications. Try again."
+            return nil
+        }
+    }
+
     func handleRegisteredDeviceToken(_ data: Data, backend: WanderBackend, authState: AuthState) async {
         let token = Self.hexString(from: data)
         userDefaults.set(token, forKey: tokenKey)
@@ -239,6 +312,12 @@ final class PushNotificationManager: ObservableObject {
         navigationRequest = NotificationNavigationRequest(destination: destination)
     }
 
+    func openSharedVisit(participantID: String, generation: Int) {
+        navigationRequest = NotificationNavigationRequest(
+            destination: .sharedVisit(participantID: participantID, generation: generation)
+        )
+    }
+
     func consumeNavigationRequest(id: UUID) {
         guard navigationRequest?.id == id else { return }
         navigationRequest = nil
@@ -263,6 +342,11 @@ final class PushNotificationManager: ObservableObject {
             return (data?["list_id"] as? String).map { .list(id: $0) }
         case "place_saved_from_your_map", "followed_place_visit":
             return (data?["place_id"] as? String).map { .place(id: $0) }
+        case "shared_visit":
+            guard let participantID = data?["participant_id"] as? String,
+                  let generation = integerValue(data?["invitation_generation"])
+            else { return nil }
+            return .sharedVisit(participantID: participantID, generation: generation)
         case "capture_ready":
             return .drafts(extractionJobID: data?["extraction_job_id"] as? String)
         case "followed_activity_digest":
@@ -287,6 +371,13 @@ final class PushNotificationManager: ObservableObject {
             return identifier.map { .list(id: $0) }
         case "places":
             return identifier.map { .place(id: $0) }
+        case "shared-visits":
+            guard let identifier,
+                  let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let generationString = components.queryItems?.first(where: { $0.name == "generation" })?.value,
+                  let generation = Int(generationString)
+            else { return nil }
+            return .sharedVisit(participantID: identifier, generation: generation)
         case "extraction-jobs":
             return .drafts(extractionJobID: identifier)
         case "discover":
@@ -306,5 +397,31 @@ final class PushNotificationManager: ObservableObject {
 
     static func hexString(from data: Data) -> String {
         data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func storedDeviceTokenWaitingForRegistration() async -> String? {
+        if let token = userDefaults.string(forKey: tokenKey), !token.isEmpty {
+            return token
+        }
+
+        UIApplication.shared.registerForRemoteNotifications()
+        for _ in 0..<80 {
+            if let token = userDefaults.string(forKey: tokenKey), !token.isEmpty {
+                return token
+            }
+            try? await Task.sleep(for: .milliseconds(125))
+        }
+        return nil
+    }
+
+    private func disablePreferencesAfterFailedEnrollment(backend: WanderBackend) async {
+        _ = try? await backend.updateNotificationPreferences(.allDisabled)
+    }
+
+    private static func integerValue(_ value: Any?) -> Int? {
+        if let value = value as? Int { return value }
+        if let value = value as? NSNumber { return value.intValue }
+        if let value = value as? String { return Int(value) }
+        return nil
     }
 }

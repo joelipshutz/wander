@@ -284,6 +284,20 @@ struct MapScreen: View {
                             .padding(.vertical, WanderTheme.spacing1)
                         }
                         .frame(height: 48)
+
+                        if let invitation = store.sharedVisitInvitations.first {
+                            SharedVisitInboxCard(
+                                invitation: invitation,
+                                additionalCount: max(0, store.sharedVisitInvitations.count - 1),
+                                onOpen: {
+                                    Task { await openSharedVisitInvitation(invitation) }
+                                },
+                                onDecline: {
+                                    Task { await declineSharedVisitInvitation(invitation) }
+                                }
+                            )
+                            .padding(.horizontal, WanderTheme.spacing3)
+                        }
                     }
 
                     Spacer()
@@ -311,12 +325,16 @@ struct MapScreen: View {
             }
             .task {
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                if auth.isSignedIn {
+                    await store.refreshSharedVisitInbox(backend: backend)
+                }
                 centerMapOnInitialPlacesIfNeeded()
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else { return }
                 Task {
                     await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                    await store.refreshSharedVisitInbox(backend: backend)
                     centerMapOnInitialPlacesIfNeeded()
                 }
             }
@@ -369,7 +387,41 @@ struct MapScreen: View {
     }
 
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
-        guard let request, case .place(let placeID) = request.destination else { return }
+        guard let request else { return }
+
+        switch request.destination {
+        case .place(let placeID):
+            await openNotificationPlace(placeID, requestID: request.id)
+        case .sharedVisit(let participantID, let generation):
+            guard let destination = await store.resolveSharedVisitDestination(
+                participantID: participantID,
+                generation: generation,
+                backend: backend
+            ) else {
+                pushNotifications.consumeNavigationRequest(id: request.id)
+                return
+            }
+
+            if destination.status == SharedVisitParticipantStatus.pending.rawValue,
+               let invitation = await store.refreshSharedVisitContext(
+                participantID: participantID,
+                generation: destination.currentGeneration,
+                backend: backend
+               ) {
+                mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
+                pushNotifications.consumeNavigationRequest(id: request.id)
+            } else if destination.status == SharedVisitParticipantStatus.accepted.rawValue {
+                await openNotificationPlace(destination.placeID, requestID: request.id)
+            } else {
+                mapSearchMessage = "That shared visit is no longer available."
+                pushNotifications.consumeNavigationRequest(id: request.id)
+            }
+        default:
+            return
+        }
+    }
+
+    private func openNotificationPlace(_ placeID: String, requestID: UUID) async {
 
         let notificationLookupViewport = MapViewport(
             minLatitude: -90,
@@ -380,7 +432,11 @@ struct MapScreen: View {
         await store.refreshRemoteSocialSurfaces(in: notificationLookupViewport, backend: backend)
         guard let visiblePlace = store.visiblePlaces().first(where: {
             $0.place.id == placeID || $0.place.localID == placeID || $0.place.serverID == placeID
-        }) else { return }
+        }) else {
+            mapSearchMessage = "That place is not available on your map."
+            pushNotifications.consumeNavigationRequest(id: requestID)
+            return
+        }
 
         selectedFilters = [.you, .social, .been, .wanna]
         selectedSocialOwnerID = nil
@@ -396,7 +452,29 @@ struct MapScreen: View {
                 span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
             )
         )
-        pushNotifications.consumeNavigationRequest(id: request.id)
+        pushNotifications.consumeNavigationRequest(id: requestID)
+    }
+
+    private func openSharedVisitInvitation(_ cachedInvitation: SharedVisitInvitation) async {
+        let invitation = await store.refreshSharedVisitContext(
+            participantID: cachedInvitation.participantID,
+            generation: cachedInvitation.invitationGeneration,
+            backend: backend
+        )
+        guard let invitation else {
+            mapSearchMessage = "That shared visit is no longer available."
+            return
+        }
+        mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
+    }
+
+    private func declineSharedVisitInvitation(_ invitation: SharedVisitInvitation) async {
+        let declined = await store.declineSharedVisit(
+            participantID: invitation.participantID,
+            generation: invitation.invitationGeneration,
+            backend: backend
+        )
+        mapSearchMessage = declined ? "Shared visit declined." : "Could not decline that shared visit. Try again."
     }
 
     private func toggle(_ filter: MapFilter) {
@@ -990,7 +1068,13 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
+            await createSharedVisitInvitesIfNeeded(
+                inviteeUserIDs: submission.inviteeUserIDs,
+                sourceVisit: targetVisit
+            )
             return result
+        case .sharedVisit(let invitation):
+            return await acceptSharedVisit(invitation, submission: submission)
         case .addVisit, .editVisit, .editWant:
             let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
                 submission,
@@ -1003,6 +1087,10 @@ struct MapScreen: View {
                 to: targetVisit,
                 store: store,
                 backend: visitBackend
+            )
+            await createSharedVisitInvitesIfNeeded(
+                inviteeUserIDs: submission.inviteeUserIDs,
+                sourceVisit: targetVisit
             )
             selectedSearchCandidateID = nil
             selectSavedResult(result)
@@ -1025,10 +1113,140 @@ struct MapScreen: View {
             "Added to your map."
         case .addVisit:
             "Visit saved."
+        case .sharedVisit:
+            "Shared visit saved to your map."
         case .editVisit:
             "Visit updated."
         case .editWant:
             "Want updated."
+        }
+    }
+
+    private func createSharedVisitInvitesIfNeeded(
+        inviteeUserIDs: [String],
+        sourceVisit: LocalPlaceVisit?
+    ) async {
+        guard !inviteeUserIDs.isEmpty, auth.isSignedIn, let sourceVisit else { return }
+        store.queueSharedVisitInvites(sourceVisitID: sourceVisit.id, inviteeUserIDs: inviteeUserIDs)
+        _ = await store.retryPendingVisitPhotoUploads(backend: backend)
+        _ = await store.retryPendingSharedVisitInvites(backend: backend)
+        if store.pendingSharedVisitInvites.contains(where: {
+            $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
+        }) {
+            mapSearchMessage = "Visit saved. Friend invites are queued and will retry automatically."
+        }
+    }
+
+    private func acceptSharedVisit(
+        _ invitation: SharedVisitInvitation,
+        submission: MapPlaceSaveSubmission
+    ) async -> SaveResult? {
+        guard case .signedIn(let acceptingSession) = auth.state,
+              store.currentUser.id == acceptingSession.userID
+        else {
+            auth.presentGate(for: .syncPlace)
+            return nil
+        }
+
+        let identifiers = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: invitation.participantID,
+            generation: invitation.invitationGeneration
+        )
+        let inheritedPhotoPayloads: [(
+            sourcePhotoID: String,
+            attachment: MapPlaceSavePhotoAttachment,
+            data: Data
+        )] = submission.photoAttachments.compactMap { attachment in
+            guard let sourcePhotoID = attachment.sourcePhotoID,
+                  let data = attachment.data()
+            else { return nil }
+            return (sourcePhotoID, attachment, data)
+        }
+        let requestedInheritedPhotoCount = submission.photoAttachments.filter {
+            $0.sourcePhotoID != nil
+        }.count
+        let draft = SharedVisitAcceptanceDraft(
+            participantID: invitation.participantID,
+            invitationGeneration: invitation.invitationGeneration,
+            snapshotRevision: invitation.snapshotRevision,
+            operationID: identifiers.operationID,
+            userPlaceID: identifiers.userPlaceID,
+            visitID: identifiers.visitID,
+            visibility: submission.visibility,
+            visitedAt: invitation.visitedAt,
+            note: submission.note,
+            ratingScore: submission.ratingScore,
+            attributes: submission.attributes,
+            selectedPhotoIDs: inheritedPhotoPayloads.map(\.sourcePhotoID)
+        )
+
+        do {
+            let result = try await backend.acceptSharedVisit(draft)
+            guard case .signedIn(let currentSession) = auth.state,
+                  currentSession.userID == acceptingSession.userID,
+                  store.currentUser.id == acceptingSession.userID
+            else { return nil }
+            let visit = store.applySharedVisitAcceptance(
+                invitation: invitation,
+                draft: draft,
+                result: result
+            )
+            var photoCopyFailed = inheritedPhotoPayloads.count != requestedInheritedPhotoCount
+            for copy in result.photoCopies {
+                guard case .signedIn(let currentSession) = auth.state,
+                      currentSession.userID == acceptingSession.userID,
+                      store.currentUser.id == acceptingSession.userID
+                else { return nil }
+                guard let payload = inheritedPhotoPayloads.first(where: {
+                    $0.sourcePhotoID == copy.sourcePhotoID
+                }) else {
+                    photoCopyFailed = true
+                    continue
+                }
+
+                store.recordAcceptedSharedVisitPhoto(
+                    copy: copy,
+                    visitID: visit.id,
+                    localAssetRef: payload.attachment.localAssetRef,
+                    byteSize: payload.attachment.byteSize,
+                    width: payload.attachment.width,
+                    height: payload.attachment.height,
+                    uploaded: false
+                )
+                do {
+                    try await backend.uploadSharedVisitPhoto(
+                        bucket: copy.destinationBucket,
+                        path: copy.destinationPath,
+                        data: payload.data,
+                        contentType: copy.contentType
+                    )
+                    guard case .signedIn(let currentSession) = auth.state,
+                          currentSession.userID == acceptingSession.userID,
+                          store.currentUser.id == acceptingSession.userID
+                    else { return nil }
+                    try await backend.markSharedVisitPhotoUploaded(photoID: copy.destinationPhotoID)
+                    store.recordAcceptedSharedVisitPhoto(
+                        copy: copy,
+                        visitID: visit.id,
+                        localAssetRef: payload.attachment.localAssetRef,
+                        byteSize: payload.attachment.byteSize,
+                        width: payload.attachment.width,
+                        height: payload.attachment.height,
+                        uploaded: true
+                    )
+                } catch {
+                    photoCopyFailed = true
+                }
+            }
+            if photoCopyFailed {
+                mapSearchMessage = "Visit saved. One shared photo will retry when you reopen rec.me."
+            }
+            await store.refreshSharedVisitInbox(backend: backend)
+            await store.refreshRemoteVisiblePlaces(backend: backend)
+            return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced)
+        } catch {
+            mapSearchMessage = "That shared visit changed before it could be saved. Open the invitation again."
+            return nil
         }
     }
 
@@ -1064,7 +1282,7 @@ struct MapScreen: View {
             isPlaceProfilePresented = false
             showTransientMapSearchMessage("Want removed.")
             return true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }
@@ -2371,6 +2589,7 @@ struct PlaceSheetPlace {
 enum MapPlaceSaveMode {
     case add(AddSourceType)
     case addVisit(VisiblePlace)
+    case sharedVisit(SharedVisitInvitation)
     case editVisit(VisiblePlace, LocalPlaceVisit)
     case editWant(VisiblePlace)
 }
@@ -2391,7 +2610,7 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .editVisit, .editWant:
             return true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }
@@ -2400,7 +2619,7 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             false
-        case .addVisit, .editVisit, .editWant:
+        case .addVisit, .sharedVisit, .editVisit, .editWant:
             true
         }
     }
@@ -2409,14 +2628,14 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .add:
             true
-        case .addVisit, .editVisit, .editWant:
+        case .addVisit, .sharedVisit, .editVisit, .editWant:
             false
         }
     }
 
     var allowsPhotoAttachments: Bool {
         switch mode {
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             true
         case .editVisit, .editWant:
             false
@@ -2427,14 +2646,14 @@ struct MapPlaceSaveContext: Identifiable {
         switch mode {
         case .editVisit, .editWant:
             true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             false
         }
     }
 
     var sourceVisiblePlace: VisiblePlace? {
         switch mode {
-        case .add:
+        case .add, .sharedVisit:
             nil
         case .addVisit(let visiblePlace),
              .editVisit(let visiblePlace, _),
@@ -2450,12 +2669,21 @@ struct MapPlaceSaveContext: Identifiable {
         return nil
     }
 
+    var sharedVisitInvitation: SharedVisitInvitation? {
+        if case .sharedVisit(let invitation) = mode {
+            return invitation
+        }
+        return nil
+    }
+
     var title: String {
         switch mode {
         case .add:
             "save this place"
         case .addVisit:
             "add visit"
+        case .sharedVisit:
+            "save shared visit"
         case .editVisit:
             "edit visit"
         case .editWant:
@@ -2469,6 +2697,8 @@ struct MapPlaceSaveContext: Identifiable {
             "pick status and a few details."
         case .addVisit:
             "save what happened this time."
+        case .sharedVisit(let invitation):
+            "\(invitation.sourceOwnerDisplayName) shared their version. Make yours your own."
         case .editVisit:
             "adjust this saved visit."
         case .editWant:
@@ -2482,6 +2712,8 @@ struct MapPlaceSaveContext: Identifiable {
             "save to my map"
         case .addVisit:
             "save visit"
+        case .sharedVisit:
+            "save my visit"
         case .editVisit:
             "update visit"
         case .editWant:
@@ -2495,7 +2727,7 @@ struct MapPlaceSaveContext: Identifiable {
             "Delete visit"
         case .editWant:
             "Remove want"
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             "Remove save"
         }
     }
@@ -2506,7 +2738,7 @@ struct MapPlaceSaveContext: Identifiable {
             "Delete visit?"
         case .editWant:
             "Remove want?"
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             "Remove save?"
         }
     }
@@ -2517,7 +2749,7 @@ struct MapPlaceSaveContext: Identifiable {
             "This removes this visit and its photos from your place history."
         case .editWant:
             "This removes your want from this place."
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             "This removes the place from your map."
         }
     }
@@ -2576,6 +2808,23 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: initialAnswers(from: defaultAttributes),
             initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
             initialCuisine: initialCuisine(from: defaultAttributes)
+        )
+    }
+
+    static func sharedVisit(
+        _ invitation: SharedVisitInvitation,
+        defaultVisibility: PlaceVisibility
+    ) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: invitation.candidate,
+            mode: .sharedVisit(invitation),
+            initialStatus: .been,
+            initialVisibility: defaultVisibility,
+            initialRatingScore: invitation.ratingScore,
+            initialNote: invitation.note ?? "",
+            initialAnswers: initialAnswers(from: invitation.attributeDrafts),
+            initialPersonalLabels: initialPersonalLabels(from: invitation.attributeDrafts),
+            initialCuisine: initialCuisine(from: invitation.attributeDrafts)
         )
     }
 
@@ -2752,14 +3001,20 @@ struct MapPlaceSaveSubmission {
     let note: String?
     let attributes: [PlaceAttributeDraft]
     let photoAttachments: [MapPlaceSavePhotoAttachment]
+    let inviteeUserIDs: [String]
 }
 
 struct MapPlaceSavePhotoAttachment: Identifiable {
+    static let maximumCount = 10
+    static let maximumBytesPerPhoto = 10 * 1024 * 1024
+    static let maximumTotalBytes = 75 * 1024 * 1024
+
     let id: UUID
     let image: UIImage
-    let data: Data
     let contentType: String
     let localAssetRef: String?
+    let sourcePhotoID: String?
+    let byteSize: Int
 
     var width: Int? {
         image.cgImage?.width
@@ -2773,74 +3028,39 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         image: UIImage,
         data: Data? = nil,
         contentType: String = "image/jpeg",
-        fallbackAssetRef: String? = nil
+        fallbackAssetRef: String? = nil,
+        sourcePhotoID: String? = nil
     ) -> MapPlaceSavePhotoAttachment? {
         guard let payload = data ?? image.jpegData(compressionQuality: 0.86) else {
             return nil
         }
+        guard payload.count <= maximumBytesPerPhoto else { return nil }
 
         let id = UUID()
-        let fileRef = VisitPhotoLocalFileStore.save(data: payload, id: id, contentType: contentType)
+        guard let fileRef = VisitPhotoLocalFileStore.save(data: payload, id: id, contentType: contentType) else {
+            return nil
+        }
         return MapPlaceSavePhotoAttachment(
             id: id,
-            image: image,
-            data: payload,
+            image: thumbnail(from: image),
             contentType: contentType,
-            localAssetRef: fileRef ?? fallbackAssetRef
+            localAssetRef: fileRef,
+            sourcePhotoID: sourcePhotoID,
+            byteSize: payload.count
         )
     }
-}
 
-enum VisitPhotoLocalFileStore {
-    private static let prefix = "local_file:"
-    private static let directoryName = "VisitPhotos"
-
-    static func save(data: Data, id: UUID, contentType: String) -> String? {
-        guard let directory = directoryURL() else { return nil }
-
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
-            let filename = "\(id.uuidString.lowercased()).\(fileExtension(for: contentType))"
-            try data.write(to: directory.appendingPathComponent(filename), options: [.atomic])
-            return "\(prefix)\(filename)"
-        } catch {
-            return nil
-        }
+    func data() -> Data? {
+        VisitPhotoLocalFileStore.data(from: localAssetRef)
     }
 
-    static func image(from localAssetRef: String?) -> UIImage? {
-        guard let filename = filename(from: localAssetRef),
-              let directory = directoryURL()
-        else {
-            return nil
-        }
-
-        return UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
-    }
-
-    private static func filename(from localAssetRef: String?) -> String? {
-        guard let localAssetRef,
-              localAssetRef.hasPrefix(prefix)
-        else {
-            return nil
-        }
-
-        return String(localAssetRef.dropFirst(prefix.count))
-    }
-
-    private static func directoryURL() -> URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent(directoryName, isDirectory: true)
-    }
-
-    private static func fileExtension(for contentType: String) -> String {
-        switch contentType.lowercased() {
-        case "image/png":
-            "png"
-        case "image/heic", "image/heif":
-            "heic"
-        default:
-            "jpg"
+    private static func thumbnail(from image: UIImage) -> UIImage {
+        let maximumDimension: CGFloat = 320
+        let scale = min(1, maximumDimension / max(image.size.width, image.size.height))
+        guard scale < 1 else { return image }
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
         }
     }
 }
@@ -2873,6 +3093,8 @@ func persistScopedVisitOrWantSubmission(
 ) async -> (SaveResult?, LocalPlaceVisit?) {
     switch submission.context.mode {
     case .add:
+        return (nil, nil)
+    case .sharedVisit:
         return (nil, nil)
     case .addVisit:
         guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
@@ -2923,9 +3145,10 @@ func persistVisitPhotoAttachments(
     guard let visit, !attachments.isEmpty else { return }
 
     for attachment in attachments {
+        guard let data = attachment.data() else { continue }
         _ = await store.createVisitPhoto(
             visitID: visit.id,
-            data: attachment.data,
+            data: data,
             localAssetRef: attachment.localAssetRef,
             contentType: attachment.contentType,
             width: attachment.width,
@@ -2952,6 +3175,8 @@ struct MapPlaceSaveFlowSheet: View {
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
@@ -2967,6 +3192,8 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isRemoving = false
     @State private var isShowingRemoveConfirmation = false
     @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    @State private var selectedInviteeUserIDs: [String] = []
+    @State private var didLoadSharedVisitPhotos = false
     @State private var errorMessage: String?
 
     init(
@@ -3101,9 +3328,18 @@ struct MapPlaceSaveFlowSheet: View {
                     syncAnswersForCurrentQuestions()
                 }
             }
+            .task {
+                await loadSharedVisitPhotosIfNeeded()
+            }
             .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
                 if isPrivateProfile {
                     selectedVisibility = .selfOnly
+                    selectedInviteeUserIDs = []
+                }
+            }
+            .onChange(of: canInviteFriends) { _, canInvite in
+                if !canInvite {
+                    selectedInviteeUserIDs = []
                 }
             }
             .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
@@ -3120,7 +3356,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
-                if step == .details && !context.isEditing {
+                if step == .details && !context.isEditing && context.sharedVisitInvitation == nil {
                     Button {
                         errorMessage = nil
                         step = .confirm
@@ -3189,6 +3425,10 @@ struct MapPlaceSaveFlowSheet: View {
 
             if selectedStatus == .been {
                 ratingSection
+            }
+
+            if canInviteFriends {
+                SharedVisitInviteSection(selectedUserIDs: $selectedInviteeUserIDs)
             }
 
             ForEach(questionBlocks) { block in
@@ -3290,6 +3530,20 @@ struct MapPlaceSaveFlowSheet: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var canInviteFriends: Bool {
+        guard selectedStatus == .been,
+              !store.isPrivateProfile,
+              saveVisibility != .selfOnly
+        else { return false }
+
+        switch context.mode {
+        case .add, .addVisit:
+            return true
+        case .sharedVisit, .editVisit, .editWant:
+            return false
+        }
     }
 
     private var placeTypeSection: some View {
@@ -3635,7 +3889,8 @@ struct MapPlaceSaveFlowSheet: View {
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
-            photoAttachments: visitPhotoAttachments
+            photoAttachments: visitPhotoAttachments,
+            inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : []
         )
 
         Task {
@@ -3644,9 +3899,41 @@ struct MapPlaceSaveFlowSheet: View {
                 isSaving = false
                 if result != nil {
                     dismiss()
+                } else if auth.isSignedIn {
+                    errorMessage = context.sharedVisitInvitation == nil
+                        ? "Could not save this place. Try again."
+                        : "Could not save this shared visit. Open the invitation and try again."
                 } else {
                     errorMessage = "Sign in to finish this save."
                 }
+            }
+        }
+    }
+
+    private func loadSharedVisitPhotosIfNeeded() async {
+        guard !didLoadSharedVisitPhotos,
+              let invitation = context.sharedVisitInvitation,
+              auth.isSignedIn
+        else { return }
+        didLoadSharedVisitPhotos = true
+
+        for photo in invitation.photos.prefix(MapPlaceSavePhotoAttachment.maximumCount) {
+            do {
+                let data = try await backend.downloadSharedVisitPhoto(
+                    bucket: photo.storageBucket,
+                    path: photo.storagePath
+                )
+                guard let image = UIImage(data: data),
+                      let attachment = MapPlaceSavePhotoAttachment.make(
+                        image: image,
+                        data: data,
+                        contentType: photo.contentType,
+                        sourcePhotoID: photo.photoID
+                      )
+                else { continue }
+                visitPhotoAttachments.append(attachment)
+            } catch {
+                errorMessage = "One shared photo could not be loaded. You can still save the visit."
             }
         }
     }
@@ -3733,7 +4020,7 @@ private struct MapSaveVisitPhotoSection: View {
                 }
             }
 
-            if canAddPhotos {
+            if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
                 VStack(spacing: WanderTheme.spacing1) {
                     Button {
                         isShowingPhotoMenu = true
@@ -3785,7 +4072,9 @@ private struct MapSaveVisitPhotoSection: View {
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
-                    photos.append(attachment)
+                    appendIfWithinLimits(attachment)
+                } else {
+                    photoError = "That photo is too large or could not be prepared."
                 }
                 isShowingPhotoMenu = false
             }
@@ -3794,7 +4083,7 @@ private struct MapSaveVisitPhotoSection: View {
         .photosPicker(
             isPresented: $isShowingPhotoPicker,
             selection: $selectedPhotoItems,
-            maxSelectionCount: 8,
+            maxSelectionCount: max(1, MapPlaceSavePhotoAttachment.maximumCount - photos.count),
             matching: .images
         )
         .onChange(of: selectedPhotoItems) { _, items in
@@ -3836,9 +4125,24 @@ private struct MapSaveVisitPhotoSection: View {
         }
 
         await MainActor.run {
-            photos.append(contentsOf: imported)
+            for attachment in imported {
+                appendIfWithinLimits(attachment)
+            }
             selectedPhotoItems = []
         }
+    }
+
+    private func appendIfWithinLimits(_ attachment: MapPlaceSavePhotoAttachment) {
+        guard photos.count < MapPlaceSavePhotoAttachment.maximumCount else {
+            photoError = "A visit can have up to 10 photos."
+            return
+        }
+        guard photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
+            photoError = "Those photos are over the 75 MB visit limit."
+            return
+        }
+        photoError = nil
+        photos.append(attachment)
     }
 }
 
@@ -5535,6 +5839,7 @@ struct PlaceActivitySection: View {
                         PlaceActivityCard(
                             entry: entry,
                             photos: photos(for: entry),
+                            companions: companions(for: entry),
                             onOpenPhoto: { photo in
                                 viewerRoute = PlaceActivityPhotoViewerRoute(photoID: photo.id)
                             },
@@ -5559,6 +5864,10 @@ struct PlaceActivitySection: View {
             } onRemove: { context in
                 await removeActivityEdit(context)
             }
+        }
+        .task(id: companionVisitIDs) {
+            guard auth.isSignedIn else { return }
+            await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
     }
 
@@ -5621,6 +5930,15 @@ struct PlaceActivitySection: View {
         entries.flatMap(photos(for:))
     }
 
+    private var companionVisitIDs: [String] {
+        entries.compactMap { $0.visit?.serverID }.sorted()
+    }
+
+    private func companions(for entry: PlaceActivityEntry) -> [SharedVisitCompanion] {
+        guard let visit = entry.visit else { return [] }
+        return store.sharedVisitCompanions(for: visit.id)
+    }
+
     private func photos(for entry: PlaceActivityEntry) -> [PlaceActivityPhoto] {
         guard let visit = entry.visit else { return [] }
         return store.photos(for: visit.id).map { photo in
@@ -5676,7 +5994,7 @@ struct PlaceActivitySection: View {
             return await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil)
         case .editWant(let visiblePlace):
             return await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }
@@ -5741,6 +6059,7 @@ private struct PlaceActivityCard: View {
     @EnvironmentObject private var backend: WanderBackend
     let entry: PlaceActivityEntry
     let photos: [PlaceActivityPhoto]
+    let companions: [SharedVisitCompanion]
     let onOpenPhoto: (PlaceActivityPhoto) -> Void
     let onEdit: () -> Void
     @State private var isShowingPhotoMenu = false
@@ -5752,6 +6071,8 @@ private struct PlaceActivityCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             header
+
+            SharedVisitCompanionLabel(companions: companions)
 
             if let note = entry.note {
                 Text("\"\(note)\"")
@@ -5908,11 +6229,15 @@ private struct PlaceActivityCard: View {
 
     private func addPhoto(_ attachment: MapPlaceSavePhotoAttachment) async {
         guard let visit = entry.visit else { return }
+        guard let data = attachment.data() else {
+            photoError = "Could not read that photo."
+            return
+        }
         photoError = nil
         isShowingPhotoMenu = false
         _ = await store.createVisitPhoto(
             visitID: visit.id,
-            data: attachment.data,
+            data: data,
             localAssetRef: attachment.localAssetRef,
             contentType: attachment.contentType,
             width: attachment.width,

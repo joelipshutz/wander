@@ -1413,6 +1413,102 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.effectiveDefaultVisibility, .selfOnly)
     }
 
+    func testPendingSharedVisitInviteOutboxPersistsAndStaysScopedToItsOwner() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        firstStore.queueSharedVisitInvites(
+            sourceVisitID: "visit-local-1",
+            inviteeUserIDs: ["user_sarah", "user_sarah", "user_ryan"]
+        )
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let pending = relaunchedStore.pendingSharedVisitInvites.first
+
+        XCTAssertEqual(relaunchedStore.pendingSharedVisitInvites.count, 1)
+        XCTAssertEqual(pending?.ownerUserID, "user_joe")
+        XCTAssertEqual(pending?.sourceVisitID, "visit-local-1")
+        XCTAssertEqual(pending?.inviteeUserIDs, ["user_ryan", "user_sarah"])
+
+        relaunchedStore.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        XCTAssertEqual(relaunchedStore.pendingSharedVisitInvites.first?.ownerUserID, "user_joe")
+    }
+
+    func testPendingSharedVisitInviteOutboxDrainsOnceSourceVisitIsSynced() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_outbox",
+                name: "Shared Outbox Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: "great patio",
+            sourceType: .manual,
+            ratingScore: 4.5
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000001"
+        userPlace.syncStateRaw = SyncState.synced.rawValue
+        visit.serverID = "83000000-0000-0000-0000-000000000001"
+        visit.syncStateRaw = SyncState.synced.rawValue
+
+        store.queueSharedVisitInvites(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah", "user_maya"]
+        )
+        let repository = FakeSharedVisitRepository()
+
+        let sentCount = await store.retryPendingSharedVisitInvites(
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertEqual(sentCount, 2)
+        XCTAssertTrue(store.pendingSharedVisitInvites.isEmpty)
+        XCTAssertEqual(
+            repository.inviteRequests,
+            [
+                FakeSharedVisitRepository.InviteRequest(
+                    sourceVisitID: "83000000-0000-0000-0000-000000000001",
+                    inviteeUserIDs: ["user_maya", "user_sarah"]
+                )
+            ]
+        )
+    }
+
+    func testSharedVisitInboxDiscardsCompletionFromPreviousAccount() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let repository = FakeSharedVisitRepository()
+        repository.shouldSuspendInbox = true
+        let backend = WanderBackend(sharedVisitRepository: repository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshSharedVisitInbox(backend: backend)
+        }
+        while !repository.hasSuspendedInboxRequest {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        repository.resumeInbox()
+        await refreshTask.value
+
+        XCTAssertEqual(store.currentUser.id, "user_sarah")
+        XCTAssertNil(store.sharedVisitInboxUserID)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+    }
+
     func testOldPersistenceSnapshotClearsSavedPlaceDataButKeepsAccountGraph() throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -4101,6 +4197,54 @@ private final class FakeVisitRepository: VisitRepository {
             throw error
         }
     }
+}
+
+@MainActor
+private final class FakeSharedVisitRepository: SharedVisitRepository {
+    struct InviteRequest: Equatable {
+        let sourceVisitID: String
+        let inviteeUserIDs: [String]
+    }
+
+    private(set) var inviteRequests: [InviteRequest] = []
+    var shouldSuspendInbox = false
+    private var inboxContinuation: CheckedContinuation<[SharedVisitInvitation], Error>?
+
+    var hasSuspendedInboxRequest: Bool { inboxContinuation != nil }
+
+    func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        inviteRequests.append(InviteRequest(sourceVisitID: sourceVisitID, inviteeUserIDs: inviteeUserIDs))
+        return inviteeUserIDs.map {
+            SharedVisitInviteResult(
+                participantID: UUID().uuidString.lowercased(),
+                inviteeUserID: $0,
+                status: .pending,
+                invitationGeneration: 1
+            )
+        }
+    }
+
+    func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
+        guard shouldSuspendInbox else { return [] }
+        return try await withCheckedThrowingContinuation { continuation in
+            inboxContinuation = continuation
+        }
+    }
+
+    func resumeInbox() {
+        inboxContinuation?.resume(returning: [])
+        inboxContinuation = nil
+    }
+    func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? { nil }
+    func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? { nil }
+    func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        throw WanderRemoteError.notImplemented("fake shared visit acceptance")
+    }
+    func decline(participantID: String, generation: Int) async throws {}
+    func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion] { [] }
+    func downloadPhotoData(bucket: String, path: String) async throws -> Data { Data() }
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {}
+    func markPhotoUploaded(photoID: String) async throws {}
 }
 
 @MainActor

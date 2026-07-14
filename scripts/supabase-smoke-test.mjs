@@ -140,9 +140,13 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
       { cwd: process.cwd(), encoding: "utf8", env: process.env },
     );
     if (result.status !== 0) {
-      throw new Error((result.stderr || result.stdout || "linked Supabase query failed").trim());
+      const details = [result.stderr, result.stdout]
+        .map((value) => value?.trim())
+        .filter(Boolean)
+        .join("\n");
+      throw new Error(details || "linked Supabase query failed");
     }
-    console.log("Supabase smoke test passed: linked preferred-place-photo visibility and provider-quota contracts are valid.");
+    console.log("Supabase smoke test passed: linked photo visibility, provider quota, and Shared Visits contracts are valid.");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -160,8 +164,17 @@ begin;
 
 ${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
 
+create temporary table smoke_shared_visit_invitation (
+  participant_id uuid primary key,
+  invitation_generation integer not null,
+  snapshot_revision integer not null
+) on commit drop;
+grant select, insert on smoke_shared_visit_invitation to authenticated;
+
 insert into public.follows (follower_user_id, followed_user_id, source)
-values (${collaboratorUser}, ${smokeUser}, 'profile')
+values
+  (${collaboratorUser}, ${smokeUser}, 'profile'),
+  (${smokeUser}, ${collaboratorUser}, 'profile')
 on conflict (follower_user_id, followed_user_id) do nothing;
 
 update public.user_places up
@@ -312,6 +325,110 @@ end
 $stranger$;
 
 reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+insert into smoke_shared_visit_invitation(participant_id, invitation_generation, snapshot_revision)
+select invite.participant_id, invite.invitation_generation, 1
+from public.create_shared_visit_invites(
+  '${smokeVisitID}'::uuid,
+  array[${collaboratorUser}]::text[]
+) invite;
+
+do $shared_invite$
+begin
+  if (select count(*) from smoke_shared_visit_invitation) <> 1 then
+    raise exception 'shared visit invite creation failed';
+  end if;
+end
+$shared_invite$;
+
+select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
+do $shared_context$
+declare
+  smoke_invitation smoke_shared_visit_invitation;
+  inbox_count integer;
+  context_note text;
+begin
+  select * into smoke_invitation from smoke_shared_visit_invitation;
+  select count(*)::integer into inbox_count
+  from public.list_shared_visit_inbox(null, 50) inbox
+  where inbox.participant_id = smoke_invitation.participant_id
+    and inbox.invitation_generation = smoke_invitation.invitation_generation;
+  if inbox_count <> 1 then
+    raise exception 'shared visit inbox visibility failed';
+  end if;
+
+  select context.source_snapshot->>'note' into context_note
+  from public.get_shared_visit_context(
+    smoke_invitation.participant_id,
+    smoke_invitation.invitation_generation
+  ) context;
+  if context_note is distinct from 'Rolled back linked preferred-photo smoke visit' then
+    raise exception 'shared visit invitation snapshot failed';
+  end if;
+end
+$shared_context$;
+
+do $shared_accept$
+declare
+  smoke_invitation smoke_shared_visit_invitation;
+  accepted jsonb;
+  retried jsonb;
+begin
+  select * into smoke_invitation from smoke_shared_visit_invitation;
+  accepted := public.accept_shared_visit(
+    smoke_invitation.participant_id,
+    smoke_invitation.invitation_generation,
+    smoke_invitation.snapshot_revision,
+    '58000000-0000-0000-0000-000000000001'::uuid,
+    '58000000-0000-0000-0000-000000000002'::uuid,
+    '58000000-0000-0000-0000-000000000003'::uuid,
+    '{"visibility":"mutuals"}'::jsonb,
+    '{"visited_at":"2026-07-13T12:00:00Z","note":"Collaborator smoke version","rating_score":4.5,"attribute_answers":[]}'::jsonb,
+    '[]'::jsonb,
+    array[]::uuid[]
+  );
+  if accepted->>'status' is distinct from 'accepted'
+     or accepted->>'visit_id' is distinct from '58000000-0000-0000-0000-000000000003' then
+    raise exception 'shared visit acceptance failed';
+  end if;
+
+  retried := public.accept_shared_visit(
+    smoke_invitation.participant_id,
+    smoke_invitation.invitation_generation,
+    smoke_invitation.snapshot_revision,
+    '58000000-0000-0000-0000-000000000001'::uuid,
+    '58000000-0000-0000-0000-000000000002'::uuid,
+    '58000000-0000-0000-0000-000000000003'::uuid,
+    '{"visibility":"mutuals"}'::jsonb,
+    '{"visited_at":"2026-07-13T12:00:00Z","note":"Collaborator smoke version","rating_score":4.5,"attribute_answers":[]}'::jsonb,
+    '[]'::jsonb,
+    array[]::uuid[]
+  );
+  if retried->>'visit_id' is distinct from accepted->>'visit_id'
+     or (select count(*) from public.place_visits where id = '58000000-0000-0000-0000-000000000003'::uuid) <> 1 then
+    raise exception 'shared visit exactly-once retry failed';
+  end if;
+end
+$shared_accept$;
+
+do $shared_companion$
+declare
+  companion_id text;
+begin
+  select companion.companion_user_id into companion_id
+  from public.get_shared_visit_companion_context(
+    array['58000000-0000-0000-0000-000000000003'::uuid]
+  ) companion;
+  if companion_id is distinct from ${smokeUser} then
+    raise exception 'shared visit companion attribution failed';
+  end if;
+end
+$shared_companion$;
+
+reset role;
 rollback;
 `;
 }
@@ -380,12 +497,13 @@ insert into public.profiles (
   bio,
   home_area,
   default_visibility,
+  is_private_profile,
   deleted_at
 )
 values
-  (${smokeUser}, 'codex_smoke', 'Codex Smoke Test', 'Backend smoke-test profile.', 'Test', 'followers', null),
-  (${collaboratorUser}, 'codex_smoke_collab', 'Codex Smoke Collaborator', 'Backend smoke-test collaborator.', 'Test', 'followers', null),
-  (${strangerUser}, 'codex_smoke_stranger', 'Codex Smoke Stranger', 'Backend smoke-test stranger.', 'Test', 'followers', null)
+  (${smokeUser}, 'codex_smoke', 'Codex Smoke Test', 'Backend smoke-test profile.', 'Test', 'followers', false, null),
+  (${collaboratorUser}, 'codex_smoke_collab', 'Codex Smoke Collaborator', 'Backend smoke-test collaborator.', 'Test', 'followers', false, null),
+  (${strangerUser}, 'codex_smoke_stranger', 'Codex Smoke Stranger', 'Backend smoke-test stranger.', 'Test', 'followers', false, null)
 on conflict (id) do update
 set
   handle = excluded.handle,
@@ -393,6 +511,7 @@ set
   bio = excluded.bio,
   home_area = excluded.home_area,
   default_visibility = excluded.default_visibility,
+  is_private_profile = false,
   deleted_at = null,
   updated_at = now();
 

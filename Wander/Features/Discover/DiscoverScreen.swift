@@ -436,6 +436,8 @@ struct DiscoverScreen: View {
     private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
+        case .sharedVisit:
+            return nil
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
                 placeSaveFlow = nil
@@ -497,6 +499,8 @@ struct DiscoverScreen: View {
             return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
         case .addVisit:
             return "Visit saved." + suffix
+        case .sharedVisit:
+            return "Shared visit saved." + suffix
         case .editVisit:
             return "Visit updated." + suffix
         case .editWant:
@@ -525,7 +529,7 @@ struct DiscoverScreen: View {
             selectedPlace = nil
             savedMessage = "Want removed."
             return true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }

@@ -39,6 +39,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
     let bio: String?
     let homeArea: String?
     let defaultVisibility: String
+    let isPrivateProfile: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -48,6 +49,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
         case bio
         case homeArea = "home_area"
         case defaultVisibility = "default_visibility"
+        case isPrivateProfile = "is_private_profile"
     }
 
     func localProfile() -> LocalProfile {
@@ -59,6 +61,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
             avatarURL: avatarURL,
             bio: bio,
             homeArea: homeArea,
+            isPrivateProfile: isPrivateProfile ?? false,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibility) ?? .followers,
             syncState: .synced
         )
