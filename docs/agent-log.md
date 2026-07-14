@@ -11659,3 +11659,29 @@ Latest-main integration and handoff, 2026-07-13 23:28 PDT:
 
 - Production implementation commit: `b27c800f5`. Integrated `origin/main` through `d959504d6` with merge commit `41f74858d`; the only incoming file was this append-only build 73 release log, and both histories were preserved chronologically.
 - PR #95 remains the physical-test handoff: https://github.com/joelipshutz/wander/pull/95. Keep REC-92 `In Review` while Ryan and Joe run the two-account checklist; the exact branch is `codex/rec-92-invitation-inbox` in `/private/tmp/recme-rec92-invitation-inbox`.
+
+## 2026-07-14 00:17 PDT - Codex - REC-92 Joe Account Production Re-Investigation
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (draft)
+
+Goal: reproduce and fix the remaining Joe-account failures after the first production handoff: missing Profile invitation entry, stale/dummy invitations, inert Review/Decline actions, recipient save failure, banner copy, and incorrect banner destination.
+
+Starting evidence and coordination:
+
+- The isolated REC-92 worktree is clean at remote commit `c5adb598d`, zero commits behind `origin/main`; the root checkout still has unrelated `.pnpm-store/` content and remains untouched. No active worktree reports overlapping REC-92 production edits.
+- Joe's prior console was from authenticated user `user_3EhAT`. It shows `list_shared_visit_inbox` returned 3,812 bytes but maintenance reported `invite_count=0`; `accept_shared_visit` sent the rejected numeric `visited_at` value; and `profile_visible_places` decoded without `saved_at`. The hosted schema and encoder were repaired afterward, but Joe's latest physical behavior proves the account-specific workflow still requires fresh verification rather than inference from unit/rollback tests.
+- Investigation will distinguish four possible layers before editing: wrong/outdated device build, account-scoped local snapshot leakage or fixture mode, invalid hosted invitation rows, and navigation/action routing. Expected files, only after root cause confirmation, are Shared Visit/root/Profile/store code, focused tests, hosted smoke or a narrow forward migration if the data contract is wrong, and this log.
+
+Root cause, implementation, and validation, 2026-07-14 00:48 PDT:
+
+- The Joe/Maya invitation records and inert `Review & save` / `Decline` buttons were not hosted account data. They came from the approved DEBUG mock, whose launch argument could still replace the complete production app with `SharedVisitInvitationMockupRoot`. Removed that app replacement and deleted the retired 597-line fixture surface, so Joe now sees only invitations returned by `list_shared_visit_inbox`; an account with no real pending invitations gets the production empty state.
+- The real owner Profile invitation row is unconditional. Joe's missing row was therefore the same stale/debug-build problem, not account eligibility. Added a source-contract regression that prevents any retired Shared Visit mock identifier from re-entering the app target.
+- Found a second production race specific to private profiles: `applyRemoteCurrentProfile` cleared the pending inbox and companion context whenever profile hydration changed the user to private. Private accounts may not invite others, but they may receive invitations. Removed that destructive clearing while preserving the existing conversion of owned content to private, and added a regression that loads Joe's inbox before private-profile hydration.
+- Changed the transient banner copy to exactly `<name> tagged you at <location>`. Tapping it now switches to Profile and opens the durable Visit Invitations page; the existing three-second auto-dismiss remains. Review continues through the generation-scoped editable save flow, and Decline calls the production repository before removing the invitation. Added focused routing/copy and real decline-mutation tests.
+- Joe's previously captured recipient-save failures remain repaired by commit `b27c800f5`: ISO-8601 Supabase payload encoding fixes `accept_shared_visit`, and hosted migration `20260714050000_restore_profile_visible_place_activity.sql` restores the required `profile_visible_places.saved_at` contract. This pass did not change or reset hosted data because the apparent dummy records were local code constants.
+- Regenerated `Wander.xcodeproj` with XcodeGen. Five focused regressions passed, including ISO-8601 acceptance encoding. The final iPhone 17 Pro / iOS 26.5 suite passed 331 tests with 0 failures, and the generic arm64/x86_64 iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. `git diff --check` passes; only the existing traditional-headermap warning remains.
+- No TestFlight build was requested or created. Required physical verification remains: fresh Ryan-to-Joe invitation, three-second banner and inbox recovery, Review/edit/photo/save into Joe's independent visit, Decline on a second invite, and receipt while Joe's profile is private.

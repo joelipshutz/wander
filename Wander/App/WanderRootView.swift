@@ -19,6 +19,7 @@ struct WanderRootView: View {
     @State private var sharedVisitBannerInvitation: SharedVisitInvitation?
     @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
     @State private var sharedVisitBannerTask: Task<Void, Never>?
+    @State private var visitInvitationInboxRequestID: UUID?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
@@ -62,7 +63,7 @@ struct WanderRootView: View {
                 .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
                 .tag(WanderTab.lists)
 
-            ProfileScreen {
+            ProfileScreen(visitInvitationInboxRequestID: $visitInvitationInboxRequestID) {
                 discoverSection = .members
                 selectedTab = .discover
             }
@@ -217,6 +218,8 @@ struct WanderRootView: View {
         }
     }
 
+    static let sharedVisitBannerDestinationTab: WanderTab = .profile
+
     static func sharedProfileRoute(for url: URL) -> SharedProfileRoute? {
         guard url.scheme?.lowercased() == "recme", url.host?.lowercased() == "profiles" else {
             return nil
@@ -288,10 +291,8 @@ struct WanderRootView: View {
 
     private func openSharedVisitFromBanner(_ invitation: SharedVisitInvitation) {
         dismissSharedVisitBanner()
-        pushNotifications.openSharedVisit(
-            participantID: invitation.participantID,
-            generation: invitation.invitationGeneration
-        )
+        selectedTab = Self.sharedVisitBannerDestinationTab
+        visitInvitationInboxRequestID = UUID()
     }
 
     private func dismissSharedVisitBanner() {

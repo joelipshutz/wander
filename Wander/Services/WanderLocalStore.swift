@@ -4931,8 +4931,6 @@ final class WanderStore: ObservableObject {
         isPrivateProfile = remoteProfile.isPrivateProfile
         if becamePrivate {
             makeCurrentUserContentPrivate()
-            sharedVisitInvitations.removeAll()
-            sharedVisitCompanionsByVisitID.removeAll()
         }
         persist()
     }

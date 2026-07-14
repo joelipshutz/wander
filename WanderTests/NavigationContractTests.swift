@@ -139,26 +139,27 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testSharedVisitInvitationMockupsHaveDeterministicLaunchPages() {
+    func testRetiredSharedVisitInvitationMockCannotReplaceTheProductionApp() throws {
+        let retiredIdentifiers = [
+            "WanderSharedVisitInvitationMockup",
+            "SharedVisitInvitationMockData",
+            "SharedVisitInvitationMockupRoot"
+        ]
+        let matches = try swiftFiles(in: projectRoot.appendingPathComponent("Wander")).filter { file in
+            let source = try String(contentsOf: file)
+            return retiredIdentifiers.contains { source.contains($0) }
+        }
+
+        XCTAssertEqual(matches.map(\.lastPathComponent), [])
+    }
+
+    @MainActor
+    func testSharedVisitBannerUsesTaggedCopyAndOpensTheProfileInbox() {
         XCTAssertEqual(
-            SharedVisitInvitationMockupPage.resolved(
-                from: ["Wander", "-WanderSharedVisitInvitationMockup", "profileBanner"]
-            ),
-            .profileBanner
+            SharedVisitBannerCopy.title(inviterName: "Joe Lipshutz", placeName: "RVR"),
+            "Joe Lipshutz tagged you at RVR"
         )
-        XCTAssertEqual(
-            SharedVisitInvitationMockupPage.resolved(
-                from: ["Wander", "-WanderSharedVisitInvitationMockup", "inbox"]
-            ),
-            .inbox
-        )
-        XCTAssertEqual(
-            SharedVisitInvitationMockupPage.resolved(
-                from: ["Wander", "-WanderSharedVisitInvitationMockup", "emptyInbox"]
-            ),
-            .emptyInbox
-        )
-        XCTAssertNil(SharedVisitInvitationMockupPage.resolved(from: ["Wander"]))
+        XCTAssertEqual(WanderRootView.sharedVisitBannerDestinationTab, .profile)
     }
 
     func testSharedVisitBannerOnlySurfacesNewInvitationGenerations() {

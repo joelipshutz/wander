@@ -24,13 +24,18 @@ struct ProfileScreen: View {
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
 
+    @Binding private var visitInvitationInboxRequestID: UUID?
     let onFindFriends: () -> Void
 
     private let profilePhotoMenuWidth: CGFloat = 232
     private let profilePhotoMenuAnchorOffsetX: CGFloat = 35
     private let profilePhotoMenuTopGap: CGFloat = 2
 
-    init(onFindFriends: @escaping () -> Void = {}) {
+    init(
+        visitInvitationInboxRequestID: Binding<UUID?> = .constant(nil),
+        onFindFriends: @escaping () -> Void = {}
+    ) {
+        _visitInvitationInboxRequestID = visitInvitationInboxRequestID
         self.onFindFriends = onFindFriends
     }
 
@@ -131,6 +136,12 @@ struct ProfileScreen: View {
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
                     handleNotificationRoute(request)
                 }
+                .onAppear {
+                    openRequestedVisitInvitationInbox()
+                }
+                .onChange(of: visitInvitationInboxRequestID) { _, _ in
+                    openRequestedVisitInvitationInbox()
+                }
                 .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoMenu, titleVisibility: .visible) {
                     if isCameraAvailable {
                         Button("Take Photo") { presentProfileCamera() }
@@ -142,6 +153,12 @@ struct ProfileScreen: View {
                     Button("Cancel", role: .cancel) {}
                 }
         }
+    }
+
+    private func openRequestedVisitInvitationInbox() {
+        guard visitInvitationInboxRequestID != nil else { return }
+        showsVisitInvitations = true
+        visitInvitationInboxRequestID = nil
     }
 
     private var profileInsights: ProfileInsights {

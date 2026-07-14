@@ -247,6 +247,12 @@ struct SharedVisitBannerTracker {
     }
 }
 
+enum SharedVisitBannerCopy {
+    static func title(inviterName: String, placeName: String) -> String {
+        "\(inviterName) tagged you at \(placeName)"
+    }
+}
+
 struct SharedVisitNotificationBanner: View {
     let invitation: SharedVisitInvitation
     let onOpen: () -> Void
@@ -262,7 +268,12 @@ struct SharedVisitNotificationBanner: View {
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(invitation.sourceOwnerDisplayName) invited you to \(invitation.placeName)")
+                    Text(
+                        SharedVisitBannerCopy.title(
+                            inviterName: invitation.sourceOwnerDisplayName,
+                            placeName: invitation.placeName
+                        )
+                    )
                         .font(.system(size: 14, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
@@ -293,7 +304,7 @@ struct SharedVisitNotificationBanner: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "Open visit invitation from \(invitation.sourceOwnerDisplayName) for \(invitation.placeName)"
+            "Open visit invitations. \(SharedVisitBannerCopy.title(inviterName: invitation.sourceOwnerDisplayName, placeName: invitation.placeName))"
         )
     }
 
