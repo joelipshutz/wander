@@ -75,7 +75,7 @@ Do not copy:
 
 - Profile first viewport shows `profile`, the member name, edit/share/settings icons, a 120-132pt avatar, metadata, Followers/Following/Friends, and unchanged Been/Wanna tiles.
 - Calendar is a real month grid built from deterministic visit dates; Been visits receive a dining underlay and Wanna saves never do.
-- Dining map is fixed and non-interactive, plots Been saves only, and has Places/Cities/Countries summaries.
+- Map is fixed and non-interactive, plots Been saves only, and has Places/Cities/Countries summaries.
 - Social graph has three tabs, search, a Find Friends action, populated rows, and an intentional zero-state.
 - Edit Profile contains only photo, name, username, home city, and bio.
 - Settings home links to account security, Privacy & Trust, and Blocked & Muted; destructive deletion uses two native confirmations.

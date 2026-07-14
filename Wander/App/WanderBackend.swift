@@ -7,6 +7,7 @@ final class WanderBackend: ObservableObject {
     let profileAvatarRepository: (any ProfileAvatarRepository)?
     let followRepository: (any FollowRepository)?
     let blockRepository: (any BlockRepository)?
+    let muteRepository: (any MuteRepository)?
     let placeRepository: (any PlaceRepository)?
     let userPlaceRepository: (any UserPlaceRepository)?
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
@@ -26,6 +27,7 @@ final class WanderBackend: ObservableObject {
             self.profileAvatarRepository = SupabaseProfileAvatarRepository(rpc: client, storage: client)
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
+            self.muteRepository = SupabaseMuteRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
             let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client, userPlaceDeleter: client)
             self.userPlaceRepository = userPlaceRepository
@@ -41,6 +43,7 @@ final class WanderBackend: ObservableObject {
             self.profileAvatarRepository = nil
             self.followRepository = nil
             self.blockRepository = nil
+            self.muteRepository = nil
             self.placeRepository = nil
             self.userPlaceRepository = nil
             self.socialPlaceSaveRepository = nil
@@ -64,6 +67,7 @@ final class WanderBackend: ObservableObject {
         profileAvatarRepository: (any ProfileAvatarRepository)? = nil,
         followRepository: (any FollowRepository)? = nil,
         blockRepository: (any BlockRepository)? = nil,
+        muteRepository: (any MuteRepository)? = nil,
         placeRepository: (any PlaceRepository)? = nil,
         userPlaceRepository: (any UserPlaceRepository)? = nil,
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
@@ -79,6 +83,7 @@ final class WanderBackend: ObservableObject {
         self.profileAvatarRepository = profileAvatarRepository
         self.followRepository = followRepository
         self.blockRepository = blockRepository
+        self.muteRepository = muteRepository
         self.placeRepository = placeRepository
         self.userPlaceRepository = userPlaceRepository
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
@@ -95,6 +100,7 @@ final class WanderBackend: ObservableObject {
             || profileAvatarRepository != nil
             || followRepository != nil
             || blockRepository != nil
+            || muteRepository != nil
             || placeRepository != nil
             || userPlaceRepository != nil
             || socialPlaceSaveRepository != nil
@@ -145,6 +151,13 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await profileRepository.currentProfile()
+    }
+
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        guard let profileRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await profileRepository.updateCurrentProfile(update)
     }
 
     func uploadProfileAvatar(jpegData: Data, userID: String) async throws -> ProfileAvatarResult {
@@ -233,6 +246,28 @@ final class WanderBackend: ObservableObject {
         }
 
         try await blockRepository.unblock(userID: userID)
+    }
+
+    func blockedProfiles() async throws -> [ProfileShell] {
+        guard let blockRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await blockRepository.blockedProfiles()
+    }
+
+    func mute(userID: String) async throws {
+        guard let muteRepository else { throw WanderRemoteError.notConfigured }
+        try await muteRepository.mute(userID: userID)
+    }
+
+    func unmute(userID: String) async throws {
+        guard let muteRepository else { throw WanderRemoteError.notConfigured }
+        try await muteRepository.unmute(userID: userID)
+    }
+
+    func mutedProfiles() async throws -> [ProfileShell] {
+        guard let muteRepository else { throw WanderRemoteError.notConfigured }
+        return try await muteRepository.mutedProfiles()
     }
 
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {

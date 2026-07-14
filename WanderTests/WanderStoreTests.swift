@@ -8,6 +8,37 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testPermanentAccountDeletionPurgesAllLocalAccountDataAndPreferences() {
+        let store = WanderStore(fixtures: .seed())
+        store.defaultVisibility = .mutuals
+        store.setPrivateProfile(true)
+
+        store.resetAfterAccountDeletion()
+
+        XCTAssertEqual(store.currentUser.handle, "you")
+        XCTAssertNil(store.currentUser.serverID)
+        XCTAssertEqual(store.profiles.count, 1)
+        XCTAssertTrue(store.places.isEmpty)
+        XCTAssertTrue(store.userPlaces.isEmpty)
+        XCTAssertTrue(store.placeVisits.isEmpty)
+        XCTAssertTrue(store.follows.isEmpty)
+        XCTAssertTrue(store.blocks.isEmpty)
+        XCTAssertTrue(store.mutes.isEmpty)
+        XCTAssertTrue(store.placeLists.isEmpty)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertFalse(store.isPrivateProfile)
+    }
+
+    func testFriendsAreMutualFollowsFromSingleStoreHelper() {
+        let store = WanderStore(fixtures: .seed())
+        let ownerID = store.currentUser.id
+        let expected = store.following(of: ownerID)
+            .filter { profile in store.followers(of: ownerID).contains { $0.id == profile.id } }
+            .map(\.id)
+
+        XCTAssertEqual(store.friends(of: ownerID).map(\.id), expected)
+    }
+
     private func makeStore() -> WanderStore {
         WanderStore(fixtures: WanderFixtures.seed())
     }

@@ -7,6 +7,20 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
+        XCTAssertEqual(
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://profiles/user_joe"))),
+            SharedProfileRoute(profileID: "user_joe")
+        )
+        XCTAssertEqual(
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://profiles/user%20joe"))),
+            SharedProfileRoute(profileID: "user joe")
+        )
+        XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://rec.me/profiles/user_joe"))))
+        XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://places/place_1"))))
+    }
+
+    @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)

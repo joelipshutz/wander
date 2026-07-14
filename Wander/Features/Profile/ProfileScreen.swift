@@ -15,36 +15,41 @@ struct ProfileScreen: View {
     @State private var selectedProfilePhotoItem: PhotosPickerItem?
     @State private var isProfilePhotoSaving = false
     @State private var profilePhotoError: String?
+    @State private var socialGraphTab: ProfileSocialGraphTab?
     @State private var listMode: GraphListMode?
-    @State private var savedListMode: SavedPlacesListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
+    @State private var savedListMode: SavedPlacesListMode?
+    @State private var showsEditProfile = false
+    @State private var selectedMonth = Date.now
+
+    let onFindFriends: () -> Void
 
     private let profilePhotoMenuWidth: CGFloat = 232
     private let profilePhotoMenuAnchorOffsetX: CGFloat = 35
     private let profilePhotoMenuTopGap: CGFloat = 2
 
+    init(onFindFriends: @escaping () -> Void = {}) {
+        self.onFindFriends = onFindFriends
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        pageTitle
-                        ownerHeader
-                        statsGrid
-                        monthCard
-                        draftsSection
-                        recentSection
-                        peopleSection
-                    }
-                    .padding(WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing8)
+            ProfileOwnerHome(
+                profile: store.currentUser,
+                stats: profileStats,
+                followerCount: store.followers(of: store.currentUser.id).count,
+                followingCount: store.following(of: store.currentUser.id).count,
+                insights: profileInsights,
+                selectedMonth: $selectedMonth,
+                isAvatarSaving: isProfilePhotoSaving,
+                avatarAction: toggleProfilePhotoMenu,
+                editAction: { showsEditProfile = true },
+                settingsAction: { showsSettings = true },
+                graphAction: { socialGraphTab = $0 },
+                savedPlacesAction: { status in
+                    savedListMode = status == .been ? .been : .wanna
                 }
-                .overlayPreferenceValue(ProfilePhotoAvatarBoundsPreferenceKey.self) { anchor in
-                    GeometryReader { proxy in
-                        profilePhotoMenuOverlay(anchor: anchor, proxy: proxy)
-                    }
-                }
-                .wanderScreen()
+            )
                 .sheet(isPresented: $showsSettings) {
                     SettingsScreen()
                         .environmentObject(store)
@@ -59,8 +64,14 @@ struct ProfileScreen: View {
                         }
                     }
                 }
-                .sheet(item: $listMode) { mode in
-                    GraphListScreen(mode: mode)
+                .sheet(item: $socialGraphTab) { tab in
+                    ProfileSocialGraphScreen(initialTab: tab, onFindFriends: onFindFriends)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+                .sheet(isPresented: $showsEditProfile) {
+                    ProfileEditScreen()
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
@@ -84,14 +95,59 @@ struct ProfileScreen: View {
                 }
                 .task(id: auth.isSignedIn) {
                     guard auth.isSignedIn else { return }
+                    await store.refreshRemoteCurrentProfile(backend: backend)
                     await store.refreshRemoteSocialGraph(backend: backend)
-                    handleNotificationRoute(pushNotifications.navigationRequest, proxy: proxy)
+                    await store.refreshRemoteCurrentUserProfileData(backend: backend)
+                    handleNotificationRoute(pushNotifications.navigationRequest)
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
-                    handleNotificationRoute(request, proxy: proxy)
+                    handleNotificationRoute(request)
                 }
-            }
+                .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoMenu, titleVisibility: .visible) {
+                    if isCameraAvailable {
+                        Button("Take Photo") { presentProfileCamera() }
+                    }
+                    Button("Choose from Library") { presentProfilePhotoLibrary() }
+                    if hasProfilePhoto {
+                        Button("Delete Photo", role: .destructive) { confirmDeleteProfilePhoto() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
         }
+    }
+
+    private var profileInsights: ProfileInsights {
+        ProfileInsightsPresenter.present(
+            ownerID: store.currentUser.id,
+            userPlaces: profileUserPlaces,
+            visits: store.placeVisits,
+            places: profilePlaces,
+            month: selectedMonth
+        )
+    }
+
+    private var profileStats: ProfileStats {
+        var seen: Set<String> = []
+        let active = profileUserPlaces.filter {
+            $0.userID == store.currentUser.id && $0.deletedAt == nil && seen.insert($0.id).inserted
+        }
+        return ProfileStats(
+            been: active.filter { $0.status == .been }.count,
+            wanna: active.filter { $0.status == .wannaGo }.count,
+            friends: store.friends(of: store.currentUser.id).count
+        )
+    }
+
+    private var profileUserPlaces: [LocalUserPlace] {
+        store.userPlaces + store.remoteVisiblePlaceCache
+            .filter { $0.owner.id == store.currentUser.id }
+            .map(\.userPlace)
+    }
+
+    private var profilePlaces: [LocalPlace] {
+        store.places + store.remoteVisiblePlaceCache
+            .filter { $0.owner.id == store.currentUser.id }
+            .map(\.place)
     }
 
     private var pageTitle: some View {
@@ -333,35 +389,22 @@ struct ProfileScreen: View {
         .id("profile.people")
     }
 
-    private func handleNotificationRoute(
-        _ request: NotificationNavigationRequest?,
-        proxy: ScrollViewProxy
-    ) {
+    private func handleNotificationRoute(_ request: NotificationNavigationRequest?) {
         guard let request else { return }
 
-        let target: String
         switch request.destination {
         case .people(let mode):
-            selectedPeopleMode = switch mode {
-            case .following: .following
-            case .followers: .followers
-            case .friends: .friends
+            socialGraphTab = switch mode {
+            case .following: ProfileSocialGraphTab.following
+            case .followers: ProfileSocialGraphTab.followers
+            case .friends: ProfileSocialGraphTab.friends
             }
-            target = "profile.people"
-        case .drafts(let extractionJobID):
-            if let extractionJobID,
-               store.unresolvedDrafts.contains(where: { $0.extractionJobID == extractionJobID }) {
-                target = "profile.draft.\(extractionJobID)"
-            } else {
-                target = "profile.drafts"
-            }
+        case .drafts:
+            break
         default:
             return
         }
 
-        withAnimation(.easeInOut(duration: 0.25)) {
-            proxy.scrollTo(target, anchor: .top)
-        }
         pushNotifications.consumeNavigationRequest(id: request.id)
     }
 
@@ -776,6 +819,7 @@ struct ProfileDetailView: View {
             }
             .task(id: profileID) {
                 await refreshRemoteProfile()
+                await store.refreshRemoteMutes(backend: backend)
             }
         }
     }
@@ -822,6 +866,19 @@ struct ProfileDetailView: View {
                     if state.shell.relationship != .owner && state.shell.relationship != .nonFollower && !state.isBlocked {
                         Button("Unfollow", role: .destructive) {
                             showUnfollowConfirm = true
+                        }
+                    }
+                    if state.shell.relationship != .owner && !state.isBlocked {
+                        Button(store.isMuted(userID: profileID) ? "Unmute activity" : "Mute activity") {
+                            auth.requireSignIn(for: .manageBlocks) {
+                                Task {
+                                    if store.isMuted(userID: profileID) {
+                                        await store.unmute(userID: profileID, backend: backend)
+                                    } else {
+                                        await store.mute(userID: profileID, backend: backend)
+                                    }
+                                }
+                            }
                         }
                     }
                     Button("Block", role: .destructive) {

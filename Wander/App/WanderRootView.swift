@@ -9,6 +9,8 @@ struct WanderRootView: View {
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
     @State private var initialPresentation: WanderInitialPresentation?
+    @State private var discoverSection: DiscoverSection?
+    @State private var sharedProfile: SharedProfileRoute?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
@@ -40,7 +42,7 @@ struct WanderRootView: View {
                 .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
-            DiscoverScreen()
+            DiscoverScreen(requestedSection: $discoverSection)
                 .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
 
@@ -52,7 +54,10 @@ struct WanderRootView: View {
                 .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
                 .tag(WanderTab.lists)
 
-            ProfileScreen()
+            ProfileScreen {
+                discoverSection = .members
+                selectedTab = .discover
+            }
                 .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
                 .tag(WanderTab.profile)
         }
@@ -86,6 +91,12 @@ struct WanderRootView: View {
                     .environmentObject(backend)
                     .environmentObject(pushNotifications)
             }
+        }
+        .sheet(item: $sharedProfile) { route in
+            ProfileDetailView(profileID: route.profileID)
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -125,6 +136,9 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)
         }
+        .onOpenURL { url in
+            sharedProfile = Self.sharedProfileRoute(for: url)
+        }
     }
 
     private var tabSelection: Binding<WanderTab> {
@@ -157,6 +171,18 @@ struct WanderRootView: View {
         case .place: .map
         case .discover: .discover
         }
+    }
+
+    static func sharedProfileRoute(for url: URL) -> SharedProfileRoute? {
+        guard url.scheme?.lowercased() == "recme", url.host?.lowercased() == "profiles" else {
+            return nil
+        }
+        guard let profileID = url.pathComponents.dropFirst().first?.removingPercentEncoding,
+              !profileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+        return SharedProfileRoute(profileID: profileID)
     }
 
     private func applyAuthStateIfNeeded(_ state: AuthState) {
@@ -238,6 +264,11 @@ enum WanderInitialPresentation: String, Identifiable {
     case settings
 
     var id: String { rawValue }
+}
+
+struct SharedProfileRoute: Equatable, Identifiable {
+    let profileID: String
+    var id: String { profileID }
 }
 
 enum WanderTab: String, CaseIterable, Hashable {

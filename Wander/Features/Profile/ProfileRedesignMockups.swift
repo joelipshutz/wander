@@ -263,7 +263,7 @@ private struct ProfileCalendarMockup: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("your dining calendar")
+                    Text("your calendar")
                         .font(.system(size: 23, weight: .black))
                     Text("June 2026")
                         .font(.system(size: 14, weight: .bold))
@@ -402,7 +402,7 @@ private struct ProfileDiningMapMockup: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("your dining map")
+                Text("your map")
                     .font(.system(size: 23, weight: .black))
                 Text("5 cities  •  87 Been places")
                     .font(.system(size: 14, weight: .bold))

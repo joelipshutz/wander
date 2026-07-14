@@ -32,7 +32,7 @@ This is a scope reduction for the current branch, not a feature cut.
 | Friends | Existing code already defines friends as following entries whose relationship is `.mutual`. | Add one shared `friends(of:)` store helper later to remove duplicate filtering. |
 | Been/Wanna tiles and pages | `StatTile`, `SavedPlacesListScreen`, and current navigation. | Preserve destination pages unchanged. Restyle/reposition only the profile entry tiles if approved. |
 | Visit dates | `LocalPlaceVisit.visitedAt`, `WanderStore.visits(for:)`, persisted visit rows. | Calendar uses active owner visits, not generic save timestamps. |
-| Geographic data | `LocalPlace` already stores locality, region, country, latitude, and longitude. | Dining map and city/country summaries reuse canonical place rows. |
+| Geographic data | `LocalPlace` already stores locality, region, country, latitude, and longitude. | Map and city/country summaries reuse canonical place rows. |
 | Place categories | `WanderPlaceCategory` canonical primary categories and saved effective category. | Places summary uses canonical primary category, not cuisine labels copied from Beli. |
 | Privacy controls | Private Profile and default stealth mode already exist in Settings. | Move unchanged behavior to the top of Privacy & Trust. |
 | Blocked accounts | `LocalBlock`, `blockedProfiles()`, repository and persistence exist. | Move management into a dedicated destination. |
@@ -64,7 +64,7 @@ LocalPlace (category + geo fields) ──────────┤
                                              |
                ┌─────────────────────────────┼──────────────────────────┐
                v                             v                          v
-       Calendar month model          Dining map points       Places/Cities/Countries
+       Calendar month model            Map points             Places/Cities/Countries
 ```
 
 Views do not perform nested store scans. The presenter is deterministic and unit-testable.
@@ -78,7 +78,7 @@ Production failure: a visit references a deleted/missing user-place or place row
 - Multiple visits on one date render one dining underlay plus a numeric count.
 - Month statistics are distinct spots, distinct canonical categories, and distinct cities.
 - Calendar grouping uses the visit/place time zone when available, otherwise the user's current calendar/time zone.
-- Wanna saves never mark a calendar day or dining map point.
+- Wanna saves never mark a calendar day or map point.
 
 Production failure: a timezone change moves a late-night visit across dates. Tests pin the calendar/time zone so the conversion is explicit rather than device-dependent.
 
@@ -225,7 +225,7 @@ No current-scale bottleneck requires new infrastructure.
 |---|---|---|---|---|
 | Profile insights | Orphan visit/place relation | Presenter unit test | Drop orphan and log count | Remaining profile still renders |
 | Calendar | Device timezone changes date | Fixed-calendar unit test | Explicit calendar/time-zone conversion | Correct local visit date |
-| Dining map | Missing or invalid coordinate | Presenter unit test | Exclude point, retain summary row | Map renders without bad dot |
+| Map | Missing or invalid coordinate | Presenter unit test | Exclude point, retain summary row | Map renders without bad dot |
 | Social graph | Refresh/network failure | Store/UI state test | Preserve cached rows and show retry | Recoverable inline error |
 | Edit profile | Clerk succeeds, Supabase fails | Coordinator unit test | Persist accepted fields; retry failed subset | Partial-save message and retry |
 | Share profile | Invalid/private/blocked route | Navigation tests | Route to unavailable/private state | Clear destination state |

@@ -34,14 +34,22 @@ struct AuthSession: Equatable, Identifiable {
     let displayName: String?
     let handle: String?
     let email: String?
+    let phoneNumber: String?
 
     var id: String { userID }
 
-    init(userID: String, displayName: String?, handle: String?, email: String? = nil) {
+    init(
+        userID: String,
+        displayName: String?,
+        handle: String?,
+        email: String? = nil,
+        phoneNumber: String? = nil
+    ) {
         self.userID = userID
         self.displayName = displayName
         self.handle = handle
         self.email = email
+        self.phoneNumber = phoneNumber
     }
 }
 
@@ -123,7 +131,19 @@ protocol AuthSessionProviding: AnyObject {
     var canPresentNativeAuth: Bool { get }
     func refreshSession() async
     func signOut() async throws
+    func updateIdentity(displayName: String, handle: String) async throws
+    func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
+}
+
+extension AuthSessionProviding {
+    func updateIdentity(displayName: String, handle: String) async throws {
+        throw AuthSessionError.notConfigured
+    }
+
+    func deleteAccount() async throws {
+        throw AuthSessionError.notConfigured
+    }
 }
 
 @MainActor
@@ -219,6 +239,20 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             signOutError = "Could not sign out. Try again."
             throw error
         }
+    }
+
+    func updateIdentity(displayName: String, handle: String) async throws {
+        try await provider.updateIdentity(displayName: displayName, handle: handle)
+        await provider.refreshSession()
+        state = provider.state
+    }
+
+    func deleteAccount() async throws {
+        try await provider.deleteAccount()
+        await provider.refreshSession()
+        state = provider.state
+        activeGate = nil
+        isPresentingNativeAuth = false
     }
 }
 

@@ -15,6 +15,19 @@ struct SupabaseProfileRepository: ProfileRepository {
         return rows.first?.localProfile()
     }
 
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        let response: RemoteCurrentProfileDTO = try await rpc.call(
+            "update_own_profile",
+            params: UpdateOwnProfileParams(
+                bio: update.bio,
+                homeArea: update.homeArea,
+                defaultVisibility: update.defaultVisibility?.rawValue,
+                isPrivateProfile: update.isPrivateProfile
+            )
+        )
+        return response.localProfile()
+    }
+
     func profile(id: String) async throws -> ProfileViewState {
         throw WanderRemoteError.notImplemented("profile_visible_places profile shell")
     }
@@ -158,11 +171,33 @@ struct SupabaseBlockRepository: BlockRepository {
     }
 
     func blockedProfiles() async throws -> [ProfileShell] {
-        throw WanderRemoteError.notImplemented("blocked profiles RPC")
+        let rows: [RemoteProfileShellDTO] = try await rpc.call("blocked_profiles", params: EmptyParams())
+        return rows.map { $0.profileShell() }
     }
 
     func isBlocked(userID: String) async throws -> Bool {
         throw WanderRemoteError.notImplemented("is blocked RPC")
+    }
+}
+
+struct SupabaseMuteRepository: MuteRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func mute(userID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call("mute_profile", params: ProfileIDParams(profileID: userID))
+    }
+
+    func unmute(userID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call("unmute_profile", params: ProfileIDParams(profileID: userID))
+    }
+
+    func mutedProfiles() async throws -> [ProfileShell] {
+        let rows: [RemoteProfileShellDTO] = try await rpc.call("muted_profiles", params: EmptyParams())
+        return rows.map { $0.profileShell() }
     }
 }
 
@@ -830,6 +865,20 @@ private struct SearchProfilesParams: Encodable {
 }
 
 private struct EmptyParams: Encodable {}
+
+private struct UpdateOwnProfileParams: Encodable {
+    let bio: String?
+    let homeArea: String?
+    let defaultVisibility: String?
+    let isPrivateProfile: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case bio = "input_bio"
+        case homeArea = "input_home_area"
+        case defaultVisibility = "input_default_visibility"
+        case isPrivateProfile = "input_is_private_profile"
+    }
+}
 
 private struct NotificationPreferencesResponse: Decodable {
     let pushEnabled: Bool

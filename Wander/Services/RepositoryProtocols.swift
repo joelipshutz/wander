@@ -881,6 +881,25 @@ struct ProfileAvatarResult: Equatable {
     let storagePath: String
 }
 
+struct ProfileDetailsUpdate: Equatable {
+    let bio: String?
+    let homeArea: String?
+    let defaultVisibility: PlaceVisibility?
+    let isPrivateProfile: Bool?
+
+    init(
+        bio: String? = nil,
+        homeArea: String? = nil,
+        defaultVisibility: PlaceVisibility? = nil,
+        isPrivateProfile: Bool? = nil
+    ) {
+        self.bio = bio
+        self.homeArea = homeArea
+        self.defaultVisibility = defaultVisibility
+        self.isPrivateProfile = isPrivateProfile
+    }
+}
+
 enum PushTokenEnvironment: String, Equatable {
     case sandbox
     case production
@@ -967,8 +986,15 @@ struct NotificationPreferencesUpdate: Equatable {
 @MainActor
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
+}
+
+extension ProfileRepository {
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        throw WanderRemoteError.notImplemented("update current profile")
+    }
 }
 
 @MainActor
@@ -992,6 +1018,13 @@ protocol BlockRepository {
     func unblock(userID: String) async throws
     func blockedProfiles() async throws -> [ProfileShell]
     func isBlocked(userID: String) async throws -> Bool
+}
+
+@MainActor
+protocol MuteRepository {
+    func mute(userID: String) async throws
+    func unmute(userID: String) async throws
+    func mutedProfiles() async throws -> [ProfileShell]
 }
 
 @MainActor

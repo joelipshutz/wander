@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum DiscoverSection: String, Equatable {
+    case places
+    case members
+}
+
 struct DiscoverScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -16,6 +21,11 @@ struct DiscoverScreen: View {
     @State private var selectedOwnerCandidateID: String?
     @State private var tickerIndex = 0
     @FocusState private var searchFieldFocused: Bool
+    @Binding private var requestedSection: DiscoverSection?
+
+    init(requestedSection: Binding<DiscoverSection?> = .constant(nil)) {
+        _requestedSection = requestedSection
+    }
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -70,6 +80,7 @@ struct DiscoverScreen: View {
         DiscoverLatestActivityPresentation.places(
             from: store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
                 .filter { $0.owner.id != store.currentUser.id }
+                .filter { !store.isMuted(userID: $0.owner.id) }
         )
     }
 
@@ -135,6 +146,7 @@ struct DiscoverScreen: View {
             .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
             .task {
+                applyRequestedSection()
                 await refreshRemotePlacesIfNeeded()
                 await refreshPlaces()
                 await refreshMembers()
@@ -146,6 +158,9 @@ struct DiscoverScreen: View {
                     await refreshPlaces()
                     await refreshMembers()
                 }
+            }
+            .onChange(of: requestedSection) { _, _ in
+                applyRequestedSection()
             }
             .onChange(of: placesQuery) { _, _ in
                 selectedOwnerCandidateID = nil
@@ -184,6 +199,13 @@ struct DiscoverScreen: View {
                 Text(savedMessage ?? "")
             }
         }
+    }
+
+    private func applyRequestedSection() {
+        guard let requestedSection else { return }
+        selectedMode = requestedSection == .members ? .members : .places
+        self.requestedSection = nil
+        searchFieldFocused = false
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {

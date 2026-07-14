@@ -62,7 +62,8 @@ final class ClerkAuthService: AuthSessionProviding {
                     userID: user.id,
                     displayName: name.isEmpty ? user.username : name,
                     handle: user.username,
-                    email: user.primaryEmailAddress?.emailAddress
+                    email: user.primaryEmailAddress?.emailAddress,
+                    phoneNumber: user.primaryPhoneNumber?.phoneNumber
                 )
             )
             #if DEBUG
@@ -88,6 +89,41 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notConfigured
         }
         try await Clerk.shared.auth.signOut()
+        state = .signedOut
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func updateIdentity(displayName: String, handle: String) async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
+        guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
+
+        let parts = displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        let firstName = parts.first
+        let lastName = parts.count > 1 ? parts.dropFirst().joined(separator: " ") : nil
+        _ = try await user.update(
+            .init(
+                username: handle.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")),
+                firstName: firstName,
+                lastName: lastName
+            )
+        )
+        await refreshSession()
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func deleteAccount() async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
+        guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
+        _ = try await user.delete()
         state = .signedOut
         #else
         throw AuthSessionError.notConfigured
