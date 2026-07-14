@@ -11560,3 +11560,14 @@ Release validation checkpoint, 2026-07-13 22:32 PDT:
 - Generic iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`; artifact: `/private/tmp/DerivedData-build73-build/Build/Products/Debug-iphonesimulator/Wander.app`.
 - `git diff --check` passes and the release diff remains limited to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this coordination log. Tester-facing What to Test copy is staged outside the repo at `/private/tmp/recme-build73-what-to-test.md`.
 - Release validation carries forward the already completed hosted security proofs: REC-89 profile pgTAP 44/44 plus linked smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. The remaining high-value tester proof is the fresh two-account/APNs Shared Visits flow on physical devices.
+
+Release completion, 2026-07-13 22:48 PDT:
+
+- Opened ready release PR #94 with the three-file build-number/log diff and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/94. Exact released source commit: `8e123c17a4d7831d9869c1e234d1dee503c41b32`.
+- Archived exact released `main` successfully at `/private/tmp/Wander-0.1-build73.xcarchive`. Archive and embedded app metadata both confirm marketing version `0.1`, build `73`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export options used `destination=upload`, `method=app-store-connect`, automatic signing, and `manageAppVersionAndBuildNumber=false`. Upload with the configured App Store Connect API key succeeded without changing the archive build number.
+- App Store Connect build id `85eb8567-4158-47c4-a5ff-732cf947afcd` reached `VALID`. The helper set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 73 to `Wander Alpha`, submitted external beta review, and confirmed review state `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784007999287189. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Added final release evidence to Linear `REC-88` and `REC-89` and moved both issues to `Done` after the build was approved and attached to the public beta group.
+- Validation shipped with 324 tests / 0 failures, a passing generic arm64/x86_64 iOS Simulator build, a passing signed Release archive, REC-89 hosted pgTAP 44/44 plus linked smoke, and REC-88 hosted pgTAP 70/70 plus linked rollback smoke.
+- Known/deferred: Find Friends routes to Discover > Members until native Contacts import ships. The tester checklist explicitly prioritizes a fresh physical two-account/APNs pass for Shared Visits foreground, background, and cold-launch routing.
