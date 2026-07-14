@@ -24,6 +24,8 @@ struct WanderApp: App {
             #if DEBUG
             if let invitationMockupPage = SharedVisitInvitationMockupPage.resolved() {
                 SharedVisitInvitationMockupRoot(page: invitationMockupPage)
+            } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
+                ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if let mockupPage = CategoryTaxonomyMockupPage.resolved() {

@@ -55,8 +55,9 @@ async function main() {
     try {
       await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
       await runOwnPlaceSmokeChecks(client, smokeUserID);
+      await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
       await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
-      console.log("Supabase smoke test passed: semantic own-place saves, place-list access, and preferred-place-photo visibility boundaries are valid.");
+      console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, and photo visibility are valid.");
     } finally {
       await client.query("rollback");
     }
@@ -146,7 +147,7 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
         .join("\n");
       throw new Error(details || "linked Supabase query failed");
     }
-    console.log("Supabase smoke test passed: linked photo visibility, provider quota, and Shared Visits contracts are valid.");
+    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, and Shared Visits contracts are valid.");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -259,6 +260,67 @@ begin
 end
 $quota_metadata$;
 
+do $profile_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=app, public' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'update_own_profile'
+    and pg_get_function_identity_arguments(p.oid) =
+      'input_bio text, input_home_area text, input_default_visibility text, input_is_private_profile boolean, input_display_name text, input_handle text';
+  if valid is distinct from true then
+    raise exception 'profile update metadata contract failed';
+  end if;
+end
+$profile_metadata$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+do $profile_behavior$
+declare updated jsonb; muted_id text; visible_city text;
+begin
+  updated := public.update_own_profile(
+    'Backend smoke-test profile.', 'Test', 'mutuals', true, 'Backend Smoke Tester', 'recme_smoke_profile'
+  );
+  if updated->>'default_visibility' is distinct from 'mutuals'
+     or (updated->>'is_private_profile')::boolean is distinct from true then
+    raise exception 'profile preference persistence failed';
+  end if;
+
+  perform public.mute_profile(${collaboratorUser});
+  select id into muted_id from public.muted_profiles() where id = ${collaboratorUser};
+  if muted_id is distinct from ${collaboratorUser} then
+    raise exception 'profile mute persistence failed';
+  end if;
+
+  select locality into visible_city
+  from public.profile_visible_places(${smokeUser}, null, null)
+  limit 1;
+  if visible_city is distinct from 'Los Angeles' then
+    raise exception 'profile geography payload failed';
+  end if;
+
+  perform public.unmute_profile(${collaboratorUser});
+  perform public.update_own_profile(null, null, null, false, null, null);
+  update public.user_places up
+  set visibility = 'followers', updated_at = now()
+  from public.places p
+  where up.place_id = p.id
+    and up.user_id = ${smokeUser}
+    and p.source_provider = 'codex_smoke'
+    and p.source_provider_place_id = 'place-list-rpc-smoke';
+end
+$profile_behavior$;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -293,7 +355,15 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 do $follower$
-declare resolved uuid;
+declare
+  resolved uuid;
+  can_read boolean;
+  follows_owner boolean;
+  blocked boolean;
+  visible_user_places integer;
+  visible_visits integer;
+  visible_photos integer;
+  visible_places integer;
 begin
   select photo_id into resolved
   from public.first_visible_place_photo((
@@ -301,7 +371,25 @@ begin
     where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
   ));
   if resolved is distinct from '${smokePhotoID}'::uuid then
-    raise exception 'follower preferred-place-photo visibility failed';
+    select app.follows(${collaboratorUser}, ${smokeUser}),
+           app.is_blocked(${collaboratorUser}, ${smokeUser}),
+           app.can_read_user_place(${collaboratorUser}, ${smokeUser}, 'followers')
+      into follows_owner, blocked, can_read;
+    select count(*)::integer into visible_user_places
+      from public.user_places where user_id = ${smokeUser} and deleted_at is null;
+    select count(*)::integer into visible_visits
+      from public.place_visits where id = '${smokeVisitID}'::uuid;
+    select count(*)::integer into visible_photos
+      from public.visit_photos where id = '${smokePhotoID}'::uuid;
+    select count(*)::integer into visible_places
+      from public.places
+      where source_provider = 'codex_smoke' and source_provider_place_id = 'place-list-rpc-smoke';
+    raise exception 'follower preferred-place-photo visibility failed'
+      using detail = format(
+        'current_user=%s follows=%s blocked=%s can_read=%s user_places=%s visits=%s photos=%s places=%s resolved=%s',
+        app.current_user_id(), follows_owner, blocked, can_read, visible_user_places,
+        visible_visits, visible_photos, visible_places, resolved
+      );
   end if;
 end
 $follower$;
@@ -576,6 +664,14 @@ set
   deleted_at = null,
   updated_at = now();
 
+delete from public.blocks
+where blocker_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser})
+  and blocked_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser});
+
+delete from public.follows
+where follower_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser})
+  and followed_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser});
+
 insert into public.places (
   canonical_name,
   category,
@@ -583,6 +679,9 @@ insert into public.places (
   subcategory,
   raw_provider_type,
   category_source,
+  locality,
+  region,
+  country,
   latitude,
   longitude,
   source_provider,
@@ -596,6 +695,9 @@ values (
   'Coffee shop',
   'coffee shop',
   'deterministic',
+  'Los Angeles',
+  'CA',
+  'United States',
   34.052235,
   -118.243683,
   ${sourceProvider},
@@ -610,6 +712,9 @@ set
   subcategory = excluded.subcategory,
   raw_provider_type = excluded.raw_provider_type,
   category_source = excluded.category_source,
+  locality = excluded.locality,
+  region = excluded.region,
+  country = excluded.country,
   latitude = excluded.latitude,
   longitude = excluded.longitude,
   confidence = excluded.confidence,
@@ -748,6 +853,110 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID) {
         && cuisine?.value_type === "restaurant_cuisine"
         && cuisine.value === "Thai";
     },
+  );
+
+  await client.query("reset role");
+}
+
+async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID) {
+  await expectQuery(
+    client,
+    "profile update and mute RPC metadata",
+    `
+      select
+        not update_proc.prosecdef as update_invoker,
+        'search_path=public, app' = any(update_proc.proconfig) as update_search_path,
+        not mute_proc.prosecdef as mute_invoker,
+        'search_path=public, app' = any(mute_proc.proconfig) as mute_search_path,
+        has_function_privilege(
+          'authenticated',
+          'public.update_own_profile(text,text,text,boolean,text,text)',
+          'execute'
+        ) as update_authenticated,
+        not has_function_privilege(
+          'anon',
+          'public.update_own_profile(text,text,text,boolean,text,text)',
+          'execute'
+        ) as update_anon_denied
+      from pg_proc update_proc
+      cross join pg_proc mute_proc
+      where update_proc.oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure
+        and mute_proc.oid = 'app.mute_profile(text)'::regprocedure
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.update_invoker === true
+        && row?.update_search_path === true
+        && row?.mute_invoker === true
+        && row?.mute_search_path === true
+        && row?.update_authenticated === true
+        && row?.update_anon_denied === true;
+    },
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "authenticated profile details and privacy preferences persist",
+    `
+      select public.update_own_profile(
+        'Backend smoke-test profile.',
+        'Test',
+        'mutuals',
+        true,
+        'Backend Smoke Tester',
+        'recme_smoke_profile'
+      ) as profile
+    `,
+    [],
+    (result) => result.rows[0]?.profile?.default_visibility === "mutuals"
+      && result.rows[0]?.profile?.is_private_profile === true
+      && result.rows[0]?.profile?.display_name === "Backend Smoke Tester"
+      && result.rows[0]?.profile?.handle === "recme_smoke_profile"
+      && Boolean(result.rows[0]?.profile?.created_at),
+  );
+
+  await expectQuery(
+    client,
+    "authenticated mute is owner-private and listable",
+    `
+      with muted as (select public.mute_profile($1))
+      select profiles.id
+      from public.muted_profiles() profiles
+      cross join muted
+      where profiles.id = $1
+    `,
+    [collaboratorUserID],
+    (result) => result.rows[0]?.id === collaboratorUserID,
+  );
+
+  await expectQuery(
+    client,
+    "profile insight payload includes geography and owner avatar column",
+    `
+      select locality, region, country, owner_avatar_url
+      from public.profile_visible_places($1, null, null)
+      limit 1
+    `,
+    [smokeUserID],
+    (result) => result.rows[0]?.locality === "Los Angeles"
+      && result.rows[0]?.region === "CA"
+      && result.rows[0]?.country === "United States"
+      && Object.hasOwn(result.rows[0] ?? {}, "owner_avatar_url"),
+  );
+
+  await expectQuery(
+    client,
+    "authenticated user can remove a mute",
+    `
+      with unmuted as (select public.unmute_profile($1))
+      select count(profiles.id)::integer as count
+      from unmuted
+      left join public.muted_profiles() profiles on profiles.id = $1
+    `,
+    [collaboratorUserID],
+    (result) => result.rows[0]?.count === 0,
   );
 
   await client.query("reset role");

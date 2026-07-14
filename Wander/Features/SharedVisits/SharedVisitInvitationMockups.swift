@@ -151,127 +151,196 @@ private struct SharedVisitFlashBanner: View {
 
 private struct SharedVisitProfileShell: View {
     var body: some View {
-        ZStack(alignment: .bottom) {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    Text("profile")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
-
-                    profileHeader
-                    profileStats
-                    SharedVisitProfileInboxRow(count: 2)
-                    monthSection
-                    recentSection
-                }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, 92)
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                profileHeader
+                SharedVisitProfileInboxRow(count: 2)
+                profileStats
+                calendarPreview
             }
-
-            SharedVisitMockTabBar()
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing12)
         }
         .foregroundStyle(WanderTheme.textInk.color)
     }
 
     private var profileHeader: some View {
-        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            WanderAvatar(initials: "RL", size: 56, color: WanderTheme.avatarRyan.color)
+        VStack(spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("Ryan Lieblein")
-                    .font(.system(size: 23, weight: .black))
-                Text("@ryan · Los Angeles")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("profile")
+                    .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
+
+                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                    Text("Ryan Lieblein")
+                        .font(.system(size: 30, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    SharedVisitProfileAction(systemImage: "pencil")
+                    SharedVisitProfileAction(systemImage: "square.and.arrow.up")
+                    SharedVisitProfileAction(systemImage: "gearshape.fill")
+                }
             }
-            Spacer()
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 17, weight: .bold))
-                .frame(width: 40, height: 40)
-                .background(WanderTheme.surfaceSand.color, in: Circle())
+
+            WanderAvatar(initials: "RL", size: 132, color: WanderTheme.avatarRyan.color)
+                .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, y: 6)
+
+            VStack(spacing: WanderTheme.spacing1) {
+                Text("@ryan_lieblein")
+                    .font(.system(size: 18, weight: .black))
+                Text("Member since October 2023  •  Los Angeles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 0) {
+                SharedVisitSocialCount(value: "128", label: "Followers")
+                SharedVisitSocialCount(value: "96", label: "Following")
+                SharedVisitSocialCount(value: "42", label: "Friends")
+            }
+            .padding(.vertical, WanderTheme.spacing2)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            }
         }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var profileStats: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            SharedVisitMockStat(value: "38", label: "BEEN", tint: WanderTheme.categorySage.color.opacity(0.22))
-            SharedVisitMockStat(value: "17", label: "WANNA", tint: WanderTheme.sunTint.color)
+            SharedVisitMockStat(
+                value: "87",
+                label: "BEEN",
+                symbol: "checkmark.circle.fill",
+                color: WanderTheme.stateSuccess.color,
+                tint: WanderTheme.categorySage.color.opacity(0.22)
+            )
+            SharedVisitMockStat(
+                value: "34",
+                label: "WANNA",
+                symbol: "bookmark.fill",
+                color: WanderTheme.stateWarning.color,
+                tint: WanderTheme.sunTint.color
+            )
         }
     }
 
-    private var monthSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+    private var calendarPreview: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack {
-                Text("this month")
-                    .font(.system(size: 17, weight: .black))
-                Spacer()
-                Text("JUL '26")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            HStack(spacing: WanderTheme.spacing4) {
-                Text("6")
-                    .font(.system(size: 38, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                Text("saved places this month.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-            }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        }
-    }
-
-    private var recentSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("recent")
-                .font(.system(size: 17, weight: .black))
-            HStack(spacing: WanderTheme.spacing3) {
-                SharedVisitPlaceThumbnail(
-                    symbol: "takeoutbag.and.cup.and.straw.fill",
-                    color: WanderTheme.terracotta.color,
-                    size: 58
-                )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Gjusta")
-                        .font(.system(size: 15, weight: .black))
-                    Text("Venice · yesterday")
-                        .font(.system(size: 12, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("your calendar")
+                        .font(.system(size: 23, weight: .black))
+                    Text("July 2026")
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textFaint.color)
+                SharedVisitProfileAction(systemImage: "chevron.left")
+                SharedVisitProfileAction(systemImage: "chevron.right")
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+
+            HStack(spacing: 0) {
+                SharedVisitCalendarMetric(value: "6", label: "spots ranked")
+                SharedVisitCalendarMetric(value: "4", label: "cuisines")
+                SharedVisitCalendarMetric(value: "2", label: "cities")
+            }
         }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+    }
+}
+
+private struct SharedVisitProfileAction: View {
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 16, weight: .black))
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .background(WanderTheme.surfaceBone.color)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(WanderTheme.borderHairline.color))
+    }
+}
+
+private struct SharedVisitSocialCount: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 19, weight: .black))
+            Text(label)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, minHeight: 54)
     }
 }
 
 private struct SharedVisitMockStat: View {
     let value: String
     let label: String
+    let symbol: String
+    let color: Color
     let tint: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-            Text(value)
-                .font(.system(size: 30, weight: .black))
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: symbol)
+                    .font(.system(size: 19, weight: .black))
+                Text(value)
+                    .font(.system(size: 28, weight: .black))
+                Spacer(minLength: WanderTheme.spacing2)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .black))
+                    .frame(width: 28, height: 28)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.8))
+                    .clipShape(Circle())
+            }
             Text(label)
-                .font(.system(size: 12, weight: .black))
+                .font(.system(size: 13, weight: .black))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
-        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
-        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
         .background(tint)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .foregroundStyle(color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .stroke(color.opacity(0.3), lineWidth: 1.5)
+        }
+    }
+}
+
+private struct SharedVisitCalendarMetric: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 50)
     }
 }
 
@@ -525,45 +594,4 @@ private struct SharedVisitPlaceThumbnail: View {
     }
 }
 
-private struct SharedVisitMockTabBar: View {
-    private let items = [
-        ("map.fill", "map"),
-        ("sparkles", "discover"),
-        ("plus", "add"),
-        ("list.bullet", "lists"),
-        ("person.fill", "profile")
-    ]
-
-    var body: some View {
-        HStack {
-            ForEach(items, id: \.1) { item in
-                VStack(spacing: 3) {
-                    Image(systemName: item.0)
-                        .font(.system(size: item.1 == "add" ? 20 : 16, weight: .black))
-                        .frame(width: item.1 == "add" ? 44 : 30, height: item.1 == "add" ? 44 : 30)
-                        .background(item.1 == "add" ? WanderTheme.terracotta.color : Color.clear)
-                        .foregroundStyle(
-                            item.1 == "add"
-                                ? WanderTheme.textOnAction.color
-                                : (item.1 == "profile" ? WanderTheme.terracotta.color : WanderTheme.textMuted.color)
-                        )
-                        .clipShape(Circle())
-                    Text(item.1)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(item.1 == "profile" ? WanderTheme.terracotta.color : WanderTheme.textMuted.color)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing2)
-        .padding(.top, WanderTheme.spacing2)
-        .padding(.bottom, WanderTheme.spacing1)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(WanderTheme.borderHairline.color.opacity(0.65))
-                .frame(height: 1)
-        }
-    }
-}
 #endif

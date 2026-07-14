@@ -39,7 +39,8 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
     let bio: String?
     let homeArea: String?
     let defaultVisibility: String
-    let isPrivateProfile: Bool?
+    let isPrivateProfile: Bool
+    let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -50,6 +51,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
         case homeArea = "home_area"
         case defaultVisibility = "default_visibility"
         case isPrivateProfile = "is_private_profile"
+        case createdAt = "created_at"
     }
 
     func localProfile() -> LocalProfile {
@@ -61,9 +63,10 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
             avatarURL: avatarURL,
             bio: bio,
             homeArea: homeArea,
-            isPrivateProfile: isPrivateProfile ?? false,
+            isPrivateProfile: isPrivateProfile,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibility) ?? .followers,
-            syncState: .synced
+            syncState: .synced,
+            createdAt: createdAt
         )
     }
 }
@@ -82,6 +85,11 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let categorySource: String?
     let categoryConfidence: Double?
     let rawProviderType: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let timeZoneIdentifier: String?
     let latitude: Double
     let longitude: Double
     let status: String
@@ -116,6 +124,11 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case categorySource = "category_source"
         case categoryConfidence = "category_confidence"
         case rawProviderType = "raw_provider_type"
+        case address
+        case locality
+        case region
+        case country
+        case timeZoneIdentifier = "time_zone_identifier"
         case latitude
         case longitude
         case status
@@ -163,8 +176,13 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
             categoryConfidence: categoryConfidence,
             rawProviderType: rawProviderType ?? category,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
             latitude: latitude,
             longitude: longitude,
+            timeZoneIdentifier: timeZoneIdentifier,
             syncState: .synced
         )
         let userPlace = LocalUserPlace(
