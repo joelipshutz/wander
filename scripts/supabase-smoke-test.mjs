@@ -344,6 +344,27 @@ begin
 end
 $shared_invite$;
 
+do $shared_owner_pending$
+declare
+  companion_id text;
+  selected_invitee_id text;
+begin
+  select companion.companion_user_id into companion_id
+  from public.get_shared_visit_companion_context(
+    array['${smokeVisitID}'::uuid]
+  ) companion;
+  if companion_id is distinct from ${collaboratorUser} then
+    raise exception 'pending shared visit companion attribution failed';
+  end if;
+
+  select invitee.invitee_user_id into selected_invitee_id
+  from public.list_shared_visit_invitees('${smokeVisitID}'::uuid) invitee;
+  if selected_invitee_id is distinct from ${collaboratorUser} then
+    raise exception 'shared visit invitee listing failed';
+  end if;
+end
+$shared_owner_pending$;
+
 select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
 do $shared_context$
 declare
@@ -427,6 +448,46 @@ begin
   end if;
 end
 $shared_companion$;
+
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+do $shared_remove$
+declare
+  active_count integer;
+begin
+  select count(*)::integer into active_count
+  from public.set_shared_visit_invitees(
+    '${smokeVisitID}'::uuid,
+    array[]::text[]
+  );
+  if active_count <> 0 then
+    raise exception 'shared visit exact invitee removal failed';
+  end if;
+end
+$shared_remove$;
+
+reset role;
+do $shared_remove_persistence$
+declare
+  participant_status text;
+  recipient_visit_count integer;
+begin
+
+  select participant.status into participant_status
+  from public.shared_visit_participants participant
+  where participant.id = (select participant_id from smoke_shared_visit_invitation);
+  if participant_status is distinct from 'removed' then
+    raise exception 'shared visit removed attribution persisted';
+  end if;
+
+  select count(*)::integer into recipient_visit_count
+  from public.place_visits visit
+  where visit.id = '58000000-0000-0000-0000-000000000003'::uuid
+    and visit.deleted_at is null;
+  if recipient_visit_count <> 1 then
+    raise exception 'shared visit removal deleted the recipient independent visit';
+  end if;
+end
+$shared_remove_persistence$;
 
 reset role;
 rollback;

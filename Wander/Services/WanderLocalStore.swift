@@ -284,7 +284,9 @@ final class WanderStore: ObservableObject {
         } catch {
             guard currentUser.id == requestUserID else { return nil }
             lastRemoteError = remoteErrorMessage(error)
-            return nil
+            return sharedVisitInvitations.first {
+                $0.participantID == participantID && $0.invitationGeneration == generation
+            }
         }
     }
 
@@ -292,19 +294,20 @@ final class WanderStore: ObservableObject {
         participantID: String,
         generation: Int,
         backend: WanderBackend?
-    ) async -> SharedVisitDestination? {
-        guard let backend, backend.canUseSharedVisits else { return nil }
+    ) async -> SharedVisitDestinationResolution {
+        guard let backend, backend.canUseSharedVisits else { return .retryableFailure }
         let requestUserID = currentUser.id
         do {
             let destination = try await backend.resolveSharedVisitDestination(
                 participantID: participantID,
                 generation: generation
             )
-            return currentUser.id == requestUserID ? destination : nil
+            guard currentUser.id == requestUserID else { return .retryableFailure }
+            return destination.map(SharedVisitDestinationResolution.resolved) ?? .unavailable
         } catch {
-            guard currentUser.id == requestUserID else { return nil }
+            guard currentUser.id == requestUserID else { return .retryableFailure }
             lastRemoteError = remoteErrorMessage(error)
-            return nil
+            return .retryableFailure
         }
     }
 
@@ -352,17 +355,53 @@ final class WanderStore: ObservableObject {
 
     func sharedVisitCompanions(for visitID: String) -> [SharedVisitCompanion] {
         let ids = matchingVisitIDs(visitID)
-        return ids.compactMap { sharedVisitCompanionsByVisitID[$0] }.flatMap { $0 }
+        var seenUserIDs: Set<String> = []
+        return ids
+            .compactMap { sharedVisitCompanionsByVisitID[$0] }
+            .flatMap { $0 }
+            .filter { seenUserIDs.insert($0.userID).inserted }
+    }
+
+    func sharedVisitInviteeUserIDs(sourceVisitID: String, backend: WanderBackend?) async throws -> [String] {
+        guard let backend, backend.canUseSharedVisits else { throw WanderRemoteError.notConfigured }
+        let requestUserID = currentUser.id
+        guard let visit = currentUserVisit(matching: sourceVisitID) else { return [] }
+
+        if let pending = pendingSharedVisitInvites.last(where: {
+            $0.ownerUserID == requestUserID && currentUserVisit(matching: $0.sourceVisitID)?.id == visit.id
+        }) {
+            return pending.inviteeUserIDs
+        }
+
+        guard let remoteVisitID = visit.serverID else { return [] }
+        let inviteeUserIDs = try await backend.sharedVisitInviteeUserIDs(sourceVisitID: remoteVisitID)
+        guard currentUser.id == requestUserID else { throw CancellationError() }
+        return Array(Set(inviteeUserIDs)).sorted()
     }
 
     func queueSharedVisitInvites(sourceVisitID: String, inviteeUserIDs: [String]) {
         let normalizedInvitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty })).sorted()
         guard !normalizedInvitees.isEmpty else { return }
 
+        queueSharedVisitInviteeReconciliation(
+            sourceVisitID: sourceVisitID,
+            inviteeUserIDs: normalizedInvitees
+        )
+    }
+
+    func queueSharedVisitInviteeReconciliation(sourceVisitID: String, inviteeUserIDs: [String]) {
+        let normalizedInvitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty })).sorted()
+        let sourceVisit = currentUserVisit(matching: sourceVisitID)
+
         pendingSharedVisitInvites.removeAll {
             $0.ownerUserID == currentUser.id
-                && $0.sourceVisitID == sourceVisitID
-                && $0.inviteeUserIDs == normalizedInvitees
+                && (
+                    $0.sourceVisitID == sourceVisitID
+                    || (
+                        sourceVisit != nil
+                        && currentUserVisit(matching: $0.sourceVisitID)?.id == sourceVisit?.id
+                    )
+                )
         }
         pendingSharedVisitInvites.append(
             PendingSharedVisitInvite(
@@ -372,6 +411,10 @@ final class WanderStore: ObservableObject {
                 inviteeUserIDs: normalizedInvitees,
                 createdAt: .now
             )
+        )
+        setOptimisticSharedVisitCompanions(
+            visitID: sourceVisit?.id ?? sourceVisitID,
+            inviteeUserIDs: normalizedInvitees
         )
         persist()
     }
@@ -400,7 +443,7 @@ final class WanderStore: ObservableObject {
             }
 
             do {
-                _ = try await backend.createSharedVisitInvites(
+                _ = try await backend.setSharedVisitInvitees(
                     sourceVisitID: remoteVisitID,
                     inviteeUserIDs: pending.inviteeUserIDs
                 )
@@ -408,6 +451,7 @@ final class WanderStore: ObservableObject {
                 pendingSharedVisitInvites.removeAll { $0.id == pending.id }
                 sentCount += pending.inviteeUserIDs.count
                 lastRemoteError = nil
+                await refreshSharedVisitCompanions(visitIDs: [remoteVisitID], backend: backend)
             } catch {
                 guard currentUser.id == ownerUserID else { break }
                 lastRemoteError = remoteErrorMessage(error)
@@ -416,6 +460,21 @@ final class WanderStore: ObservableObject {
 
         persist()
         return sentCount
+    }
+
+    private func setOptimisticSharedVisitCompanions(visitID: String, inviteeUserIDs: [String]) {
+        guard let visit = currentUserVisit(matching: visitID) else { return }
+        let cacheVisitID = visit.serverID ?? visit.id
+        sharedVisitCompanionsByVisitID[cacheVisitID] = inviteeUserIDs.compactMap { userID in
+            guard let profile = profiles.first(where: { $0.id == userID }) else { return nil }
+            return SharedVisitCompanion(
+                visitID: cacheVisitID,
+                userID: profile.id,
+                handle: profile.handle,
+                displayName: profile.displayName,
+                avatarURL: profile.avatarURL
+            )
+        }
     }
 
     @discardableResult

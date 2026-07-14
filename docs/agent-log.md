@@ -11150,3 +11150,29 @@ PR handoff, 2026-07-13 19:51 PDT:
 - Remaining manual proof is a physical two-account flow: sender creates a non-stealth Been visit and invites a mutual friend; recipient receives the push, edits/removes inherited data, saves an independent card, and both accounts verify companion attribution plus private/stealth/block cancellation behavior.
 - Pushed the rebased branch to `origin/codex/rec-88-visit-friends-mockup`, replaced PR #85's obsolete mockup-only description with the production contract and validation evidence, and marked the PR ready for review.
 - Moved Linear REC-88 to `In Review` and added a durable comment with the PR, deployed migration set, iOS/pgTAP/smoke results, local Docker gap, manual physical-device proof, and intentional no-TestFlight status.
+
+## 2026-07-13 20:11 PDT - Codex - REC-88 Physical-Test Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup`
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: investigate and fix three failures found in the first physical two-account Shared Visits test: the sender card does not show the invited friend, tapping the recipient push does not open or surface the pending visit, and Edit This Visit cannot add or remove friends after the original save.
+
+Starting status and coordination:
+
+- Root Xcode checkout remains on the clean pushed REC-88 branch for Ryan's testing; its unrelated untracked `.pnpm-store/` is untouched.
+- Created this isolated follow-up branch from exact PR head `79a73857c` because the root checkout has untracked content and the fix touches high-conflict Map/store/backend files.
+- Moved REC-88 from In Review back to In Progress. No implementation edits have been made; root-cause investigation will trace hosted participant state, card companion loading, notification routing, and edit-visit submission before choosing the patch.
+- Expected files are narrowly scoped to Shared Visits UI/store/repository contracts, Map edit integration, focused tests, one additive Supabase migration only if hosted behavior is proven wrong, and this log. Existing user and other-agent changes will not be reverted.
+
+Root cause and hosted-validation checkpoint, 2026-07-13 21:37 PDT:
+
+- Hosted read-only evidence showed the reported physical invite was sent with the correct generation-aware deep link and private snapshot, while the participant remained pending and no recipient visit existed. That narrowed the failures to client routing/read behavior: source companion lookup omitted pending invitees, card refresh was keyed only to unchanged visit ids, Edit This Visit explicitly hid the picker and ignored membership, and the app delegate's asynchronous single-value notification handoff could lose a cold-launch tap before auth and Map were ready.
+- Added exact owner-only invitee listing/reconciliation RPCs in `20260714043000_manage_shared_visit_invitees.sql`. Pending invitees now appear in sender attribution; removal clears attribution, snapshots, and pending delivery while preserving any recipient-owned visit; re-addition uses a new generation. Edit This Visit loads the current set, safely leaves it unchanged if loading fails, supports add/remove/clear, and updates the card optimistically while its persisted outbox retries.
+- Replaced the transient push handoff with a lock-backed synchronous response buffer, event-id deduplication, auth-aware Map routing, explicit terminal versus retryable destination results, and bounded context/destination retries. A valid Shared Visit tap is retained through cold launch or a temporary backend failure and retried on app activation.
+- Focused iOS simulator validation passed 5/5 tests on iPhone 17 Pro / iOS 26.5, including exact empty reconciliation, latest-outbox selection, RPC payloads, and duplicate buffered/delivered notification handling (`/private/tmp/DerivedData-rec88-followup-focused/Logs/Test/Test-Wander-2026.07.13_21-28-34--0700.xcresult`). XcodeGen produced no project-file churn.
+- Deployed linked hosted migration `20260714043000_manage_shared_visit_invitees.sql` to `rugmtlgufrhlxwfkumhw`. Hosted rollback pgTAP passed 70/70 assertions and the expanded linked rollback smoke passed pending attribution, invitee loading, atomic acceptance, exact removal, and preservation of the recipient independent visit. Direct metadata verification confirmed all three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`; migration ledger alignment was verified through `20260714043000` with REC-89's separately owned `003000` and `033000` files materialized only for comparison and removed afterward.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The required `npm --prefix scripts ci --ignore-scripts` command also could not run because this Codex runtime has Node but no npm binary; the exact pinned `pg@8.22.0` dependency was installed with pnpm instead. Direct smoke could not resolve hosted database credentials on Ryan's machine, so the stronger linked Management API rollback smoke was run and passed.

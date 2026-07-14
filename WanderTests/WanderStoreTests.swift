@@ -1476,7 +1476,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(sentCount, 2)
         XCTAssertTrue(store.pendingSharedVisitInvites.isEmpty)
         XCTAssertEqual(
-            repository.inviteRequests,
+            repository.setRequests,
             [
                 FakeSharedVisitRepository.InviteRequest(
                     sourceVisitID: "83000000-0000-0000-0000-000000000001",
@@ -1484,6 +1484,102 @@ final class WanderStoreTests: XCTestCase {
                 )
             ]
         )
+    }
+
+    func testSharedVisitInviteeReconciliationReplacesQueuedSelectionAndCanClearIt() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_edit",
+                name: "Shared Edit Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: nil,
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000002"
+        userPlace.syncStateRaw = SyncState.synced.rawValue
+        visit.serverID = "83000000-0000-0000-0000-000000000002"
+        visit.syncStateRaw = SyncState.synced.rawValue
+
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah", "user_maya"]
+        )
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: []
+        )
+
+        XCTAssertEqual(store.pendingSharedVisitInvites.count, 1)
+        XCTAssertEqual(store.pendingSharedVisitInvites.first?.inviteeUserIDs, [])
+
+        let repository = FakeSharedVisitRepository()
+        _ = await store.retryPendingSharedVisitInvites(
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertTrue(store.pendingSharedVisitInvites.isEmpty)
+        XCTAssertEqual(
+            repository.setRequests,
+            [
+                FakeSharedVisitRepository.InviteRequest(
+                    sourceVisitID: "83000000-0000-0000-0000-000000000002",
+                    inviteeUserIDs: []
+                )
+            ]
+        )
+    }
+
+    func testSharedVisitInviteeSelectionLoadsPendingOutboxBeforeRemoteState() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_pending_selection",
+                name: "Pending Shared Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: nil,
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000003"
+        visit.serverID = "83000000-0000-0000-0000-000000000003"
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah"]
+        )
+        let repository = FakeSharedVisitRepository()
+        repository.activeInviteeUserIDs = ["user_maya"]
+
+        let inviteeUserIDs = try await store.sharedVisitInviteeUserIDs(
+            sourceVisitID: visit.id,
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertEqual(inviteeUserIDs, ["user_sarah"])
+        XCTAssertTrue(repository.inviteeListRequests.isEmpty)
     }
 
     func testSharedVisitInboxDiscardsCompletionFromPreviousAccount() async {
@@ -4207,6 +4303,9 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
     }
 
     private(set) var inviteRequests: [InviteRequest] = []
+    private(set) var inviteeListRequests: [String] = []
+    private(set) var setRequests: [InviteRequest] = []
+    var activeInviteeUserIDs: [String] = []
     var shouldSuspendInbox = false
     private var inboxContinuation: CheckedContinuation<[SharedVisitInvitation], Error>?
 
@@ -4214,6 +4313,24 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
 
     func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
         inviteRequests.append(InviteRequest(sourceVisitID: sourceVisitID, inviteeUserIDs: inviteeUserIDs))
+        return inviteeUserIDs.map {
+            SharedVisitInviteResult(
+                participantID: UUID().uuidString.lowercased(),
+                inviteeUserID: $0,
+                status: .pending,
+                invitationGeneration: 1
+            )
+        }
+    }
+
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        inviteeListRequests.append(sourceVisitID)
+        return activeInviteeUserIDs
+    }
+
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        setRequests.append(InviteRequest(sourceVisitID: sourceVisitID, inviteeUserIDs: inviteeUserIDs))
+        activeInviteeUserIDs = inviteeUserIDs
         return inviteeUserIDs.map {
             SharedVisitInviteResult(
                 participantID: UUID().uuidString.lowercased(),

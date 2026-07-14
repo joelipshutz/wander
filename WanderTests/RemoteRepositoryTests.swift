@@ -1057,8 +1057,83 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[3]["input_environment"] as? String, "sandbox")
     }
 
+    func testSharedVisitRepositoryLoadsAndReconcilesExactInviteeSet() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["list_shared_visit_invitees"] = """
+        [
+          {
+            "invitee_user_id": "user_sarah",
+            "participant_status": "pending",
+            "invitation_generation": 1
+          }
+        ]
+        """.data(using: .utf8)
+        rpc.responses["set_shared_visit_invitees"] = """
+        [
+          {
+            "participant_id": "48000000-0000-0000-0000-000000000001",
+            "invitee_user_id": "user_maya",
+            "participant_status": "pending",
+            "invitation_generation": 2
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseSharedVisitRepository(
+            rpc: rpc,
+            table: RecordingTable(),
+            storage: RecordingStorage()
+        )
+
+        let existingInviteeUserIDs = try await repository.inviteeUserIDs(
+            sourceVisitID: "83000000-0000-0000-0000-000000000001"
+        )
+        let reconciled = try await repository.setInvitees(
+            sourceVisitID: "83000000-0000-0000-0000-000000000001",
+            inviteeUserIDs: ["user_maya"]
+        )
+
+        XCTAssertEqual(existingInviteeUserIDs, ["user_sarah"])
+        XCTAssertEqual(reconciled.map(\.inviteeUserID), ["user_maya"])
+        XCTAssertEqual(reconciled.map(\.invitationGeneration), [2])
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            ["list_shared_visit_invitees", "set_shared_visit_invitees"]
+        )
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_source_visit_id"] as? String,
+            "83000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertEqual(rpc.rawBodies[1]["input_invitee_user_ids"] as? [String], ["user_maya"])
+    }
+
     func testPushNotificationDeviceTokenHexEncoding() {
         XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
+    }
+
+    func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
+        let manager = PushNotificationManager()
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "notification-event-1",
+                "notification_type": "shared_visit",
+                "data": [
+                    "participant_id": "48000000-0000-0000-0000-000000000001",
+                    "invitation_generation": 3
+                ]
+            ]
+        ]
+
+        XCTAssertTrue(manager.handleNotificationResponse(userInfo: userInfo))
+        let firstRequest = manager.navigationRequest
+        XCTAssertFalse(manager.handleNotificationResponse(userInfo: userInfo))
+        XCTAssertEqual(manager.navigationRequest, firstRequest)
+        XCTAssertEqual(
+            manager.navigationRequest?.destination,
+            .sharedVisit(
+                participantID: "48000000-0000-0000-0000-000000000001",
+                generation: 3
+            )
+        )
     }
 
     func testNotificationPreferencePresetsToggleEveryTypeTogether() {

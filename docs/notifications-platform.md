@@ -68,6 +68,8 @@ The app parses `recme.deeplink_url` first and falls back to `notification_type` 
 
 The deep link is generation-aware. A pending invitation opens a prefilled Save This Place flow; an accepted invitation resolves to the recipient-owned visit; stale, declined, cancelled, or otherwise terminal generations do not expose their old snapshot. Generic `followed_place_visit` delivery waits two minutes so a more specific Shared Visit event can supersede it without sending two notifications for one save.
 
+Notification responses are synchronously buffered before the app delegate completion handler returns, drained after auth restoration, and deduplicated by event id. Shared Visit routing distinguishes a terminal missing invitation from a retryable auth/network failure, so a cold-launch tap remains pending and retries when the app becomes active instead of being silently consumed.
+
 Invitation delivery and acceptance are separate guarantees. The sender keeps an account-scoped local outbox until the source visit and all selected source photos are remotely available. The recipient's acceptance uses deterministic client IDs plus a server operation ledger, so foreground retries cannot create duplicate saves or visits.
 
 ## Adding A Notification

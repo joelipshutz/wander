@@ -550,6 +550,25 @@ struct SupabaseSharedVisitRepository: SharedVisitRepository {
         return rows.map(\.result)
     }
 
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        let rows: [SharedVisitInviteeRow] = try await rpc.call(
+            "list_shared_visit_invitees",
+            params: SharedVisitSourceVisitParams(sourceVisitID: sourceVisitID)
+        )
+        return rows.map(\.inviteeUserID)
+    }
+
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        let rows: [SharedVisitInviteRow] = try await rpc.call(
+            "set_shared_visit_invitees",
+            params: CreateSharedVisitInvitesParams(
+                sourceVisitID: sourceVisitID,
+                inviteeUserIDs: inviteeUserIDs
+            )
+        )
+        return rows.map(\.result)
+    }
+
     func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
         let rows: [SharedVisitInvitationRow] = try await rpc.call(
             "list_shared_visit_inbox",
@@ -628,6 +647,22 @@ private struct CreateSharedVisitInvitesParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case sourceVisitID = "input_source_visit_id"
         case inviteeUserIDs = "input_invitee_user_ids"
+    }
+}
+
+private struct SharedVisitSourceVisitParams: Encodable {
+    let sourceVisitID: String
+
+    enum CodingKeys: String, CodingKey {
+        case sourceVisitID = "input_source_visit_id"
+    }
+}
+
+private struct SharedVisitInviteeRow: Decodable {
+    let inviteeUserID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteeUserID = "invitee_user_id"
     }
 }
 

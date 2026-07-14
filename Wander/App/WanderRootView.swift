@@ -95,7 +95,7 @@ struct WanderRootView: View {
             await pushNotifications.refreshAuthorizationStatus()
             await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
-            if let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
+            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
                 pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
             }
         }

@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(56);
+select plan(70);
 
 create temporary table test_shared_participant_ids (
   user_id text primary key,
@@ -50,6 +50,37 @@ select is(
   (select prosecdef from pg_proc where oid = 'public.create_shared_visit_invites(uuid,text[])'::regprocedure),
   true,
   'invite creation is a security-definer RPC'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.list_shared_visit_invitees(uuid)'::regprocedure),
+  true,
+  'invitee listing is a security-definer RPC'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.set_shared_visit_invitees(uuid,text[])'::regprocedure),
+  true,
+  'invitee reconciliation is a security-definer RPC'
+);
+select ok(
+  (
+    select bool_and('search_path=public, app' = any(coalesce(proconfig, array[]::text[])))
+    from pg_proc
+    where oid in (
+      'public.list_shared_visit_invitees(uuid)'::regprocedure,
+      'public.set_shared_visit_invitees(uuid,text[])'::regprocedure
+    )
+  ),
+  'invitee management RPCs pin their search path'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.list_shared_visit_invitees(uuid)', 'execute')
+    and has_function_privilege('authenticated', 'public.set_shared_visit_invitees(uuid,text[])', 'execute'),
+  'authenticated users can manage invitees through the narrow RPCs'
+);
+select ok(
+  not has_function_privilege('anon', 'public.list_shared_visit_invitees(uuid)', 'execute')
+    and not has_function_privilege('anon', 'public.set_shared_visit_invitees(uuid,text[])', 'execute'),
+  'anonymous users cannot manage invitees'
 );
 select is(
   (select prosecdef from pg_proc where oid = 'public.accept_shared_visit(uuid,integer,integer,uuid,uuid,uuid,jsonb,jsonb,jsonb,uuid[])'::regprocedure),
@@ -255,6 +286,26 @@ select is(
   (select count(*)::integer from test_shared_participant_ids),
   1,
   'owner can invite one mutual friend to a visible Been visit'
+);
+select is(
+  (
+    select companion_user_id
+    from public.get_shared_visit_companion_context(
+      array['83000000-0000-0000-0000-000000000001'::uuid]
+    )
+  ),
+  'shared_recipient',
+  'source owner sees pending friend attribution immediately'
+);
+select is(
+  (
+    select invitee_user_id
+    from public.list_shared_visit_invitees(
+      '83000000-0000-0000-0000-000000000001'
+    )
+  ),
+  'shared_recipient',
+  'owner can load the existing invitee selection for editing'
 );
 
 reset role;
@@ -569,6 +620,72 @@ from public.create_shared_visit_invites(
   array['shared_friend_three']
 );
 
+select is(
+  (
+    select count(*)::integer
+    from public.set_shared_visit_invitees(
+      '83000000-0000-0000-0000-000000000001',
+      array['shared_friend_three']
+    )
+  ),
+  1,
+  'exact reconciliation keeps the selected friend and removes other active participants'
+);
+
+reset role;
+
+select ok(
+  (
+    select status = 'removed' and invitation_snapshot is null
+    from public.shared_visit_participants
+    where user_id = 'shared_recipient'
+  ),
+  'removing an accepted friend clears the shared attribution and private snapshot'
+);
+select is(
+  (
+    select count(*)::integer
+    from public.place_visits
+    where id = '87000000-0000-0000-0000-000000000001'
+      and deleted_at is null
+  ),
+  1,
+  'removing an accepted friend preserves their independently owned visit'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'shared_owner', true);
+select is(
+  (
+    select invitee_user_id
+    from public.list_shared_visit_invitees(
+      '83000000-0000-0000-0000-000000000001'
+    )
+  ),
+  'shared_friend_three',
+  'invitee listing reflects the reconciled selection'
+);
+
+insert into test_shared_participant_ids(user_id, participant_id, invitation_generation)
+select invitee_user_id, participant_id, invitation_generation
+from public.set_shared_visit_invitees(
+  '83000000-0000-0000-0000-000000000001',
+  array['shared_recipient', 'shared_friend_three']
+)
+on conflict (user_id) do update set
+  participant_id = excluded.participant_id,
+  invitation_generation = excluded.invitation_generation;
+
+select is(
+  (
+    select invitation_generation
+    from test_shared_participant_ids
+    where user_id = 'shared_recipient'
+  ),
+  2,
+  're-adding a removed friend creates a fresh invitation generation'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'shared_owner', true);
 select throws_ok(
@@ -621,6 +738,45 @@ select is(
   'privacy transition preserves the recipient independent visit'
 );
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'shared_owner', true);
+select is(
+  (
+    select count(*)::integer
+    from public.set_shared_visit_invitees(
+      '83000000-0000-0000-0000-000000000001',
+      array[]::text[]
+    )
+  ),
+  0,
+  'owner can clear every friend from an existing shared visit'
+);
+
+reset role;
+
+select ok(
+  (
+    select status = 'removed' and invitation_snapshot is null
+    from public.shared_visit_participants
+    where user_id = 'shared_friend_three'
+  ),
+  'clearing the friend set removes pending attribution and its snapshot'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'shared_owner', true);
+insert into test_shared_participant_ids(user_id, participant_id, invitation_generation)
+select invitee_user_id, participant_id, invitation_generation
+from public.set_shared_visit_invitees(
+  '83000000-0000-0000-0000-000000000001',
+  array['shared_friend_three']
+)
+on conflict (user_id) do update set
+  participant_id = excluded.participant_id,
+  invitation_generation = excluded.invitation_generation;
+
+reset role;
+
 update public.user_places
 set visibility = 'self'
 where id = '82000000-0000-0000-0000-000000000001';
@@ -649,7 +805,7 @@ select is(
     select route_status
     from public.resolve_shared_visit_destination(
       (select participant_id from test_shared_participant_ids where user_id = 'shared_friend_three'),
-      1
+      (select invitation_generation from test_shared_participant_ids where user_id = 'shared_friend_three')
     )
   ),
   'cancelled',

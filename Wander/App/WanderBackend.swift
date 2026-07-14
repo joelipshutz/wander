@@ -470,6 +470,19 @@ final class WanderBackend: ObservableObject {
         )
     }
 
+    func sharedVisitInviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.inviteeUserIDs(sourceVisitID: sourceVisitID)
+    }
+
+    func setSharedVisitInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.setInvitees(
+            sourceVisitID: sourceVisitID,
+            inviteeUserIDs: inviteeUserIDs
+        )
+    }
+
     func sharedVisitInbox(before: Date? = nil, limit: Int = 50) async throws -> [SharedVisitInvitation] {
         guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
         return try await sharedVisitRepository.inbox(before: before, limit: limit)

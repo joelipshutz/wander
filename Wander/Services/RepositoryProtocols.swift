@@ -1170,6 +1170,12 @@ struct SharedVisitDestination: Equatable {
     let sourceVisitID: String
 }
 
+enum SharedVisitDestinationResolution: Equatable {
+    case resolved(SharedVisitDestination)
+    case unavailable
+    case retryableFailure
+}
+
 @MainActor
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
@@ -1298,6 +1304,8 @@ protocol NotificationRepository {
 @MainActor
 protocol SharedVisitRepository {
     func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String]
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
     func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation]
     func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation?
     func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination?

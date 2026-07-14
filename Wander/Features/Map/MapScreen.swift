@@ -4,6 +4,7 @@ import SwiftUI
 import UIKit
 
 struct MapScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -33,6 +34,7 @@ struct MapScreen: View {
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didCenterInitialPlaces = false
+    @State private var handlingNotificationRequestID: UUID?
 
     private static let defaultRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
@@ -335,6 +337,7 @@ struct MapScreen: View {
                 Task {
                     await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
+                    await handleNotificationRoute(pushNotifications.navigationRequest)
                     centerMapOnInitialPlacesIfNeeded()
                 }
             }
@@ -384,30 +387,53 @@ struct MapScreen: View {
                 await handleNotificationRoute(request)
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await handleNotificationRoute(pushNotifications.navigationRequest)
+            }
+        }
     }
 
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
-        guard let request else { return }
+        guard let request,
+              auth.isSignedIn,
+              handlingNotificationRequestID != request.id
+        else { return }
+        handlingNotificationRequestID = request.id
+        defer {
+            if handlingNotificationRequestID == request.id {
+                handlingNotificationRequestID = nil
+            }
+        }
 
         switch request.destination {
         case .place(let placeID):
             await openNotificationPlace(placeID, requestID: request.id)
         case .sharedVisit(let participantID, let generation):
-            guard let destination = await store.resolveSharedVisitDestination(
+            let resolution = await resolveSharedVisitDestinationWithRetry(
                 participantID: participantID,
-                generation: generation,
-                backend: backend
-            ) else {
-                pushNotifications.consumeNavigationRequest(id: request.id)
+                generation: generation
+            )
+            guard case .resolved(let destination) = resolution else {
+                if resolution == .unavailable {
+                    mapSearchMessage = "That shared visit is no longer available."
+                    pushNotifications.consumeNavigationRequest(id: request.id)
+                } else {
+                    mapSearchMessage = "Could not open that shared visit yet. It will retry when the app becomes active."
+                }
                 return
             }
 
-            if destination.status == SharedVisitParticipantStatus.pending.rawValue,
-               let invitation = await store.refreshSharedVisitContext(
-                participantID: participantID,
-                generation: destination.currentGeneration,
-                backend: backend
-               ) {
+            if destination.status == SharedVisitParticipantStatus.pending.rawValue {
+                let invitation = await sharedVisitContextWithRetry(
+                    participantID: participantID,
+                    generation: destination.currentGeneration
+                )
+                guard let invitation else {
+                    mapSearchMessage = "Could not open that shared visit yet. It will retry when the app becomes active."
+                    return
+                }
                 mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
                 pushNotifications.consumeNavigationRequest(id: request.id)
             } else if destination.status == SharedVisitParticipantStatus.accepted.rawValue {
@@ -419,6 +445,51 @@ struct MapScreen: View {
         default:
             return
         }
+    }
+
+    private func resolveSharedVisitDestinationWithRetry(
+        participantID: String,
+        generation: Int
+    ) async -> SharedVisitDestinationResolution {
+        for attempt in 0..<3 {
+            let resolution = await store.resolveSharedVisitDestination(
+                participantID: participantID,
+                generation: generation,
+                backend: backend
+            )
+            if resolution != .retryableFailure {
+                return resolution
+            }
+            if attempt < 2 {
+                try? await Task.sleep(for: .milliseconds(350 * (attempt + 1)))
+            }
+        }
+        return .retryableFailure
+    }
+
+    private func sharedVisitContextWithRetry(
+        participantID: String,
+        generation: Int
+    ) async -> SharedVisitInvitation? {
+        for attempt in 0..<3 {
+            if let invitation = await store.refreshSharedVisitContext(
+                participantID: participantID,
+                generation: generation,
+                backend: backend
+            ) {
+                return invitation
+            }
+            await store.refreshSharedVisitInbox(backend: backend)
+            if let invitation = store.sharedVisitInvitations.first(where: {
+                $0.participantID == participantID && $0.invitationGeneration == generation
+            }) {
+                return invitation
+            }
+            if attempt < 2 {
+                try? await Task.sleep(for: .milliseconds(350 * (attempt + 1)))
+            }
+        }
+        return nil
     }
 
     private func openNotificationPlace(_ placeID: String, requestID: UUID) async {
@@ -1088,10 +1159,14 @@ struct MapScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await createSharedVisitInvitesIfNeeded(
-                inviteeUserIDs: submission.inviteeUserIDs,
-                sourceVisit: targetVisit
-            )
+            if submission.reconcilesSharedVisitInvitees {
+                await reconcileSharedVisitInvitees(submission, sourceVisit: targetVisit)
+            } else {
+                await createSharedVisitInvitesIfNeeded(
+                    inviteeUserIDs: submission.inviteeUserIDs,
+                    sourceVisit: targetVisit
+                )
+            }
             selectedSearchCandidateID = nil
             selectSavedResult(result)
             showMapSaveFeedback(
@@ -1134,6 +1209,23 @@ struct MapScreen: View {
             $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
         }) {
             mapSearchMessage = "Visit saved. Friend invites are queued and will retry automatically."
+        }
+    }
+
+    private func reconcileSharedVisitInvitees(
+        _ submission: MapPlaceSaveSubmission,
+        sourceVisit: LocalPlaceVisit?
+    ) async {
+        guard auth.isSignedIn, let sourceVisit else { return }
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: sourceVisit.id,
+            inviteeUserIDs: submission.inviteeUserIDs
+        )
+        _ = await store.retryPendingSharedVisitInvites(backend: backend)
+        if store.pendingSharedVisitInvites.contains(where: {
+            $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
+        }) {
+            mapSearchMessage = "Visit updated. Friend changes are queued and will retry automatically."
         }
     }
 
@@ -3002,6 +3094,7 @@ struct MapPlaceSaveSubmission {
     let attributes: [PlaceAttributeDraft]
     let photoAttachments: [MapPlaceSavePhotoAttachment]
     let inviteeUserIDs: [String]
+    let reconcilesSharedVisitInvitees: Bool
 }
 
 struct MapPlaceSavePhotoAttachment: Identifiable {
@@ -3193,6 +3286,9 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isShowingRemoveConfirmation = false
     @State private var visitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var selectedInviteeUserIDs: [String] = []
+    @State private var isLoadingSharedVisitInvitees = false
+    @State private var didLoadSharedVisitInvitees = false
+    @State private var sharedVisitInviteesError: String?
     @State private var didLoadSharedVisitPhotos = false
     @State private var errorMessage: String?
 
@@ -3330,6 +3426,7 @@ struct MapPlaceSaveFlowSheet: View {
             }
             .task {
                 await loadSharedVisitPhotosIfNeeded()
+                await loadSharedVisitInviteesIfNeeded()
             }
             .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
                 if isPrivateProfile {
@@ -3428,7 +3525,15 @@ struct MapPlaceSaveFlowSheet: View {
             }
 
             if canInviteFriends {
-                SharedVisitInviteSection(selectedUserIDs: $selectedInviteeUserIDs)
+                SharedVisitInviteSection(
+                    selectedUserIDs: $selectedInviteeUserIDs,
+                    isLoading: isLoadingSharedVisitInvitees,
+                    errorMessage: sharedVisitInviteesError,
+                    onRetry: context.editedVisit == nil ? nil : {
+                        didLoadSharedVisitInvitees = false
+                        Task { await loadSharedVisitInviteesIfNeeded() }
+                    }
+                )
             }
 
             ForEach(questionBlocks) { block in
@@ -3534,14 +3639,15 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var canInviteFriends: Bool {
         guard selectedStatus == .been,
+              auth.isSignedIn,
               !store.isPrivateProfile,
               saveVisibility != .selfOnly
         else { return false }
 
         switch context.mode {
-        case .add, .addVisit:
+        case .add, .addVisit, .editVisit:
             return true
-        case .sharedVisit, .editVisit, .editWant:
+        case .sharedVisit, .editWant:
             return false
         }
     }
@@ -3890,7 +3996,10 @@ struct MapPlaceSaveFlowSheet: View {
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
             photoAttachments: visitPhotoAttachments,
-            inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : []
+            inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : [],
+            reconcilesSharedVisitInvitees: context.editedVisit != nil
+                && canInviteFriends
+                && didLoadSharedVisitInvitees
         )
 
         Task {
@@ -3936,6 +4045,26 @@ struct MapPlaceSaveFlowSheet: View {
                 errorMessage = "One shared photo could not be loaded. You can still save the visit."
             }
         }
+    }
+
+    private func loadSharedVisitInviteesIfNeeded() async {
+        guard !didLoadSharedVisitInvitees,
+              let visit = context.editedVisit,
+              canInviteFriends
+        else { return }
+
+        isLoadingSharedVisitInvitees = true
+        sharedVisitInviteesError = nil
+        do {
+            selectedInviteeUserIDs = try await store.sharedVisitInviteeUserIDs(
+                sourceVisitID: visit.id,
+                backend: backend
+            )
+            didLoadSharedVisitInvitees = true
+        } catch {
+            sharedVisitInviteesError = "Could not load shared friends. Your visit can still be edited without changing them."
+        }
+        isLoadingSharedVisitInvitees = false
     }
 
     private var removeSaveConfirmationMessage: String {
@@ -5981,6 +6110,13 @@ struct PlaceActivitySection: View {
             store: store,
             backend: auth.isSignedIn ? backend : nil
         )
+        if submission.reconcilesSharedVisitInvitees, let targetVisit, auth.isSignedIn {
+            store.queueSharedVisitInviteeReconciliation(
+                sourceVisitID: targetVisit.id,
+                inviteeUserIDs: submission.inviteeUserIDs
+            )
+            _ = await store.retryPendingSharedVisitInvites(backend: backend)
+        }
         if result != nil, !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
         }

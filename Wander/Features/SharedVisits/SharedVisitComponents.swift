@@ -3,6 +3,9 @@ import SwiftUI
 struct SharedVisitInviteSection: View {
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
+    var isLoading = false
+    var errorMessage: String?
+    var onRetry: (() -> Void)?
     @State private var isPresentingPicker = false
 
     private var selectedFriends: [LocalProfile] {
@@ -35,7 +38,31 @@ struct SharedVisitInviteSection: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isLoading || errorMessage != nil)
+                .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
                 .accessibilityLabel("Add friends to this visit")
+            }
+
+            if isLoading {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView()
+                    Text("Loading shared friends...")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            } else if let errorMessage {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text(errorMessage)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.stateError.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if let onRetry {
+                        Button("Retry", action: onRetry)
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
             }
 
             ForEach(selectedFriends) { friend in

@@ -10,6 +10,24 @@ private final class NotificationUserInfoBox: @unchecked Sendable {
     }
 }
 
+private final class NotificationResponseBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [[AnyHashable: Any]] = []
+
+    func append(_ value: [AnyHashable: Any]) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    func takeFirst() -> [AnyHashable: Any]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !values.isEmpty else { return nil }
+        return values.removeFirst()
+    }
+}
+
 final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     static let didRegisterForRemoteNotifications = Notification.Name("WanderDidRegisterForRemoteNotifications")
     static let didFailToRegisterForRemoteNotifications = Notification.Name("WanderDidFailToRegisterForRemoteNotifications")
@@ -18,11 +36,10 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
     static let deviceTokenKey = "deviceToken"
     static let errorKey = "error"
     nonisolated static let userInfoKey = "userInfo"
-    private static var pendingNotificationUserInfo: [AnyHashable: Any]?
+    private nonisolated static let notificationResponseBuffer = NotificationResponseBuffer()
 
     static func takePendingNotificationUserInfo() -> [AnyHashable: Any]? {
-        defer { pendingNotificationUserInfo = nil }
-        return pendingNotificationUserInfo
+        notificationResponseBuffer.takeFirst()
     }
 
     func application(
@@ -77,8 +94,8 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let boxedUserInfo = NotificationUserInfoBox(response.notification.request.content.userInfo)
+        Self.notificationResponseBuffer.append(boxedUserInfo.value)
         Task { @MainActor in
-            Self.pendingNotificationUserInfo = boxedUserInfo.value
             NotificationCenter.default.post(
                 name: Self.didReceiveNotificationResponse,
                 object: nil,
@@ -119,6 +136,7 @@ final class PushNotificationManager: ObservableObject {
 
     private let userDefaults: UserDefaults
     private let tokenKey = "wander.apnsDeviceToken"
+    private var handledEventIDs: [String] = []
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -307,9 +325,21 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
-    func handleNotificationResponse(userInfo: [AnyHashable: Any]) {
-        guard let destination = Self.destination(from: userInfo) else { return }
+    @discardableResult
+    func handleNotificationResponse(userInfo: [AnyHashable: Any]) -> Bool {
+        let eventID = Self.eventID(from: userInfo)
+        if let eventID, handledEventIDs.contains(eventID) {
+            return false
+        }
+        guard let destination = Self.destination(from: userInfo) else { return false }
+        if let eventID {
+            handledEventIDs.append(eventID)
+            if handledEventIDs.count > 100 {
+                handledEventIDs.removeFirst(handledEventIDs.count - 100)
+            }
+        }
         navigationRequest = NotificationNavigationRequest(destination: destination)
+        return true
     }
 
     func openSharedVisit(participantID: String, generation: Int) {
@@ -354,6 +384,10 @@ final class PushNotificationManager: ObservableObject {
         default:
             return nil
         }
+    }
+
+    private static func eventID(from userInfo: [AnyHashable: Any]) -> String? {
+        (userInfo["recme"] as? [String: Any])?["event_id"] as? String
     }
 
     static func destination(
