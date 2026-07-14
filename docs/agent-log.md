@@ -11668,3 +11668,17 @@ Starting status:
 - Latest completed TestFlight is build 73. `project.yml` still has `CURRENT_PROJECT_VERSION: "73"`, and the release log records build 73 as uploaded, attached to the public `Wander Alpha` group, and externally approved. No unfinished build-number bump or pending explicit release exists.
 - Eligible app change since build 73 is REC-94 only: stable eager Profile/calendar containers plus the prior scroll-compatible date interaction. The affected physical iPhone passed the formerly deterministic second-scroll freeze sequence and remained tappable afterward; the branch also passed 325/325 tests and a generic arm64/x86_64 simulator build.
 - The PR body still states the superseded simulator-only diagnosis that lazy containers were restored. Before merge, update it to the physical watchdog root cause and final eager-container implementation so the durable PR record matches the shipped code and Linear evidence.
+
+Merge and release-branch checkpoint, 2026-07-14 13:45 PDT:
+
+- Corrected PR #99's durable body to the physical watchdog root cause and final eager-container fix, then completed a latest-head pre-landing review with no blocking findings. Posted the clean review result on the PR; scope remained limited to Profile UI, one focused source contract, and coordination docs.
+- Squash-merged PR #99 into `main` as `444c14fe5856ffbf14b95f925e20536247ba9ca3` and deleted the remote implementation branch. REC-94 remains `In Review` because the user explicitly gated completion on this TestFlight release.
+- Created isolated release worktree `/private/tmp/recme-build74-release` on `codex/testflight-build-74` from exact merged `origin/main`. Confirmed build 73 is complete with no pending release, and classified REC-94 as the only eligible app/test change since build 73.
+- Incremented `CURRENT_PROJECT_VERSION` from 73 to 74 exactly once. Next: regenerate `Wander.xcodeproj`, inspect generated churn, commit/push the release bump through a short-lived PR, then validate exact released `main` before archive/upload.
+
+Build-74 pre-landing validation, 2026-07-14 13:55 PDT:
+
+- Regenerated `Wander.xcodeproj` with XcodeGen after the version bump. Generated project churn is limited to the Debug and Release `CURRENT_PROJECT_VERSION` values changing from 73 to 74; no source membership, signing, capability, or dependency settings changed.
+- The full iPhone Simulator suite passed 325 tests with 0 failures on the regenerated build-74 tree: `/private/tmp/DerivedData-build74-test/Logs/Test/Test-Wander-2026.07.14_13-46-15--0700.xcresult`.
+- The required generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-build74-test/Build/Products/Debug-iphonesimulator/Wander.app`.
+- `git diff --check` passes. The release branch diff contains exactly `project.yml`, generated `Wander.xcodeproj/project.pbxproj`, and this required coordination log. Next: commit, push, open and squash-merge the release PR, then archive and upload exact resulting `main`.
