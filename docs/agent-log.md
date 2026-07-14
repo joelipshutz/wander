@@ -11202,3 +11202,337 @@ Backend and validation checkpoint, 2026-07-13 21:26 PDT:
 - Final clean iPhone 17 Pro / iOS 26.5 XCTest run passed 310 tests with 0 failures (`/private/tmp/DerivedData-rec89-followup-final/Logs/Test/Test-Wander-2026.07.13_21-23-16--0700.xcresult`). The generic Simulator build previously passed for arm64 and x86_64 at `/private/tmp/DerivedData-rec89-followup-build/Build/Products/Debug-iphonesimulator/Wander.app`.
 - Migration ordering depends on REC-88 versions `20260714013000`, `20260714022000`, `20260714024500`, and `20260714031500` landing before this PR. Those hosted migrations are already present, but their source remains on `codex/rec-88-visit-friends-mockup`; no REC-88 files or commits were imported into REC-89.
 - No TestFlight upload, build-number bump, merge, or Slack announcement was requested or performed. Next step: push PR #86, return REC-89 to In Review, and let Ryan test `codex/rec-89-profile-redesign` from its isolated Xcode worktree.
+
+## 2026-07-13 13:41 PDT - Codex - REC-88 Visit Friend Invite Mockup
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+
+Goal: create a visual-only SwiftUI mockup of inviting friends to a saved visit before implementing persistence, backend behavior, or invite wiring.
+
+Starting status:
+
+- Created REC-88 from the chat request and assigned it to Ryan.
+- Fetched latest `origin/main` and created this clean isolated worktree at `302324d9f` because the root checkout has unrelated untracked pnpm cache content and multiple agents/worktrees are active.
+- No overlapping active work was found in the planned DEBUG-only mockup file.
+- Design direction follows `DESIGN.md` and the existing New List collaborator block: warm bone surface, 44-point terracotta plus button, friend avatar/name rows, and compact social attribution.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceActivityMockups.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Mockup scope:
+
+- Add an `add friends to this visit` section directly below rating and above tags/labels in the DEBUG visit editor mockup.
+- Add a compact `with Maya` treatment to a visit card.
+- Add deterministic launch pages and navigation-contract coverage, build the app, and capture iPhone screenshots for review.
+- Do not change production models, save submission payloads, Supabase schema/RPCs, notifications, or invite behavior in this pass.
+
+Completion, 2026-07-13 13:57 PDT:
+
+- Added two deterministic DEBUG-only SwiftUI review pages:
+  - `-WanderPlaceActivityMockup visitFriendsEditor` renders the requested `save this place` screen with `add friends to this visit` directly below rating and above tags.
+  - `-WanderPlaceActivityMockup visitWithFriend` renders a visit card with avatar-backed `with Maya Chen` attribution below the rating.
+- The invite block mirrors New List collaborator styling: warm bone section, concise helper copy, 44-point terracotta plus button, friend avatar/name/handle, and remove affordance. It deliberately does not mutate state or open a picker in this visual pass.
+- Added navigation-contract tests for both deterministic mockup launch arguments.
+- Visual verification passed with no clipping or overlap on:
+  - iPhone 17 Pro / iOS 26.5: `/private/tmp/rec88-save-place-friends-final.png` and `/private/tmp/rec88-visit-with-friend-final.png`.
+  - Smaller iPhone 17e / iOS 26.5: `/private/tmp/rec88-save-place-friends-17e.png`.
+- Focused `NavigationContractTests` passed: 13 passed, 0 failed.
+- Full iOS suite passed: 279 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec88/Logs/Test/Test-Wander-2026.07.13_13-50-53--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
+- No production save/card UI, persistence models, backend contracts, Supabase migrations, notification triggers, or invite behavior changed. Functional implementation remains intentionally deferred until this visual direction is approved.
+
+## 2026-07-13 17:55 PDT - Codex - REC-88 Production Shared Visits
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: implement the approved Shared Visits system end to end: independent participant saves, invite picker, pending cards, prefilled acceptance, inherited recipient-owned photos, companion attribution, privacy transitions, notification settings/deep links, lifecycle inbox sync, hosted Supabase contracts, and regression coverage.
+
+Starting status and coordination:
+
+- Fetched `origin` and rebased the clean isolated worktree onto latest `origin/main`; preserved both sides of the expected `docs/agent-log.md` conflict. Rebased mockup commit is `69dfb40b4`.
+- The root checkout remains intentionally untouched. Another active worktree is implementing REC-89 profile redesign; production edits here will avoid profile-screen redesign and keep any `MapScreen.swift` touch narrowly scoped to shared-visit bindings/routes.
+- High-conflict files reserved for this task include `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, this log, and one new Supabase migration. No overlapping edit will be reverted.
+- Updated REC-88 from mockup-only wording to the full production Shared Visits contract and kept it assigned to Ryan/In Progress with PR #85 linked.
+- Completed the FULL office-hours and engineering reviews. The approved engineering plan is `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-88-visit-friends-mockup-eng-plan-20260713-175419.md`; all 13 recommended decisions were accepted, with 0 unresolved decisions and 0 critical plan gaps.
+
+Expected implementation files:
+
+- Shared Visits schema/RLS/RPC migration, pgTAP coverage, and `scripts/supabase-smoke-test.mjs`.
+- Shared-visit local/remote models, persistence, repositories, backend composition, inbox lifecycle coordinator, private photo transport, deep links, and transactional push enrollment.
+- Focused `Wander/Features/SharedVisits/` components, reusable mutual-friend picker extraction, narrow Map save/card integration, and Settings notification/privacy integration.
+- `project.yml`, regenerated Xcode project, unit/navigation tests, and focused `WanderUITests` target.
+- `docs/decisions.md`, notification/backend documentation where contracts change, and this coordination log.
+
+Validation plan:
+
+- Run pgTAP locally when Docker is available, deploy only the reviewed linked migration, verify migration/metadata posture, and run the extended two-account hosted rollback smoke test.
+- Run XcodeGen, focused tests, the full iPhone 16 Plus / iOS 18.6 suite, focused UI automation, generic simulator build, and current/small-phone screenshots.
+- Physical two-account/APNs delivery is the final manual proof; no TestFlight build-number bump, archive, upload, or release is authorized by this request.
+
+Production checkpoint, 2026-07-13 18:55 PDT:
+
+- Completed the outside engineering hardening pass with the recommended defaults: server-authoritative private-profile enforcement, generation-scoped pending snapshots that are erased on every terminal path, deterministic client acceptance identities plus a unique server operation ledger, account-exclusive active APNs tokens, generation-aware notification resolution, and an account-scoped sender outbox that waits for the source visit and selected photos to finish syncing.
+- Wired signed-in/foreground maintenance for own-save sync, failed photo retry, invite-outbox drain, push-token registration, and recipient inbox refresh. Pending invitations appear on Map, open the prefilled Save This Place flow, support decline, and resolve terminal deep links safely. Accepted source and recipient visit cards load server companion attribution.
+- Moved local visit-photo file persistence into `Wander/Services/VisitPhotoLocalFileStore.swift` so background retries do not depend on a Map feature implementation detail. Visit photos now use private signed URLs in both production and repository contract tests.
+- Local pgTAP could not run because Docker is unavailable on this machine; this is not counted as a pass. Added 49 Shared Visits pgTAP assertions and expanded the linked hosted rollback smoke test to cover invite creation, inbox/context isolation, atomic recipient acceptance, exactly-once retry, and companion attribution.
+- The documented iPhone 16 Plus / iOS 18.6 simulator runtime is not installed in the active Xcode; available runtimes are iOS 26.5. Focused testing on iPhone 17 Pro / iOS 26.5 passed 48 tests with 0 failures after correcting the private-storage test double (`/tmp/DerivedData-rec88-tests/Logs/Test/Test-Wander-2026.07.13_18-53-54--0700.xcresult`).
+
+Hardening and final-validation checkpoint, 2026-07-13 19:45 PDT:
+
+- Added account-generation guards to every Shared Visits inbox, destination, companion, decline, acceptance, outbox, and photo-retry path. A late async completion from a previous account can no longer populate the next account's store or finish its local acceptance work. Added a focused account-switch regression test.
+- Added a block cleanup trigger that cancels affected pending or accepted participant links, erases the private snapshot, and skips any pending/claimed Shared Visit push. Companion attribution now omits blocked profiles, including co-invitees.
+- Notification preferences now default all eight categories off for new backend rows. Existing explicit preference rows are preserved; the one-tap enrollment action remains the only path that enables every category. APNs token ownership remains exclusive to the current account.
+- Selected inherited photos are offered only when the sender has local bytes available, avoiding recipient copy metadata that could never complete. Acceptance still copies selected photos into recipient-owned storage and permits the recipient to remove inherited photos before saving.
+- Deployed linked hosted migrations `20260714013000_shared_visits.sql`, `20260714022000_fix_shared_visit_acceptance_source.sql`, `20260714024500_cancel_shared_visits_on_block.sql`, and `20260714031500_notification_preferences_opt_in_defaults.sql` to project `rugmtlgufrhlxwfkumhw`.
+- Hosted rollback-wrapped pgTAP passed 56/56 Shared Visits assertions and 45/45 notification assertions. Direct metadata checks confirmed the block trigger is enabled, sensitive RPCs/functions retain pinned `search_path` and intended security/grants, and all eight notification defaults are `false`. Local pgTAP remains unavailable because Docker is unavailable and is not counted as a pass.
+- Full iOS suite passed on iPhone 17 Pro / iOS 26.5: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-39-12--0700.xcresult`). The iPhone 16 Plus / iOS 18.6 runtime required by the repo command is not installed in the active Xcode.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec88-final-build`; only the existing traditional-headermap warning was emitted.
+- Final linked smoke passed: photo visibility, provider quota, and Shared Visits contracts are valid. `supabase migration list --linked` reports local/remote alignment through `20260714031500`; REC-89's separately owned `20260714003000` migration was restored only for this read-only comparison and removed from this branch afterward.
+- Final UI verification remains clean on iPhone 17 Pro and iPhone 17e: `/private/tmp/rec88-shared-visit-editor-17pro-final.png`, `/private/tmp/rec88-shared-visit-editor-17e-final.png`, and `/private/tmp/rec88-shared-visit-card-17pro-final.png`.
+
+PR handoff, 2026-07-13 19:51 PDT:
+
+- Committed the production implementation as `ec4709fe2` after rebasing onto latest `origin/main` (`aa6cf212d`). The only rebase conflict was this coordination log; both the completed TestFlight 71 release history and REC-88 history were preserved.
+- Post-rebase full iOS suite passed again: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-48-27--0700.xcresult`). The post-rebase generic iOS Simulator build also passed with `CODE_SIGNING_ALLOWED=NO`.
+- PR #85 is the review and merge vehicle: https://github.com/joelipshutz/wander/pull/85. No TestFlight build number, archive, upload, or tester announcement is included because no release was requested for this implementation handoff.
+- Remaining manual proof is a physical two-account flow: sender creates a non-stealth Been visit and invites a mutual friend; recipient receives the push, edits/removes inherited data, saves an independent card, and both accounts verify companion attribution plus private/stealth/block cancellation behavior.
+- Pushed the rebased branch to `origin/codex/rec-88-visit-friends-mockup`, replaced PR #85's obsolete mockup-only description with the production contract and validation evidence, and marked the PR ready for review.
+- Moved Linear REC-88 to `In Review` and added a durable comment with the PR, deployed migration set, iOS/pgTAP/smoke results, local Docker gap, manual physical-device proof, and intentional no-TestFlight status.
+
+## 2026-07-13 20:11 PDT - Codex - REC-88 Physical-Test Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup`
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: investigate and fix three failures found in the first physical two-account Shared Visits test: the sender card does not show the invited friend, tapping the recipient push does not open or surface the pending visit, and Edit This Visit cannot add or remove friends after the original save.
+
+Starting status and coordination:
+
+- Root Xcode checkout remains on the clean pushed REC-88 branch for Ryan's testing; its unrelated untracked `.pnpm-store/` is untouched.
+- Created this isolated follow-up branch from exact PR head `79a73857c` because the root checkout has untracked content and the fix touches high-conflict Map/store/backend files.
+- Moved REC-88 from In Review back to In Progress. No implementation edits have been made; root-cause investigation will trace hosted participant state, card companion loading, notification routing, and edit-visit submission before choosing the patch.
+- Expected files are narrowly scoped to Shared Visits UI/store/repository contracts, Map edit integration, focused tests, one additive Supabase migration only if hosted behavior is proven wrong, and this log. Existing user and other-agent changes will not be reverted.
+
+Root cause and hosted-validation checkpoint, 2026-07-13 21:37 PDT:
+
+- Hosted read-only evidence showed the reported physical invite was sent with the correct generation-aware deep link and private snapshot, while the participant remained pending and no recipient visit existed. That narrowed the failures to client routing/read behavior: source companion lookup omitted pending invitees, card refresh was keyed only to unchanged visit ids, Edit This Visit explicitly hid the picker and ignored membership, and the app delegate's asynchronous single-value notification handoff could lose a cold-launch tap before auth and Map were ready.
+- Added exact owner-only invitee listing/reconciliation RPCs in `20260714043000_manage_shared_visit_invitees.sql`. Pending invitees now appear in sender attribution; removal clears attribution, snapshots, and pending delivery while preserving any recipient-owned visit; re-addition uses a new generation. Edit This Visit loads the current set, safely leaves it unchanged if loading fails, supports add/remove/clear, and updates the card optimistically while its persisted outbox retries.
+- Replaced the transient push handoff with a lock-backed synchronous response buffer, event-id deduplication, auth-aware Map routing, explicit terminal versus retryable destination results, and bounded context/destination retries. A valid Shared Visit tap is retained through cold launch or a temporary backend failure and retried on app activation.
+- Focused iOS simulator validation passed 5/5 tests on iPhone 17 Pro / iOS 26.5, including exact empty reconciliation, latest-outbox selection, RPC payloads, and duplicate buffered/delivered notification handling (`/private/tmp/DerivedData-rec88-followup-focused/Logs/Test/Test-Wander-2026.07.13_21-28-34--0700.xcresult`). XcodeGen produced no project-file churn.
+- Deployed linked hosted migration `20260714043000_manage_shared_visit_invitees.sql` to `rugmtlgufrhlxwfkumhw`. Hosted rollback pgTAP passed 70/70 assertions and the expanded linked rollback smoke passed pending attribution, invitee loading, atomic acceptance, exact removal, and preservation of the recipient independent visit. Direct metadata verification confirmed all three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`; migration ledger alignment was verified through `20260714043000` with REC-89's separately owned `003000` and `033000` files materialized only for comparison and removed afterward.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The required `npm --prefix scripts ci --ignore-scripts` command also could not run because this Codex runtime has Node but no npm binary; the exact pinned `pg@8.22.0` dependency was installed with pnpm instead. Direct smoke could not resolve hosted database credentials on Ryan's machine, so the stronger linked Management API rollback smoke was run and passed.
+## 2026-07-12 18:08 PDT - Codex - REC-85 Lists performance investigation
+
+Agent: Codex
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85`
+
+Goal: reproduce and root-cause reported janky scrolling and back navigation in Lists on current TestFlight/main before choosing a fix or adding diagnostics.
+
+Starting status:
+
+- Worktree is clean at `origin/main` commit `a81b971`; current TestFlight is build 68.
+- Investigation will compare demo-fixture and live-data behavior to separate rendering/navigation cost from remote list refresh and state-publication churn.
+- Likely files to inspect are `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, Lists backend/repository code, and focused tests. No runtime files will be edited until a root cause is supported by profiling or code-path evidence.
+- Engineering review gate is not required for read-only diagnosis. It will run before implementation if the recommended fix changes shared sync/state behavior or cross-screen contracts.
+
+Investigation checkpoint, 2026-07-12 18:29 PDT:
+
+- Built current `origin/main` successfully for iPhone 16 Plus / iOS 18.6 after clearing completed task-only DerivedData caches that had left 116 MB free. No source, app data, archive, or branch data was removed.
+- Launched the populated fixture Lists home and detail scenarios and captured a 20-second Time Profiler trace at `/private/tmp/rec85-list-detail-launch.trace`.
+- The fixture launch reported no potential hang above 250 ms. This does not clear the live path: demo fixtures disable persistence and the unauthenticated remote refresh fails before hydrating a real list set.
+- Supported bottleneck chain from code and trace evidence:
+  - Lists home runs sync plus a full remote list refresh whenever the screen task appears.
+  - Every list detail repeats sync plus the same full remote list refresh before loading suggestions.
+  - `refreshRemotePlaceLists` fetches summaries, then each owner profile's visible places, then every visible list detail sequentially.
+  - Summary hydration publishes and persists once; each list detail then publishes and persists again. Persistence constructs and pretty-prints the complete store snapshot and performs an atomic file write synchronously from the main-actor store.
+  - Each store publication invalidates all tab children. The trace sampled hidden `MapScreen.visiblePlaces`/grouping work and `ListsScreen.body` during Lists detail launch.
+  - Lists rebuilds `PlaceListMock` values after publication; each list calls `store.visiblePlaces(in:)`, which rebuilds the entire visible social place set before matching that list's items.
+- macOS Accessibility permission is unavailable to `osascript`, so automated simulator swipes/back gestures cannot be generated from this environment without adding a UI-test harness. Joe's iPhone 16 Pro is connected and developer-enabled, so the highest-signal next step is a short physical-device Time Profiler/Animation Hitches capture while Joe reproduces My Lists scroll, list detail scroll, and back navigation.
+- Recommendation: do not add broad print/network logging. If the physical trace needs more attribution, add narrow `os_signpost` intervals around Lists home/detail tasks, remote summary/detail hydration, full-snapshot persistence, list view-model projection, and navigation push/pop.
+
+Investigation checkpoint, 2026-07-13 19:00 PDT:
+
+- Rebased the dedicated REC-85 worktree onto current `origin/main` / TestFlight build 71. The Lists refresh, projection, and persistence paths are unchanged by the intervening build 69-71 work; REC-82 only added place-photo metadata plumbing to Lists.
+- Reconfirmed the supported root-cause chain on current main: Lists home and detail each start a full list sync/refresh; refresh publishes summaries, refreshes each owner, and hydrates every list detail; the main-actor store persists after the summary batch and again after every detail; `PlaceListMock` projection recomputes the full visible social place set per list after publications.
+- Pulled the build 68 test device's local store into `/private/tmp` for aggregate measurement only, then deleted the temporary source and benchmark copies. No place names, notes, coordinates, account identifiers, or other private values were printed or persisted to the repo. The snapshot is 106,525 bytes with 14 visible/server-backed lists, two list owners, 23 list items, 10 places, and 130 attributes.
+- A 50-iteration local approximation of the current pretty-printed, sorted, atomic snapshot-write path averaged 2.21 ms per 106 KB write on the Mac before snapshot-model construction or SwiftUI invalidation cost. With the current device data, one refresh can cause about 20 persistence passes: one summary pass, owner metadata/attribute passes, and one pass per list detail. That is enough synchronous main-actor work to consume multiple 16.7 ms frame budgets.
+- Apple's current SwiftUI performance guidance matches the trace/code pattern: frequent dependency-driven view updates and long body work cause hitches; the next validation should use the SwiftUI Instruments template on a real device, then Time Profiler within the long-update range.
+- The connected iPhone has build 68 installed, but two automated launch attempts were denied because the phone was locked. A physical SwiftUI/Time Profiler trace remains the highest-signal before/after validation once the phone is unlocked and rec.me is open.
+- Root-cause hypothesis: scroll and Back jank in Lists comes from a burst of coarse `WanderStore` publications plus repeated synchronous full-store persistence and repeated list projection on the main actor while the navigation/scroll surfaces are rendering. Network latency extends the refresh window but is not itself the frame hitch.
+- Scope lock was intentionally skipped because the supported cause crosses `Wander/Features/Lists`, `Wander/Services/WanderLocalStore.swift`, and `Wander/Services/WanderStorePersistence.swift`; any implementation should still stay within those modules plus focused tests and docs.
+- Mission Control could not be updated because `http://localhost:4000` is not running. Linear `REC-85` remains the durable tracker and stays In Progress pending the physical trace and implementation decision.
+
+Handoff, 2026-07-13 19:03 PDT:
+
+- Pushed `codex/rec-85-lists-jank` and opened draft PR #91: https://github.com/joelipshutz/wander/pull/91. Linked the PR and the current-main measurement checkpoint to Linear `REC-85`.
+- No runtime code changed, so no iOS build/test run was required for this docs-only checkpoint. `git diff --check` passed before the final handoff note.
+- Exact restart: unlock the connected iPhone, open rec.me build 68, record the `SwiftUI` Instruments template for 45 seconds while scrolling My Lists, opening a list, scrolling detail, and navigating Back repeatedly; inspect Long View Body Updates/Hitches and use Time Profiler in that range.
+- If the physical trace confirms the supported chain, implementation should coalesce remote list hydration into one store publication/persistence pass, avoid a full global list refresh on every detail appearance, move file encoding/writes off the main actor while preserving ordering, and cache/index list projections so each list does not rebuild the full visible-place set.
+- Add narrow signposts only if SwiftUI + Time Profiler cannot distinguish those intervals. Do not add broad print, network, or analytics logging for this UI performance bug.
+
+Physical-device profiling checkpoint, 2026-07-13 19:21 PDT:
+
+- Unlocked and launched the installed rec.me build 68 on Joe's connected iPhone, then recorded a 46.36-second physical-device `SwiftUI` Instruments trace while Joe scrolled Lists, opened a list, scrolled detail, and navigated Back. The trace is temporarily retained at `/private/tmp/rec85-device-swiftui.trace`; no private app payloads were copied into the repo or printed in the findings.
+- Instruments recorded repeated `Potentially expensive app update(s)` hitches during the Lists interaction window, including stalls of 133.36 ms, 162.53 ms, 200.03 ms, 250.04 ms, 266.71 ms, 275.05 ms, 283.38 ms, and a 350.06 ms peak.
+- The trace contained 217,022 SwiftUI updates, with 3,023 updates at or above 0.5 ms. There were 59 long `ListsScreen` dynamic-body updates totaling 2.12 seconds; every one exceeded the 16.67 ms frame budget and most took 33-45 ms. `ListDetailScreen` body updates reached 15.6 ms, while the row bodies were secondary (`ListPlaceRow`: 40 long updates / 22.5 ms total; `ListVisiblePlaceAddRow`: 16 / 47.9 ms total).
+- The shared store invalidation also repeatedly recomputed hidden `MapScreen` body work. Its 59 captured long intervals totaled 972 ms and reached roughly 16-17.5 ms, confirming that coarse `WanderStore` publication makes non-visible tabs compete with the active Lists surface.
+- Time Profiler contained 1,391 `JSONEncoder`/`JSONWriter` samples. Fifty-three of the 59 over-budget `ListsScreen` body updates were preceded by JSON encoding within 50 ms; in the common case the gap was only 1-6 ms. This directly connects the previously identified main-actor full-store persistence bursts to the long SwiftUI invalidations and user-visible hitches.
+- Root cause is confirmed: the primary problem is repeated remote hydration publishing and synchronously persisting the whole store, followed by expensive global view/projection recomputation. Network latency lengthens the refresh window but is not the frame-blocking work; eager detail rows are a secondary contributor, not the main cause.
+- Additional broad logging is not warranted. Instruments already distinguishes the relevant intervals. Narrow development-only signposts around refresh, hydration, persistence, and projection could be added later as regression instrumentation, but they are not required to choose or validate the fix.
+- Recommended implementation order: (1) hydrate a remote list refresh into local staging state and commit/persist once, (2) stop running the full global list refresh whenever a detail appears, (3) serialize/coalesce persistence and move JSON encoding plus file I/O off the main actor without allowing stale snapshots to win, and (4) cache/index visible-place-to-list projections and narrow observation so unrelated/hidden tab bodies do not rebuild. Consider lazy detail rows only after those primary changes.
+- Required validation for the fix: focused tests that assert one publication/persistence boundary per refresh and preserve sync ordering, the full iOS suite, then the same real-device SwiftUI trace. Acceptance should show no repeated `ListsScreen` body intervals over one frame during steady scrolling/back navigation and materially lower hitch duration/count.
+- No runtime code changed in this investigation. Linear `REC-85` and PR #91 are the durable evidence/handoff surfaces; Mission Control remains unavailable at `http://localhost:4000`.
+
+Local device-build checkpoint, 2026-07-13 19:34 PDT:
+
+- At Joe's request, built commit `f186817` as a signed Debug app for the connected iPhone 16 Pro (`00008140-0018152C08A2201C`) with Xcode's device destination and automatic provisioning. The build succeeded in 64.474 seconds with only the existing traditional-headermap warning.
+- Installed `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app` over bundle `com.grayline.wander` and launched it successfully on the phone. No app-data reset or uninstall command was run. This build contains the diagnosed current behavior; the REC-85 performance fix is not implemented yet.
+
+Lists/Discover follow-up capture, 2026-07-13 19:40 PDT:
+
+- Joe confirmed that Lists remains choppy in the local Debug baseline, which is expected because PR #91 contains investigation documentation only and no REC-85 runtime fix. Captured another 45-second physical-device SwiftUI trace after Joe also reported choppy Discover scrolling; the original trace is temporarily retained at `/private/tmp/rec85-lists-discover-device.trace`.
+- Discover showed a separate deterministic invalidation source rather than the Lists persistence burst. `DiscoverScreen` rebuilt 18 times at an almost exact 2.6-second cadence, totaling 117.41 ms and reaching 9.58 ms per body. `LatestActivityRow` rebuilt 180 times—exactly ten visible rows per screen update—totaling 493.97 ms and reaching 9.62 ms per row.
+- The cadence exactly matches `runTicker()`: it sleeps for 2.6 seconds, then animates the parent `tickerIndex` solely to rotate the search-field placeholder. Because that state belongs to `DiscoverScreen`, every placeholder tick invalidates the entire visible activity feed during scrolling. No individual Discover body exceeded 16.67 ms and Instruments recorded no formal hitch in this capture, but the periodic batch explains the reported micro-stutter.
+- Created high-priority bug `REC-91` for implementation: isolate ticker state/animation inside `DiscoverSearchField` or a dedicated small ticker view so placeholder changes cannot rebuild activity rows; preserve stable row identity and make the feed lazy if it can grow. Physical-device acceptance requires that ticker rotation produce zero `LatestActivityRow` updates during steady scrolling.
+- Added the REC-91 evidence and link to Linear REC-85. REC-85 remains the Lists/global-store persistence fix; REC-91 is the distinct Discover placeholder-ticker fix. No runtime code changed during this follow-up diagnosis.
+
+## 2026-07-13 20:09 PDT - Codex - REC-85 + REC-91 implementation
+
+Agent: Codex using the `ios-fix` workflow
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85` and `REC-91`, both moved to `In Progress`
+
+Goal: implement the confirmed Lists persistence/publication fix and the separate Discover ticker-isolation fix, validate both with focused/full tests and repeat physical-device traces, then release the validated latest `main` to TestFlight as explicitly requested.
+
+Starting status:
+
+- Fetched `origin`; the branch is clean, six investigation commits ahead of and zero commits behind current `origin/main`. Existing worktrees do not overlap this isolated branch. PR #91 was returned to draft for implementation.
+- Pre-fix evidence is retained in physical Instruments traces at `/private/tmp/rec85-device-swiftui.trace` and `/private/tmp/rec85-lists-discover-device.trace`. The first showed 59/59 `ListsScreen` updates over one frame with JSON persistence immediately preceding 53/59; the second showed 180 activity-row rebuilds at the exact 2.6-second placeholder-ticker cadence.
+- The `ios-fix` workflow normally captures a debug `StateServer` snapshot fixture before editing. This repo has no `StateServer`, `DebugBridge`, or restore API by prior documented decision, so the physical traces are the reproducing pre-fix snapshots and deterministic Swift test fixtures will provide the durable regression guard. No debug-server scope will be added.
+- Expected implementation files are `Wander/Features/Discover/DiscoverScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, focused files under `WanderTests/`, and this coordination log. `project.yml`, auth, payments, schema/RLS, and app build number are out of the implementation diff; build number changes only in the later explicit TestFlight release step.
+- Mission Control remains unavailable at `http://localhost:4000`; Linear and PR #91 are the durable trackers.
+
+Engineering review checkpoint, 2026-07-13 20:16 PDT:
+
+- Reviewed the implementation boundary against the confirmed device traces before editing shared store code. The smallest safe design is: fetch remote list payloads first, apply them synchronously inside one persistence transaction, keep remote-owner failures best-effort, replace the detail screen's global refresh with a selected-list refresh, and build all list-card projections from one shared visible-place candidate pass.
+- The persistence transaction will only wrap the synchronous apply phase, never the network awaits. This preserves immediate durability for unrelated user mutations while collapsing the existing nested summary/profile/attribute/detail saves into one ordered snapshot write.
+- The Discover fix owns placeholder index and timer state inside `DiscoverSearchField`; the parent `DiscoverScreen` no longer observes ticker state, so a placeholder animation cannot invalidate the activity feed.
+- Regression coverage will assert one persistence save per full remote-list refresh, selected-list detail refresh without a global summary request, batched list projection equivalence, and structural ownership of Discover ticker state. Existing remote-list merge/pending-local-change tests remain the behavior guard.
+- Explicitly not in this fix: a global store-observation rewrite, asynchronous persistence semantics, new logging/signposts, backend/schema changes, lazy-row redesign, or a new debug state server. Those are larger changes and are not needed to address the measured causes.
+
+Implementation checkpoint, 2026-07-13 20:25 PDT:
+
+- Discover now keeps the 2.6-second placeholder index and animation task inside `DiscoverSearchField`; `DiscoverScreen` no longer owns or awaits ticker state. The search experience and animation are unchanged, but ticker ticks cannot invalidate the activity feed.
+- Lists now stages remote summaries, owner places/relationships, and details before a synchronous apply. Nested profile/attribute/list persistence requests are deferred during that apply and flushed as one final snapshot write. Auxiliary owner hydration remains best-effort, preserving the prior list-refresh success behavior.
+- List detail appearance refreshes only the selected remote list instead of the entire list collection, and its task identity is stable across local-to-server id reconciliation. Lists home computes the visible social-place candidate set once and reuses it for all card projections.
+- Added regression coverage for ticker state ownership, batched list-projection equivalence, one persisted snapshot per full hydration batch, and selected-list detail refresh without a global summary request.
+- Focused REC-85/REC-91 run passed: 5 tests, 0 failures. Full iPhone 16 Plus / iOS 18.6 simulator suite passed: 295 tests, 0 failures. Both used `/private/tmp/DerivedData-rec85-focused`; the only build warning is the existing traditional-headermap warning.
+
+Device-build checkpoint, 2026-07-13 20:36 PDT:
+
+- The first signed-device attempt exposed a host problem rather than a code failure: the data volume had only 116 MB free, leaving an incomplete `Wander.debug.dylib` that `codesign` reported as an internal subsystem error. A disposable signing probe confirmed the development identity itself remained valid.
+- Removed only failed REC-85 device DerivedData and stale Wander Xcode DerivedData caches, recovering 7.3 GB. Source, archives, installed app data, and the passing simulator result bundle were not touched.
+- Rebuilt the patched branch for generic iOS with automatic provisioning and one build job. The signed Debug device build succeeded in 158.812 seconds with only the existing traditional-headermap warning; app path: `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app`.
+- The iPhone 16 Pro remains visible to Xcode/Instruments but is currently marked offline, so installation and the required post-fix physical SwiftUI trace are pending unlock/reconnect. No app uninstall or data reset will be used when it returns online.
+
+Pre-landing review checkpoint, 2026-07-13 20:49 PDT:
+
+- Applied the repo's `recme-pr-review-merge-release` and gstack pre-landing review gates to the complete PR #91 diff. Scope is clean; persistence ordering, partial refresh behavior, selected-list refresh, SwiftUI task/state lifetime, security/privacy, performance, migration, design-system, and adversarial failure-mode checks found no blocking issue. Greptile has no comments on the PR.
+- This Codex session is explicitly prohibited from spawning subagents, so the gstack specialist and independent-adversarial checklists were applied locally instead of dispatching review subagents. This limitation and the evidence are recorded on both Linear issues.
+- Review found one cheap coverage gap and added `testRemotePlaceListRefreshKeepsSummariesWhenOneDetailFails`, proving the staged refresh still applies summaries, records the detail error, and persists exactly once. Its focused run passed: 1 test, 0 failures.
+- Final branch suite passed on iPhone 16 Plus / iOS 18.6: 296 tests, 0 failures. Result: `/private/tmp/DerivedData-rec85-focused/Logs/Test/Test-Wander-2026.07.13_20-46-54--0700.xcresult`. `git diff --check` passes; the only build warning remains the existing traditional-headermap warning.
+- After repeated checks, the paired iPhone is still `unavailable` in CoreDevice and is absent from USB/local-network reachability. The requested TestFlight release will not be held on the cable; REC-85/REC-91 remain `In Review`, and the first build-72 tester task is to repeat Lists scroll/detail/Back and Discover steady scrolling on-device. If the phone reconnects before archive completion, the local after trace will still run first.
+
+## 2026-07-13 20:51 PDT - Codex - REC-85/REC-91 TestFlight Build 72
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-72`
+Worktree: `/private/tmp/recme-build72-release`
+Linear: `REC-85` and `REC-91`, kept `In Review` through TestFlight availability
+
+Goal: package the merged Lists persistence/projection fix and Discover ticker-isolation fix from latest `main` into explicit TestFlight build 72.
+
+Starting status:
+
+- PR #91 passed focused/full tests and the pre-landing review, then squash-merged to `main` at `edf37273065724a7ba35627b9307ed8ccf19ead3`: https://github.com/joelipshutz/wander/pull/91.
+- Latest completed TestFlight release is build 71. It is documented as `VALID`, attached to `Wander Alpha`, externally approved, and announced to testers. Latest `main` still declares build 71, so this explicit release increments exactly once to 72.
+- Release source contains one eligible app-code delta since build 71: PR #91 / REC-85 / REC-91. No schema, auth, privacy, signing, or tester-data mutation is included.
+- Final implementation-branch validation passed 296/296 tests. The signed device build also succeeded, but the paired iPhone is physically disconnected, so post-fix physical profiling is explicitly moved to the build-72 tester checklist instead of silently treated as passed.
+- Expected release files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. Mission Control remains unavailable at `http://localhost:4000`; Linear is the durable tracker.
+
+Release plan:
+
+1. Bump build 71 to 72, regenerate with XcodeGen, and keep the generated diff limited to the matching build-number settings.
+2. Run the full iOS suite and generic iOS Simulator build on the release branch.
+3. Open/review/squash-merge the build-number PR to `main`.
+4. Archive and upload exact latest `main` with `manageAppVersionAndBuildNumber=false`, then run the TestFlight helper with the archive path and What to Test copy.
+5. Post the required `#testflight-feedback` note and finish Linear/release logging after App Store Connect reports the build available or processing state.
+
+Release validation checkpoint, 2026-07-13 21:01 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 71 to 72 in `project.yml` and regenerated `Wander.xcodeproj`; the generated project diff was audited and reduced to the two matching build-number settings, with no signing or compiler-setting churn.
+- Full iPhone 16 Plus / iOS 18.6 suite passed: 296 tests, 0 failures. Result: `/private/tmp/DerivedData-build72-test/Logs/Test/Test-Wander-2026.07.13_20-53-19--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; the sandboxed attempt could not access CoreSimulator/SwiftPM caches, so the identical command was rerun with normal host access as required by the repo testing policy. The only warning remains the existing traditional-headermap warning.
+- `git diff --check` passes and the release diff is limited to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this coordination log. Tester-facing What to Test copy is staged outside the repo at `/private/tmp/recme-build72-what-to-test.md`.
+- The paired iPhone remains disconnected, so the post-fix physical Instruments comparison is a documented validation gap and the first on-device checklist item, not a claimed pass. Archive/upload will continue from the exact merged build-number commit on latest `main`.
+
+Release completion, 2026-07-13 21:10 PDT:
+
+- Opened ready release PR #92 with the three-file build-number/log diff and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/92. Exact released source commit: `7da459f8bb47eead16fe22091ca25708cc8b3256`.
+- Archived exact latest `main` successfully at `/private/tmp/Wander-0.1-build72.xcarchive`. Archive and embedded app metadata both confirm marketing version `0.1`, build `72`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export options used `destination=upload`, `method=app-store-connect`, automatic signing, and `manageAppVersionAndBuildNumber=false`. The first export stopped before upload because the local Xcode Apple Account lacked App Store Connect access; the identical archive/export was retried with the configured App Store Connect API key, with credential values redacted, and upload succeeded.
+- App Store Connect build id `ae7fc0ca-7d92-45c1-adaf-0e108ad89eac` reached `VALID`. The helper set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 72 to `Wander Alpha`, submitted external beta review, and confirmed review state `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784002212136389. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Added final release evidence to Linear `REC-85` and `REC-91` and moved both issues from `In Review` to `Done`. Mission Control remained unavailable at `http://localhost:4000` throughout this release.
+- Validation shipped with 296 tests / 0 failures, a passing generic iOS Simulator build, and a passing signed Release archive. Known follow-up remains the post-fix physical Instruments comparison because the paired iPhone disconnected; this is called out in both TestFlight What to Test and Slack rather than treated as passed.
+
+## 2026-07-13 21:48 PDT - Codex - REC-88 Physical-Test Follow-Up Completion
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup` (to be fast-forwarded into `codex/rec-88-visit-friends-mockup`)
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`; move to `In Review` after push)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Final outcome:
+
+- Fixed all three failures from the first physical Shared Visits test. Pending invitees now render immediately on the sender card; notification responses are synchronously buffered, deduplicated, auth-aware, and retained across retryable cold-launch failures; and Edit This Visit now safely loads and exactly reconciles add/remove/clear membership.
+- Deployed hosted migration `20260714043000_manage_shared_visit_invitees.sql` to project `rugmtlgufrhlxwfkumhw`. The owner-only exact-membership RPC removes pending delivery/snapshots without deleting an already accepted recipient-owned visit, and source companion attribution includes pending invitees.
+- Hosted rollback pgTAP passed 70/70 before merge. Metadata checks confirmed the three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`. The linked rollback smoke passed again after merging latest `origin/main`: photo visibility, provider quota, and Shared Visits contracts are valid.
+- Merged latest `origin/main` at `258414060`, preserving build 72 plus the REC-85/REC-91 Lists/Discover performance fixes. The only conflicts were additive changes in `WanderLocalStore.swift` and chronological entries in this log; both implementations and histories were retained in merge commit `ab6f6fa8f`.
+- Final iPhone 17 Pro / iOS 26.5 suite passed 305 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec88-followup-final/Logs/Test/Test-Wander-2026.07.13_21-41-56--0700.xcresult`.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning remains.
+- Visual verification passed with no clipping or overlap on iPhone 17 Pro and smaller iPhone 17e. Screenshots: `/private/tmp/rec88-followup-editor-17pro.png`, `/private/tmp/rec88-followup-editor-17e.png`, and `/private/tmp/rec88-followup-card-17pro.png`.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
+- No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.
+
+## 2026-07-13 22:18 PDT - Codex - REC-89 / REC-88 Latest-Main Integration
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89` (`In Review` after landing validation)
+PR: https://github.com/joelipshutz/wander/pull/86
+
+- Merged exact `origin/main` at `672b60894`, which contains the squashed REC-88 Shared Visits implementation and physical-device follow-up, into the clean REC-89 branch. Conflicts were limited to backend composition, root routing/maintenance, redesigned Settings entry, current-profile DTOs, account/session profile hydration, the combined hosted smoke script, and this coordination log.
+- Resolutions preserve both contracts: REC-89 app-owned display name/handle and member-since fields, redesigned Settings/Profile navigation, profile deep links, and hosted profile smoke coverage; REC-88 generation-scoped inbox cleanup, lifecycle maintenance, private-profile invitation cancellation, Shared Visit notification routing, and hosted Shared Visits smoke coverage.
+- Regenerated the Xcode project with XcodeGen. The merged smoke script passes Node syntax validation with the bundled Node runtime, and `git diff --check` passes.
+- Full combined iOS suite passed on iPhone 17 Pro / iOS 26.5: 324 tests, 0 failures (`/private/tmp/DerivedData-rec89-rec88-integration/Logs/Test/Test-Wander-2026.07.13_22-08-36--0700.xcresult`). The first sandboxed attempt failed before compilation because CoreSimulator and package network access were blocked; the identical command passed with the repo-required elevated access and that pre-test infrastructure failure is not counted as a test result.
+- Generic universal iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`; artifact: `/private/tmp/DerivedData-rec89-rec88-universal/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Hosted database migrations and security verification remain the previously completed proofs: REC-89 profile pgTAP 44/44 plus linked authenticated smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. No new migration bytes were introduced by this integration merge.

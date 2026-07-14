@@ -9,6 +9,8 @@ struct SettingsScreen: View {
     @State private var activeDetail: SettingsDetail?
     @State private var pendingPrivateProfileValue: Bool?
     @State private var showsPrivateProfileWarning = false
+    @State private var isUpdatingPrivateProfile = false
+    @State private var privacyErrorMessage: String?
 
     var body: some View {
         ProfileSettingsHome()
@@ -133,6 +135,15 @@ struct SettingsScreen: View {
 
             privateProfileToggle
 
+            if isUpdatingPrivateProfile {
+                ProgressView("Updating privacy...")
+                    .font(.system(size: 12, weight: .bold))
+            } else if let privacyErrorMessage {
+                Text(privacyErrorMessage)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
+            }
+
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
 
@@ -198,6 +209,7 @@ struct SettingsScreen: View {
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
+        .disabled(isUpdatingPrivateProfile)
         .accessibilityIdentifier(SettingsProfilePrivacySurface.accessibilityID)
     }
 
@@ -395,6 +407,11 @@ struct NotificationSettingsSheet: View {
                             title: "Shared lists",
                             systemImage: "bookmark.square",
                             binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Shared visits",
+                            systemImage: "person.2.badge.plus",
+                            binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
                         notificationToggle(
                             title: "Saves from your map",
@@ -612,30 +629,18 @@ struct NotificationSettingsSheet: View {
         pushNotifications.clearLastError()
         defer { isChangingEnabledState = false }
 
-        let permissionGranted: Bool
-        if permissionAlreadyGranted || pushNotifications.canRegisterForRemoteNotifications {
-            permissionGranted = true
+        if permissionAlreadyGranted {
             UIApplication.shared.registerForRemoteNotifications()
-        } else {
-            permissionGranted = await pushNotifications.requestAuthorizationAndRegister()
         }
-
-        guard permissionGranted else {
+        guard let enabledPreferences = await pushNotifications.enableNotifications(
+            backend: backend,
+            authState: auth.state
+        ) else {
             preferences = .allDisabled
             errorMessage = pushNotifications.lastErrorMessage ?? "Notifications were not allowed."
             return
         }
-
-        do {
-            preferences = try await backend.updateNotificationPreferences(.allEnabled)
-            _ = await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: auth.state)
-            if let registrationError = pushNotifications.lastErrorMessage {
-                errorMessage = registrationError
-            }
-        } catch {
-            preferences = .allDisabled
-            errorMessage = "Permission was allowed, but rec.me could not finish notification setup. Try again."
-        }
+        preferences = enabledPreferences
     }
 
     private func disableNotifications() async {
@@ -646,14 +651,10 @@ struct NotificationSettingsSheet: View {
         pushNotifications.clearLastError()
         defer { isChangingEnabledState = false }
 
-        do {
-            preferences = try await backend.updateNotificationPreferences(.allDisabled)
-            let disconnected = await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
-            if !disconnected {
-                errorMessage = pushNotifications.lastErrorMessage
-            }
-        } catch {
-            errorMessage = "Could not disable notifications. Try again."
+        if let disabledPreferences = await pushNotifications.disableNotifications(backend: backend) {
+            preferences = disabledPreferences
+        } else {
+            errorMessage = pushNotifications.lastErrorMessage
         }
     }
 

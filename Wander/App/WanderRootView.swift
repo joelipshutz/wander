@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct WanderRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -11,6 +12,9 @@ struct WanderRootView: View {
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var discoverSection: DiscoverSection?
     @State private var sharedProfile: SharedProfileRoute?
+    @State private var signedInMaintenanceTask: Task<Void, Never>?
+    @State private var signedInMaintenanceRunID: UUID?
+    @State private var signedInMaintenanceUserID: String?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
@@ -102,7 +106,7 @@ struct WanderRootView: View {
             await pushNotifications.refreshAuthorizationStatus()
             await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
-            if let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
+            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
                 pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
             }
         }
@@ -121,6 +125,10 @@ struct WanderRootView: View {
                 ?? notification.userInfo?[WanderAppDelegate.userInfoKey] as? [AnyHashable: Any]
             else { return }
             pushNotifications.handleNotificationResponse(userInfo: userInfo)
+            scheduleSignedInMaintenance(for: auth.state)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
+            scheduleSignedInMaintenance(for: auth.state)
         }
         .onChange(of: pushNotifications.navigationRequest) { _, request in
             guard let request else { return }
@@ -137,7 +145,13 @@ struct WanderRootView: View {
             applyAuthStateIfNeeded(state)
         }
         .onOpenURL { url in
-            sharedProfile = Self.sharedProfileRoute(for: url)
+            if let route = Self.sharedProfileRoute(for: url) {
+                sharedProfile = route
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            scheduleSignedInMaintenance(for: auth.state)
         }
     }
 
@@ -168,7 +182,7 @@ struct WanderRootView: View {
         switch destination {
         case .people, .drafts: .profile
         case .list: .lists
-        case .place: .map
+        case .place, .sharedVisit: .map
         case .discover: .discover
         }
     }
@@ -194,29 +208,96 @@ struct WanderRootView: View {
         }
         store.apply(authState: state)
 
-        if state.isSignedIn {
-            Task {
-                #if DEBUG
-                if case .signedIn(let session) = state {
-                    WanderDebugLog.sync.debug("signed-in backfill trigger user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
-                } else {
-                    WanderDebugLog.sync.debug("signed-in backfill trigger remote=\(backend.canUseRemoteData, privacy: .public)")
-                }
-                #endif
-                await store.refreshRemoteCurrentProfile(backend: backend)
-                let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
-                await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
-                let syncedListCount = await store.syncPendingPlaceLists(backend: backend)
-                await store.refreshRemotePlaceLists(backend: backend)
-                #if DEBUG
-                WanderDebugLog.sync.debug("signed-in backfill finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public)")
-                #endif
+        if case .signedIn(let session) = state {
+            if let maintenanceUserID = signedInMaintenanceUserID,
+               maintenanceUserID != session.userID {
+                cancelSignedInMaintenance()
             }
+            scheduleSignedInMaintenance(for: state)
         } else {
+            cancelSignedInMaintenance()
             #if DEBUG
             WanderDebugLog.sync.debug("auth state applied without backfill state=\(state.debugSummary, privacy: .public)")
             #endif
         }
+    }
+
+    private func scheduleSignedInMaintenance(for state: AuthState) {
+        guard fixtureMode == .empty,
+              case .signedIn(let session) = state,
+              signedInMaintenanceTask == nil
+        else { return }
+
+        let runID = UUID()
+        signedInMaintenanceRunID = runID
+        signedInMaintenanceUserID = session.userID
+        signedInMaintenanceTask = Task { @MainActor in
+            #if DEBUG
+            if case .signedIn(let session) = state {
+                WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
+            }
+            #endif
+            await store.refreshRemoteCurrentProfile(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let syncedListCount = await store.syncPendingPlaceLists(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            await store.refreshRemotePlaceLists(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let uploadedPhotoCount = await store.retryPendingVisitPhotoUploads(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let sentInviteCount = await store.retryPendingSharedVisitInvites(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            await store.refreshSharedVisitInbox(backend: backend)
+            #if DEBUG
+            WanderDebugLog.sync.debug("signed-in maintenance finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public) photo_count=\(uploadedPhotoCount, privacy: .public) invite_count=\(sentInviteCount, privacy: .public)")
+            #endif
+            finishSignedInMaintenance(runID: runID)
+        }
+    }
+
+    private func shouldContinueSignedInMaintenance(runID: UUID, state: AuthState) -> Bool {
+        !Task.isCancelled
+            && signedInMaintenanceRunID == runID
+            && auth.state == state
+    }
+
+    private func cancelSignedInMaintenance() {
+        signedInMaintenanceRunID = nil
+        signedInMaintenanceUserID = nil
+        signedInMaintenanceTask?.cancel()
+        signedInMaintenanceTask = nil
+    }
+
+    private func finishSignedInMaintenance(runID: UUID) {
+        guard signedInMaintenanceRunID == runID else { return }
+        signedInMaintenanceRunID = nil
+        signedInMaintenanceUserID = nil
+        signedInMaintenanceTask = nil
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {

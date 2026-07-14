@@ -400,8 +400,16 @@ struct ListsScreen: View {
     private var activeLists: [PlaceListMock] {
         guard scenario != .empty else { return [] }
 
-        let storeLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
-            .map { PlaceListMock(list: $0, store: store) }
+        let sourceLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
+        let visiblePlacesByListID = store.visiblePlacesByListID(in: sourceLists)
+        let storeLists = sourceLists
+            .map { list in
+                PlaceListMock(
+                    list: list,
+                    visiblePlaces: visiblePlacesByListID[list.id] ?? [],
+                    store: store
+                )
+            }
             .filter { !deletedListIDs.contains($0.id) }
 
         guard !storeLists.isEmpty else {
@@ -719,9 +727,11 @@ private struct ListDetailScreen: View {
                 }
             }
         }
-        .task(id: sourceList?.id ?? list.id) {
+        .task(id: list.sourceListID ?? list.id) {
             _ = await store.syncPendingPlaceLists(backend: backend)
-            await store.refreshRemotePlaceLists(backend: backend)
+            if let sourceList {
+                await store.refreshRemotePlaceList(sourceList, backend: backend)
+            }
             await loadSuggestions()
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
@@ -2709,6 +2719,10 @@ private struct PlaceListMock: Identifiable, Hashable {
 @MainActor
 private extension PlaceListMock {
     init(list: LocalPlaceList, store: WanderStore) {
+        self.init(list: list, visiblePlaces: store.visiblePlaces(in: list), store: store)
+    }
+
+    init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
         self.id = list.id
         self.name = list.name
@@ -2716,7 +2730,7 @@ private extension PlaceListMock {
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = store.visiblePlaces(in: list).map(ListPlaceMock.init(visiblePlace:))
+        self.places = visiblePlaces.map(ListPlaceMock.init(visiblePlace:))
         self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID

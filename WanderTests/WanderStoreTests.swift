@@ -1517,6 +1517,198 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.effectiveDefaultVisibility, .selfOnly)
     }
 
+    func testPendingSharedVisitInviteOutboxPersistsAndStaysScopedToItsOwner() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        firstStore.queueSharedVisitInvites(
+            sourceVisitID: "visit-local-1",
+            inviteeUserIDs: ["user_sarah", "user_sarah", "user_ryan"]
+        )
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let pending = relaunchedStore.pendingSharedVisitInvites.first
+
+        XCTAssertEqual(relaunchedStore.pendingSharedVisitInvites.count, 1)
+        XCTAssertEqual(pending?.ownerUserID, "user_joe")
+        XCTAssertEqual(pending?.sourceVisitID, "visit-local-1")
+        XCTAssertEqual(pending?.inviteeUserIDs, ["user_ryan", "user_sarah"])
+
+        relaunchedStore.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        XCTAssertEqual(relaunchedStore.pendingSharedVisitInvites.first?.ownerUserID, "user_joe")
+    }
+
+    func testPendingSharedVisitInviteOutboxDrainsOnceSourceVisitIsSynced() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_outbox",
+                name: "Shared Outbox Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: "great patio",
+            sourceType: .manual,
+            ratingScore: 4.5
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000001"
+        userPlace.syncStateRaw = SyncState.synced.rawValue
+        visit.serverID = "83000000-0000-0000-0000-000000000001"
+        visit.syncStateRaw = SyncState.synced.rawValue
+
+        store.queueSharedVisitInvites(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah", "user_maya"]
+        )
+        let repository = FakeSharedVisitRepository()
+
+        let sentCount = await store.retryPendingSharedVisitInvites(
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertEqual(sentCount, 2)
+        XCTAssertTrue(store.pendingSharedVisitInvites.isEmpty)
+        XCTAssertEqual(
+            repository.setRequests,
+            [
+                FakeSharedVisitRepository.InviteRequest(
+                    sourceVisitID: "83000000-0000-0000-0000-000000000001",
+                    inviteeUserIDs: ["user_maya", "user_sarah"]
+                )
+            ]
+        )
+    }
+
+    func testSharedVisitInviteeReconciliationReplacesQueuedSelectionAndCanClearIt() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_edit",
+                name: "Shared Edit Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: nil,
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000002"
+        userPlace.syncStateRaw = SyncState.synced.rawValue
+        visit.serverID = "83000000-0000-0000-0000-000000000002"
+        visit.syncStateRaw = SyncState.synced.rawValue
+
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah", "user_maya"]
+        )
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: []
+        )
+
+        XCTAssertEqual(store.pendingSharedVisitInvites.count, 1)
+        XCTAssertEqual(store.pendingSharedVisitInvites.first?.inviteeUserIDs, [])
+
+        let repository = FakeSharedVisitRepository()
+        _ = await store.retryPendingSharedVisitInvites(
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertTrue(store.pendingSharedVisitInvites.isEmpty)
+        XCTAssertEqual(
+            repository.setRequests,
+            [
+                FakeSharedVisitRepository.InviteRequest(
+                    sourceVisitID: "83000000-0000-0000-0000-000000000002",
+                    inviteeUserIDs: []
+                )
+            ]
+        )
+    }
+
+    func testSharedVisitInviteeSelectionLoadsPendingOutboxBeforeRemoteState() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let saved = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_shared_pending_selection",
+                name: "Pending Shared Cafe",
+                category: "coffee_tea_sweets",
+                latitude: 34.04,
+                longitude: -118.24,
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .mutuals,
+            note: nil,
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let userPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == saved.userPlaceID }?.userPlace
+        )
+        let visit = try XCTUnwrap(store.visits(for: saved.userPlaceID).first)
+        userPlace.serverID = "82000000-0000-0000-0000-000000000003"
+        visit.serverID = "83000000-0000-0000-0000-000000000003"
+        store.queueSharedVisitInviteeReconciliation(
+            sourceVisitID: visit.id,
+            inviteeUserIDs: ["user_sarah"]
+        )
+        let repository = FakeSharedVisitRepository()
+        repository.activeInviteeUserIDs = ["user_maya"]
+
+        let inviteeUserIDs = try await store.sharedVisitInviteeUserIDs(
+            sourceVisitID: visit.id,
+            backend: WanderBackend(sharedVisitRepository: repository)
+        )
+
+        XCTAssertEqual(inviteeUserIDs, ["user_sarah"])
+        XCTAssertTrue(repository.inviteeListRequests.isEmpty)
+    }
+
+    func testSharedVisitInboxDiscardsCompletionFromPreviousAccount() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let repository = FakeSharedVisitRepository()
+        repository.shouldSuspendInbox = true
+        let backend = WanderBackend(sharedVisitRepository: repository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshSharedVisitInbox(backend: backend)
+        }
+        while !repository.hasSuspendedInboxRequest {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        repository.resumeInbox()
+        await refreshTask.value
+
+        XCTAssertEqual(store.currentUser.id, "user_sarah")
+        XCTAssertNil(store.sharedVisitInboxUserID)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+    }
+
     func testOldPersistenceSnapshotClearsSavedPlaceDataButKeepsAccountGraph() throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -3361,6 +3553,20 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
     }
 
+    func testBatchedListProjectionMatchesIndividualListProjection() {
+        let store = makeStore()
+        let lists = store.visiblePlaceLists
+        let batched = store.visiblePlacesByListID(in: lists)
+
+        for list in lists {
+            XCTAssertEqual(
+                batched[list.id]?.map(\.id),
+                store.visiblePlaces(in: list).map(\.id),
+                "Batched projection changed the visible places for \(list.id)"
+            )
+        }
+    }
+
     func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {
         let store = makeStore()
         let listID = "11111111-1111-4111-8111-111111111111"
@@ -3424,6 +3630,135 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(remoteList?.cachedItemCount, 1)
         XCTAssertEqual(repository.detailListIDs, [listID])
         XCTAssertTrue(remoteList.map { store.visiblePlaces(in: $0).contains { $0.place.canonicalName == "Bar Nido" } } ?? false)
+    }
+
+    func testRemotePlaceListRefreshPersistsHydrationOnce() async {
+        var saveCount = 0
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { _ in saveCount += 1 }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.seed(), persistence: persistence)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "live list",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 0
+        )
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: remoteList,
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 0
+                )
+            ],
+            details: [
+                listID: RemotePlaceListDetail(list: remoteList, collaborators: [], items: [])
+            ]
+        )
+        let userPlaceRepository = FakeUserPlaceRepository(
+            userPlacesByUserID: ["user_ryan": store.visiblePlaces(for: "user_ryan")]
+        )
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            placeListRepository: repository
+        )
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(repository.visibleListRequestCount, 1)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testRemotePlaceListDetailRefreshDoesNotRequestAllListSummaries() async {
+        let store = makeStore()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "live list",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 0
+        )
+        let repository = FakePlaceListRepository(
+            details: [
+                listID: RemotePlaceListDetail(list: remoteList, collaborators: [], items: [])
+            ]
+        )
+        let backend = WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(),
+            placeListRepository: repository
+        )
+
+        await store.refreshRemotePlaceList(remoteList, backend: backend)
+
+        XCTAssertEqual(repository.visibleListRequestCount, 0)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+    }
+
+    func testRemotePlaceListRefreshKeepsSummariesWhenOneDetailFails() async {
+        var saveCount = 0
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { _ in saveCount += 1 }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.seed(), persistence: persistence)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "summary survives a detail error",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 1
+        )
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: remoteList,
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 1
+                )
+            ],
+            failedDetailListIDs: [listID]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(store.visiblePlaceLists.first { $0.id == listID }?.name, remoteList.name)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertNotNil(store.lastRemoteError)
     }
 
     func testRemotePlaceListsPreserveKnownAvatarsWhenSummaryOmitsThem() async {
@@ -4227,6 +4562,75 @@ private final class FakeVisitRepository: VisitRepository {
 }
 
 @MainActor
+private final class FakeSharedVisitRepository: SharedVisitRepository {
+    struct InviteRequest: Equatable {
+        let sourceVisitID: String
+        let inviteeUserIDs: [String]
+    }
+
+    private(set) var inviteRequests: [InviteRequest] = []
+    private(set) var inviteeListRequests: [String] = []
+    private(set) var setRequests: [InviteRequest] = []
+    var activeInviteeUserIDs: [String] = []
+    var shouldSuspendInbox = false
+    private var inboxContinuation: CheckedContinuation<[SharedVisitInvitation], Error>?
+
+    var hasSuspendedInboxRequest: Bool { inboxContinuation != nil }
+
+    func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        inviteRequests.append(InviteRequest(sourceVisitID: sourceVisitID, inviteeUserIDs: inviteeUserIDs))
+        return inviteeUserIDs.map {
+            SharedVisitInviteResult(
+                participantID: UUID().uuidString.lowercased(),
+                inviteeUserID: $0,
+                status: .pending,
+                invitationGeneration: 1
+            )
+        }
+    }
+
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        inviteeListRequests.append(sourceVisitID)
+        return activeInviteeUserIDs
+    }
+
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        setRequests.append(InviteRequest(sourceVisitID: sourceVisitID, inviteeUserIDs: inviteeUserIDs))
+        activeInviteeUserIDs = inviteeUserIDs
+        return inviteeUserIDs.map {
+            SharedVisitInviteResult(
+                participantID: UUID().uuidString.lowercased(),
+                inviteeUserID: $0,
+                status: .pending,
+                invitationGeneration: 1
+            )
+        }
+    }
+
+    func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
+        guard shouldSuspendInbox else { return [] }
+        return try await withCheckedThrowingContinuation { continuation in
+            inboxContinuation = continuation
+        }
+    }
+
+    func resumeInbox() {
+        inboxContinuation?.resume(returning: [])
+        inboxContinuation = nil
+    }
+    func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? { nil }
+    func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? { nil }
+    func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        throw WanderRemoteError.notImplemented("fake shared visit acceptance")
+    }
+    func decline(participantID: String, generation: Int) async throws {}
+    func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion] { [] }
+    func downloadPhotoData(bucket: String, path: String) async throws -> Data { Data() }
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {}
+    func markPhotoUploaded(photoID: String) async throws {}
+}
+
+@MainActor
 private final class FakeExtractionRepository: ExtractionRepository {
     private let result: ExtractionJobEnqueueResult?
     private let processResult: ExtractionJobResult?
@@ -4302,9 +4706,11 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     private var visibleListsResult: [RemotePlaceListSummary]
     private let detailsByListID: [String: RemotePlaceListDetail]
+    private let failedDetailListIDs: Set<String>
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
+    private(set) var visibleListRequestCount = 0
     private(set) var detailListIDs: [String] = []
     private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
     private(set) var deletedListIDs: [String] = []
@@ -4315,6 +4721,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     init(
         visibleLists: [RemotePlaceListSummary] = [],
         details: [String: RemotePlaceListDetail] = [:],
+        failedDetailListIDs: Set<String> = [],
         upsertResult: String = "11111111-1111-4111-8111-111111111111",
         upsertResults: [String]? = nil,
         itemResult: String = "22222222-2222-4222-8222-222222222222",
@@ -4322,6 +4729,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     ) {
         self.visibleListsResult = visibleLists
         self.detailsByListID = details
+        self.failedDetailListIDs = failedDetailListIDs
         self.upsertResults = upsertResults ?? [upsertResult]
         self.itemResult = itemResult
         self.upsertDelayNanoseconds = upsertDelayNanoseconds
@@ -4332,11 +4740,15 @@ private final class FakePlaceListRepository: PlaceListRepository {
     }
 
     func visibleLists() async throws -> [RemotePlaceListSummary] {
-        visibleListsResult
+        visibleListRequestCount += 1
+        return visibleListsResult
     }
 
     func detail(listID: String) async throws -> RemotePlaceListDetail? {
         detailListIDs.append(listID)
+        if failedDetailListIDs.contains(listID) {
+            throw TestError.expected
+        }
         return detailsByListID[listID]
     }
 

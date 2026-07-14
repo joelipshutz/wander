@@ -53,6 +53,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
+        XCTAssertEqual(
+            WanderRootView.notificationTab(for: .sharedVisit(participantID: "participant-1", generation: 2)),
+            .map
+        )
         XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
     }
 
@@ -124,6 +128,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
+    func testVisitFriendMockupsHaveDeterministicLaunchPages() {
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitFriendsEditor"]),
+            .visitFriendsEditor
+        )
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitWithFriend"]),
+            .visitWithFriend
+        )
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
@@ -171,6 +186,19 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
         XCTAssertFalse(mapScreen.contains(".navigationDestination(isPresented: placeProfileDestinationBinding)"))
+    }
+
+    func testDiscoverTickerStateIsOwnedBySearchField() throws {
+        let discoverScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let sections = discoverScreen.components(separatedBy: "private struct DiscoverSearchField: View")
+
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertFalse(sections[0].contains("@State private var tickerIndex"))
+        XCTAssertFalse(sections[0].contains("runTicker()"))
+        XCTAssertTrue(sections[1].contains("@State private var placeholderIndex"))
+        XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
     }
 
     @MainActor

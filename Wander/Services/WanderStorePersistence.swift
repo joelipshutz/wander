@@ -48,6 +48,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let placeAttributes: [PlaceAttributeRecord]
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
+    let sharedVisitInvitations: [SharedVisitInvitation]?
+    let sharedVisitInboxUserID: String?
+    let pendingSharedVisitInvites: [PendingSharedVisitInvite]?
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
     let mutes: [MuteRecord]?
@@ -72,6 +75,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
         placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
+        sharedVisitInvitations = store.sharedVisitInvitations
+        sharedVisitInboxUserID = store.sharedVisitInboxUserID
+        pendingSharedVisitInvites = store.pendingSharedVisitInvites
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
         mutes = store.mutes.map(MuteRecord.init)
@@ -103,6 +109,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
+            sharedVisitInvitations: sharedVisitInvitations ?? [],
+            sharedVisitInboxUserID: sharedVisitInboxUserID,
+            pendingSharedVisitInvites: pendingSharedVisitInvites ?? [],
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
             mutes: mutes?.map { $0.model() } ?? [],
@@ -128,6 +137,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let placeAttributes: [LocalPlaceAttribute]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]
+        let sharedVisitInvitations: [SharedVisitInvitation]
+        let sharedVisitInboxUserID: String?
+        let pendingSharedVisitInvites: [PendingSharedVisitInvite]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]
         let mutes: [LocalMute]

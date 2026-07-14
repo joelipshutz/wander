@@ -1409,6 +1409,8 @@ private struct SavedPlacesListScreen: View {
     private func saveProfileFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
+        case .sharedVisit:
+            return nil
         case .add(let sourceType):
             let result = await store.saveCandidate(
                 submission.candidate,
@@ -1462,7 +1464,7 @@ private struct SavedPlacesListScreen: View {
             }
             selectedPlace = nil
             return true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }
