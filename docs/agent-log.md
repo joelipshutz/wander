@@ -11045,3 +11045,34 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
+
+## 2026-07-12 18:08 PDT - Codex - REC-85 Lists performance investigation
+
+Agent: Codex
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85`
+
+Goal: reproduce and root-cause reported janky scrolling and back navigation in Lists on current TestFlight/main before choosing a fix or adding diagnostics.
+
+Starting status:
+
+- Worktree is clean at `origin/main` commit `a81b971`; current TestFlight is build 68.
+- Investigation will compare demo-fixture and live-data behavior to separate rendering/navigation cost from remote list refresh and state-publication churn.
+- Likely files to inspect are `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, Lists backend/repository code, and focused tests. No runtime files will be edited until a root cause is supported by profiling or code-path evidence.
+- Engineering review gate is not required for read-only diagnosis. It will run before implementation if the recommended fix changes shared sync/state behavior or cross-screen contracts.
+
+Investigation checkpoint, 2026-07-12 18:29 PDT:
+
+- Built current `origin/main` successfully for iPhone 16 Plus / iOS 18.6 after clearing completed task-only DerivedData caches that had left 116 MB free. No source, app data, archive, or branch data was removed.
+- Launched the populated fixture Lists home and detail scenarios and captured a 20-second Time Profiler trace at `/private/tmp/rec85-list-detail-launch.trace`.
+- The fixture launch reported no potential hang above 250 ms. This does not clear the live path: demo fixtures disable persistence and the unauthenticated remote refresh fails before hydrating a real list set.
+- Supported bottleneck chain from code and trace evidence:
+  - Lists home runs sync plus a full remote list refresh whenever the screen task appears.
+  - Every list detail repeats sync plus the same full remote list refresh before loading suggestions.
+  - `refreshRemotePlaceLists` fetches summaries, then each owner profile's visible places, then every visible list detail sequentially.
+  - Summary hydration publishes and persists once; each list detail then publishes and persists again. Persistence constructs and pretty-prints the complete store snapshot and performs an atomic file write synchronously from the main-actor store.
+  - Each store publication invalidates all tab children. The trace sampled hidden `MapScreen.visiblePlaces`/grouping work and `ListsScreen.body` during Lists detail launch.
+  - Lists rebuilds `PlaceListMock` values after publication; each list calls `store.visiblePlaces(in:)`, which rebuilds the entire visible social place set before matching that list's items.
+- macOS Accessibility permission is unavailable to `osascript`, so automated simulator swipes/back gestures cannot be generated from this environment without adding a UI-test harness. Joe's iPhone 16 Pro is connected and developer-enabled, so the highest-signal next step is a short physical-device Time Profiler/Animation Hitches capture while Joe reproduces My Lists scroll, list detail scroll, and back navigation.
+- Recommendation: do not add broad print/network logging. If the physical trace needs more attribution, add narrow `os_signpost` intervals around Lists home/detail tasks, remote summary/detail hydration, full-snapshot persistence, list view-model projection, and navigation push/pop.
