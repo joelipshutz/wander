@@ -11737,3 +11737,10 @@ Starting status:
 - Fetched and inspected exact `origin/main` at `2c11be341`; it already records completed TestFlight build 74, so there is no pending explicit release to resume. Ryan requested a docs merge only, not a TestFlight release; no build-number bump, archive, upload, or Slack note is authorized.
 - The branch is clean and contains exactly two files against latest `origin/main`: the new 244-line research brief and the required 29-line prior coordination entry. The primary checkout remains on another active branch with untracked `.pnpm-store/`; this isolated worktree will continue to avoid it.
 - `docs/agent-log.md` is a high-conflict coordination file, but this branch is not behind `origin/main`, no other worktree is editing this branch, and the diff is an append-only record. No overlap is present before review.
+
+Landing completion, 2026-07-14 16:56 PDT:
+
+- Completed the full pre-landing review against exact `origin/main` with no blocking findings or scope drift. PR #102 was ready, mergeable, conflict-free, and had no checks, reviews, unresolved threads, draft/hold signal, or app/runtime changes. `git diff --check` passed; app builds/tests were correctly skipped because the deliverable is documentation only.
+- Opened ready PR #102 and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/102. Exact merge commit: `196c4cd08409760b4a0a05baae7ea7a8d14a2aff`. Refetched `origin/main` and verified `docs/reviews/2026-07-14-rec-90-discover-competitive-research.md` exists there with the expected REC-90 header and research status.
+- Linked PR #102 on Linear REC-90, recorded the reviewed head and validation, and moved the issue from `In Progress` to `In Review`. REC-90 intentionally remains open for Joe's direction decision; this docs merge does not approve Direction A or authorize implementation.
+- No build-number bump, Xcode generation, TestFlight archive/upload, release helper, or Slack announcement was performed because Ryan requested a docs-only merge. No product-code, backend, schema, hosted data, auth, privacy, or tester-facing behavior changed.
