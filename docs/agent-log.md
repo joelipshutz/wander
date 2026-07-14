@@ -11141,3 +11141,10 @@ Hardening and final-validation checkpoint, 2026-07-13 19:45 PDT:
 - Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec88-final-build`; only the existing traditional-headermap warning was emitted.
 - Final linked smoke passed: photo visibility, provider quota, and Shared Visits contracts are valid. `supabase migration list --linked` reports local/remote alignment through `20260714031500`; REC-89's separately owned `20260714003000` migration was restored only for this read-only comparison and removed from this branch afterward.
 - Final UI verification remains clean on iPhone 17 Pro and iPhone 17e: `/private/tmp/rec88-shared-visit-editor-17pro-final.png`, `/private/tmp/rec88-shared-visit-editor-17e-final.png`, and `/private/tmp/rec88-shared-visit-card-17pro-final.png`.
+
+PR handoff, 2026-07-13 19:51 PDT:
+
+- Committed the production implementation as `ec4709fe2` after rebasing onto latest `origin/main` (`aa6cf212d`). The only rebase conflict was this coordination log; both the completed TestFlight 71 release history and REC-88 history were preserved.
+- Post-rebase full iOS suite passed again: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-48-27--0700.xcresult`). The post-rebase generic iOS Simulator build also passed with `CODE_SIGNING_ALLOWED=NO`.
+- PR #85 is the review and merge vehicle: https://github.com/joelipshutz/wander/pull/85. No TestFlight build number, archive, upload, or tester announcement is included because no release was requested for this implementation handoff.
+- Remaining manual proof is a physical two-account flow: sender creates a non-stealth Been visit and invites a mutual friend; recipient receives the push, edits/removes inherited data, saves an independent card, and both accounts verify companion attribution plus private/stealth/block cancellation behavior.
