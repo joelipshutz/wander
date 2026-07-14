@@ -312,13 +312,12 @@ private struct ProfileCalendarSection: View {
                 ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
                     if let date {
                         let day = calendar.startOfDay(for: date)
-                        Button {
-                            dateAction(date, insights.monthPlaceIDs[day] ?? [])
-                        } label: {
-                            ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows places from this date")
+                        ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectDate(date, day: day) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("Shows places from this date")
+                            .accessibilityAction { selectDate(date, day: day) }
                     } else {
                         ProfileCalendarDayCell(date: nil, visitCount: nil)
                     }
@@ -365,6 +364,10 @@ private struct ProfileCalendarSection: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             selectedMonth = next
         }
+    }
+
+    private func selectDate(_ date: Date, day: Date) {
+        dateAction(date, insights.monthPlaceIDs[day] ?? [])
     }
 }
 

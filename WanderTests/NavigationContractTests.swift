@@ -47,6 +47,17 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testProfileCalendarDatesUseScrollCompatibleTapHandling() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(source.contains("ScrollView {"))
+        XCTAssertTrue(source.contains(".onTapGesture { selectDate(date, day: day) }"))
+        XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
+        XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
+    }
+
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)

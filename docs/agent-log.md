@@ -11571,3 +11571,52 @@ Release completion, 2026-07-13 22:48 PDT:
 - Added final release evidence to Linear `REC-88` and `REC-89` and moved both issues to `Done` after the build was approved and attached to the public beta group.
 - Validation shipped with 324 tests / 0 failures, a passing generic arm64/x86_64 iOS Simulator build, a passing signed Release archive, REC-89 hosted pgTAP 44/44 plus linked smoke, and REC-88 hosted pgTAP 70/70 plus linked rollback smoke.
 - Known/deferred: Find Friends routes to Discover > Members until native Contacts import ships. The tester checklist explicitly prioritizes a fresh physical two-account/APNs pass for Shared Visits foreground, background, and cold-launch routing.
+
+## 2026-07-13 23:25 PDT - Codex - REC-94 Profile Calendar Scroll Trace
+
+Agent: Codex using `investigate` and `recme-testflight-feedback-bug-catcher`
+Branch: `codex/rec-94-profile-calendar-scroll`
+Worktree: `/private/tmp/recme-rec94-profile-scroll`
+Linear: `REC-94` (`In Progress`)
+
+Goal: reproduce and trace the build-73 regression where the main Profile page stops vertically scrolling at the calendar, identify the gesture or layout owner from runtime evidence, then make the smallest verified fix without changing calendar/map data behavior.
+
+Starting status:
+
+- Created this isolated worktree from exact latest `origin/main` at `d959504d6`; the root checkout has unrelated `.pnpm-store/` content and stays untouched. Existing REC-92 work is active in another worktree; no overlap is expected unless tracing reaches shared Profile navigation.
+- The report is a deterministic user-facing interaction regression from TestFlight build 73. PostHog/Supabase evidence is intentionally skipped because this is local SwiftUI gesture/layout behavior and hosted logs cannot change the next action.
+- Engineering review gate: not needed at start because the expected fix is an isolated Profile UI correction with no new flow, persisted state, backend, privacy, or cross-screen contract. Escalate to `plan-eng-review` if tracing expands beyond the Profile module or requires a product-sensitive interaction change.
+- Expected files are `Wander/Features/Profile/ProfileOwnerHome.swift`, focused Profile tests under `WanderTests/`, and this log. No implementation edit will be made before the scroll/gesture root cause is reproduced and confirmed.
+
+Trace and root-cause checkpoint, 2026-07-13 23:49 PDT:
+
+- Built and launched exact `origin/main` on iPhone 17 Pro and smaller iPhone 17e simulators with demo fixtures and Profile selected. The paired physical iPhone is offline, and Xcode reports that the SwiftUI/Hitches instruments are unsupported on Simulator, so no physical Instruments pass is claimed.
+- Live LLDB inspection found the Profile `SwiftUI.HostingScrollView` enabled with frame `390x844`, content size `390x1576`, top/bottom adjusted insets `101/83`, and a normal `UIScrollViewPanGestureRecognizer`. The map begins at content y `1127.67`, proving the content below the calendar is measured rather than clipped out of the scroll extent.
+- Hit-testing over both the saved-place tiles and calendar resolves to the same hosting-scroll content container; there is no intervening overlay or nested UIKit scroll view. MapKit's inherited host is `userInteractionEnabled = NO`, matching `.allowsHitTesting(false)`, so the map is not consuming the parent pan.
+- The remaining code-level trigger is the nested vertical lazy layout: a `LazyVStack` for only four Profile sections containing a fixed, at-most-42-day `LazyVGrid`. Apple has a current iOS 26 developer report for an otherwise valid `ScrollView` becoming unscrollable when it contains a `LazyVGrid`; eager containers are also the documented fit for small fixed content. The fix replaces these with `VStack` and `Grid` while retaining the calendar's individual date buttons and all actions.
+- Coordination update: active `REC-92` also touches `ProfileOwnerHome.swift` and the generated project. Its only overlap in this file is an additive invitation-inbox row before `savedPlacesSection`; this patch avoids that call site and does not change `project.yml` or `Wander.xcodeproj`, so the two branches can compose without discarding either behavior.
+
+Trace refinement, 2026-07-13 23:59 PDT:
+
+- The eager-container patch compiled, its focused contract test passed, and the full suite passed 325/325, but the repeated accessibility scroll trace still stalled once the calendar filled the viewport. LLDB captured offset y `209` with content height `1607` and maximum legal offset approximately `846`, proving this was still gesture delivery rather than reaching the content boundary.
+- The differentiator at the exact stall is the calendar's wall of date `Button` controls. The revised implementation keeps every date tappable but uses a shaped tap gesture and explicit accessibility button/default-action semantics, removing the control gesture that competes with the parent scroll pan. The exact repeated-scroll trace must pass before this diagnosis is accepted as fixed.
+
+Final trace and validation, 2026-07-14 00:30 PDT:
+
+- Added a temporary XCUI target solely to drive the original gesture with real touch synthesis: reveal the calendar, begin a swipe on a visible numbered date, and assert `your map` becomes hittable. The target was removed after the A/B trace and `xcodegen generate` restored the project, so no temporary test-target or generated-project churn remains in the branch.
+- The controlled A/B establishes the root cause and falsifies the earlier eager-container hypothesis. With the original layout plus scroll-compatible date tap handling, the gesture passed (`/private/tmp/DerivedData-rec94-focused/Logs/Test/Test-Wander-2026.07.14_00-09-51--0700.xcresult`). Replacing only that handling with the original date `Button` failed the identical swipe (`/private/tmp/DerivedData-rec94-focused/Logs/Test/Test-Wander-2026.07.14_00-10-57--0700.xcresult`). Restoring the original `LazyVStack` and `LazyVGrid` while keeping the new tap handling passed again (`/private/tmp/DerivedData-rec94-focused/Logs/Test/Test-Wander-2026.07.14_00-12-38--0700.xcresult`). The earlier apparent offset y `209` was Accessibility auto-scrolling an offscreen date before activation, not a successful parent-scroll trace; the XCUI A/B supersedes it.
+- Final implementation changes only the calendar date interaction: `ProfileCalendarDayCell` now has a rectangular hit shape, a normal tap action, and explicit VoiceOver button/default-action semantics. Date navigation still opens the expected saved-place list, while vertical pans beginning on a date remain owned by the Profile scroll view. No profile/map data, backend, persistence, auth, or privacy behavior changed.
+- Visual checks passed on iPhone 17 Pro and smaller iPhone 17e, including a six-row August calendar and opening July 13's three-place list. Screenshots: `/private/tmp/rec94-profile-scroll-17pro.png` and `/private/tmp/rec94-profile-scroll-17e.png`.
+- Permanent navigation-contract coverage protects the scroll-compatible tap and accessibility behavior. The final fresh iPhone 17 Pro / iOS 26.5 suite passed 325 tests with 0 failures: `/private/tmp/DerivedData-rec94-final/Logs/Test/Test-Wander-2026.07.14_00-14-14--0700.xcresult`. The required generic arm64/x86_64 iOS Simulator build also passed with `CODE_SIGNING_ALLOWED=NO`; the first sandboxed build attempt could not access CoreSimulator or package networking, and the identical approved host-access rerun succeeded.
+- `git diff --check` passes. Physical Instruments remains unavailable because the paired iPhone is offline and Xcode's SwiftUI/Hitches templates do not support Simulator; this is the only trace gap and is not counted as a pass. The deterministic XCUI before/after proof verifies the reported regression on Simulator. No TestFlight build or release was requested.
+
+Publishing handoff, 2026-07-14 00:37 PDT:
+
+- Committed the three-file fix as `d6d8d2877` on local branch `codex/rec-94-profile-calendar-scroll`. The branch starts from exact current `origin/main` (`d959504d6`) and has no unrelated changes.
+- Publishing is blocked by machine GitHub authentication, not by code or validation. HTTPS has no Keychain credential, the active `gh` token for `ryanlane23` is invalid, SSH has no authorized key, and the connected GitHub app returned `403 Resource not accessible by integration` for branch creation. The failed pushes sent no branch data and changed no repository history.
+- Added the full root-cause, A/B, test, build, and auth-blocker evidence to Linear REC-94; it remains `In Progress` until a ready PR can be opened. Exact restart after GitHub re-authentication: from `/private/tmp/recme-rec94-profile-scroll`, run `git push -u origin codex/rec-94-profile-calendar-scroll`, open a ready PR to `main` linked to REC-94, then move REC-94 to `In Review`. No implementation or test work remains.
+
+Publishing resumed, 2026-07-14 PDT:
+
+- Ryan requested the verified branch in Xcode for testing. GitHub CLI authentication for `ryanlane23` is healthy again with repository scope, and a fresh `git fetch origin` confirms the implementation parent still exactly matches current `origin/main` with no integration work required.
+- App and test source remain byte-for-byte identical to the 325-test, XCUI A/B, and universal simulator-build validation above. This docs-only checkpoint is being amended before the first successful push so the remote branch has a single coherent handoff commit.
