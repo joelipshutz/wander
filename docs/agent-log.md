@@ -11170,3 +11170,36 @@ Pre-landing review checkpoint, 2026-07-13 20:49 PDT:
 - Review found one cheap coverage gap and added `testRemotePlaceListRefreshKeepsSummariesWhenOneDetailFails`, proving the staged refresh still applies summaries, records the detail error, and persists exactly once. Its focused run passed: 1 test, 0 failures.
 - Final branch suite passed on iPhone 16 Plus / iOS 18.6: 296 tests, 0 failures. Result: `/private/tmp/DerivedData-rec85-focused/Logs/Test/Test-Wander-2026.07.13_20-46-54--0700.xcresult`. `git diff --check` passes; the only build warning remains the existing traditional-headermap warning.
 - After repeated checks, the paired iPhone is still `unavailable` in CoreDevice and is absent from USB/local-network reachability. The requested TestFlight release will not be held on the cable; REC-85/REC-91 remain `In Review`, and the first build-72 tester task is to repeat Lists scroll/detail/Back and Discover steady scrolling on-device. If the phone reconnects before archive completion, the local after trace will still run first.
+
+## 2026-07-13 20:51 PDT - Codex - REC-85/REC-91 TestFlight Build 72
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-72`
+Worktree: `/private/tmp/recme-build72-release`
+Linear: `REC-85` and `REC-91`, kept `In Review` through TestFlight availability
+
+Goal: package the merged Lists persistence/projection fix and Discover ticker-isolation fix from latest `main` into explicit TestFlight build 72.
+
+Starting status:
+
+- PR #91 passed focused/full tests and the pre-landing review, then squash-merged to `main` at `edf37273065724a7ba35627b9307ed8ccf19ead3`: https://github.com/joelipshutz/wander/pull/91.
+- Latest completed TestFlight release is build 71. It is documented as `VALID`, attached to `Wander Alpha`, externally approved, and announced to testers. Latest `main` still declares build 71, so this explicit release increments exactly once to 72.
+- Release source contains one eligible app-code delta since build 71: PR #91 / REC-85 / REC-91. No schema, auth, privacy, signing, or tester-data mutation is included.
+- Final implementation-branch validation passed 296/296 tests. The signed device build also succeeded, but the paired iPhone is physically disconnected, so post-fix physical profiling is explicitly moved to the build-72 tester checklist instead of silently treated as passed.
+- Expected release files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. Mission Control remains unavailable at `http://localhost:4000`; Linear is the durable tracker.
+
+Release plan:
+
+1. Bump build 71 to 72, regenerate with XcodeGen, and keep the generated diff limited to the matching build-number settings.
+2. Run the full iOS suite and generic iOS Simulator build on the release branch.
+3. Open/review/squash-merge the build-number PR to `main`.
+4. Archive and upload exact latest `main` with `manageAppVersionAndBuildNumber=false`, then run the TestFlight helper with the archive path and What to Test copy.
+5. Post the required `#testflight-feedback` note and finish Linear/release logging after App Store Connect reports the build available or processing state.
+
+Release validation checkpoint, 2026-07-13 21:01 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 71 to 72 in `project.yml` and regenerated `Wander.xcodeproj`; the generated project diff was audited and reduced to the two matching build-number settings, with no signing or compiler-setting churn.
+- Full iPhone 16 Plus / iOS 18.6 suite passed: 296 tests, 0 failures. Result: `/private/tmp/DerivedData-build72-test/Logs/Test/Test-Wander-2026.07.13_20-53-19--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; the sandboxed attempt could not access CoreSimulator/SwiftPM caches, so the identical command was rerun with normal host access as required by the repo testing policy. The only warning remains the existing traditional-headermap warning.
+- `git diff --check` passes and the release diff is limited to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this coordination log. Tester-facing What to Test copy is staged outside the repo at `/private/tmp/recme-build72-what-to-test.md`.
+- The paired iPhone remains disconnected, so the post-fix physical Instruments comparison is a documented validation gap and the first on-device checklist item, not a claimed pass. Archive/upload will continue from the exact merged build-number commit on latest `main`.
