@@ -11722,3 +11722,18 @@ Publishing handoff, 2026-07-14 14:32 PDT:
 
 - Committed the research brief and coordination log as `927a8823d` (`docs: research Discover redesign`) and pushed `codex/discover-research` to `origin`; `git diff --check` passed before commit and the branch is clean.
 - Ready-PR creation is blocked outside the branch itself: the connected GitHub app returned `403 Resource not accessible by integration`, local `gh` authentication is invalid, and the in-app browser reached GitHub's sign-in page. Exact restart action after GitHub authentication: open `https://github.com/joelipshutz/wander/pull/new/codex/discover-research`, create a ready PR to `main`, and link it to REC-90. No implementation or TestFlight work should begin until Ryan chooses a direction.
+
+## 2026-07-14 16:49 PDT - Codex - Land Discover Research Brief
+
+Agent: Codex using `recme-pr-review-merge-release`, `review`, GitHub, and Linear workflows
+Branch: `codex/discover-research`
+Worktree: `/private/tmp/recme-discover-research`
+Linear: `REC-90` (`In Progress`)
+
+Goal: at Ryan's explicit request, review the research-only branch, open a ready PR, and squash-merge the Discover competitive research brief to `main` so Joe can review it from the integration branch.
+
+Starting status:
+
+- Fetched and inspected exact `origin/main` at `2c11be341`; it already records completed TestFlight build 74, so there is no pending explicit release to resume. Ryan requested a docs merge only, not a TestFlight release; no build-number bump, archive, upload, or Slack note is authorized.
+- The branch is clean and contains exactly two files against latest `origin/main`: the new 244-line research brief and the required 29-line prior coordination entry. The primary checkout remains on another active branch with untracked `.pnpm-store/`; this isolated worktree will continue to avoid it.
+- `docs/agent-log.md` is a high-conflict coordination file, but this branch is not behind `origin/main`, no other worktree is editing this branch, and the diff is an append-only record. No overlap is present before review.
