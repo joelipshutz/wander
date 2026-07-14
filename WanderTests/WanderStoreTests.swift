@@ -3257,6 +3257,20 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
     }
 
+    func testBatchedListProjectionMatchesIndividualListProjection() {
+        let store = makeStore()
+        let lists = store.visiblePlaceLists
+        let batched = store.visiblePlacesByListID(in: lists)
+
+        for list in lists {
+            XCTAssertEqual(
+                batched[list.id]?.map(\.id),
+                store.visiblePlaces(in: list).map(\.id),
+                "Batched projection changed the visible places for \(list.id)"
+            )
+        }
+    }
+
     func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {
         let store = makeStore()
         let listID = "11111111-1111-4111-8111-111111111111"
@@ -3320,6 +3334,89 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(remoteList?.cachedItemCount, 1)
         XCTAssertEqual(repository.detailListIDs, [listID])
         XCTAssertTrue(remoteList.map { store.visiblePlaces(in: $0).contains { $0.place.canonicalName == "Bar Nido" } } ?? false)
+    }
+
+    func testRemotePlaceListRefreshPersistsHydrationOnce() async {
+        var saveCount = 0
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { _ in saveCount += 1 }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.seed(), persistence: persistence)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "live list",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 0
+        )
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: remoteList,
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 0
+                )
+            ],
+            details: [
+                listID: RemotePlaceListDetail(list: remoteList, collaborators: [], items: [])
+            ]
+        )
+        let userPlaceRepository = FakeUserPlaceRepository(
+            userPlacesByUserID: ["user_ryan": store.visiblePlaces(for: "user_ryan")]
+        )
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            placeListRepository: repository
+        )
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(repository.visibleListRequestCount, 1)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testRemotePlaceListDetailRefreshDoesNotRequestAllListSummaries() async {
+        let store = makeStore()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "live list",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 0
+        )
+        let repository = FakePlaceListRepository(
+            details: [
+                listID: RemotePlaceListDetail(list: remoteList, collaborators: [], items: [])
+            ]
+        )
+        let backend = WanderBackend(
+            userPlaceRepository: FakeUserPlaceRepository(),
+            placeListRepository: repository
+        )
+
+        await store.refreshRemotePlaceList(remoteList, backend: backend)
+
+        XCTAssertEqual(repository.visibleListRequestCount, 0)
+        XCTAssertEqual(repository.detailListIDs, [listID])
     }
 
     func testRemotePlaceListsPreserveKnownAvatarsWhenSummaryOmitsThem() async {
@@ -4182,6 +4279,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
+    private(set) var visibleListRequestCount = 0
     private(set) var detailListIDs: [String] = []
     private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
     private(set) var deletedListIDs: [String] = []
@@ -4209,7 +4307,8 @@ private final class FakePlaceListRepository: PlaceListRepository {
     }
 
     func visibleLists() async throws -> [RemotePlaceListSummary] {
-        visibleListsResult
+        visibleListRequestCount += 1
+        return visibleListsResult
     }
 
     func detail(listID: String) async throws -> RemotePlaceListDetail? {

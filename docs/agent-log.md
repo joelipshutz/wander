@@ -11139,3 +11139,19 @@ Starting status:
 - The `ios-fix` workflow normally captures a debug `StateServer` snapshot fixture before editing. This repo has no `StateServer`, `DebugBridge`, or restore API by prior documented decision, so the physical traces are the reproducing pre-fix snapshots and deterministic Swift test fixtures will provide the durable regression guard. No debug-server scope will be added.
 - Expected implementation files are `Wander/Features/Discover/DiscoverScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, focused files under `WanderTests/`, and this coordination log. `project.yml`, auth, payments, schema/RLS, and app build number are out of the implementation diff; build number changes only in the later explicit TestFlight release step.
 - Mission Control remains unavailable at `http://localhost:4000`; Linear and PR #91 are the durable trackers.
+
+Engineering review checkpoint, 2026-07-13 20:16 PDT:
+
+- Reviewed the implementation boundary against the confirmed device traces before editing shared store code. The smallest safe design is: fetch remote list payloads first, apply them synchronously inside one persistence transaction, keep remote-owner failures best-effort, replace the detail screen's global refresh with a selected-list refresh, and build all list-card projections from one shared visible-place candidate pass.
+- The persistence transaction will only wrap the synchronous apply phase, never the network awaits. This preserves immediate durability for unrelated user mutations while collapsing the existing nested summary/profile/attribute/detail saves into one ordered snapshot write.
+- The Discover fix owns placeholder index and timer state inside `DiscoverSearchField`; the parent `DiscoverScreen` no longer observes ticker state, so a placeholder animation cannot invalidate the activity feed.
+- Regression coverage will assert one persistence save per full remote-list refresh, selected-list detail refresh without a global summary request, batched list projection equivalence, and structural ownership of Discover ticker state. Existing remote-list merge/pending-local-change tests remain the behavior guard.
+- Explicitly not in this fix: a global store-observation rewrite, asynchronous persistence semantics, new logging/signposts, backend/schema changes, lazy-row redesign, or a new debug state server. Those are larger changes and are not needed to address the measured causes.
+
+Implementation checkpoint, 2026-07-13 20:25 PDT:
+
+- Discover now keeps the 2.6-second placeholder index and animation task inside `DiscoverSearchField`; `DiscoverScreen` no longer owns or awaits ticker state. The search experience and animation are unchanged, but ticker ticks cannot invalidate the activity feed.
+- Lists now stages remote summaries, owner places/relationships, and details before a synchronous apply. Nested profile/attribute/list persistence requests are deferred during that apply and flushed as one final snapshot write. Auxiliary owner hydration remains best-effort, preserving the prior list-refresh success behavior.
+- List detail appearance refreshes only the selected remote list instead of the entire list collection, and its task identity is stable across local-to-server id reconciliation. Lists home computes the visible social-place candidate set once and reuses it for all card projections.
+- Added regression coverage for ticker state ownership, batched list-projection equivalence, one persisted snapshot per full hydration batch, and selected-list detail refresh without a global summary request.
+- Focused REC-85/REC-91 run passed: 5 tests, 0 failures. Full iPhone 16 Plus / iOS 18.6 simulator suite passed: 295 tests, 0 failures. Both used `/private/tmp/DerivedData-rec85-focused`; the only build warning is the existing traditional-headermap warning.

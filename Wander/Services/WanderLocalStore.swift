@@ -115,6 +115,8 @@ final class WanderStore: ObservableObject {
     private let placeResolver: PlaceCandidateResolving
     private let analytics: AnalyticsClient
     private let persistence: WanderStorePersistence?
+    private var persistenceDeferralDepth = 0
+    private var persistenceRequestedWhileDeferred = false
     private var discoverParseCache: [String: DiscoverFilters] = [:]
     private static let defaultRemoteViewport = MapViewport(
         minLatitude: 33.95,
@@ -195,7 +197,25 @@ final class WanderStore: ObservableObject {
 
     private func persist() {
         guard let persistence else { return }
+
+        if persistenceDeferralDepth > 0 {
+            persistenceRequestedWhileDeferred = true
+            return
+        }
+
         persistence.save(WanderStoreSnapshot(store: self))
+    }
+
+    private func withDeferredPersistence<Result>(_ operation: () throws -> Result) rethrows -> Result {
+        persistenceDeferralDepth += 1
+        defer {
+            persistenceDeferralDepth -= 1
+            if persistenceDeferralDepth == 0, persistenceRequestedWhileDeferred {
+                persistenceRequestedWhileDeferred = false
+                persist()
+            }
+        }
+        return try operation()
     }
 
     func apply(authState: AuthState) {
@@ -338,6 +358,16 @@ final class WanderStore: ObservableObject {
         return listItems(for: list).compactMap { item in
             visiblePlace(for: item, candidates: candidates)
         }
+    }
+
+    func visiblePlacesByListID(in lists: [LocalPlaceList]) -> [String: [VisiblePlace]] {
+        let candidates = visiblePlaces()
+        return Dictionary(uniqueKeysWithValues: lists.map { list in
+            let visiblePlaces = listItems(for: list).compactMap { item in
+                visiblePlace(for: item, candidates: candidates)
+            }
+            return (list.id, visiblePlaces)
+        })
     }
 
     func hasPlace(_ visiblePlace: VisiblePlace, in list: LocalPlaceList) -> Bool {
@@ -2729,22 +2759,101 @@ final class WanderStore: ObservableObject {
 
         do {
             let summaries = try await backend.visiblePlaceLists()
-            reconcileMissingRemotePlaceLists(with: summaries)
-            upsertRemotePlaceListSummaries(summaries)
-
             let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
+            var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
+            var relationshipsByOwnerID: [String: ViewerRelationship] = [:]
+            var details: [RemotePlaceListDetail] = []
+            var firstRefreshError: Error?
+
             for ownerID in ownerIDs.sorted() {
-                await refreshRemoteProfileVisiblePlaces(profileID: ownerID, backend: backend)
+                do {
+                    visiblePlacesByOwnerID[ownerID] = try await backend.userPlaces(for: ownerID)
+                } catch {
+                    continue
+                }
+                guard ownerID != currentUser.id else { continue }
+                do {
+                    relationshipsByOwnerID[ownerID] = try await backend.relationship(to: ownerID)
+                } catch {
+                    continue
+                }
             }
 
             for summary in summaries where UUID(uuidString: summary.list.id) != nil {
-                if let detail = try await backend.placeListDetail(listID: summary.list.id) {
-                    upsertRemotePlaceListDetail(detail)
+                do {
+                    if let detail = try await backend.placeListDetail(listID: summary.list.id) {
+                        details.append(detail)
+                    }
+                } catch {
+                    firstRefreshError = firstRefreshError ?? error
                 }
             }
-            lastRemoteError = nil
+
+            withDeferredPersistence {
+                reconcileMissingRemotePlaceLists(with: summaries)
+                upsertRemotePlaceListSummaries(summaries)
+                for ownerID in ownerIDs.sorted() {
+                    guard let visiblePlaces = visiblePlacesByOwnerID[ownerID] else { continue }
+                    applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: ownerID)
+                    if let relationship = relationshipsByOwnerID[ownerID] {
+                        applyRemoteRelationship(profileID: ownerID, relationship: relationship)
+                    }
+                }
+                for detail in details {
+                    upsertRemotePlaceListDetail(detail)
+                }
+                lastRemoteError = firstRefreshError.map(remoteErrorMessage)
+                persist()
+            }
         } catch {
             lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
+    func refreshRemotePlaceList(_ list: LocalPlaceList, backend: WanderBackend?) async {
+        guard let backend,
+              let remoteListID = list.serverID ?? (UUID(uuidString: list.id) != nil ? list.id : nil)
+        else {
+            return
+        }
+
+        var visiblePlaces: [VisiblePlace]?
+        var relationship: ViewerRelationship?
+        var detail: RemotePlaceListDetail?
+        var firstRefreshError: Error?
+
+        do {
+            visiblePlaces = try await backend.userPlaces(for: list.ownerUserID)
+        } catch {
+            visiblePlaces = nil
+        }
+
+        if visiblePlaces != nil, list.ownerUserID != currentUser.id {
+            do {
+                relationship = try await backend.relationship(to: list.ownerUserID)
+            } catch {
+                relationship = nil
+            }
+        }
+
+        do {
+            detail = try await backend.placeListDetail(listID: remoteListID)
+        } catch {
+            firstRefreshError = firstRefreshError ?? error
+        }
+
+        withDeferredPersistence {
+            if let visiblePlaces {
+                applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: list.ownerUserID)
+            }
+            if let relationship {
+                applyRemoteRelationship(profileID: list.ownerUserID, relationship: relationship)
+            }
+            if let detail {
+                upsertRemotePlaceListDetail(detail)
+            }
+            lastRemoteError = firstRefreshError.map(remoteErrorMessage)
+            persist()
         }
     }
 
@@ -2777,9 +2886,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let visiblePlaces = try await backend.userPlaces(for: profileID)
-            remoteVisiblePlaceCache.removeAll { $0.owner.id == profileID }
-            remoteVisiblePlaceCache.append(contentsOf: visiblePlaces)
-            hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
+            applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: profileID)
             if profileID != currentUser.id {
                 try await refreshRemoteRelationship(to: profileID, backend: backend)
             }
@@ -3966,6 +4073,12 @@ final class WanderStore: ObservableObject {
         }
         upsertRemoteProfileShells(shells, preserveExistingProfileMetadataWhenMissing: true)
         upsertRemoteAttributes(from: visiblePlaces)
+    }
+
+    private func applyRemoteProfileVisiblePlaces(_ visiblePlaces: [VisiblePlace], profileID: String) {
+        remoteVisiblePlaceCache.removeAll { $0.owner.id == profileID }
+        remoteVisiblePlaceCache.append(contentsOf: visiblePlaces)
+        hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
     }
 
     private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {
