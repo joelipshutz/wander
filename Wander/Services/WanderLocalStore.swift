@@ -287,8 +287,12 @@ final class WanderStore: ObservableObject {
             currentUser.handle = handle
             currentUser.searchHandle = handle.lowercased()
         }
-        currentUser.bio = normalizedOptionalProfileValue(bio)
-        currentUser.homeArea = normalizedOptionalProfileValue(homeArea)
+        if let bio {
+            currentUser.bio = normalizedOptionalProfileValue(bio)
+        }
+        if let homeArea {
+            currentUser.homeArea = normalizedOptionalProfileValue(homeArea)
+        }
         currentUser.updatedAt = now
         currentUser.localUpdatedAt = now
 
@@ -306,8 +310,15 @@ final class WanderStore: ObservableObject {
     }
 
     func updateCurrentUserDetails(_ update: ProfileDetailsUpdate, backend: WanderBackend?) async throws {
-        updateCurrentUserProfile(bio: update.bio, homeArea: update.homeArea)
-        guard let backend, backend.profileRepository != nil else { return }
+        guard let backend, backend.profileRepository != nil else {
+            updateCurrentUserProfile(
+                displayName: update.displayName,
+                handle: update.handle,
+                bio: update.bio,
+                homeArea: update.homeArea
+            )
+            return
+        }
 
         do {
             let remoteProfile = try await backend.updateCurrentProfile(update)
@@ -3207,8 +3218,12 @@ final class WanderStore: ObservableObject {
 
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
-        let handle = normalizedSessionHandle(from: session)
-        let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: handle)
+        let isSameUser = previousCurrentUser.id == session.userID
+        let sessionHandle = normalizedSessionHandle(from: session)
+        let handle = isSameUser ? previousCurrentUser.handle : sessionHandle
+        let displayName = isSameUser
+            ? previousCurrentUser.displayName
+            : normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile

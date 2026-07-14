@@ -18,6 +18,12 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(insights.monthCityCount, 2)
         XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido", "Woodcat Coffee"])
         XCTAssertEqual(insights.placeSummaries.map(\.title), ["Coffee, Tea, & Sweets", "Restaurants & Food"])
+        XCTAssertEqual(insights.countrySummaries.map(\.title), ["United States"])
+        XCTAssertEqual(insights.countrySummaries.map(\.count), [2])
+        XCTAssertEqual(
+            insights.placeSummaries.first { $0.id == WanderPlaceCategory.coffeeTeaSweets }?.placeIDs,
+            ["coffee"]
+        )
         XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
     }
 
@@ -34,7 +40,19 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
 
         XCTAssertEqual(insights.monthVisitCounts[day], 2)
+        XCTAssertEqual(insights.monthPlaceIDs[day], ["coffee"])
         XCTAssertEqual(insights.monthVisitCounts.count, 2)
+    }
+
+    func testCountryCanonicalizerDeduplicatesCodesAndNames() {
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("US"), "United States")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("U.S."), "United States")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("USA"), "United States")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("united states"), "United States")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("UK"), "United Kingdom")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("GBR"), "United Kingdom")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("ARE"), "United Arab Emirates")
+        XCTAssertEqual(CountryCanonicalizer.canonicalName("Canada"), "Canada")
     }
 
     func testTimezoneBoundaryUsesInjectedCalendar() throws {
@@ -45,7 +63,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             canonicalName: "Late Dinner",
             category: WanderPlaceCategory.restaurantsFood,
             locality: "Los Angeles",
-            country: "United States",
+            country: "US",
             latitude: 34,
             longitude: -118
         )
@@ -127,7 +145,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             canonicalName: "Bar Nido",
             category: WanderPlaceCategory.restaurantsFood,
             locality: "New York",
-            country: "United States",
+            country: "US",
             latitude: 40.71,
             longitude: -74.0
         )

@@ -106,6 +106,7 @@ struct ProfileEditScreen: View {
         let normalizedHandle = handle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
+            .lowercased()
         return !normalizedName.isEmpty
             && normalizedHandle.range(of: "^[A-Za-z0-9_]{2,39}$", options: .regularExpression) != nil
     }
@@ -130,35 +131,24 @@ struct ProfileEditScreen: View {
         let normalizedHandle = handle
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
-        var failures: [String] = []
-
-        if normalizedName != store.currentUser.displayName || normalizedHandle != store.currentUser.handle {
-            if auth.isSignedIn {
-                do {
-                    try await auth.updateIdentity(displayName: normalizedName, handle: normalizedHandle)
-                    store.updateCurrentUserProfile(displayName: normalizedName, handle: normalizedHandle, bio: bio, homeArea: homeArea)
-                } catch {
-                    failures.append("Name or username could not be saved")
-                }
-            } else {
-                store.updateCurrentUserProfile(displayName: normalizedName, handle: normalizedHandle, bio: bio, homeArea: homeArea)
-            }
-        }
+            .lowercased()
 
         do {
             try await store.updateCurrentUserDetails(
-                ProfileDetailsUpdate(bio: bio, homeArea: homeArea),
+                ProfileDetailsUpdate(
+                    displayName: normalizedName,
+                    handle: normalizedHandle,
+                    bio: bio,
+                    homeArea: homeArea
+                ),
                 backend: auth.isSignedIn ? backend : nil
             )
         } catch {
-            failures.append("Home city or bio could not be synced")
+            errorMessage = "Profile changes could not be synced. Check the username and try again."
+            return
         }
 
-        if failures.isEmpty {
-            dismiss()
-        } else {
-            errorMessage = failures.joined(separator: ". ") + ". Your other changes were kept."
-        }
+        dismiss()
     }
 
     @MainActor

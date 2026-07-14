@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */; };
 		03461155119042D6739D7619 /* WanderEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038D4985674B1D969110954F /* WanderEnums.swift */; };
 		05CD519FB3F114E951C4D2DE /* LinkPlaceParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86041408E563554B57347025 /* LinkPlaceParser.swift */; };
 		06454DA85E1AFBEE71EBCA2D /* ProfileEditScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F6E53AF7F6E50A969880C4C /* ProfileEditScreen.swift */; };
@@ -77,6 +78,7 @@
 		C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */; };
 		C685CB14B12B2AFDFC9F4EAB /* WanderBackendConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */; };
 		C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34977B260344994771BCC93E /* AuthSessionTests.swift */; };
+		D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */; };
 		D659F5CBC1EEB692D6216008 /* VisibilityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBB1E0FFAE279FBB7C42FEF /* VisibilityPolicy.swift */; };
 		D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E5D0878CAA5887921E1ED1 /* CategoryTaxonomyMockups.swift */; };
 		DB1ADA31521F086BAA7D9A92 /* WanderSupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E12138B68E0CBFA73B271D /* WanderSupabaseClient.swift */; };
@@ -132,6 +134,7 @@
 		5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParserTests.swift; sourceTree = "<group>"; };
 		6E38429E654223C87319C7AB /* WanderPlaceCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategory.swift; sourceTree = "<group>"; };
 		70527AF1590BEF9CB781A16D /* Wander.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wander.entitlements; sourceTree = "<group>"; };
+		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
 		7A02BE0AE86E482916C8F103 /* Wander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wander.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B4A6B29FC1235EFF60DA19D /* SyncStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateMachineTests.swift; sourceTree = "<group>"; };
 		7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenterTests.swift; sourceTree = "<group>"; };
@@ -140,6 +143,7 @@
 		86041408E563554B57347025 /* LinkPlaceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParser.swift; sourceTree = "<group>"; };
 		8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStorePersistence.swift; sourceTree = "<group>"; };
 		8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfilePresentation.swift; sourceTree = "<group>"; };
+		93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountryCanonicalizer.swift; sourceTree = "<group>"; };
 		9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapKitPlaceResolver.swift; sourceTree = "<group>"; };
 		9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceExternalLinksTests.swift; sourceTree = "<group>"; };
 		A090198414BF253FB326D960 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
@@ -326,6 +330,7 @@
 			isa = PBXGroup;
 			children = (
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
+				77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */,
 				1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */,
 			);
 			path = DesignSystem;
@@ -377,6 +382,7 @@
 		E8C412A5051CD9CCBE4E8249 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */,
 				F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */,
 				CED7D1302D938DD4775E8816 /* LocalModels.swift */,
 				8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */,
@@ -541,6 +547,7 @@
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,
 				1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */,
 				A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */,
+				00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */,
 				1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */,
 				812F84570207D139A528319C /* DiscoverScreen.swift in Sources */,
 				05CD519FB3F114E951C4D2DE /* LinkPlaceParser.swift in Sources */,
@@ -582,6 +589,7 @@
 				9800E02122FDAD2796619FC8 /* WanderLocalStore.swift in Sources */,
 				09CE52B8DBA9E3B313E86B4C /* WanderPlaceCategory.swift in Sources */,
 				1892B85AE93D8064CAA26A43 /* WanderRootView.swift in Sources */,
+				D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */,
 				5E4B71CB254F3580D462444C /* WanderStorePersistence.swift in Sources */,
 				DB1ADA31521F086BAA7D9A92 /* WanderSupabaseClient.swift in Sources */,
 				3CF5CCC68B3176026CC6C517 /* WanderTheme.swift in Sources */,

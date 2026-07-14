@@ -3,6 +3,7 @@ import Foundation
 struct ProfileInsights: Equatable {
     let month: Date
     let monthVisitCounts: [Date: Int]
+    let monthPlaceIDs: [Date: [String]]
     let monthSpotCount: Int
     let monthCategoryCount: Int
     let monthCityCount: Int
@@ -29,6 +30,7 @@ struct ProfileSummaryItem: Identifiable, Equatable {
     let title: String
     let count: Int
     let total: Int
+    let placeIDs: [String]
 
     var percentage: Int {
         guard total > 0 else { return 0 }
@@ -59,9 +61,13 @@ enum ProfileInsightsPresenter {
         }
 
         var monthVisitCounts: [Date: Int] = [:]
+        var monthPlaceIDs: [Date: Set<String>] = [:]
         for visit in monthVisits {
             let day = calendar.startOfDay(for: visit.visitedAt)
             monthVisitCounts[day, default: 0] += 1
+            if let userPlace = userPlaceByID[visit.userPlaceID] {
+                monthPlaceIDs[day, default: []].insert(userPlace.placeID)
+            }
         }
 
         let monthUserPlaces = uniqueUserPlaces(
@@ -96,22 +102,27 @@ enum ProfileInsightsPresenter {
         return ProfileInsights(
             month: calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month,
             monthVisitCounts: monthVisitCounts,
+            monthPlaceIDs: monthPlaceIDs.mapValues { $0.sorted() },
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,
             mapPoints: mapPoints,
             placeSummaries: summaries(
-                values: beenPlaces.map { resolvedCategory(userPlace: $0.0, place: $0.1) },
+                values: beenPlaces.map { (resolvedCategory(userPlace: $0.0, place: $0.1), $0.1.id) },
                 title: { WanderPlaceCategory.broadCategory(for: $0) },
                 total: beenPlaces.count
             ),
             citySummaries: summaries(
-                values: beenPlaces.compactMap { normalized($0.1.locality) },
+                values: beenPlaces.compactMap { item in
+                    normalized(item.1.locality).map { ($0, item.1.id) }
+                },
                 title: { $0 },
                 total: beenPlaces.count
             ),
             countrySummaries: summaries(
-                values: beenPlaces.compactMap { normalized($0.1.country) },
+                values: beenPlaces.compactMap { item in
+                    CountryCanonicalizer.canonicalName(item.1.country).map { ($0, item.1.id) }
+                },
                 title: { $0 },
                 total: beenPlaces.count
             )
@@ -157,13 +168,19 @@ enum ProfileInsightsPresenter {
     }
 
     private static func summaries(
-        values: [String],
+        values: [(value: String, placeID: String)],
         title: (String) -> String,
         total: Int
     ) -> [ProfileSummaryItem] {
-        let counts = Dictionary(grouping: values, by: { $0 }).mapValues(\.count)
-        return counts.map { key, count in
-            ProfileSummaryItem(id: key, title: title(key), count: count, total: total)
+        let groups = Dictionary(grouping: values, by: \.value)
+        return groups.map { key, group in
+            ProfileSummaryItem(
+                id: key,
+                title: title(key),
+                count: group.count,
+                total: total,
+                placeIDs: Array(Set(group.map(\.placeID))).sorted()
+            )
         }
         .sorted { lhs, rhs in
             if lhs.count != rhs.count { return lhs.count > rhs.count }

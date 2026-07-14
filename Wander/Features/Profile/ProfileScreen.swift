@@ -19,6 +19,7 @@ struct ProfileScreen: View {
     @State private var listMode: GraphListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
     @State private var savedListMode: SavedPlacesListMode?
+    @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
 
@@ -48,6 +49,12 @@ struct ProfileScreen: View {
                 graphAction: { socialGraphTab = $0 },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
+                },
+                calendarDateAction: { date, placeIDs in
+                    placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                },
+                mapSummaryAction: { kind, item in
+                    placeCollectionRoute = .mapSummary(kind: kind, item: item)
                 }
             )
                 .sheet(isPresented: $showsSettings) {
@@ -89,6 +96,12 @@ struct ProfileScreen: View {
                 }
                 .navigationDestination(item: $savedListMode) { mode in
                     SavedPlacesListScreen(mode: mode)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+                .navigationDestination(item: $placeCollectionRoute) { route in
+                    SavedPlacesListScreen(collection: route)
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
@@ -996,11 +1009,35 @@ private enum SavedPlacesListMode: String, Identifiable {
     }
 }
 
+private struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let placeIDs: [String]
+
+    static func calendar(date: Date, placeIDs: [String], calendar: Calendar = .current) -> Self {
+        let day = calendar.startOfDay(for: date)
+        return ProfilePlaceCollectionRoute(
+            id: "calendar-\(day.timeIntervalSince1970)",
+            title: date.formatted(.dateTime.month(.wide).day().year()),
+            placeIDs: placeIDs
+        )
+    }
+
+    static func mapSummary(kind: ProfileMapSummaryKind, item: ProfileSummaryItem) -> Self {
+        ProfilePlaceCollectionRoute(
+            id: "map-\(kind.rawValue)-\(item.id)",
+            title: item.title,
+            placeIDs: item.placeIDs
+        )
+    }
+}
+
 private struct SavedPlacesListScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let mode: SavedPlacesListMode
+    let collection: ProfilePlaceCollectionRoute?
     @State private var query = ""
     @State private var selectedCategory: String?
     @State private var selectedMetadataTag: String?
@@ -1009,9 +1046,20 @@ private struct SavedPlacesListScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
 
+    init(mode: SavedPlacesListMode) {
+        self.mode = mode
+        self.collection = nil
+    }
+
+    init(collection: ProfilePlaceCollectionRoute) {
+        self.mode = .been
+        self.collection = collection
+    }
+
     private var places: [VisiblePlace] {
         store.currentUserVisiblePlaces
             .filter { $0.userPlace.status == mode.status }
+            .filter(matchesCollection)
             .filter(matchesSelectedCategory)
             .filter(matchesSelectedMetadataTag)
             .filter(matchesQuery)
@@ -1021,7 +1069,9 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var allModePlaces: [VisiblePlace] {
-        store.currentUserVisiblePlaces.filter { $0.userPlace.status == mode.status }
+        store.currentUserVisiblePlaces
+            .filter { $0.userPlace.status == mode.status }
+            .filter(matchesCollection)
     }
 
     private var categories: [String] {
@@ -1073,8 +1123,22 @@ private struct SavedPlacesListScreen: View {
             }
         }
         .wanderScreen()
-        .navigationTitle(mode.title)
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var navigationTitle: String {
+        collection?.title ?? mode.title
+    }
+
+    private func matchesCollection(_ visiblePlace: VisiblePlace) -> Bool {
+        guard let collection else { return true }
+        let acceptedIDs = Set(collection.placeIDs)
+        var placeIDs = [visiblePlace.place.id, visiblePlace.place.localID]
+        if let serverID = visiblePlace.place.serverID {
+            placeIDs.append(serverID)
+        }
+        return !acceptedIDs.isDisjoint(with: placeIDs)
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -1113,7 +1177,7 @@ private struct SavedPlacesListScreen: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("search \(mode.title.lowercased())", text: $query)
+            TextField("search \(navigationTitle.lowercased())", text: $query)
                 .textFieldStyle(.plain)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

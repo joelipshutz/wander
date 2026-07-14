@@ -14,18 +14,24 @@ struct ProfileOwnerHome: View {
     let settingsAction: () -> Void
     let graphAction: (ProfileSocialGraphTab) -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
-
-    private var shareURL: URL {
-        URL(string: "recme://profiles/\(profile.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? profile.id)")!
-    }
+    let calendarDateAction: (Date, [String]) -> Void
+    let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
                 savedPlacesSection
-                ProfileCalendarSection(insights: insights, selectedMonth: $selectedMonth)
-                ProfileMapSection(insights: insights, beenCount: stats.been)
+                ProfileCalendarSection(
+                    insights: insights,
+                    selectedMonth: $selectedMonth,
+                    dateAction: calendarDateAction
+                )
+                ProfileMapSection(
+                    insights: insights,
+                    beenCount: stats.been,
+                    summaryAction: mapSummaryAction
+                )
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
@@ -53,15 +59,17 @@ struct ProfileOwnerHome: View {
 
                     ProfileHeaderActionButton(systemImage: "pencil", accessibilityLabel: "Edit profile", action: editAction)
 
-                    ShareLink(
-                        item: shareURL,
-                        subject: Text(profile.displayName),
-                        message: Text("See @\(profile.handle) on rec.me")
+                    if let shareContent = WanderShareContent.profile(
+                        id: profile.id,
+                        displayName: profile.displayName,
+                        handle: profile.handle
                     ) {
-                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                        WanderShareButton(content: shareContent) {
+                            ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Share profile")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share profile")
 
                     ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
                 }
@@ -264,6 +272,7 @@ private struct OwnerProfileSaveTile: View {
 private struct ProfileCalendarSection: View {
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
+    let dateAction: (Date, [String]) -> Void
 
     private var calendar: Calendar { .current }
     private var weekdays: [String] { calendar.veryShortStandaloneWeekdaySymbols }
@@ -301,7 +310,18 @@ private struct ProfileCalendarSection: View {
                 }
 
                 ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
-                    ProfileCalendarDayCell(date: date, visitCount: date.flatMap { insights.monthVisitCounts[calendar.startOfDay(for: $0)] })
+                    if let date {
+                        let day = calendar.startOfDay(for: date)
+                        Button {
+                            dateAction(date, insights.monthPlaceIDs[day] ?? [])
+                        } label: {
+                            ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows places from this date")
+                    } else {
+                        ProfileCalendarDayCell(date: nil, visitCount: nil)
+                    }
                 }
             }
 
@@ -427,7 +447,7 @@ private struct ProfileCalendarDayCell: View {
     }
 }
 
-private enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
+enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
     case places
     case cities
     case countries
@@ -439,6 +459,7 @@ private enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
 private struct ProfileMapSection: View {
     let insights: ProfileInsights
     let beenCount: Int
+    let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
 
     var body: some View {
@@ -496,7 +517,13 @@ private struct ProfileMapSection: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(summaryItems.enumerated()), id: \.element.id) { index, item in
-                        ProfileMapSummaryRow(item: item)
+                        Button {
+                            summaryAction(selectedSummary, item)
+                        } label: {
+                            ProfileMapSummaryRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Shows matching Been places")
                         if index < summaryItems.count - 1 {
                             Divider().overlay(WanderTheme.borderHairline.color)
                         }
@@ -537,6 +564,7 @@ private struct ProfileMapSummaryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
                 Text("\(item.count) \(item.count == 1 ? "place" : "places")")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -545,6 +573,9 @@ private struct ProfileMapSummaryRow: View {
             Text("\(item.percentage)%")
                 .font(.system(size: 15, weight: .black))
                 .foregroundStyle(WanderTheme.terracotta.color)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 58)

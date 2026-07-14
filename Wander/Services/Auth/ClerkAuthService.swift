@@ -95,30 +95,6 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
-    func updateIdentity(displayName: String, handle: String) async throws {
-        #if canImport(ClerkKit)
-        guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
-        guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
-
-        let parts = displayName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ", omittingEmptySubsequences: true)
-            .map(String.init)
-        let firstName = parts.first
-        let lastName = parts.count > 1 ? parts.dropFirst().joined(separator: " ") : nil
-        _ = try await user.update(
-            .init(
-                username: handle.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")),
-                firstName: firstName,
-                lastName: lastName
-            )
-        )
-        await refreshSession()
-        #else
-        throw AuthSessionError.notConfigured
-        #endif
-    }
-
     func deleteAccount() async throws {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }

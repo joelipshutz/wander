@@ -19,6 +19,8 @@ struct SupabaseProfileRepository: ProfileRepository {
         let response: RemoteCurrentProfileDTO = try await rpc.call(
             "update_own_profile",
             params: UpdateOwnProfileParams(
+                displayName: update.displayName,
+                handle: update.handle,
                 bio: update.bio,
                 homeArea: update.homeArea,
                 defaultVisibility: update.defaultVisibility?.rawValue,
@@ -867,12 +869,16 @@ private struct SearchProfilesParams: Encodable {
 private struct EmptyParams: Encodable {}
 
 private struct UpdateOwnProfileParams: Encodable {
+    let displayName: String?
+    let handle: String?
     let bio: String?
     let homeArea: String?
     let defaultVisibility: String?
     let isPrivateProfile: Bool?
 
     enum CodingKeys: String, CodingKey {
+        case displayName = "input_display_name"
+        case handle = "input_handle"
         case bio = "input_bio"
         case homeArea = "input_home_area"
         case defaultVisibility = "input_default_visibility"

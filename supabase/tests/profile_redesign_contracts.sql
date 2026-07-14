@@ -2,27 +2,27 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(39);
+select plan(44);
 
 select is(
-  (select prosecdef from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure),
   false,
   'profile updates run as the authenticated caller'
 );
 
 select ok(
   (select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
-   from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean)'::regprocedure),
+   from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure),
   'profile updates pin search_path'
 );
 
 select ok(
-  has_function_privilege('authenticated', 'public.update_own_profile(text,text,text,boolean)', 'execute'),
+  has_function_privilege('authenticated', 'public.update_own_profile(text,text,text,boolean,text,text)', 'execute'),
   'authenticated can update their profile'
 );
 
 select ok(
-  not has_function_privilege('anon', 'public.update_own_profile(text,text,text,boolean)', 'execute'),
+  not has_function_privilege('anon', 'public.update_own_profile(text,text,text,boolean,text,text)', 'execute'),
   'anonymous callers cannot update profiles'
 );
 
@@ -102,7 +102,7 @@ select ok(
 );
 
 insert into public.profiles (
-  id, handle, display_name, avatar_url, avatar_storage_path
+  id, handle, display_name, avatar_url, avatar_url_source, avatar_storage_path
 )
 values
   (
@@ -110,10 +110,11 @@ values
     'redesignowner',
     'Redesign Owner',
     'https://rugmtlgufrhlxwfkumhw.supabase.co/storage/v1/object/public/profile-avatars/user_profile_redesign_owner/avatar.jpg?v=test',
+    'app',
     'user_profile_redesign_owner/avatar.jpg'
   ),
-  ('user_profile_redesign_muted', 'redesignmuted', 'Muted Member', null, null),
-  ('user_profile_redesign_other', 'redesignother', 'Other Member', null, null);
+  ('user_profile_redesign_muted', 'redesignmuted', 'Muted Member', null, 'clerk', null),
+  ('user_profile_redesign_other', 'redesignother', 'Other Member', null, 'clerk', null);
 
 insert into public.places (
   id, canonical_name, category, address, locality, region, country,
@@ -149,9 +150,34 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_profile_redesign_owner', true);
 
 select is(
-  public.update_own_profile('Places I love', 'Los Angeles', 'mutuals', true)->>'bio',
+  public.update_own_profile('Places I love', 'Los Angeles', 'mutuals', true, 'Ryan Tester', 'ryan_tester')->>'bio',
   'Places I love',
   'owner can update profile bio'
+);
+
+select is(
+  (select display_name from public.profiles where id = 'user_profile_redesign_owner'),
+  'Ryan Tester',
+  'owner can persist display name'
+);
+
+select is(
+  (select handle from public.profiles where id = 'user_profile_redesign_owner'),
+  'ryan_tester',
+  'owner can persist a unique normalized handle'
+);
+
+select is(
+  public.update_own_profile(null, null, null, null, null, null)->>'bio',
+  'Places I love',
+  'partial preference updates preserve profile details'
+);
+
+select throws_ok(
+  $$ select public.update_own_profile(null, null, null, null, null, 'redesignother') $$,
+  '23505',
+  'handle_taken',
+  'owner cannot claim another active profile handle'
 );
 
 select is(
@@ -176,6 +202,24 @@ select ok(
   (select created_at is not null and is_private_profile from public.current_profile()),
   'current profile returns membership date and privacy state'
 );
+
+reset role;
+select app.mirror_clerk_profile(
+  'evt_profile_identity_preservation',
+  'user.updated',
+  '2099-01-01T00:00:00Z',
+  'user_profile_redesign_owner',
+  'clerk_replacement',
+  'Clerk Replacement',
+  null
+);
+select is(
+  (select handle || '|' || display_name from public.profiles where id = 'user_profile_redesign_owner'),
+  'ryan_tester|Ryan Tester',
+  'Clerk updates preserve app-owned profile identity'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_profile_redesign_owner', true);
 
 select is(
   (select bio from public.profiles where id = 'user_profile_redesign_other'),
@@ -210,6 +254,9 @@ select public.register_push_token(
   '8989898989898989898989898989898989898989898989898989898989898989',
   'sandbox',
   'com.grayline.wander'
+);
+select public.update_notification_preferences(
+  '{"push_enabled": true, "social_graph_enabled": true}'::jsonb
 );
 
 reset role;
@@ -291,7 +338,11 @@ values (
   'evt_rec89_newer_update',
   'user.updated',
   '2031-01-01T00:00:00Z'
-);
+)
+on conflict (clerk_user_id) do update set
+  last_event_id = excluded.last_event_id,
+  last_event_type = excluded.last_event_type,
+  last_event_timestamp = excluded.last_event_timestamp;
 
 select is(
   (select count(*)::integer from public.account_storage_objects(
@@ -362,6 +413,6 @@ select ok(
   'hard delete preserves shared canonical place data'
 );
 
-select * from finish();
+select * from finish(true);
 
 rollback;

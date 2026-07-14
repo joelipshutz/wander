@@ -11161,3 +11161,44 @@ Handoff, 2026-07-13 18:39 PDT:
 - Moved Linear REC-89 to In Review, confirmed PR #86 is attached, and added the implementation, hosted migration, webhook, XCTest, universal build, visual QA, and known-gap evidence.
 - Opened `/private/tmp/recme-rec89-profile-redesign/Wander.xcodeproj` in Xcode. That worktree is checked out on `codex/rec-89-profile-redesign`; the root REC-81 checkout remains untouched.
 - No required implementation work remains on the branch. Ryan's next step is device/account testing in Xcode; merge and TestFlight remain separate explicit actions.
+
+## 2026-07-13 19:24 PDT - Codex - REC-89 Device Feedback Follow-up
+
+Agent: Codex
+Branch: `codex/rec-89-profile-redesign`
+Worktree: `/private/tmp/recme-rec89-profile-redesign`
+Linear: `REC-89`, moved from In Review back to In Progress
+PR: #86, https://github.com/joelipshutz/wander/pull/86
+
+Goal: address six issues found during Xcode testing: create reusable native share infrastructure, add calendar-date place drilldowns, add map-summary place drilldowns, canonicalize country metadata, fix Clerk-backed name/username editing, and add a notification-row disclosure caret.
+
+Starting status:
+
+- Fetched `origin` and confirmed the isolated worktree is clean at `fc2482bc3`; the root REC-81 checkout and other worktrees remain untouched.
+- No overlapping uncommitted work exists in this worktree. This pass will continue on the existing REC-89 branch and PR.
+- The current calendar and map summaries are display-only, profile sharing is implemented directly with `ShareLink`, and the edit failure occurs before the local name/handle mutation when Clerk rejects the combined identity update.
+- Investigation will trace the Clerk SDK/profile ownership contract before changing identity persistence. No backend or schema change will be made without corresponding contract tests and hosted verification.
+
+Expected files:
+
+- `Wander/Features/Profile/` profile insights, navigation, edit, and place-list surfaces
+- Shared share infrastructure under `Wander/DesignSystem/` or `Wander/Services/`
+- `Wander/Services/Auth/` only if required by the confirmed identity-update root cause
+- `Wander/Features/Settings/ProfileSettingsViews.swift`
+- Matching XCTest files, generated Xcode project membership when needed, and this work log
+
+Implementation checkpoint, 2026-07-13 21:26 PDT:
+
+- Added `WanderShareButton` and typed profile/place share content as the sole native sharing boundary. Profile and both place-share surfaces now use it, and `NavigationContractTests` fails if a future direct `ShareLink` is added outside the shared component.
+- Made every real calendar date navigable to a searchable saved-place list, including honest empty dates. Made every category, city, and country summary row navigate to its exact deduplicated Been-place list and reuse the existing place detail surface.
+- Added Locale-backed country canonicalization for full names plus ISO alpha-2/alpha-3 variants, including US/U.S./USA and UK/GB/GBR. Summary counts and drilldowns now deduplicate by canonical country and place id.
+- Root-caused name/username failures to Clerk's production environment disabling mutable `first_name`, `last_name`, and `username` fields. Moved app-owned display name and handle updates into the authenticated Supabase `update_own_profile` RPC, with atomic validation, duplicate-handle rejection, partial-field preservation, and remote-first local mutation. Same-user Clerk session refreshes now preserve persisted app-owned identity across relaunches; user-id changes still adopt the new session identity.
+- Added the Settings disclosure caret for Notifications and verified its layout on iPhone 17 Pro and iPhone 17e (`/private/tmp/rec89-followup-settings-17pro.png`, `/private/tmp/rec89-followup-settings-17e.png`). No clipping or overlap was observed.
+
+Backend and validation checkpoint, 2026-07-13 21:26 PDT:
+
+- Applied hosted migration `20260714033000_profile_identity_updates.sql` to linked Supabase project `rugmtlgufrhlxwfkumhw`. The six-argument owner RPC remains compatible with existing four-argument callers, uses security invoker with a pinned path, and the recreated Clerk mirror remains a narrow security-definer function that preserves app-owned display name, handle, and avatar.
+- Hosted rollback-wrapped pgTAP passed all 44 assertions. The linked authenticated smoke test passed after isolating its reserved users and explicitly restoring the smoke save following REC-88's private-profile visibility trigger. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- Final clean iPhone 17 Pro / iOS 26.5 XCTest run passed 310 tests with 0 failures (`/private/tmp/DerivedData-rec89-followup-final/Logs/Test/Test-Wander-2026.07.13_21-23-16--0700.xcresult`). The generic Simulator build previously passed for arm64 and x86_64 at `/private/tmp/DerivedData-rec89-followup-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Migration ordering depends on REC-88 versions `20260714013000`, `20260714022000`, `20260714024500`, and `20260714031500` landing before this PR. Those hosted migrations are already present, but their source remains on `codex/rec-88-visit-friends-mockup`; no REC-88 files or commits were imported into REC-89.
+- No TestFlight upload, build-number bump, merge, or Slack announcement was requested or performed. Next step: push PR #86, return REC-89 to In Review, and let Ryan test `codex/rec-89-profile-redesign` from its isolated Xcode worktree.

@@ -21,6 +21,33 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testSharedProfileContentBuildsTheRegisteredDeepLinkAndCopy() throws {
+        let content = try XCTUnwrap(
+            WanderShareContent.profile(id: "user joe", displayName: "Joe Example", handle: "joe")
+        )
+
+        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20joe")
+        XCTAssertEqual(content.subject, "Joe Example")
+        XCTAssertEqual(content.message, "See @joe on rec.me")
+        XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
+    }
+
+    func testNativeSharingStaysBehindTheSharedShareComponent() throws {
+        let appRoot = projectRoot.appendingPathComponent("Wander")
+        let sharedComponent = appRoot.appendingPathComponent("DesignSystem/WanderShareButton.swift").standardizedFileURL
+        let directShareLinkFiles = try swiftFiles(in: appRoot).filter { file in
+            guard file.standardizedFileURL != sharedComponent else { return false }
+            return try String(contentsOf: file).contains("ShareLink(")
+        }
+
+        XCTAssertEqual(
+            directShareLinkFiles.map(\.lastPathComponent),
+            [],
+            "Use WanderShareButton so native sharing copy and behavior stay consistent."
+        )
+    }
+
+    @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
@@ -207,5 +234,22 @@ final class NavigationContractTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func swiftFiles(in directory: URL) throws -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        ) else {
+            return []
+        }
+
+        return try enumerator.compactMap { item in
+            guard let file = item as? URL,
+                  file.pathExtension == "swift",
+                  try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
+            else { return nil }
+            return file
+        }
     }
 }

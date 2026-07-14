@@ -183,7 +183,7 @@ private struct PlaceProfilePreviewCard: View {
                     }
 
                     if let shareURL {
-                        ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
+                        WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15, weight: .black))
                                 .frame(width: 36, height: 36)
@@ -790,7 +790,7 @@ private struct PlaceProfileMapHeader: View {
                         }
 
                         if let shareURL {
-                            ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
+                            WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                                 Image(systemName: "square.and.arrow.up")
                                     .font(.system(size: 16, weight: .black))
                                     .frame(width: 44, height: 44)

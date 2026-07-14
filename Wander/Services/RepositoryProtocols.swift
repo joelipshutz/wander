@@ -882,17 +882,23 @@ struct ProfileAvatarResult: Equatable {
 }
 
 struct ProfileDetailsUpdate: Equatable {
+    let displayName: String?
+    let handle: String?
     let bio: String?
     let homeArea: String?
     let defaultVisibility: PlaceVisibility?
     let isPrivateProfile: Bool?
 
     init(
+        displayName: String? = nil,
+        handle: String? = nil,
         bio: String? = nil,
         homeArea: String? = nil,
         defaultVisibility: PlaceVisibility? = nil,
         isPrivateProfile: Bool? = nil
     ) {
+        self.displayName = displayName
+        self.handle = handle
         self.bio = bio
         self.homeArea = homeArea
         self.defaultVisibility = defaultVisibility

@@ -131,16 +131,11 @@ protocol AuthSessionProviding: AnyObject {
     var canPresentNativeAuth: Bool { get }
     func refreshSession() async
     func signOut() async throws
-    func updateIdentity(displayName: String, handle: String) async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
 }
 
 extension AuthSessionProviding {
-    func updateIdentity(displayName: String, handle: String) async throws {
-        throw AuthSessionError.notConfigured
-    }
-
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -239,12 +234,6 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
             signOutError = "Could not sign out. Try again."
             throw error
         }
-    }
-
-    func updateIdentity(displayName: String, handle: String) async throws {
-        try await provider.updateIdentity(displayName: displayName, handle: handle)
-        await provider.refreshSession()
-        state = provider.state
     }
 
     func deleteAccount() async throws {

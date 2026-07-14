@@ -180,6 +180,34 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUser.syncState, .synced)
     }
 
+    func testSignedInSessionRefreshPreservesPersistedAppOwnedIdentityForSameUser() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let clerkSession = AuthSession(
+            userID: "user_live",
+            displayName: "Old Clerk Name",
+            handle: "old_clerk_handle",
+            email: "user@example.com"
+        )
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(clerkSession))
+        firstStore.updateCurrentUserProfile(displayName: "Ryan Tester", handle: "ryan_tester")
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        relaunchedStore.apply(authState: .signedIn(clerkSession))
+
+        XCTAssertEqual(relaunchedStore.currentUser.displayName, "Ryan Tester")
+        XCTAssertEqual(relaunchedStore.currentUser.handle, "ryan_tester")
+
+        relaunchedStore.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_other", displayName: "Other User", handle: "other_user")
+            )
+        )
+        XCTAssertEqual(relaunchedStore.currentUser.displayName, "Other User")
+        XCTAssertEqual(relaunchedStore.currentUser.handle, "other_user")
+    }
+
     func testRemoteCurrentProfileHydratesAvatarURLWithoutPendingSync() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(
@@ -288,6 +316,51 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(store.currentUser.avatarURL)
         XCTAssertNil(store.profileState(for: "user_live")?.shell.avatarURL)
         XCTAssertEqual(store.currentUser.defaultVisibility, .mutuals)
+    }
+
+    func testPartialProfileUpdatePreservesUnspecifiedLocalDetails() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.updateCurrentUserProfile(bio: "Keep this bio", homeArea: "Santa Monica")
+
+        try await store.updateCurrentUserDetails(
+            ProfileDetailsUpdate(defaultVisibility: .mutuals, isPrivateProfile: true),
+            backend: nil
+        )
+
+        XCTAssertEqual(store.currentUser.bio, "Keep this bio")
+        XCTAssertEqual(store.currentUser.homeArea, "Santa Monica")
+    }
+
+    func testProfileIdentityUpdatePersistsThroughTheProfileDetailsPath() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+
+        try await store.updateCurrentUserDetails(
+            ProfileDetailsUpdate(displayName: "Ryan Tester", handle: "ryan_tester"),
+            backend: nil
+        )
+
+        XCTAssertEqual(store.currentUser.displayName, "Ryan Tester")
+        XCTAssertEqual(store.currentUser.handle, "ryan_tester")
+        XCTAssertEqual(store.profileState(for: store.currentUser.id)?.shell.displayName, "Ryan Tester")
+        XCTAssertEqual(store.profileState(for: store.currentUser.id)?.shell.handle, "ryan_tester")
+    }
+
+    func testRejectedRemoteProfileIdentityDoesNotOverwriteTheLocalProfile() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let originalName = store.currentUser.displayName
+        let originalHandle = store.currentUser.handle
+        let backend = WanderBackend(profileRepository: FakeProfileRepository(updateError: TestError.expected))
+
+        do {
+            try await store.updateCurrentUserDetails(
+                ProfileDetailsUpdate(displayName: "Duplicate Name", handle: "already_taken"),
+                backend: backend
+            )
+            XCTFail("Expected the remote update to fail")
+        } catch {
+            XCTAssertEqual(store.currentUser.displayName, originalName)
+            XCTAssertEqual(store.currentUser.handle, originalHandle)
+        }
     }
 
     func testSignedInSessionClaimsGuestSavedPlaces() {
@@ -3833,15 +3906,34 @@ final class WanderStoreTests: XCTestCase {
 private final class FakeProfileRepository: ProfileRepository {
     private let shells: [ProfileShell]
     private let currentProfileResult: LocalProfile?
+    private let updateError: Error?
+    private let updatedProfileResult: LocalProfile?
     private(set) var queries: [String] = []
 
-    init(shells: [ProfileShell] = [], currentProfile: LocalProfile? = nil) {
+    init(
+        shells: [ProfileShell] = [],
+        currentProfile: LocalProfile? = nil,
+        updateError: Error? = nil,
+        updatedProfile: LocalProfile? = nil
+    ) {
         self.shells = shells
         self.currentProfileResult = currentProfile
+        self.updateError = updateError
+        self.updatedProfileResult = updatedProfile
     }
 
     func currentProfile() async throws -> LocalProfile? {
         currentProfileResult
+    }
+
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        if let updateError {
+            throw updateError
+        }
+        guard let updatedProfileResult else {
+            throw WanderRemoteError.notImplemented("fake profile update")
+        }
+        return updatedProfileResult
     }
 
     func profile(id: String) async throws -> ProfileViewState {

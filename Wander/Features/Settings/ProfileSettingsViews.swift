@@ -132,6 +132,9 @@ struct ProfileSettingsHome: View {
                     Spacer()
                     Text(pushNotifications.statusTitle.lowercased())
                         .foregroundStyle(WanderTheme.textMuted.color)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
                 }
             }
             .foregroundStyle(WanderTheme.textInk.color)

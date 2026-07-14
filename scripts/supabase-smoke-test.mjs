@@ -263,7 +263,7 @@ begin
   where n.nspname = 'public'
     and p.proname = 'update_own_profile'
     and pg_get_function_identity_arguments(p.oid) =
-      'input_bio text, input_home_area text, input_default_visibility text, input_is_private_profile boolean';
+      'input_bio text, input_home_area text, input_default_visibility text, input_is_private_profile boolean, input_display_name text, input_handle text';
   if valid is distinct from true then
     raise exception 'profile update metadata contract failed';
   end if;
@@ -277,7 +277,7 @@ do $profile_behavior$
 declare updated jsonb; muted_id text; visible_city text;
 begin
   updated := public.update_own_profile(
-    'Backend smoke-test profile.', 'Test', 'mutuals', true
+    'Backend smoke-test profile.', 'Test', 'mutuals', true, 'Backend Smoke Tester', 'recme_smoke_profile'
   );
   if updated->>'default_visibility' is distinct from 'mutuals'
      or (updated->>'is_private_profile')::boolean is distinct from true then
@@ -298,6 +298,14 @@ begin
   end if;
 
   perform public.unmute_profile(${collaboratorUser});
+  perform public.update_own_profile(null, null, null, false, null, null);
+  update public.user_places up
+  set visibility = 'followers', updated_at = now()
+  from public.places p
+  where up.place_id = p.id
+    and up.user_id = ${smokeUser}
+    and p.source_provider = 'codex_smoke'
+    and p.source_provider_place_id = 'place-list-rpc-smoke';
 end
 $profile_behavior$;
 
@@ -335,7 +343,15 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 do $follower$
-declare resolved uuid;
+declare
+  resolved uuid;
+  can_read boolean;
+  follows_owner boolean;
+  blocked boolean;
+  visible_user_places integer;
+  visible_visits integer;
+  visible_photos integer;
+  visible_places integer;
 begin
   select photo_id into resolved
   from public.first_visible_place_photo((
@@ -343,7 +359,25 @@ begin
     where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
   ));
   if resolved is distinct from '${smokePhotoID}'::uuid then
-    raise exception 'follower preferred-place-photo visibility failed';
+    select app.follows(${collaboratorUser}, ${smokeUser}),
+           app.is_blocked(${collaboratorUser}, ${smokeUser}),
+           app.can_read_user_place(${collaboratorUser}, ${smokeUser}, 'followers')
+      into follows_owner, blocked, can_read;
+    select count(*)::integer into visible_user_places
+      from public.user_places where user_id = ${smokeUser} and deleted_at is null;
+    select count(*)::integer into visible_visits
+      from public.place_visits where id = '${smokeVisitID}'::uuid;
+    select count(*)::integer into visible_photos
+      from public.visit_photos where id = '${smokePhotoID}'::uuid;
+    select count(*)::integer into visible_places
+      from public.places
+      where source_provider = 'codex_smoke' and source_provider_place_id = 'place-list-rpc-smoke';
+    raise exception 'follower preferred-place-photo visibility failed'
+      using detail = format(
+        'current_user=%s follows=%s blocked=%s can_read=%s user_places=%s visits=%s photos=%s places=%s resolved=%s',
+        app.current_user_id(), follows_owner, blocked, can_read, visible_user_places,
+        visible_visits, visible_photos, visible_places, resolved
+      );
   end if;
 end
 $follower$;
@@ -452,6 +486,14 @@ set
   is_private_profile = excluded.is_private_profile,
   deleted_at = null,
   updated_at = now();
+
+delete from public.blocks
+where blocker_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser})
+  and blocked_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser});
+
+delete from public.follows
+where follower_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser})
+  and followed_user_id in (${smokeUser}, ${collaboratorUser}, ${strangerUser});
 
 insert into public.places (
   canonical_name,
@@ -651,17 +693,17 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
         'search_path=public, app' = any(mute_proc.proconfig) as mute_search_path,
         has_function_privilege(
           'authenticated',
-          'public.update_own_profile(text,text,text,boolean)',
+          'public.update_own_profile(text,text,text,boolean,text,text)',
           'execute'
         ) as update_authenticated,
         not has_function_privilege(
           'anon',
-          'public.update_own_profile(text,text,text,boolean)',
+          'public.update_own_profile(text,text,text,boolean,text,text)',
           'execute'
         ) as update_anon_denied
       from pg_proc update_proc
       cross join pg_proc mute_proc
-      where update_proc.oid = 'app.update_own_profile(text,text,text,boolean)'::regprocedure
+      where update_proc.oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure
         and mute_proc.oid = 'app.mute_profile(text)'::regprocedure
     `,
     [],
@@ -685,12 +727,16 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
         'Backend smoke-test profile.',
         'Test',
         'mutuals',
-        true
+        true,
+        'Backend Smoke Tester',
+        'recme_smoke_profile'
       ) as profile
     `,
     [],
     (result) => result.rows[0]?.profile?.default_visibility === "mutuals"
       && result.rows[0]?.profile?.is_private_profile === true
+      && result.rows[0]?.profile?.display_name === "Backend Smoke Tester"
+      && result.rows[0]?.profile?.handle === "recme_smoke_profile"
       && Boolean(result.rows[0]?.profile?.created_at),
   );
 

@@ -81,6 +81,8 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let profile = try await repository.updateCurrentProfile(
             ProfileDetailsUpdate(
+                displayName: "Joe Updated",
+                handle: "joe_updated",
                 bio: "new bio",
                 homeArea: "Los Angeles",
                 defaultVisibility: .mutuals,
@@ -91,6 +93,8 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(profile.bio, "new bio")
         XCTAssertEqual(profile.homeArea, "Los Angeles")
         XCTAssertEqual(rpc.calls.map(\.name), ["update_own_profile"])
+        XCTAssertEqual(rpc.calls[0].body["input_display_name"] as? String, "Joe Updated")
+        XCTAssertEqual(rpc.calls[0].body["input_handle"] as? String, "joe_updated")
         XCTAssertEqual(rpc.calls[0].body["input_bio"] as? String, "new bio")
         XCTAssertEqual(rpc.calls[0].body["input_home_area"] as? String, "Los Angeles")
         XCTAssertEqual(rpc.calls[0].body["input_default_visibility"] as? String, "mutuals")
