@@ -11685,3 +11685,10 @@ Root cause, implementation, and validation, 2026-07-14 00:48 PDT:
 - Joe's previously captured recipient-save failures remain repaired by commit `b27c800f5`: ISO-8601 Supabase payload encoding fixes `accept_shared_visit`, and hosted migration `20260714050000_restore_profile_visible_place_activity.sql` restores the required `profile_visible_places.saved_at` contract. This pass did not change or reset hosted data because the apparent dummy records were local code constants.
 - Regenerated `Wander.xcodeproj` with XcodeGen. Five focused regressions passed, including ISO-8601 acceptance encoding. The final iPhone 17 Pro / iOS 26.5 suite passed 331 tests with 0 failures, and the generic arm64/x86_64 iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. `git diff --check` passes; only the existing traditional-headermap warning remains.
 - No TestFlight build was requested or created. Required physical verification remains: fresh Ryan-to-Joe invitation, three-second banner and inbox recovery, Review/edit/photo/save into Joe's independent visit, Decline on a second invite, and receipt while Joe's profile is private.
+
+Remote handoff, 2026-07-14 00:52 PDT:
+
+- Committed the production follow-up as `ee0d4a834` (`REC-92 fix production invitation inbox routing`) and pushed `codex/rec-92-invitation-inbox` to `origin`.
+- Updated PR #95 with the root-cause and validation report and marked it ready for review: https://github.com/joelipshutz/wander/pull/95.
+- Added the same evidence to Linear `REC-92` and moved it to `In Review` for Ryan/Joe physical-device validation.
+- Opened the exact isolated project `/private/tmp/recme-rec92-invitation-inbox/Wander.xcodeproj` in Xcode. The worktree contains an ignored/untracked local `DerivedData-rec92-focused/` test artifact only; it was not staged or pushed.
