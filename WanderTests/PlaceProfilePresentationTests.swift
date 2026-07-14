@@ -1,3 +1,5 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Wander
 
@@ -27,6 +29,142 @@ final class PlaceProfilePresentationTests: XCTestCase {
             currentUserID: currentUser.id
         )
         XCTAssertEqual(explicitVisitDate.timestamp, visitedAt)
+    }
+
+    @MainActor
+    func testPlacePhotoImageStartsRemoteLoadFromEmptyState() async throws {
+        let loadStarted = expectation(description: "Place photo load started")
+        let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let repository = RecordingPlacePhotoRenderingRepository(
+            imageData: try XCTUnwrap(renderedImage.pngData()),
+            loadStarted: loadStarted
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "test-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/test-photo",
+            width: 1600,
+            height: 1200,
+            authorName: "Test Photographer",
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/test-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let host = UIHostingController(
+            rootView: PlaceProfilePhotoImage(photo: photo, placeName: "Test Place")
+                .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [loadStarted], timeout: 1.0)
+
+        XCTAssertEqual(repository.requestedPhotos, [photo])
+        window.isHidden = true
+    }
+
+    @MainActor
+    func testPlacePhotoImageReportsRemoteDecodeFailureForUserPhotoFallback() async throws {
+        let failureReported = expectation(description: "Place photo failure reported")
+        let repository = FailingPlacePhotoRenderingRepository()
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "failed-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/failed-photo",
+            width: 1600,
+            height: 1200,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/failed-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let host = UIHostingController(
+            rootView: PlaceProfilePhotoImage(
+                photo: photo,
+                placeName: "Failed Test Place",
+                onLoadFailure: { failedPhoto in
+                    XCTAssertEqual(failedPhoto, photo)
+                    failureReported.fulfill()
+                }
+            )
+            .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [failureReported], timeout: 1.0)
+        window.isHidden = true
+    }
+
+    @MainActor
+    func testWidePlacePhotoKeepsHeaderControlsInsidePhoneWidth() async throws {
+        let loadStarted = expectation(description: "Wide place photo load started")
+        let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2_400, height: 600)).image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2_400, height: 600))
+        }
+        let repository = RecordingPlacePhotoRenderingRepository(
+            imageData: try XCTUnwrap(renderedImage.jpegData(compressionQuality: 0.8)),
+            loadStarted: loadStarted
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "wide-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/wide-photo",
+            width: 2_400,
+            height: 600,
+            authorName: "Test Photographer",
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/wide-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let recorder = PlacePhotoControlFrameRecorder()
+        let host = UIHostingController(
+            rootView: PlacePhotoControlLayoutProbe(photo: photo, recorder: recorder)
+                .environmentObject(backend)
+        )
+        let phoneWidth: CGFloat = 393
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: phoneWidth, height: 268))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [loadStarted], timeout: 1.0)
+        try await Task.sleep(for: .milliseconds(350))
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        let trailingControlFrame = try XCTUnwrap(recorder.frames.last)
+        XCTAssertGreaterThanOrEqual(trailingControlFrame.minX, 0)
+        XCTAssertLessThanOrEqual(trailingControlFrame.maxX, phoneWidth)
+        window.isHidden = true
     }
 
     func testCommonTagsRequireUserAndTrustedOrTwoTrustedSupports() {
@@ -303,5 +441,96 @@ final class PlaceProfilePresentationTests: XCTestCase {
     private func json<T: Encodable>(_ value: T) -> String {
         let data = try! JSONEncoder().encode(value)
         return String(data: data, encoding: .utf8)!
+    }
+}
+
+@MainActor
+private final class RecordingPlacePhotoRenderingRepository: PlacePhotoRepository {
+    let imageData: Data
+    let loadStarted: XCTestExpectation
+    private(set) var requestedPhotos: [PlacePhoto] = []
+
+    init(imageData: Data, loadStarted: XCTestExpectation) {
+        self.imageData = imageData
+        self.loadStarted = loadStarted
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected metadata request")
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected fallback metadata request")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        requestedPhotos.append(photo)
+        loadStarted.fulfill()
+        return imageData
+    }
+}
+
+@MainActor
+private final class FailingPlacePhotoRenderingRepository: PlacePhotoRepository {
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected metadata request")
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("Unexpected fallback metadata request")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        Data([0x00, 0x01, 0x02])
+    }
+}
+
+@MainActor
+private final class PlacePhotoControlFrameRecorder {
+    var frames: [CGRect] = []
+}
+
+private struct PlacePhotoControlLayoutProbe: View {
+    let photo: PlacePhoto
+    let recorder: PlacePhotoControlFrameRecorder
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            PlaceProfilePhotoImage(photo: photo, placeName: "Wide Test Place")
+
+            HStack {
+                Color.blue
+                    .frame(width: 42, height: 42)
+
+                Spacer()
+
+                Color.green
+                    .frame(width: 42, height: 42)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: PlacePhotoTrailingControlFrameKey.self,
+                                value: proxy.frame(in: .global)
+                            )
+                        }
+                    }
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 268)
+        .clipped()
+        .onPreferenceChange(PlacePhotoTrailingControlFrameKey.self) { frame in
+            recorder.frames.append(frame)
+        }
+    }
+}
+
+private struct PlacePhotoTrailingControlFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .null
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }

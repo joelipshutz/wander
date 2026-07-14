@@ -16,6 +16,20 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(result.map(\.id), ["up_new", "up_a", "up_b"])
     }
 
+    func testLatestActivityDemotesImplausibleFutureDates() {
+        let now = date("2026-07-13T12:00:00Z")
+        let future = visiblePlace(id: "up_future", savedAt: date("2026-07-14T12:00:00Z"))
+        let current = visiblePlace(id: "up_current", savedAt: date("2026-07-13T11:00:00Z"))
+        let old = visiblePlace(id: "up_old", savedAt: date("2026-07-10T12:00:00Z"))
+
+        let result = DiscoverLatestActivityPresentation.places(
+            from: [future, old, current],
+            relativeTo: now
+        )
+
+        XCTAssertEqual(result.map(\.id), ["up_current", "up_old", "up_future"])
+    }
+
     func testLatestActivityFormatsSavedTimeWithoutSyntheticNowCopy() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -27,6 +41,8 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(timestamp("2026-07-09T12:00:00Z", now: now, calendar: calendar), "3d ago")
         XCTAssertEqual(timestamp("2026-01-02T12:00:00Z", now: now, calendar: calendar), "Jan 2")
         XCTAssertEqual(timestamp("2025-12-31T12:00:00Z", now: now, calendar: calendar), "Dec 31, 2025")
+        XCTAssertEqual(timestamp("2026-07-12T12:02:00Z", now: now, calendar: calendar), "just now")
+        XCTAssertEqual(timestamp("2026-07-13T12:00:00Z", now: now, calendar: calendar), "Jul 13")
     }
 
     func testDeterministicParserMapsQueryToAllowedFiltersOnly() async throws {

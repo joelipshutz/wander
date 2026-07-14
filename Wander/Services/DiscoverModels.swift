@@ -161,12 +161,20 @@ struct DiscoverResults {
 }
 
 enum DiscoverLatestActivityPresentation {
-    static func places(from places: [VisiblePlace], limit: Int = 10) -> [VisiblePlace] {
+    private static let futureClockSkewTolerance: TimeInterval = 5 * 60
+
+    static func places(
+        from places: [VisiblePlace],
+        limit: Int = 10,
+        relativeTo now: Date = .now
+    ) -> [VisiblePlace] {
         Array(
             places
                 .sorted { lhs, rhs in
-                    if lhs.userPlace.savedAt != rhs.userPlace.savedAt {
-                        return lhs.userPlace.savedAt > rhs.userPlace.savedAt
+                    let lhsDate = sortDate(for: lhs.userPlace.savedAt, relativeTo: now)
+                    let rhsDate = sortDate(for: rhs.userPlace.savedAt, relativeTo: now)
+                    if lhsDate != rhsDate {
+                        return lhsDate > rhsDate
                     }
                     return lhs.userPlace.id < rhs.userPlace.id
                 }
@@ -179,6 +187,10 @@ enum DiscoverLatestActivityPresentation {
         relativeTo now: Date = .now,
         calendar: Calendar = .current
     ) -> String {
+        if savedAt.timeIntervalSince(now) > futureClockSkewTolerance {
+            return absoluteDateText(for: savedAt, relativeTo: now, calendar: calendar)
+        }
+
         let elapsed = max(0, now.timeIntervalSince(savedAt))
 
         if elapsed < 60 {
@@ -194,6 +206,14 @@ enum DiscoverLatestActivityPresentation {
             return "\(Int(elapsed / (24 * 60 * 60)))d ago"
         }
 
+        return absoluteDateText(for: savedAt, relativeTo: now, calendar: calendar)
+    }
+
+    private static func sortDate(for savedAt: Date, relativeTo now: Date) -> Date {
+        savedAt.timeIntervalSince(now) > futureClockSkewTolerance ? .distantPast : min(savedAt, now)
+    }
+
+    private static func absoluteDateText(for savedAt: Date, relativeTo now: Date, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "en_US_POSIX")

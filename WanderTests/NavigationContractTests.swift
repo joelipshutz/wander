@@ -100,6 +100,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
     }
 
+    func testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush() throws {
+        let mapScreen = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
+
+        XCTAssertTrue(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
+        XCTAssertFalse(mapScreen.contains(".navigationDestination(isPresented: placeProfileDestinationBinding)"))
+    }
+
     @MainActor
     func testPlaceProfileEdgeSwipeBackGestureOnlyTriggersFromLeftEdge() {
         XCTAssertTrue(
@@ -142,5 +149,24 @@ final class NavigationContractTests: XCTestCase {
             PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: 62),
             62
         )
+    }
+
+    @MainActor
+    func testPlaceProfileFullViewKeepsScrollableBottomInset() {
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 0),
+            64
+        )
+
+        XCTAssertEqual(
+            PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
+            66
+        )
+    }
+
+    private var projectRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

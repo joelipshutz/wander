@@ -30,7 +30,7 @@ struct AddScreen: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
-    @State private var saveToast: AddSaveToast?
+    @State private var saveToast: SaveSyncFeedback?
 
     init(resetToken: UUID = UUID()) {
         self.resetToken = resetToken
@@ -591,11 +591,11 @@ struct AddScreen: View {
     }
 
     private func showSaveToast(for result: SaveResult?) {
-        let toast = AddSaveToast(syncState: result?.syncState ?? .localOnly, canSignIn: !auth.isSignedIn)
+        let toast = SaveSyncFeedback(syncState: result?.syncState ?? .localOnly, canSignIn: !auth.isSignedIn)
         saveToast = toast
 
         let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(result?.syncState == .serverDenied ? .warning : .success)
+        generator.notificationOccurred(toast.usesWarningHaptic ? .warning : .success)
 
         Task {
             try? await Task.sleep(nanoseconds: toast.dismissDelayNanoseconds)
@@ -1109,54 +1109,8 @@ private enum AddStep {
     }
 }
 
-private struct AddSaveToast: Identifiable, Equatable {
-    let id = UUID()
-    let title: String
-    let message: String
-    let systemImage: String
-    let canSignIn: Bool
-    let dismissDelayNanoseconds: UInt64
-
-    init(syncState: SyncState, canSignIn: Bool) {
-        self.canSignIn = canSignIn
-
-        switch syncState {
-        case .synced:
-            title = "saved to your map"
-            message = "Synced and ready."
-            systemImage = "checkmark"
-            dismissDelayNanoseconds = 2_000_000_000
-        case .failed:
-            title = "saved here"
-            message = canSignIn ? "Sign in to back it up." : "We'll keep trying to back it up."
-            systemImage = "checkmark"
-            dismissDelayNanoseconds = 3_000_000_000
-        case .pendingCreate, .pendingUpdate, .pendingDelete:
-            title = "saved here"
-            message = "Sync is queued."
-            systemImage = "arrow.triangle.2.circlepath"
-            dismissDelayNanoseconds = 3_500_000_000
-        case .localOnly:
-            title = "saved here"
-            message = canSignIn ? "Sign in to back it up." : "Kept on this phone."
-            systemImage = "checkmark"
-            dismissDelayNanoseconds = canSignIn ? 5_000_000_000 : 2_500_000_000
-        case .serverDenied:
-            title = "needs review"
-            message = "Saved locally until this can sync."
-            systemImage = "exclamationmark.triangle"
-            dismissDelayNanoseconds = 5_000_000_000
-        case .tombstoned:
-            title = "removed"
-            message = "This saved place was removed."
-            systemImage = "trash"
-            dismissDelayNanoseconds = 3_500_000_000
-        }
-    }
-}
-
 private struct AddSaveToastView: View {
-    let toast: AddSaveToast
+    let toast: SaveSyncFeedback
     let signInAction: () -> Void
     let dismissAction: () -> Void
 

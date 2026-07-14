@@ -170,6 +170,31 @@ npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABA
 npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 ```
 
+### Google Places venue photos
+
+REC-82 resolves one preferred image for both the full place-profile header and collapsed map card. The iOS app first calls the authenticated `place-photo` Edge Function, which validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract, matches the place by provider id or name plus coordinates, requests Google's first returned usable photo, and returns a short-lived image URL plus the required Google Maps/author/source attribution. Google does not expose a storefront/signage label or usage count, so this is a best available default rather than a guaranteed exterior photo.
+
+If Google has no trustworthy match or is unavailable, iOS calls `public.first_visible_place_photo(place_id)`. That security-invoker RPC returns the earliest uploaded visit-photo object allowed by existing user-place/visit/photo RLS. The image bytes are downloaded from the private `visit-photos` bucket with the signed-in user's auth headers. This makes the first uploaded photo the shared default for dropped pins that friends can see, without exposing a permanent public URL. A just-added local photo renders immediately from its local asset while upload is pending. MapKit/category artwork remains the final fallback when neither source exists.
+
+With the REC-82 field mask, Google currently bills venue matching as Text Search Pro, which has a separate 5,000-event monthly free cap; Place Details Photos has a 1,000-event monthly free cap. Most Rec.me places originate in MapKit, so the first photo open can consume one event from each SKU. The database RPC `public.consume_place_photo_quota()` admits at most 900 provider lookups per UTC month globally and 120 per user per UTC day before the Edge Function returns `429`, preventing the alpha from crossing the smaller photo free cap even if Google Cloud budget alerts are only advisory. Coordinate/dropped pins bypass Google and go directly to the visible user-photo fallback. The Google Cloud project must still have billing enabled. Keep Places API (New) method quotas and budget alerts configured as a second control, and restrict the server-side key to Places API. Yelp is not a free commercial fallback: its free access is a 30-day evaluation trial.
+
+Keep the key server-side and deploy the function:
+
+```bash
+npx supabase secrets set WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy place-photo --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
+The function and `first_visible_place_photo` RPC were deployed to the linked rec.me project on 2026-07-12. The user-photo fallback is live. `WANDER_GOOGLE_PLACES_API_KEY` was installed as a managed Supabase secret and `place-photo` was redeployed on 2026-07-12. A live Text Search plus Place Details Photo check matched Ronan and returned an attributed Google media URL. The hard quota RPC was added on 2026-07-13; deploy its migration before deploying the updated Edge Function. Keep the Google Cloud key restricted to Places API (New), retain provider-side quotas and budget alerts, and rotate the credential if it is ever exposed outside approved secret storage.
+
+Do not store Google photo names, image bytes, or returned image URLs in SwiftData, Supabase, fixtures, or analytics. Google Place IDs may be retained. The UI must keep the Google Maps attribution, photo author attribution when present, and source-photo link visible with the image.
+
+After changing the preferred-photo RPC or its RLS path, run the hosted smoke test. `--linked` uses the Supabase Management API when a direct database password is not available:
+
+```bash
+node scripts/supabase-smoke-test.mjs --linked
+```
+
 Current hosted SQL test status:
 
 ```text

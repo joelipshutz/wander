@@ -853,6 +853,36 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
+    func testFirstVisitPhotoForPlaceUsesEarliestUsablePhoto() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "dropped_pin_photo_default",
+                name: "Dropped pin",
+                category: "other",
+                latitude: 34.09435,
+                longitude: -118.44982,
+                sourceProvider: "manual",
+                confidence: 1
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        let visit = store.visits(for: result.userPlaceID).first
+        let first = store.createVisitPhoto(visitID: visit?.id ?? "", localAssetRef: "first.jpg")
+        let second = store.createVisitPhoto(visitID: visit?.id ?? "", localAssetRef: "second.jpg")
+        let placeID = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.place.id
+
+        XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, first?.id)
+        XCTAssertNotEqual(first?.id, second?.id)
+
+        _ = store.deleteVisitPhoto(photoID: first?.id ?? "")
+        XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, second?.id)
+    }
+
     func testMultipleVisitsAverageRatings() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -2706,42 +2736,79 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(serializedProperties.contains("network down"))
     }
 
-    func testRetryFailedOwnPlaceSyncsMarksRowsSynced() async {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
-        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
-        let failingBackend = WanderBackend(
-            userPlaceRepository: FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
-        )
+    func testSignedInBackfillRetriesPersistedFailedSemanticSaveAfterRelaunch() async {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
 
-        let failed = await store.saveCandidate(
-            PlaceCandidate(
-                id: "manual_taco",
-                name: "Taco Table",
-                category: "restaurant",
-                latitude: 34.0522,
-                longitude: -118.2437,
-                confidence: 0.7
-            ),
-            status: .wannaGo,
-            visibility: .mutuals,
-            note: "retry this",
-            sourceType: .manual,
-            attributes: [],
-            backend: failingBackend
-        )
-        XCTAssertEqual(failed.syncState, .failed)
+        do {
+            let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+            firstStore.apply(authState: .signedIn(session))
+            let failingBackend = WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
+            )
+
+            let failed = await firstStore.saveCandidate(
+                PlaceCandidate(
+                    id: "manual_taco",
+                    name: "Taco Table",
+                    category: "restaurant",
+                    latitude: 34.0522,
+                    longitude: -118.2437,
+                    confidence: 0.7
+                ),
+                status: .wannaGo,
+                visibility: .mutuals,
+                note: "retry this",
+                sourceType: .manual,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                        valueType: "personal_label",
+                        stringValues: ["date night"]
+                    ),
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                        valueType: "restaurant_cuisine",
+                        stringValue: "Thai"
+                    )
+                ],
+                backend: failingBackend
+            )
+            XCTAssertEqual(failed.syncState, .failed)
+        }
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        relaunchedStore.apply(authState: .signedIn(session))
+        let restored = relaunchedStore.currentUserVisiblePlaces.first { $0.place.canonicalName == "Taco Table" }
+        XCTAssertEqual(restored?.userPlace.syncState, .failed)
 
         let successRepository = FakeUserPlaceRepository(
             result: SaveResult(userPlaceID: "up_remote_taco", syncState: .synced, placeID: "place_remote_taco")
         )
-        let retriedCount = await store.retryFailedOwnPlaceSyncs(
+        let retriedCount = await relaunchedStore.syncUnsyncedOwnPlaces(
             backend: WanderBackend(userPlaceRepository: successRepository)
         )
 
         XCTAssertEqual(retriedCount, 1)
         XCTAssertEqual(successRepository.savedDrafts.count, 1)
         XCTAssertEqual(successRepository.savedDrafts[0].note, "retry this")
-        let saved = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Taco Table" }
+        XCTAssertEqual(
+            successRepository.savedDrafts[0].attributes,
+            [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: ["date night"]
+                ),
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Thai"
+                )
+            ]
+        )
+        let saved = relaunchedStore.currentUserVisiblePlaces.first { $0.place.canonicalName == "Taco Table" }
         XCTAssertEqual(saved?.place.serverID, "place_remote_taco")
         XCTAssertEqual(saved?.userPlace.serverID, "up_remote_taco")
         XCTAssertEqual(saved?.userPlace.syncState, .synced)

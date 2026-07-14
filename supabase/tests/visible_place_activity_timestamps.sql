@@ -2,7 +2,34 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(22);
+select plan(27);
+
+select is(
+  (select prosecdef from pg_proc where oid = 'app.sync_user_place_latest_visit()'::regprocedure),
+  true,
+  'latest visit sync trigger function is security definer'
+);
+
+select ok(
+  (select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[])) from pg_proc where oid = 'app.sync_user_place_latest_visit()'::regprocedure),
+  'latest visit sync trigger function pins search_path'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'app.sync_user_place_latest_visit()', 'execute'),
+  'authenticated cannot execute the latest visit sync trigger function directly'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_trigger
+    where tgname = 'place_visits_sync_user_place_latest_visit'
+      and tgrelid = 'public.place_visits'::regclass
+      and not tgisinternal
+  ),
+  'place visits keep the parent latest visit timestamp in sync'
+);
 
 select is(
   (select prosecdef from pg_proc where oid = 'app.visible_places_in_view(double precision,double precision,double precision,double precision,text[],text[],text[])'::regprocedure),
@@ -120,6 +147,35 @@ values (
   '2026-07-10 21:00:00+00'
 );
 
+insert into public.place_visits (
+  id,
+  user_place_id,
+  visited_at,
+  note,
+  rating_score,
+  attribute_answers,
+  backfilled_from_user_place
+)
+values (
+  '83000000-0000-0000-0000-000000000001',
+  '82000000-0000-0000-0000-000000000001',
+  '2026-07-11 20:00:00+00',
+  'Explicit visit',
+  4.5,
+  '[]'::jsonb,
+  false
+);
+
+update public.place_visits
+set visited_at = '2026-07-12 20:00:00+00'
+where id = '83000000-0000-0000-0000-000000000001';
+
+select is(
+  (select visited_at from public.user_places where id = '82000000-0000-0000-0000-000000000001'),
+  '2026-07-12 20:00:00+00'::timestamptz,
+  'explicit visit edits update the parent Been timestamp'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_activity_viewer', true);
 
@@ -131,8 +187,8 @@ select is(
 
 select is(
   (select visited_at from public.visible_places_in_view(34, -119, 35, -118, null, null, array['following']) where user_place_id = '82000000-0000-0000-0000-000000000001'),
-  '2026-07-09 20:00:00+00'::timestamptz,
-  'visible places returns persisted visit time'
+  '2026-07-12 20:00:00+00'::timestamptz,
+  'visible places returns the latest persisted visit time'
 );
 
 select is(
@@ -149,8 +205,8 @@ select is(
 
 select is(
   (select updated_at from public.visible_places_in_view(34, -119, 35, -118, null, null, array['following']) where user_place_id = '82000000-0000-0000-0000-000000000001'),
-  '2026-07-10 21:00:00+00'::timestamptz,
-  'visible places returns persisted update time'
+  (select updated_at from public.user_places where id = '82000000-0000-0000-0000-000000000001'),
+  'visible places returns the persisted parent update time'
 );
 
 select is(
@@ -161,8 +217,8 @@ select is(
 
 select is(
   (select visited_at from public.profile_visible_places('user_activity_owner', null, null) where user_place_id = '82000000-0000-0000-0000-000000000001'),
-  '2026-07-09 20:00:00+00'::timestamptz,
-  'profile visible places returns persisted visit time'
+  '2026-07-12 20:00:00+00'::timestamptz,
+  'profile visible places returns the latest persisted visit time'
 );
 
 select is(
@@ -179,8 +235,8 @@ select is(
 
 select is(
   (select updated_at from public.profile_visible_places('user_activity_owner', null, null) where user_place_id = '82000000-0000-0000-0000-000000000001'),
-  '2026-07-10 21:00:00+00'::timestamptz,
-  'profile visible places returns persisted update time'
+  (select updated_at from public.user_places where id = '82000000-0000-0000-0000-000000000001'),
+  'profile visible places returns the persisted parent update time'
 );
 
 select * from finish();

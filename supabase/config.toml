@@ -439,3 +439,10 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/parse-discover-query/deno.json"
 entrypoint = "./functions/parse-discover-query/index.ts"
+
+[functions.place-photo]
+enabled = true
+# Clerk third-party JWTs are verified through PostgREST inside the function.
+verify_jwt = false
+import_map = "./functions/place-photo/deno.json"
+entrypoint = "./functions/place-photo/index.ts"

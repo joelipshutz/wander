@@ -61,7 +61,10 @@ Latest Activity row: place metadata + compact saved-time label
 | Equal timestamps reorder between renders | Activity rows jump around | Stable `user_place_id` tie-break |
 | RPC recreation loses security posture | Unauthorized execution or RLS surprises | pgTAP metadata/grant assertions |
 | RPC recreation loses existing fields | Avatars/category/rating UI regressions | Preserve full latest return shape and test avatar plus timestamp mapping |
-| Future-dated row from clock skew | Misleading negative relative time | Clamp to `just now` |
+| Small future offset from clock skew | Misleading negative relative time | Treat offsets up to five minutes as `just now` |
+| Implausible future-dated row | Activity remains pinned above real saves | Demote it in ordering and render an absolute date |
+| Explicit visit date changes without a matching parent write | Been activity keeps showing the old date | Trigger recomputes the latest active explicit visit into `user_places.visited_at` |
+| Long place metadata truncates the timestamp | User still cannot tell when a place was saved | Keep the timestamp fixed-width and truncate metadata first |
 
 ## Test Plan
 
@@ -91,6 +94,29 @@ Required validation:
 - `git diff --check`.
 - Local pgTAP when available; otherwise rollback-wrapped hosted pgTAP before applying.
 - Apply linked migration, verify migration list and function metadata, then smoke-test payload values.
+
+## Pre-Landing Hardening
+
+The final review against latest `main` identified three gaps beyond the original
+RPC fix. They are included in the same release because each can otherwise
+recreate one of the reported symptoms:
+
+1. Explicit `place_visits.visited_at` edits now recompute the latest active
+   visit into the denormalized `user_places.visited_at` summary. The trigger is
+   narrow, `SECURITY DEFINER`, pins `search_path`, skips derived backfill rows to
+   avoid recursion, and has no direct authenticated execute grant.
+2. Saved timestamps more than five minutes in the future no longer sort ahead
+   of valid activity or render as `just now`; they sort last and display an
+   absolute calendar date. Small clock-skew offsets retain the forgiving
+   `just now` treatment.
+3. Latest Activity keeps the saved-time label visible on narrow layouts by
+   allowing locality/category metadata to truncate first.
+
+The additive trigger migration was applied to the linked hosted project.
+Rollback-wrapped hosted pgTAP passes 27/27 assertions, including trigger
+metadata, explicit visit edit propagation, exact RPC timestamps, avatar fields,
+RLS-facing behavior, and grants. The integrated iOS suite passes 291/291 tests
+on iPhone 16 Plus / iOS 18.6.
 
 ## Not In Scope
 

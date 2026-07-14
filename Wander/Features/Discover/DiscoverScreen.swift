@@ -919,10 +919,22 @@ private struct LatestActivityRow: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
 
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+                    HStack(spacing: WanderTheme.spacing1) {
+                        if !metadataSubtitle.isEmpty {
+                            Text(metadataSubtitle)
+                                .lineLimit(1)
+
+                            Text("·")
+                                .accessibilityHidden(true)
+                        }
+
+                        Text(savedTimeText)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .accessibilityElement(children: .combine)
                 }
 
                 Spacer()
@@ -938,18 +950,21 @@ private struct LatestActivityRow: View {
         .buttonStyle(.plain)
     }
 
-    private var subtitle: String {
+    private var metadataSubtitle: String {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
-            DiscoverLatestActivityPresentation.timestampText(for: visiblePlace.userPlace.savedAt)
+            visiblePlace.effectiveCategoryDisplay.compactTitle
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed?.isEmpty == false ? trimmed : nil
             }
             .joined(separator: " · ")
+    }
+
+    private var savedTimeText: String {
+        DiscoverLatestActivityPresentation.timestampText(for: visiblePlace.userPlace.savedAt)
     }
 
     private var avatarColor: Color {

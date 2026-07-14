@@ -10262,6 +10262,77 @@ Release checkpoint, 2026-07-12 14:04 PDT:
 - Full iOS suite passed on the installed iPhone 17 / iOS 26.5 runtime: 269 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build67/Logs/Test/`).
 - Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
 - `git diff --check` passed. Next step is the build-67 bump PR and squash merge before archiving latest `main`.
+## 2026-07-12 13:42 PDT - Codex - REC-82 Seed Place Photos
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: implement an end-to-end place-photo seed path so every place detail can show at least one representative venue photo, preferring Google Maps only if its terms/pricing fit a free implementation and otherwise using Yelp. Seed the most representative available venue image, favoring storefront/name signage where provider metadata supports it; uploaded visit-photo carousels remain deferred.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected `git status --short --branch`, `git worktree list`, and recent agent-log entries before editing.
+- Root checkout is on unrelated `codex/rec-81-collab-visibility`; REC-82 is isolated in a clean worktree created from `origin/main` at `6b3e093f9`.
+- Linear REC-82 was read with its Slack-synced context and moved from Backlog to In Progress.
+- No overlapping REC-82 work was found. Existing nearby work covers uploaded visit photos and profile avatars, which will be preserved rather than repurposed.
+
+Expected files:
+
+- `docs/agent-log.md`
+- Place model/persistence/remote DTO and repository files under `Wander/Models/` and `Wander/Services/`
+- Place-detail/map/discover/list UI surfaces that render venue images
+- `Wander/App/WanderBackend.swift` and configuration only if provider wiring requires them
+- Supabase migration/function or storage files if provider access must stay server-side
+- Focused tests under `WanderTests/`
+
+Initial plan:
+
+- Confirm current official Google Maps and Yelp photo API pricing/usage constraints and choose the free compliant provider.
+- Trace every place creation/hydration path and the existing visit-photo contract before defining a separate seeded venue-photo contract.
+- Implement provider lookup, durable cache/persistence, repository-boundary wiring, placeholders/failure behavior, and photo rendering across opened place surfaces.
+- Add deterministic fakes and regression coverage, then run the full simulator suite and capture representative Xcode/simulator evidence.
+- Push the branch, open a draft PR for Ryan's Xcode testing, link it to REC-82, and leave the issue In Review with validation notes.
+
+Checkpoint, 2026-07-12 14:11 PDT:
+
+- Provider decision from current official terms/pricing:
+  - Google Places has separate 1,000-event monthly free caps for Text Search Enterprise and Place Details Photos, requires billing, and bills overages. A MapKit-origin place can consume both SKUs on its first photo open.
+  - Yelp's only free access is a 5,000-call, 30-day evaluation trial that is not licensed for commercial deployment; its commercial plan is paid and restricts caching to 24 hours.
+  - Selected Google Places, contingent on an explicitly approved billing project with low quotas/budget alerts. No Google/Yelp key is configured in the Wander repo or local Wander secrets. A safety review rejected searching unrelated local projects for credential material, so no secret reuse was attempted.
+- Implemented a provider-neutral `PlacePhotoRepository` boundary and Google-backed `SupabasePlacePhotoRepository` wired through `WanderBackend`.
+- Added the `place-photo` Supabase Edge Function:
+  - validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract before provider access;
+  - uses an existing Google Place ID when trustworthy, otherwise Text Search with name/address and a 1 km coordinate bias;
+  - rejects weak-name or distant matches, takes Google's first returned usable photo, and requires the direct Google Maps source-photo URL;
+  - keeps the API key server-side and returns `Cache-Control: no-store`.
+- Replaced the full place-profile map header with photo-first media behavior while preserving the MapKit header as loading/error/no-match fallback. The image loader uses an ephemeral `URLSession` with no URL cache. The UI exposes author profile attribution plus the individual source photo on Google Maps.
+- Deliberately did not persist Google photo names, image bytes, or returned URLs because Google prohibits prefetching/caching/storing Places content beyond allowed exceptions. Google Place IDs remain the only durable provider identity.
+- Updated `docs/decisions.md`, `docs/setup.md`, and Supabase function config with the provider, pricing, attribution, no-cache, authentication, secret, quota, and deployment contract.
+- Validation:
+  - `xcodegen generate` passed and produced no project diff.
+  - Focused iOS photo repository/encoding tests passed on iPhone 17 Pro, iOS 26.5.
+  - Final full iOS suite passed: 264 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82/Logs/Test/Test-Wander-2026.07.12_14-06-27--0700.xcresult`.
+  - Generic iOS Simulator build passed.
+  - Google match/photo helper tests passed through Node's TypeScript type stripping, including rejecting an unrelated venue at the same coordinate and selecting the first usable image returned by Google.
+  - `node --experimental-strip-types --check` passed for both Edge Function TypeScript files; `git diff --check` passed.
+- Environment note: the repo-documented iPhone 16 Plus, iOS 18.6 simulator is not installed on this machine. Validation used the installed iPhone 17 Pro, iOS 26.5 simulator.
+- Remaining live-test blocker: an approved, quota-capped Google Cloud billing project and restricted Places API server key. Until `WANDER_GOOGLE_PLACES_API_KEY` is set and `place-photo` is deployed, Xcode builds and the safe MapKit fallback work, but live venue photos cannot load and photo visual QA cannot be completed honestly.
+
+Post-merge checkpoint, 2026-07-12 14:19 PDT:
+
+- `origin/main` advanced during implementation with REC-60 push notifications and TestFlight build 67. Committed the validated REC-82 state, merged `origin/main`, and resolved overlaps by preserving both photo and notification repositories/backend injection/tests plus all agent-log entries.
+- Post-merge full suite passed on iPhone 17 Pro, iOS 26.5: 271 tests, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82-merged/Logs/Test/Test-Wander-2026.07.12_14-16-03--0700.xcresult`.
+
+Handoff, 2026-07-12 14:22 PDT:
+
+- Implementation commit: `9a23bfa58` (`Implement REC-82 Google place photos`). Latest-main integration commits: `681469565` and docs-only `16ddbed2c`.
+- Pushed branch `codex/rec-82-seed-place-photos` and opened draft PR #75: https://github.com/joelipshutz/wander/pull/75.
+- Linked PR #75 to Linear REC-82, moved the issue to In Review, and added validation plus the exact live-provider blocker in comment `715ab3d1-8d22-447e-bddf-520c0b07fa3c`.
+- No TestFlight build, provider secret, Google billing project, hosted function deployment, or tester Slack message was requested or performed.
+- Known issue: without the approved Google key and deployed Edge Function, Xcode shows the correct existing MapKit fallback rather than a venue photo.
+- Exact next steps: approve a billing-enabled Google Cloud project; enable Places API (New); set low Text Search/Photo quotas and budget alerts; create a Places-restricted server key; set `WANDER_GOOGLE_PLACES_API_KEY` in Supabase; deploy `place-photo`; open representative saved, friend, search, and list places in Xcode; capture large and small-phone screenshots; verify photo match, crop, attribution links, failure fallback, and quota behavior; then mark PR #75 ready.
 
 Completion, 2026-07-12 14:16 PDT:
 
@@ -10275,6 +10346,107 @@ Completion, 2026-07-12 14:16 PDT:
 - Release validation: 269 iOS tests passed with 0 failures and 0 skipped; generic iOS Simulator build passed; exact notification worker Deno check passed; hosted notification pgTAP passed 40/40.
 - Tester focus: one-tap Allow/Disable behavior, every cross-account notification trigger, and exact People/list/place/draft/Discover landing destinations.
 - Known behavior communicated to testers: app-level Disable cannot revoke Apple's system permission, but it disables all rec.me preferences and device delivery. Backend-ready notifications for unfinished product surfaces begin firing only when those feature triggers are in use.
+## 2026-07-12 14:28 PDT - Codex - REC-82 User Photo Fallback Expansion
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: expand REC-82 so the same preferred image appears in both the full place-profile header and collapsed map card: Google Places photo when a trustworthy provider match exists, otherwise the earliest visible user-uploaded visit photo. A dropped pin's first saved photo must become the shared default for friends who can see that place.
+
+Starting status:
+
+- Re-read the Linear issue/comments, moved REC-82 from In Review back to In Progress, and reviewed the two annotated device screenshots supplied by Ryan.
+- Re-ran the required fetch/status/worktree/log checks. The root checkout contains unrelated REC-81 work; implementation remains isolated in the existing clean REC-82 worktree and draft PR #75.
+- Merged latest `origin/main` (`c93560ab7`, REC-83 card cutoff) before editing and preserved its overlapping place-profile layout changes.
+- No other active worktree is editing REC-82. This expansion will touch the existing REC-82 place-photo boundary/UI plus local visit-photo lookup and a narrow Supabase visibility RPC/migration; `docs/agent-log.md` remains a shared high-conflict file and will be edited carefully.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `Wander/Services/RepositoryProtocols.swift`, `RemoteRepositories.swift`, `WanderLocalStore.swift`, and backend injection as required
+- Supabase migration/RPC files and `scripts/supabase-smoke-test.mjs`
+- Focused tests under `WanderTests/`
+- `docs/decisions.md`, `docs/setup.md`, and this agent log
+
+Implementation contract:
+
+- Google photo wins only for a correlated Google place match.
+- Otherwise choose the first user-uploaded photo that the viewer is authorized to see, ordered deterministically by original photo creation/order.
+- Use the same resolution result for the full header and collapsed place card; local unsynced photos should appear immediately while hosted visible photos provide cross-user fallback.
+
+Completion, 2026-07-12 15:46 PDT:
+
+- Implemented one Google-first preferred-photo resolver for both place-profile surfaces. The full header and 82-point collapsed-card tile now render the same resolved image.
+- Added immediate local fallback: the earliest usable current-user visit photo for a canonical place renders from its on-device file as soon as it is created, including while upload is pending.
+- Added hosted cross-user fallback: `public.first_visible_place_photo(uuid)` deterministically selects the earliest uploaded visit photo for the canonical place. It is explicitly `SECURITY INVOKER`, pins `search_path = public, app`, grants execute only to `authenticated`, and relies on the existing user-place/visit/photo RLS chain. Private `visit-photos` bytes are downloaded with the viewer's auth headers; no permanent public object URL was introduced.
+- Google remains first priority whenever the Edge Function makes a trustworthy provider match. Its no-cache and attribution behavior is unchanged. If Google has no match, is unconfigured, or errors, iOS calls the user-photo RPC; MapKit/category artwork remains the last fallback.
+- Added focused repository/storage and local-ordering regressions. Extended `scripts/supabase-smoke-test.mjs` with direct-DB coverage and a self-contained `--linked` Management API mode for environments without a database password.
+- Applied hosted migration `20260712214500_first_visible_place_photo.sql`; `supabase migration list --linked` shows local and remote aligned through `20260712214500`.
+- Hosted linked smoke passed owner/follower resolution, stranger denial, authenticated-only grants, security-invoker metadata, and pinned search path. All mutations rolled back.
+- Deployed the authenticated `place-photo` Edge Function to project `rugmtlgufrhlxwfkumhw`; a no-credential POST returned `401 {"error":"missing_authorization"}`. The user-photo fallback is live now. Google still needs the approved restricted `WANDER_GOOGLE_PLACES_API_KEY` to return venue photos.
+- Validation passed:
+  - focused preferred-photo tests: 4 passed, then final post-adjustment rerun: 2 passed;
+  - complete iOS suite: 273 passed, 0 failures, 0 skipped (`/private/tmp/DerivedData-rec82-photo-fallback/Logs/Test/Test-Wander-2026.07.12_15-38-28--0700.xcresult`);
+  - generic iOS Simulator build passed;
+  - `xcodegen generate`, `git diff --check`, and Node smoke-script syntax checks passed.
+- Reviewed simulator screenshots on iPhone 17 Pro (collapsed card: `/private/tmp/rec82-17pro-collapsed.png`) and iPhone 17e (full profile: `/private/tmp/rec82-17e-full.png`). No regression was visible in card sizing, crop boundary, header controls, safe areas, or small-phone layout. These demo fixtures intentionally had no provider/user photo, so the screenshots validate the final fallback layouts; actual image rendering is covered by the data/resolver tests and is ready for Ryan's Xcode photo-upload test.
+
+Known external configuration:
+
+- Google Places is free only within its separate monthly Text Search and Place Details Photo caps, requires billing, and charges overage. Yelp remains unsuitable because its free tier is evaluation-only. Google is therefore implemented behind a restricted server key and low quotas, but no approved key has been supplied yet.
+- No TestFlight build, build-number bump, or tester Slack announcement was requested or performed.
+
+Handoff, 2026-07-12 15:49 PDT:
+
+- Implementation commit `8fa834833` (`Complete REC-82 place photo fallback`) was pushed to `origin/codex/rec-82-seed-place-photos`.
+- Updated draft PR #75 with the final behavior, hosted migration/function state, validation, and two-account Xcode test steps: https://github.com/joelipshutz/wander/pull/75.
+- Updated Linear REC-82's durable comment and moved it back to In Review.
+- Exact manual test: open `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`; save a dropped pin as Been with a photo; verify the same crop appears in the collapsed tile and full header; relaunch to confirm remote fallback; then sign into an authorized second account and verify the same default photo. Google-specific visual QA can begin after the restricted quota-capped key is approved and set.
+
+## 2026-07-12 20:49 PDT - Codex - REC-82 Google Provider Activation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`)
+
+Goal: securely install the user-approved Google Places server credential, redeploy the hosted `place-photo` function, validate real provider photo resolution, and move the completed implementation from draft/testing handoff to review-ready.
+
+Starting status:
+
+- Ran the required `git fetch origin`, clean branch status check, worktree inspection, and latest agent-log review. REC-82 remains isolated in its clean worktree; no overlapping work was found.
+- The user supplied and explicitly authorized the Google credential. The secret value will be stored only in managed/local ignored secret storage and will not be written to git, docs, Linear, GitHub, analytics, or command output.
+- The hosted preferred-photo migration and user-photo fallback are already live. This pass is limited to provider activation, live validation, durable non-secret status, and PR/Linear readiness.
+
+Expected files:
+
+- `docs/setup.md` to replace the stale provider-disabled note with non-secret live status
+- `docs/agent-log.md` for required coordination and validation evidence
+
+Completion, 2026-07-12 21:01 PDT:
+
+- Stored `WANDER_GOOGLE_PLACES_API_KEY` in the rec.me Supabase project's managed Edge Function secrets and in Ryan's owner-only local `/Users/ryanlieblein/.openclaw/workspace/.env.keys`. The credential value was not written to git, docs, Linear, GitHub, analytics, or command output. Temporary transfer/check files were deleted immediately after use.
+- Redeployed `place-photo` to Supabase project `rugmtlgufrhlxwfkumhw`. A follow-up secret listing confirmed the managed secret exists with a new digest/timestamp; no secret value was returned.
+- Ran a live provider check using the same Text Search and Place Details Photo fields as the Edge Function. Google returned HTTP 200 for both calls, matched `Ronan` at `7315 Melrose Ave, Los Angeles`, included the Google Maps source attribution, and returned an image from `lh3.googleusercontent.com`.
+- Re-ran the complete iOS suite on iPhone 17 Pro, iOS 26.5: 273 tests passed, 0 failures, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec82-google-live/Logs/Test/Test-Wander-2026.07.12_20-57-02--0700.xcresult`.
+- Opened the REC-82 project in Xcode, confirmed branch `codex/rec-82-seed-place-photos`, selected Ryan's connected iPhone, and successfully rebuilt/launched the app for immediate manual photo QA.
+- Updated `docs/setup.md` so future agents no longer treat the Google credential as an outstanding blocker. `git diff --check` passed.
+- Implementation remains commit `8fa834833` (`Complete REC-82 place photo fallback`) on draft PR #75. This activation pass changes only non-secret setup/status documentation; no app, migration, or function source changed after the previously validated implementation.
+
+Known follow-up:
+
+- Google Cloud API-key restrictions, quotas, and budget alerts cannot be inspected from the key value or Supabase. The user was given the exact Console setup steps; keep the key restricted to Places API (New) and rotate it if it is exposed outside approved secret storage.
+- No TestFlight build, build-number bump, merge, or tester Slack announcement was requested.
+
+Handoff, 2026-07-12 21:11 PDT:
+
+- Committed and pushed the provider-activation documentation as `83b31a328` (`Activate REC-82 Google place photos`).
+- Merged latest `origin/main` through build 68, preserving both REC-82 and release log entries, in `6f07368c3`. `xcodegen generate` produced no diff afterward.
+- Post-merge focused photo regressions passed 2/2 with 0 failures (`/private/tmp/DerivedData-rec82-google-live/Logs/Test/Test-Wander-2026.07.12_21-08-03--0700.xcresult`).
+- Updated PR #75 with the live activation evidence and marked it ready for review: https://github.com/joelipshutz/wander/pull/75.
+- Added Linear activation/validation comment `ec451852-65a0-494e-8c98-c468cffc3126`; REC-82 remains correctly in `In Review` pending manual device QA/review rather than being marked Done before merge.
 
 ## 2026-07-12 15:29 PDT - Codex - TestFlight Build 68 Release
 
@@ -10366,3 +10538,463 @@ Implementation and validation, 2026-07-12 22:11 PDT:
 - `git diff --check` passed. No TestFlight build, build-number bump, archive, upload, or tester announcement was requested or performed.
 - Implementation commit: `6a1bad9` (`fix: restore saved activity timestamps`).
 - Ready PR: https://github.com/joelipshutz/wander/pull/81. Merge PR #75 first so the repository contains the already-hosted REC-82 migration immediately preceding REC-86.
+
+## 2026-07-12 21:40 PDT - Codex - REC-82 Image Rendering Investigation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), `In Progress`
+
+Goal: reproduce and fix the device-only failure where Google photo attribution resolves for a place but the actual photo stays blank in both the expanded header and collapsed place card.
+
+Starting status:
+
+- Ran required `git fetch origin`, clean branch status check, worktree inspection, and latest agent-log review. REC-82 remains isolated in its clean worktree; no overlapping agent is editing the branch.
+- Reviewed Ryan's two device screenshots from 21:34 PDT. CAVA resolves `Photo by Josh Gordon · Google Maps`, proving the Edge Function and preferred-photo metadata path complete, while both image surfaces remain on category/map fallback artwork.
+- REC-82 is back in `In Progress`. Investigation will trace the returned media URL through the authenticated repository response, image loader, and both SwiftUI surfaces before any fix is applied.
+
+Expected files: the narrow preferred-photo/image-loading implementation and its focused tests, plus this coordination log. Exact files will be recorded after root cause confirmation.
+
+Root cause and fix, 2026-07-12 22:14 PDT:
+
+- Confirmed the Google transport path independently with the same Apple `URLSession` behavior used by the app: CAVA Text Search returned 200, the media lookup returned 200, and the `lh3.googleusercontent.com` response was a 593,119-byte JPEG that ImageIO decoded successfully at 1600×1200. The credential, media URL, MIME type, and decoder were not the failure.
+- Reproduced the SwiftUI lifecycle defect in a controlled host: a `.task` attached to the existing initially empty `Group` ran 0 times, while the same task attached to a concrete container ran once. Because `PlaceProfilePhotoImage.image` starts nil, SwiftUI removed the empty subtree before its downloader could start. Attribution lived outside that subtree, exactly matching Ryan's screenshots.
+- Replaced the empty `Group` with a stable clear-backed `ZStack` in `PlaceProfilePhotoImage`. That shared view drives both the expanded header and collapsed 82-point thumbnail, so one narrow fix restores both surfaces without changing provider selection, storage, attribution, or caching policy.
+- Added `testPlacePhotoImageStartsRemoteLoadFromEmptyState`, which hosts the real SwiftUI image view with a recording repository and fails if the initial empty state does not start an image request.
+- Focused regression passed. Complete iOS suite passed 274 tests, 0 failures, 0 skipped on iPhone 17 Pro / iOS 26.5 simulator. Result: `/private/tmp/DerivedData-rec82-rendering-fix/Logs/Test/Test-Wander-2026.07.12_22-04-18--0700.xcresult`.
+- `xcodegen generate` produced no project diff; `git diff --check` passed.
+- Xcode is left on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`, branch `codex/rec-82-seed-place-photos`, destination `Ry’s iPhone`. The device build compiled, but two wireless installs failed with CoreDevice 3002 / `installcoordination_proxy`, followed by Xcode reporting the phone unavailable until it is unlocked and connected by cable or reachable on the same LAN. Physical-device visual confirmation remains blocked only by that device transport state; no third install retry was attempted.
+
+Files changed:
+
+- `Wander/Features/Map/PlaceProfileMapSurface.swift`
+- `WanderTests/PlaceProfilePresentationTests.swift`
+- `docs/agent-log.md`
+
+Handoff, 2026-07-12 22:20 PDT:
+
+- Committed and pushed the rendering fix as `1ba06e813` (`Fix REC-82 place photo rendering`).
+- Updated ready PR #75 with the device-reported symptom, confirmed lifecycle root cause, CAVA media proof, new regression, 274-test result, and exact device reconnect steps: https://github.com/joelipshutz/wander/pull/75. The PR remains clean and mergeable against `main` at handoff.
+- Added Linear evidence comment `72504ce2-e7dc-4e4d-b03a-b35e3ebc095a` and returned REC-82 to `In Review`.
+- Remaining manual step: unlock Ry’s iPhone and attach it by cable or restore same-LAN wireless reachability, press Run in the already-open REC-82 Xcode project, then reopen CAVA to confirm its Google image appears in both the collapsed tile and full header. No backend redeploy, migration, TestFlight build, build-number bump, or Slack release note is required for this client-only fix.
+
+## 2026-07-13 10:01 PDT - Codex - REC-82 Device Bug Follow-up
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), `In Progress`
+
+Goal: investigate and fix the new physical-device failures reported after Google photos began rendering: Saba Cafe and Surf receives no Google result, while loaded Intelligentsia and Tavern On Main photos push the header controls partly or completely outside the screen. Audit adjacent photo aspect-ratio, attribution, empty/error, and collapsed-card states before returning the branch for testing.
+
+Starting status:
+
+- Ran the required `git fetch origin`, clean branch status check, worktree inspection, latest agent-log review, and REC-82/Linear comment review. The isolated REC-82 worktree is clean at `74e33f5ee`; no other worktree is editing this branch.
+- Reviewed all three original device screenshots at full resolution. Saba stays on the map fallback with no attribution, which means no preferred provider photo was selected. Intelligentsia clips the back control and both trailing controls after a wide image loads; Tavern On Main loses all header controls, consistent with image content expanding the header's layout width before the header is clipped to the device.
+- REC-82 was moved from `In Review` back to `In Progress`. No code change will be made until both root-cause hypotheses are reproduced.
+
+Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`, the Google selector/Edge Function only if the Saba miss is confirmed there, focused REC-82 tests, and this coordination log. Any hosted function change will receive its required smoke/live verification before handoff.
+
+Root cause, audit, and validation, 2026-07-13 10:33 PDT:
+
+- Google Places currently returns the reported venue as `Saba Coffee Shop`, while rec.me stores `Saba Cafe and Surf`. The old selector rejected the real result before considering same-location/address evidence because the normalized names shared only `saba` (1/4 tokens). A controlled selector probe reproduced `selected nothing`.
+- The prior loading fix left `PlaceProfilePhotoImage` height-constrained but horizontally content-driven. A hosted production-view regression with a 2400×600 image moved the trailing control to `maxX = 716.5` inside a 393pt host, reproducing Intelligentsia/Tavern control clipping without relying on screenshots alone.
+- `PlaceProfilePhotoImage` now uses the parent GeometryReader size as the explicit image frame before `scaledToFill` is clipped. The shared view therefore keeps arbitrary photo aspect ratios layout-neutral in both the full header and explicitly square collapsed card. Canceled loads are ignored so stale image work cannot overwrite a newer preferred photo.
+- Google matching now accepts a nearby renamed venue only when at least one non-generic name token overlaps and proximity/address evidence agrees. A same-coordinate alias still works when rec.me has no address, while unrelated venues and generic-only overlaps such as two different `coffee` names remain rejected.
+- Audited adjacent states: the map/category fallback remains visible during loading, provider/image errors, and no-match responses; the collapsed tile still has an explicit square frame; Google attribution remains conditional on a selected Google photo; exact and contained provider names preserve their prior scoring. Header back/action/share targets were raised from 42pt to the 44pt iOS minimum.
+- Selector tests: 6 passed, including Saba address/no-address aliases, unrelated same-coordinate rejection, generic-only rejection, exact-nearby preference, and first-usable-photo choice.
+- SwiftUI probes: the old code failed the wide-photo regression at 716.5pt; the corrected code passed both the wide-photo layout regression and the prior initial-empty-state loading regression.
+- `xcodegen generate` completed with no project diff; `git diff --check` passed.
+- Complete iOS suite passed 275 tests, 0 failures, 0 skipped on iPhone 17 Pro / iOS 26.5 simulator. Result: `/private/tmp/DerivedData-rec82-bug-probes/Logs/Test/Test-Wander-2026.07.13_10-31-41--0700.xcresult`.
+- Deployed the updated authenticated `place-photo` Edge Function to Supabase project `rugmtlgufrhlxwfkumhw`. The hosted endpoint is reachable and still returns 401 without authorization. No migration or RPC contract changed.
+- Latest `origin/main` is two commits ahead and includes the REC-83 full-profile bottom-overlay fix in the same Swift file plus coordination-log updates. After committing this isolated REC-82 fix, merge latest `origin/main`, preserve both behavior sets/log entries, rerun focused validation if the merge changes the generated project, then update PR #75.
+
+## 2026-07-12 16:15 PDT - Codex - REC-83 Full-View Bottom Cutoff Investigation
+
+Agent: Codex
+Branch: `codex/rec-83-full-view-bottom-cutoff`
+Worktree: `/private/tmp/recme-rec83-full-cutoff`
+Linear: `REC-83`
+
+Goal: investigate and fix Ryan's follow-up report that the full place-card view still has roughly a half inch clipped at the bottom after build 68.
+
+Starting status:
+
+- User reports the cutoff still reproduces in TestFlight build 68, so the prior row-level fix did not address the root cause.
+- `REC-83` was moved back to `In Progress` with a comment noting this new full-view/safe-area investigation.
+- Fresh worktree created from latest `origin/main` at `a81b97168`.
+- Root checkout remains on stale `codex/rec-81-collab-visibility`; this investigation is isolated in the new worktree.
+
+Expected files:
+
+- `docs/agent-log.md`
+- `Wander/Features/Map/MapScreen.swift`
+- Potentially focused tests under `WanderTests/` if a stable layout/state contract can be asserted.
+
+Investigation plan:
+
+- Trace the full place-card presentation and scroll/container hierarchy before editing.
+- Compare the prior REC-83 diff against the current symptom to identify why the previous fix missed page-level clipping.
+- Reproduce or approximate the layout on simulator if possible, then fix the actual safe-area/container root cause.
+
+Root-cause checkpoint, 2026-07-12 16:26 PDT:
+
+- The prior REC-83 fix (`c93560ab7`) only changed the repeated Place Details rows/card styling. It did not change the full-screen place-profile container.
+- The still-reproducing symptom is page-level: `PlaceProfileFullView` ignored both the top and bottom container safe areas, then tried to compute scroll bottom padding from `proxy.safeAreaInsets.bottom`. In that ignored-safe-area context, the bottom inset can be zero or otherwise not reserve the actual system/home-indicator space.
+- Fixed the shared full-screen place profile by keeping top-edge full bleed for the map header only, no longer ignoring the bottom safe area, and adding a deterministic minimum 64pt scroll bottom inset via `PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from:)`.
+- Added a focused regression test for the bottom inset contract in `NavigationContractTests`.
+- Validation: focused simulator XCTest passed on `iPhone 17 Pro, OS 26.5`: `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath DerivedData-rec83 CODE_SIGNING_ALLOWED=NO -jobs 1 -only-testing:WanderTests/NavigationContractTests/testPlaceProfileFullViewKeepsScrollableBottomInset`.
+- Visual check: installed the debug build to the booted iPhone 17 Pro simulator and launched `com.grayline.wander -WanderUseDemoFixtures -WanderMapSheetExpanded -WanderMapPlace 'Woodcat Coffee'`; top-of-full-card screenshot captured at `/tmp/rec83-full-place-demo-after-fix.png`. `simctl` does not expose general touch/scroll input on this machine, so bottom-scroll visual proof is covered by code inspection plus the layout contract test rather than an automated bottom screenshot.
+
+Handoff, 2026-07-12 16:29 PDT:
+
+- Implementation commit: `24182ef5f` (`Fix full place profile bottom inset`).
+- PR opened: https://github.com/joelipshutz/wander/pull/80.
+- Linear `REC-83` moved to `In Review`, with PR, root cause, validation, and visual-check limitation documented in a Linear comment.
+- Known local-only artifact: `DerivedData-rec83/` remains untracked in this temporary worktree and was not staged or pushed.
+- Next step: review/merge PR #80 to `main`; if Ryan wants this in TestFlight, package latest `main` as a new build after merge rather than reusing build 68.
+
+Reopened investigation checkpoint, 2026-07-12 20:31 PDT:
+
+- Ryan tested PR #80 in Xcode and reports the full-view bottom cutoff still reproduces; the prior safe-area/inset patch is now treated as a failed hypothesis.
+- Clarified current symptom: a beige layer appears over the bottom of the full-view place card, visually cutting off the last half inch of content.
+- Linear `REC-83` was moved back to `In Progress` and updated with the failed-hypothesis note.
+- Added temporary launch-argument instrumentation in `PlaceProfileFullView` to force-scroll to the bottom for simulator screenshots. This is diagnostic only unless explicitly kept for QA.
+- Built and installed the instrumented debug app on the booted iPhone 17 Pro simulator. Bottom screenshots show the forced bottom state is reachable for demo fixtures, but the previous fix did not specifically target the beige overlay/layering symptom Ryan described.
+- Current investigation hypothesis: the full profile is still hosted inside the tab/navigation presentation stack, so the parent container can paint or reserve a beige bottom layer over the final content; fixing the leaf view's scroll inset alone is insufficient.
+- Expected files remain narrow: `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Features/Map/MapScreen.swift` if presentation ownership moves, `WanderTests/NavigationContractTests.swift`, and this log.
+
+Completion checkpoint, 2026-07-12 20:41 PDT:
+
+- Confirmed the previous PR #80 change did not specifically fix Ryan's beige-overlay symptom; it only changed the full profile scroll/safe-area inset.
+- Root cause for this follow-up: map place profiles were still pushed with `.navigationDestination` inside the tab-hosted map `NavigationStack`. Even with the destination hiding the tab bar, the parent tab/navigation host can still reserve or paint the warm beige bottom area over the bottom of the pushed profile.
+- Fix: changed the map full place profile presentation from `navigationDestination` to `fullScreenCover`, so the full profile owns the screen instead of rendering under the tab container.
+- Removed the temporary forced-bottom-scroll launch instrumentation before committing.
+- Added `NavigationContractTests.testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush` to keep this from regressing back to a navigation push.
+- Visual verification: with temporary instrumentation before removal, installed the rebuilt app and captured bottom-of-profile screenshot at `/tmp/rec83-bottom-fullscreen-cover.png`.
+- Validation: focused `NavigationContractTests` passed 12/12 on `iPhone 17 Pro, OS 26.5`; full `WanderTests` passed 271/271 on the same simulator with `CODE_SIGNING_ALLOWED=NO`.
+
+Post-push note, 2026-07-12 20:44 PDT:
+
+- Pushed PR #80 branch update `a7dec01ea` (`Fix place profile full-screen presentation`) to `origin/codex/rec-83-full-view-bottom-cutoff`.
+- Remaining local artifact: `DerivedData-rec83/` is untracked in the temporary worktree and intentionally not staged.
+
+Merge-gate checkpoint, 2026-07-13 10:24 PDT:
+
+- Ryan confirmed the full-view place-card bottom overlay is fixed and asked to squash-merge PR #80 to `main`.
+- Used the repo `recme-pr-review-merge-release` workflow. This is a merge-only request, not an explicit TestFlight release request, so no build-number bump/archive/upload/Slack release note is part of this step.
+- PR #80 is open, mergeable, not draft, targets `main`, and head is `acdc1466d`.
+- Updated the PR body to replace the failed safe-area-only hypothesis with the corrected `fullScreenCover`/tab-host root cause and latest validation.
+- Pre-landing review scope check: clean. Diff is limited to full place-profile presentation/inset behavior, focused navigation contract tests, and agent log. No SQL, Supabase/RLS, auth/sync, enum, shell, LLM boundary, CI, signing, or project membership changes.
+- Greptile check: no line-level or top-level Greptile comments on PR #80.
+- Validation used for merge gate: `git diff --check` passed; focused `NavigationContractTests` passed 12/12 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-39-24--0700.xcresult`); full `WanderTests` passed 271/271 (`DerivedData-rec83/Logs/Test/Test-Wander-2026.07.12_20-40-02--0700.xcresult`).
+
+Merge completion, 2026-07-13 10:27 PDT:
+
+- PR #80 was squash-merged to `main`: https://github.com/joelipshutz/wander/pull/80.
+- Main merge commit: `2cee8a741d2f3f7a409337b02d61ad311d89955c` (`Fix full place profile bottom overlay`).
+- Remote PR branch `codex/rec-83-full-view-bottom-cutoff` was deleted after merge.
+- Linear `REC-83` was moved to `Done` with merge commit and validation evidence.
+- No TestFlight release was requested in this step, so build number remains unchanged and no archive/upload/Slack release note was produced. The fix will ride in the next explicit TestFlight build request.
+
+REC-82 latest-main integration checkpoint, 2026-07-13 10:45 PDT:
+
+- Merged latest `origin/main` into `codex/rec-82-seed-place-photos` and resolved the shared `PlaceProfileMapSurface.swift` overlap by preserving both REC-82 photo resolution/layout behavior and REC-83's top-only safe-area behavior.
+- Regenerated `Wander.xcodeproj` with XcodeGen; no generated project diff resulted. `git diff --check` passed.
+- Post-merge focused validation passed 14/14 tests: both place-photo presentation regressions plus all 12 `NavigationContractTests`. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-40-31--0700.xcresult`.
+- Post-merge complete `WanderTests` validation passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-postmerge-focused/Logs/Test/Test-Wander-2026.07.13_10-44-07--0700.xcresult`.
+- Remaining handoff actions: commit/push the resolved merge, refresh PR #75 and Linear REC-82 with the final evidence, and leave Xcode focused on this worktree for Ryan's physical-device checks of Saba Cafe and Surf, Intelligentsia, Tavern On Main, and the collapsed place cards.
+
+REC-82 final bug-fix handoff, 2026-07-13 10:50 PDT:
+
+- Latest-main merge commit: `1ebe69a70` (`Merge remote-tracking branch 'origin/main' into codex/rec-82-seed-place-photos`), following implementation commit `ab27a4c82` (`Fix REC-82 provider matching and photo layout`).
+- Pushed `codex/rec-82-seed-place-photos` through `1ebe69a70` and refreshed ready PR #75 with the Saba alias, wide-image layout, deployment, and final 277-test evidence: https://github.com/joelipshutz/wander/pull/75.
+- Added the final root-cause, hosted-state, validation, and manual-retest checklist to Linear `REC-82`; moved the issue from `In Progress` to `In Review`.
+- Opened `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`, which is the isolated REC-82 worktree on the correct branch, for Ryan's physical-device validation.
+- Known remaining validation is manual/device-only: confirm Google photo + attribution for Saba Cafe and Surf, confirm Intelligentsia/Tavern header controls stay visible, confirm collapsed cards show the same preferred photo, and confirm an unmatched dropped pin shares its first visible user photo with another authorized account.
+- No TestFlight build, merge, build-number increment, archive, upload, or Slack release note was requested; PR #75 remains the review/merge boundary.
+
+## 2026-07-13 11:08 PDT - Codex - REC-82 Saba Follow-Up Investigation
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82` (`Seed place photos from Google Maps or Yelp`), reopened to `In Progress`
+
+Goal: investigate why Saba Cafe and Surf still receives no Google photo after the renamed-venue selector fix, implement the confirmed root-cause fix, deploy it if the hosted function changes, and return the branch to Ryan for device testing.
+
+Starting status:
+
+- Ryan's fresh physical-device validation confirms Intelligentsia and Tavern On Main now render correctly and their header buttons remain onscreen. The wide-photo layout fix is accepted; only Saba remains in scope.
+- Saba still shows the fallback with no Google attribution, so the provider-photo pipeline is returning no selected photo before image rendering.
+- Branch/worktree are clean and synchronized with `origin/codex/rec-82-seed-place-photos` at `15728f3f7`; the existing isolated worktree remains the correct place to continue. No overlapping local changes were found.
+- The prior `Saba Cafe and Surf` to `Saba Coffee Shop` alias fix passed controlled selector tests and was deployed, but the real device result proves that hypothesis did not cover the production request/response path. Do not broaden matching again until the live payload and deployed response are reproduced.
+
+Expected files:
+
+- `supabase/functions/place-photo/google-places.ts` and its focused tests if the live Google candidate/selector path is at fault.
+- `supabase/functions/place-photo/index.ts` or the iOS request model only if tracing proves the production payload differs from the controlled selector fixture.
+- `docs/agent-log.md`.
+
+Root-cause checkpoint, 2026-07-13 11:19 PDT:
+
+- A read-only linked Supabase query found the exact Saba place row used by the app. The canonical name and coordinates are correct, but the stored address is only the street line; the earlier selector fixture incorrectly supplied a full city/state/ZIP address.
+- With the real stored payload and Google's previously verified `Saba Coffee Shop` candidate, the old address score was 3 shared tokens divided by Google's 8-token full address, or 0.375. The renamed-venue path required 0.5, so it returned no selection even though the distinctive `Saba` token matched and the coordinates were within roughly 10 meters.
+- Converted that exact production shape into a regression. It failed on the old implementation with `selected nothing`, proving the prior alias-only fix missed the production boundary.
+- Fix: address evidence for nearby renamed venues now measures containment against the shorter address, so a stored street line can match Google's full postal address. A separate first-address-number conflict guard prevents the looser containment score from accepting a different street number, even when both addresses share the same ZIP.
+- Safety audit/regressions now cover exact nearby selection, unrelated same-coordinate rejection, generic-only overlap rejection, production-shaped Saba street-only acceptance, no-address Saba acceptance, conflicting-street-number rejection, and representative-photo choice. All 7 selector tests pass.
+- No iOS request/model change is needed. The phone and database carry the correct name, street address, provider identity, and coordinates; the defect is isolated to hosted Google candidate scoring.
+
+Validation/deployment checkpoint, 2026-07-13 11:28 PDT:
+
+- Deployed the updated authenticated `place-photo` Edge Function to Supabase project `rugmtlgufrhlxwfkumhw`; the deployment uploaded only its existing configuration, entry point, and Google selector module.
+- A post-deploy unauthenticated probe returned 401, confirming the function is reachable and remains protected. No migration, RPC, grant, RLS, or schema contract changed, so the hosted RPC smoke test is not required for this selector-only deployment.
+- Fresh reproduction: the production-shaped Saba regression failed before the fix with `selected nothing` and passes after the fix. The conflicting-street-number safety regression also passes when both addresses share the same ZIP.
+- Provider selector suite passed 7/7 using Node 24's TypeScript stripping with a Deno test shim.
+- Complete `WanderTests` suite passed 277/277 with 0 failures and 0 skipped on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-saba-final/Logs/Test/Test-Wander-2026.07.13_11-24-09--0700.xcresult`.
+- `git diff --check` passed. Remaining verification is Ryan's signed-in physical-device reopen of Saba, because an authenticated hosted probe was intentionally not attempted with extracted privileged credentials.
+
+Handoff, 2026-07-13 11:34 PDT:
+
+- Implementation commit `707277945` (`Fix Saba street-only address matching`) was pushed to `origin/codex/rec-82-seed-place-photos`.
+- Ready PR #75 was refreshed with the corrected production root cause, false-positive guard, deployment state, and final validation: https://github.com/joelipshutz/wander/pull/75.
+- Linear `REC-82` received the same evidence and was returned to `In Review`. Ryan's confirmation that Intelligentsia and Tavern On Main now work is recorded there; only the signed-in Saba photo check remains.
+- Xcode was reopened on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj` for physical-device testing of the deployed Saba fix.
+- No TestFlight build, merge, build-number change, archive, upload, or Slack release note was requested. The PR remains the review/merge boundary.
+## 2026-07-12 22:27 PDT - Codex - REC-87 Map Save Sync Contract Regression
+
+Agent: Codex
+Branch: `codex/rec-87-map-save-sync-contract`
+Worktree: `/private/tmp/recme-map-save-sync-contract`
+Linear: `REC-87` (`Map saves with default labels fail remote sync after REC-75`), assigned to Ryan and moved to In Progress.
+
+Goal: implement the verified TestFlight build 68 fix so map saves containing REC-75 default labels sync remotely, retained failed saves such as Ugo can recover, and Joe can see a newly added Been place from `ryan_lieblein`.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected the root checkout and all worktrees, and reviewed the latest `docs/agent-log.md` entries.
+- Root checkout is on stale `codex/rec-81-collab-visibility`, 13 commits behind its remote, with untracked `.pnpm-store/`; no root files will be edited.
+- Created this isolated worktree from latest `origin/main` at `a81b97168` and renamed the branch to include `REC-87`.
+- Prior read-only diagnostics live uncommitted in `/private/tmp/recme-social-save-diagnostics`; their verified evidence is being carried into this implementation log without modifying or discarding that worktree.
+- Joe concurrently reopened `REC-45` and is working in `/Users/joelipshutz/Developer/Wander-worktrees/rec-45-save-regression` on broader transient retry and reader-cache behavior. This branch will not duplicate that coordinator/foreground-refresh work. Potential overlap in Map save failure UX and sync tests is called out before editing.
+- Verified root cause: REC-75 map payloads now send `personal_label` and, for restaurants, `restaurant_cuisine`; hosted `place_attributes.value_type` rejects both, so `app.save_own_place` rolls back the place, user save, and attributes while local-first state remains.
+- The required TestFlight bug-catcher, Linear backend-triage, and `plan-eng-review` workflows are in progress before schema/sync implementation.
+
+Expected files:
+
+- `supabase/migrations/<timestamp>_allow_semantic_place_attribute_value_types.sql`
+- `supabase/tests/save_own_place.sql` or the closest existing constraint/RPC regression file
+- `scripts/supabase-smoke-test.mjs`
+- `Wander/Features/Add/AddScreen.swift`
+- `Wander/Features/Map/MapScreen.swift` only if failure copy is not already centralized; coordinate against Joe's overlapping REC-45 work
+- Focused `WanderTests/` coverage for save failure feedback and retained failed-save retry
+- `docs/decisions.md` if the final value-type contract warrants a durable architecture decision
+- `docs/agent-log.md`
+
+Initial plan:
+
+1. Complete the required engineering review and explicitly lock the backward-compatible contract and rollout.
+2. Inspect every prior migration defining the value-type constraints and `app.save_own_place`, plus existing hosted smoke coverage.
+3. Implement the smallest complete schema/client UX fix without duplicating REC-45's broader refresh coordinator.
+4. Run migration tests where available, the hosted Supabase smoke test, focused iOS tests, the full iOS suite, and a generic simulator build.
+5. Push the branch and open a ready PR to `main`; do not merge, bump a build number, or upload TestFlight unless Ryan explicitly requests a release.
+
+Implementation checkpoint, 2026-07-13 10:52 PDT:
+
+- Completed `plan-eng-review` with a backward-compatible rollout: widen the two value-type constraints, preserve all existing rows, and rely on the existing signed-in startup backfill to retry retained failed saves. No data reset, delete, or rewrite is required.
+- Added `20260713101000_allow_semantic_place_attribute_value_types.sql`, which adds `personal_label` and `restaurant_cuisine` to both `question_definitions` and `place_attributes` while preserving the existing constraint names and comments. The migration does not recreate `app.save_own_place` or change its security/grants.
+- Applied that migration to linked hosted project `rugmtlgufrhlxwfkumhw`. Preserved the two remote-only migration history rows already owned by REC-82/REC-86; temporary local history markers used for the dry run were removed and are not part of this branch.
+- Hosted validation passed: both widened constraints are active; `app.save_own_place` remains security definer with pinned `search_path` and authenticated execute; a rollback-only authenticated semantic save transaction passed; and the expanded `supabase/tests/save_own_place.sql` suite passed all 14 pgTAP assertions. The final test assertion was scoped to its legacy fixture after the new semantic fixture exposed that the prior query was broader than its description.
+- Extended `scripts/supabase-smoke-test.mjs` to exercise the exact authenticated `public.save_own_place` payload with both semantic value types inside a rolled-back transaction. Ryan's environment does not expose the project ref/database password required by the standalone Node entry point, so that exact script invocation remains credential-blocked; the linked CLI metadata query, direct rollback transaction, and full hosted pgTAP suite provide the hosted verification for this handoff. Local `supabase test db` is unavailable because Docker is not installed; this is not counted as a pass.
+- Centralized sync-result presentation in `SaveSyncFeedback`; Add and Map now distinguish remote success from retained local failure/queued state, and Map uses the feedback-specific timeout plus a warning haptic for failed/server-denied saves.
+- Added JSON-shape-aware semantic attribute presentation across Map and profile surfaces so `personal_label` arrays and `restaurant_cuisine` strings remain visible after persistence/relaunch.
+- Strengthened recovery coverage to recreate `WanderStore` from file persistence and call the production `syncUnsyncedOwnPlaces` startup path. Added exact production HTTP encoder assertions for both semantic types plus presentation parsing tests.
+- Ran the required pre-landing review. Its SQL/data specialist found no issue; iOS/API/testing specialists found the Map presentation, feedback-duration/haptic, relaunch, and encoder-test gaps above. All findings were fixed before handoff.
+- Post-fix focused iOS regression run passed for sync state, feedback, semantic presentation, exact RPC encoding, and persisted relaunch recovery on iPhone 17 Pro / iOS 26.5. `git diff --check` passes.
+- Next: commit, rebase onto the two newer `origin/main` commits, rerun the full iOS suite and generic simulator build, then push and open the ready REC-87 PR.
+
+Final validation checkpoint, 2026-07-13 10:59 PDT:
+
+- Rebased the implementation cleanly onto latest `origin/main` at `90ec9a19b`; preserved the concurrently landed REC-83 agent-log history during the only conflict.
+- Full iOS suite passed on iPhone 17 Pro / iOS 26.5: 278 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec87-focused/Logs/Test/Test-Wander-2026.07.13_10-54-35--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec87-build`; only the existing traditional-headermap warning was emitted.
+- `node --check scripts/supabase-smoke-test.mjs`, `git diff --check`, the hosted migration list, hosted security/constraint metadata checks, the rollback-only semantic save transaction, and the 14/14 hosted pgTAP assertions all pass.
+- Final pre-landing review is clean after auto-fixing all five specialist findings. No RPC definition, RLS policy, grant, auth claim helper, data row, build number, project membership, or unrelated generated file changed.
+- Hosted migration `20260713101000` is already live and additive, so build 68 can create new semantic saves now. A retained failed save such as Ugo should retry through the existing signed-in startup backfill after force-quit/reopen. The branch's clearer failure UX and expanded presentation/test guardrails require a future explicit TestFlight release after merge.
+- Ryan/Joe validation: force-quit and reopen build 68 while signed in as `ryan_lieblein`, save a new Been restaurant with its default personal label/cuisine, then have Joe reopen/refresh and verify the place is visible. No database deletion or historical reset was performed.
+- Build-number bump, archive, TestFlight upload, and Slack release note were intentionally skipped because this request is implementation/PR only, not an explicit release request.
+
+Handoff, 2026-07-13 11:04 PDT:
+
+- Implementation commit: `8a491d55e` (`fix: restore semantic map save sync`).
+- Pushed `codex/rec-87-map-save-sync-contract` and opened ready PR #82: https://github.com/joelipshutz/wander/pull/82.
+- The GitHub app connector returned `403 Resource not accessible by integration`; the repo's authenticated `gh` fallback created the ready PR successfully. This did not affect branch contents or validation.
+- Linear `REC-87` was moved to `In Review` and PR #82 was attached. The separate validation-comment write timed out twice in automatic permission review; the same evidence and test instructions are preserved in the issue description, PR body, and this log. Keep the issue In Review until PR #82 is reviewed/merged and the requested Ryan/Joe cross-account save is verified; do not mark it Done merely because the additive hosted migration is live.
+- Concrete next step: Ryan force-quits/reopens build 68, confirms Ugo retries or saves a new Been restaurant, and Joe reopens/refreshes to verify visibility. If successful and a TestFlight binary with the UX/test guardrails is desired, merge PR #82 first and make a separate explicit TestFlight release request.
+
+REC-82 latest-main integration, 2026-07-13 11:45 PDT:
+
+- The final PR check showed that `origin/main` had advanced to `3eccea438` (`Fix semantic map save sync (#82)`), making PR #75 conflicting after the Saba implementation was pushed.
+- Merged latest `origin/main`. The only textual conflicts were the shared `docs/agent-log.md` and `scripts/supabase-smoke-test.mjs`; preserved both REC-82 and REC-87 log histories and combined the smoke runner so it retains semantic own-place save coverage, place-list access checks, and preferred-place-photo visibility/grant checks.
+- `xcodegen generate` produced no project diff. `node --check scripts/supabase-smoke-test.mjs`, `git diff --check`, and all 7 Google selector tests pass after conflict resolution.
+- Full integrated iOS suite passed 284/284 with 0 failures on iPhone 17 Pro / iOS 26.5. Result: `/private/tmp/DerivedData-rec82-saba-main-sync/Logs/Test/Test-Wander-2026.07.13_11-41-26--0700.xcresult`.
+- Next: commit/push this latest-main merge, confirm PR #75 is mergeable and ready, refresh Linear with the final head, and reopen Xcode on the synchronized worktree. Manual signed-in Saba photo validation remains the only product check.
+## 2026-07-13 11:34 PDT - Codex - TestFlight Build 69 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-69`
+Worktree: `/private/tmp/recme-build69-release`
+Linear: `REC-87` remains In Review through TestFlight availability and Ryan/Joe cross-account validation.
+
+Goal: package latest `main` as TestFlight build 69 after the requested squash merge, including the REC-83 full-screen place-profile cutoff fix and REC-87 semantic save-sync fix.
+
+Starting status:
+
+- Completed the required pending-release sweep and fresh pre-landing review for PR #82; no unresolved findings, Greptile comments, labels, or holds remain.
+- Squash-merged PR #82 into `main` at `3eccea4387508e5e7c1a4bcb908b0aa0fb512247`.
+- Created this isolated release worktree from the resulting latest `origin/main`; the worktree is clean and has no overlap with other agents' branches.
+- Current App Store build number is 68. This release will increment it exactly once to 69.
+- No tester data will be deleted or rewritten. Hosted migration `20260713101000` is already live and additive.
+
+Expected files:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj` (regenerated by XcodeGen)
+- `docs/agent-log.md`
+
+Release plan:
+
+1. Bump build 68 to 69, regenerate the Xcode project, and inspect the generated diff.
+2. Run the full iOS test suite and generic simulator build on the release branch.
+3. Open and squash-merge the build-number PR to `main`.
+4. Archive and upload signed build 69 from latest `main`, then run `scripts/testflight-release.mjs` with the archive path.
+5. Record TestFlight/Linear/Slack completion evidence through a docs-only completion PR.
+
+Release validation checkpoint, 2026-07-13 11:40 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 68 to 69 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj` with XcodeGen. The generated project diff is limited to the matching Debug and Release build numbers; there is no signing or project-membership churn.
+- Full `WanderTests` suite passed on iPhone 17 Pro / iOS 26.5: 278 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build69-test/Logs/Test/Test-Wander-2026.07.13_11-35-55--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-build69-build`; only the existing traditional-headermap warning was emitted.
+- `git diff --check` passes. Next step is the build-number PR, squash merge to `main`, then signed archive/upload from the resulting main commit.
+
+REC-82 build-69 main synchronization, 2026-07-13 11:49 PDT:
+
+- `origin/main` advanced again during the PR mergeability check with `db9dab1cd` (`chore: bump TestFlight build 69 (#83)`). Merged that build-number/docs-only commit and preserved both release and REC-82 histories in the shared agent log.
+- This final main update does not change app behavior exercised by the immediately preceding 284/284 integrated test run. `project.yml` and the generated project now consistently carry build 69.
+- Next: push the final synchronization, verify PR #75 is mergeable at its new head, and refocus Xcode for Ryan's signed-in Saba retest.
+
+REC-82 synchronized completion, 2026-07-13 11:51 PDT:
+
+- Final latest-main integration commit: `fd0772bd8`; implementation commit remains `707277945`.
+- Pushed the synchronized branch and verified ready PR #75 is open, clean, and mergeable against `main`: https://github.com/joelipshutz/wander/pull/75.
+- Final validation remains 7/7 Google selector tests and 284/284 integrated iOS tests with 0 failures. The hosted Saba selector fix is deployed.
+- Xcode is focused on `/private/tmp/recme-rec82-place-photos/Wander.xcodeproj`. Ryan's signed-in Saba full/collapsed-card check is the only remaining product validation; no implementation or configuration work remains before that test.
+- Linear `REC-82` remains `In Review`. No merge or additional TestFlight release was requested for REC-82 in this task.
+
+## 2026-07-13 13:49 PDT - Codex - REC-82 Merge And TestFlight Build 70
+
+Agent: Codex
+Branch: `codex/rec-82-seed-place-photos`
+Worktree: `/private/tmp/recme-rec82-place-photos`
+Linear: `REC-82`, kept `In Review` through the requested TestFlight release
+
+Goal: run the final landing gate for PR #75, squash-merge the confirmed place-photo behavior to `main`, then package latest `main` as the next TestFlight build and make it available to public testers.
+
+Starting status:
+
+- Ryan confirmed the complete REC-82 behavior now works as expected, including Saba, Intelligentsia, and Tavern On Main, and explicitly requested both the squash merge and a new TestFlight build.
+- PR #75 is open and ready at `f90eac5ba`; the feature worktree is clean and synchronized with its remote branch.
+- The required release sweep confirms build 69 is already uploaded, `VALID`, attached to `Wander Alpha`, externally approved, and announced. The next build is therefore 70; no prior release work remains unfinished.
+- Latest `origin/main` is `302324d9f`, whose only change after the branch's last main integration is the build-69 release completion log. The branch must absorb that log before merging.
+- Existing build-69 release/completion worktrees are clean with deleted remote branches. No overlapping uncommitted release work was found.
+
+Expected files before merge:
+
+- `docs/agent-log.md` for this landing/release record and the latest-main log merge.
+- No feature-source change is expected unless the required pre-landing review finds a blocker.
+
+Expected release files after merge, on a fresh build-70 branch/worktree from latest `origin/main`:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj`
+- `docs/agent-log.md`
+Release completion, 2026-07-13 11:53 PDT:
+
+- Build-number PR #83 was reviewed clean and squash-merged: https://github.com/joelipshutz/wander/pull/83. Latest release source is `main` commit `db9dab1cdc211db3a5f2284631475ac44d482076`.
+- Created signed archive `/private/tmp/Wander-0.1-build69.xcarchive` from that exact commit. Archive and embedded app metadata independently confirmed rec.me `0.1 (69)`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Exported and uploaded the unchanged archive with `/private/tmp/WanderExportUpload69.plist`, `destination=upload`, and `manageAppVersionAndBuildNumber=false`. Xcode reported `Uploaded Wander` and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed archive upload metadata build 69 and App Store Connect build id `8598215c-0c00-4076-8e9b-b997a831815d`; processing is `VALID`, `usesNonExemptEncryption=false`, What to Test is updated for `en-US`, the build is attached to `Wander Alpha`, and external review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required live/approved tester note with concrete Ryan/Joe cross-account and full-profile checks in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783968716300219.
+- Linear `REC-87` is Done with PR, test, archive, App Store Connect, TestFlight, and Slack evidence. `REC-83` received a follow-up comment confirming its corrected full-screen fix is included in build 69.
+- No tester data was deleted, reset, or rewritten. The REC-87 schema migration remains additive. Broader foreground/reader-cache refresh behavior is intentionally tracked separately under `REC-45`.
+- Release validation for Ryan and Joe: install build 69, force-quit/reopen, save a new Been restaurant with default personal label/cuisine on Ryan's account, then reopen Joe's app and confirm social visibility. Also verify retained Ugo recovery and the bottom of full place profiles.
+
+REC-82 pre-landing blocker checkpoint, 2026-07-13 14:18 PDT:
+
+- Ran the required fresh pre-landing review before the requested squash merge and TestFlight build 70. The merge and release are intentionally paused; PR #75 must not land in its current form.
+- Verified against Google's current Places policy (updated 2026-07-10) that Places results displayed on a map must be displayed on a Google Map. The REC-82 collapsed Google photo is rendered over Apple MapKit, so the shipped design is not terms-compatible without moving that surface to Google Maps SDK or removing Google photos from Apple-map surfaces.
+- The collapsed Google-photo container also lacks Google Maps attribution, and the full attribution uses fixed 10pt bold text rather than Google's current 12–16sp normal-weight guidance.
+- Security review found that coordinate/dropped-pin requests currently send the pin name, coordinate-formatted address, and exact latitude/longitude to Google before trying the visible user-photo fallback. Coordinate-only pins must bypass Google entirely.
+- The authenticated Edge Function has no server-side per-user/global quota enforcement before billable Google calls. An authenticated caller can automate calls against the shared credential; hard server-side limits and 429 regression coverage are required.
+- iOS review found that a successful Google metadata response followed by media download/decode failure produces attribution with no image and never attempts the visible user-photo fallback. Cancellation handling can also allow stale place-photo work to continue after rapid selection changes.
+- Additional verified cleanup: replace deprecated Text Search `maxResultCount` with `pageSize`, correct docs from Text Search Enterprise/1,000 free monthly to the actual Text Search Pro field mask/pricing tier, and make thumbnail requests size-aware instead of downloading 1600x1200 twice.
+- No app source, hosted schema, Edge Function, build number, archive, upload, TestFlight state, or Slack announcement was changed during this review checkpoint. Product decision required: either ship user-photo-only on Apple MapKit now, or make the larger Google Maps SDK/compliant attribution migration before release.
+
+REC-82 owner decision and hardening restart, 2026-07-13 14:31 PDT:
+
+- Ryan explicitly overrode the review hold and approved continuing to display Google Places photos in the existing Apple MapKit product. Treating map-provider compatibility as an owner-approved product/legal decision and proceeding with the requested squash merge and TestFlight build 70.
+- The independent technical findings remain in scope before landing: coordinate/dropped pins must bypass Google, the Edge Function must enforce authenticated per-user and global free-tier ceilings, Google media/decode failures must fall through to the visible user-photo path, cancellation must not mutate stale place state, and the deprecated Text Search request field/pricing docs must be corrected.
+- PR #75 and Linear REC-82 remain draft/In Progress during these source and hosted-contract changes. Expected additional files: place-photo Edge Function/helpers/tests, a narrow quota migration and hosted smoke assertions, place-photo repository/protocol/backend/view wiring and regression tests, `docs/decisions.md`, `docs/setup.md`, and this log.
+
+REC-82 technical hardening/deployment checkpoint, 2026-07-13 16:18 PDT:
+
+- Coordinate-backed and generically named dropped pins now bypass the Edge Function in both iOS and the server helper, going directly to `first_visible_place_photo`; exact dropped-pin coordinates are no longer sent to Google. MapKit venue enrichment remains enabled per Ryan's owner decision.
+- Added additive hosted migration `20260713213500_place_photo_quota.sql`. `public.consume_place_photo_quota()` is a narrow `SECURITY DEFINER` RPC with pinned `search_path`, no caller-selected user id, no direct authenticated counter-table privileges, a 120-request UTC daily per-user cap, and a 900-request UTC monthly global cap. The updated Edge Function fails closed with `429` before provider calls when quota is unavailable/exhausted.
+- The hosted project already contained remote migration `20260712214600` from active REC-86 work, which is not yet present on `main`; this prevented `supabase db push --dry-run`. Applied the reviewed REC-82 transaction with `supabase db query --linked`, then recorded only `20260713213500` as applied with migration repair. Migration list now shows local/remote REC-82 alignment while leaving the independent REC-86 history untouched.
+- Required hosted smoke passed authenticated quota admission, definer/search-path/grant/table-privilege metadata, and the existing owner/follower/stranger preferred-photo boundaries. Deployed the hardened `place-photo` function to project `rugmtlgufrhlxwfkumhw`; an unauthenticated post-deploy probe returns 401.
+- Google metadata/media failure handling now triggers the earliest visible user-photo fallback, drops to category artwork when that also fails, and ignores canceled/stale photo tasks. Google attribution is present on the collapsed photo and the full badge now uses 12pt regular text with a 44pt interactive height. Text Search uses supported `pageSize` and docs now identify Text Search Pro's 5,000-event cap separately from the 1,000-event photo cap.
+- Validation so far: 9/9 Edge selector/privacy tests pass through Node's TypeScript stripping; smoke script syntax passes; 46/46 focused iOS repository/presentation tests pass on iPhone 17 Pro / iOS 26.5 (`/private/tmp/DerivedData-rec82-hardening-focused/Logs/Test/Test-Wander-2026.07.13_16-09-27--0700.xcresult`); `git diff --check` passes. Next: full suite, final diff/review, commit/push, ready/merge PR #75, then build 70.
+
+REC-82 final hardening validation checkpoint, 2026-07-13 16:23 PDT:
+
+- Full `WanderTests` suite passed on iPhone 17 Pro / iOS 26.5: 287 passed, 0 failed (`/private/tmp/DerivedData-rec82-hardening-focused/Logs/Test/Test-Wander-2026.07.13_16-18-30--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec82-hardening-build`; only the existing traditional-headermap warning was emitted.
+- Final Edge selector/privacy result remains 9/9 passing, required hosted Supabase smoke remains passing, the hardened `place-photo` function and quota contract remain deployed, `git diff --check` passes, and a tracked-file scan found no Google API credential.
+- The branch is ready to commit, push, mark PR #75 ready, synchronize with latest `origin/main`, and squash-merge before the requested build-70 release.
+
+REC-82 build-70 release worktree, 2026-07-13 16:31 PDT:
+
+- PR #75 was marked ready and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/75. The merge commit is `d8b5fb00ed4193b0f9af2634ffdadae62278a9f6`.
+- Created isolated release worktree `/private/tmp/recme-testflight-build70` on `codex/testflight-build-70` from that exact latest `origin/main`; it is clean and does not overlap any active uncommitted work.
+- Current App Store build number is 69. This requested release increments it exactly once to 70 and packages all merged app changes through REC-82.
+- Expected files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this coordination log. No tester data will be deleted, reset, or rewritten.
+- Next: regenerate with XcodeGen, inspect the diff, run the full iOS suite and generic build, open and squash-merge the build-number PR, then archive/upload latest `main` and complete TestFlight/Slack/Linear handoff.
+
+Build-70 release validation checkpoint, 2026-07-13 16:38 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 69 to 70 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj`. The generated diff is limited to the matching Debug and Release build numbers; there is no signing or source-membership churn.
+- Full `WanderTests` suite passed on iPhone 17 Pro / iOS 26.5: 287 passed, 0 failed (`/private/tmp/DerivedData-build70-test/Logs/Test/Test-Wander-2026.07.13_16-32-43--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-build70-build`; only the existing traditional-headermap warning was emitted.
+- Next: final diff check, commit/push, ready build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
+
+Build-70 TestFlight completion, 2026-07-13 17:02 PDT:
+
+- Build-number PR #87 had already merged build 70 to `main` at `77d0c96502d7280d9994bcb4bd14234c24f8956d`. A clean signed archive at `/private/tmp/Wander-0.1-build70.xcarchive` independently confirmed rec.me `0.1 (70)`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- A new upload correctly failed because App Store Connect already contained build 70. The release helper resolved existing build id `19ea939c-fe95-4646-9396-d18490b39b05`, confirmed processing `VALID`, set `usesNonExemptEncryption=false`, updated What to Test, attached it to `Wander Alpha`, and reported external review `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Tester-facing Slack note: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1783987165967759.
+- Linear `REC-82` received the build-70 release evidence. REC-86 is intentionally excluded from build 70 and will ship in the next build after PR #81 is integrated and validated against current `main`.
+
+REC-86 latest-main integration and pre-landing hardening, 2026-07-13 17:25 PDT:
+
+- Merged latest `origin/main` (`77d0c96`, TestFlight build 70) into the isolated REC-86 branch and preserved the already-landed REC-82 migrations, app changes, tests, and release history. The implementation diff against current main remains scoped to activity timestamps, presentation, tests, and its two additive migrations.
+- A three-lens pre-landing review covered Swift/UI behavior, Supabase security and migration posture, and adversarial timestamp/data-flow cases. It found three actionable gaps: saved-time copy could truncate behind long metadata, explicit visit-date edits could leave `user_places.visited_at` stale, and implausible future timestamps could stay pinned above valid activity. All three are fixed; no review finding remains open.
+- Added `20260714001500_sync_user_place_latest_visit.sql`: a narrow `SECURITY DEFINER` trigger function with pinned `search_path` and no authenticated execute grant recomputes the latest active explicit visit after insert/edit/delete while skipping derived backfill rows to prevent recursive writes.
+- Applied that additive migration to linked hosted project `rugmtlgufrhlxwfkumhw`. A subsequent linked dry run reports the remote database is up to date. No tester rows were deleted or reset; existing Been summaries were updated only where their persisted latest active visit differed.
+- Hosted rollback-wrapped pgTAP now passes 27/27 assertions through the repo's pinned-TLS direct Postgres path. Coverage includes trigger metadata/grants, explicit visit edit propagation, exact timestamp/avatar payloads for both RPCs, and the preserved security-invoker/search-path/execute-grant contracts.
+- Latest Activity now truncates place metadata before its fixed saved-time label. Five minutes of clock skew is tolerated as `just now`; implausible future dates sort after valid activity and render as absolute dates.
+- Integrated full iOS suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped. Result: `/private/tmp/DerivedData-rec86-full/Logs/Test/Test-Wander-2026.07.13_17-21-27--0700.xcresult`.
+- Final generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec86-final-build`. An initial universal build attempt exhausted the remaining disk while writing dSYM output; after removing only completed temporary DerivedData, the clean rerun passed. This was an environment-capacity failure, not a source failure.
+- `git diff --check` passes. Next: commit/push the integrated branch, update and squash-merge PR #81, then package latest `main` as explicitly requested TestFlight build 71.

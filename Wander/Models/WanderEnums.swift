@@ -22,6 +22,100 @@ enum SyncState: String, Codable, CaseIterable, Equatable {
     case tombstoned
 }
 
+struct SaveSyncFeedback: Identifiable, Equatable {
+    let id = UUID()
+    let syncState: SyncState
+    let title: String
+    let message: String
+    let systemImage: String
+    let canSignIn: Bool
+    let usesWarningHaptic: Bool
+    let dismissDelayNanoseconds: UInt64
+
+    init(syncState: SyncState, canSignIn: Bool) {
+        self.syncState = syncState
+        self.canSignIn = canSignIn
+
+        switch syncState {
+        case .synced:
+            title = "saved to your map"
+            message = "Synced and ready."
+            systemImage = "checkmark"
+            usesWarningHaptic = false
+            dismissDelayNanoseconds = 2_000_000_000
+        case .failed:
+            title = "sync failed"
+            message = "Saved on this phone. We'll retry automatically."
+            systemImage = "exclamationmark.triangle"
+            usesWarningHaptic = true
+            dismissDelayNanoseconds = 5_000_000_000
+        case .pendingCreate, .pendingUpdate, .pendingDelete:
+            title = "saved on this phone"
+            message = "Sync is queued."
+            systemImage = "arrow.triangle.2.circlepath"
+            usesWarningHaptic = false
+            dismissDelayNanoseconds = 3_500_000_000
+        case .localOnly:
+            title = "saved on this phone"
+            message = canSignIn ? "Sign in to back it up." : "Kept on this phone."
+            systemImage = "checkmark"
+            usesWarningHaptic = false
+            dismissDelayNanoseconds = canSignIn ? 5_000_000_000 : 2_500_000_000
+        case .serverDenied:
+            title = "needs review"
+            message = "Saved on this phone until it can sync."
+            systemImage = "exclamationmark.triangle"
+            usesWarningHaptic = true
+            dismissDelayNanoseconds = 5_000_000_000
+        case .tombstoned:
+            title = "removed"
+            message = "This saved place was removed."
+            systemImage = "trash"
+            usesWarningHaptic = false
+            dismissDelayNanoseconds = 3_500_000_000
+        }
+    }
+
+    func mapMessage(successMessage: String) -> String {
+        switch syncState {
+        case .synced:
+            successMessage
+        case .failed:
+            "Saved on this phone, but sync failed. We'll retry."
+        case .pendingCreate, .pendingUpdate, .pendingDelete:
+            "Saved on this phone. Sync is queued."
+        case .localOnly:
+            "Saved on this phone."
+        case .serverDenied:
+            "Saved on this phone, but it needs review before syncing."
+        case .tombstoned:
+            "This saved place was removed."
+        }
+    }
+}
+
+enum PlaceAttributeValuePresentation {
+    static func strings(from valueJSON: String) -> [String] {
+        guard let data = valueJSON.data(using: .utf8) else { return [] }
+
+        if let values = try? JSONDecoder().decode([String].self, from: data) {
+            return values.compactMap(normalizedValue)
+        }
+
+        if let value = try? JSONDecoder().decode(String.self, from: data),
+           let normalized = normalizedValue(value) {
+            return [normalized]
+        }
+
+        return []
+    }
+
+    private static func normalizedValue(_ value: String) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+}
+
 enum VisitPhotoUploadState: String, Codable, CaseIterable, Equatable {
     case pendingUpload = "pending_upload"
     case uploading
