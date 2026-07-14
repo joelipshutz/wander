@@ -11109,3 +11109,8 @@ Physical-device profiling checkpoint, 2026-07-13 19:21 PDT:
 - Recommended implementation order: (1) hydrate a remote list refresh into local staging state and commit/persist once, (2) stop running the full global list refresh whenever a detail appears, (3) serialize/coalesce persistence and move JSON encoding plus file I/O off the main actor without allowing stale snapshots to win, and (4) cache/index visible-place-to-list projections and narrow observation so unrelated/hidden tab bodies do not rebuild. Consider lazy detail rows only after those primary changes.
 - Required validation for the fix: focused tests that assert one publication/persistence boundary per refresh and preserve sync ordering, the full iOS suite, then the same real-device SwiftUI trace. Acceptance should show no repeated `ListsScreen` body intervals over one frame during steady scrolling/back navigation and materially lower hitch duration/count.
 - No runtime code changed in this investigation. Linear `REC-85` and PR #91 are the durable evidence/handoff surfaces; Mission Control remains unavailable at `http://localhost:4000`.
+
+Local device-build checkpoint, 2026-07-13 19:34 PDT:
+
+- At Joe's request, built commit `f186817` as a signed Debug app for the connected iPhone 16 Pro (`00008140-0018152C08A2201C`) with Xcode's device destination and automatic provisioning. The build succeeded in 64.474 seconds with only the existing traditional-headermap warning.
+- Installed `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app` over bundle `com.grayline.wander` and launched it successfully on the phone. No app-data reset or uninstall command was run. This build contains the diagnosed current behavior; the REC-85 performance fix is not implemented yet.
