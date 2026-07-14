@@ -3419,6 +3419,52 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(repository.detailListIDs, [listID])
     }
 
+    func testRemotePlaceListRefreshKeepsSummariesWhenOneDetailFails() async {
+        var saveCount = 0
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { _ in saveCount += 1 }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.seed(), persistence: persistence)
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let remoteList = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Ryan remote tables",
+            description: "summary survives a detail error",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 1
+        )
+        let repository = FakePlaceListRepository(
+            visibleLists: [
+                RemotePlaceListSummary(
+                    list: remoteList,
+                    owner: ProfileShell(
+                        id: "user_ryan",
+                        handle: "ryan",
+                        displayName: "Ryan",
+                        avatarURL: nil,
+                        bio: nil,
+                        relationship: .mutual
+                    ),
+                    collaborators: [],
+                    itemCount: 1
+                )
+            ],
+            failedDetailListIDs: [listID]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        await store.refreshRemotePlaceLists(backend: backend)
+
+        XCTAssertEqual(store.visiblePlaceLists.first { $0.id == listID }?.name, remoteList.name)
+        XCTAssertEqual(repository.detailListIDs, [listID])
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertNotNil(store.lastRemoteError)
+    }
+
     func testRemotePlaceListsPreserveKnownAvatarsWhenSummaryOmitsThem() async {
         let store = makeStore()
         let ryanAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=known"
@@ -4276,6 +4322,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     private var visibleListsResult: [RemotePlaceListSummary]
     private let detailsByListID: [String: RemotePlaceListDetail]
+    private let failedDetailListIDs: Set<String>
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
@@ -4290,6 +4337,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     init(
         visibleLists: [RemotePlaceListSummary] = [],
         details: [String: RemotePlaceListDetail] = [:],
+        failedDetailListIDs: Set<String> = [],
         upsertResult: String = "11111111-1111-4111-8111-111111111111",
         upsertResults: [String]? = nil,
         itemResult: String = "22222222-2222-4222-8222-222222222222",
@@ -4297,6 +4345,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
     ) {
         self.visibleListsResult = visibleLists
         self.detailsByListID = details
+        self.failedDetailListIDs = failedDetailListIDs
         self.upsertResults = upsertResults ?? [upsertResult]
         self.itemResult = itemResult
         self.upsertDelayNanoseconds = upsertDelayNanoseconds
@@ -4313,6 +4362,9 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     func detail(listID: String) async throws -> RemotePlaceListDetail? {
         detailListIDs.append(listID)
+        if failedDetailListIDs.contains(listID) {
+            throw TestError.expected
+        }
         return detailsByListID[listID]
     }
 
