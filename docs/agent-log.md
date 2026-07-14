@@ -11145,7 +11145,7 @@ Production checkpoint, 2026-07-13 17:51 PDT:
 
 Final validation checkpoint, 2026-07-13 18:29 PDT:
 
-- Rebasing onto latest `origin/main` (`7b4d64082`, build 71) preserved all REC-89 work and the append-only shared log. The temporary pre-rebase stash remains as a recovery point until the implementation commit is created; no unrelated worktree changes were modified.
+- Rebasing onto build-71 source `7b4d64082` preserved all REC-89 work. A final rebase onto `aa6cf212d` then added only the build-71 completion log; no app/backend bytes changed after final validation. The temporary pre-rebase stash remains as a recovery point, and no unrelated stashes or worktree changes were modified.
 - Applied hosted migration `20260714003000_profile_redesign_contracts.sql` to linked Supabase project `rugmtlgufrhlxwfkumhw`. `supabase migration list --linked` matches through that version. The hosted rollback-wrapped pgTAP suite passed all 39 assertions, and the linked profile/mute/preferred-photo/provider-quota smoke test passed.
 - Deployed the `clerk-profile-webhook` Edge Function with the stale-delete-safe Storage purge. An unsigned production endpoint probe returned HTTP 401 with `invalid_signature`, confirming the Svix boundary remains enforced. The account-purge Deno unit tests previously passed 2/2 and the complete webhook type-check passed; deployment also compiled the final function successfully.
 - Final audit found and fixed a missing app-level registration for the existing `recme://profiles/<id>` share route. `project.yml` now generates `CFBundleURLTypes` into the app Info.plist, and `BuildConfigurationTests` protects the scheme contract.
@@ -11153,4 +11153,11 @@ Final validation checkpoint, 2026-07-13 18:29 PDT:
 - Production Profile and Settings were installed and visually inspected on iPhone 17 Pro and iPhone 17e. Profile, map, edit, social graph, Privacy & Trust, Settings, and blocked-empty states have no observed clipping or overlap; screenshots are under `/private/tmp/rec89-visual/`. Final labels are `your calendar` and `your map`.
 - Remaining validation gaps are explicit: Docker/local Supabase is unavailable, so `supabase test db` was not run; no paired physical iPhone/DebugBridge or Dynamic Type XXL session was available. Hosted schema/security checks and both simulator sizes are complete.
 - Contacts import remains intentionally deferred per the approved requirement; Find Friends routes to Discover > Members. No TestFlight build, Slack release note, merge, or build-number bump was requested or performed.
-- Next: commit and force-update the rebased branch, mark PR #86 ready, move REC-89 to In Review with the validation evidence, and open this exact worktree in Xcode for Ryan.
+- Implementation commit `c139ead61` was force-pushed with lease to `codex/rec-89-profile-redesign` after the final docs-only rebase.
+
+Handoff, 2026-07-13 18:39 PDT:
+
+- Updated PR #86 to the full production scope and marked it ready for review: https://github.com/joelipshutz/wander/pull/86.
+- Moved Linear REC-89 to In Review, confirmed PR #86 is attached, and added the implementation, hosted migration, webhook, XCTest, universal build, visual QA, and known-gap evidence.
+- Opened `/private/tmp/recme-rec89-profile-redesign/Wander.xcodeproj` in Xcode. That worktree is checked out on `codex/rec-89-profile-redesign`; the root REC-81 checkout remains untouched.
+- No required implementation work remains on the branch. Ryan's next step is device/account testing in Xcode; merge and TestFlight remain separate explicit actions.
