@@ -11122,3 +11122,20 @@ Lists/Discover follow-up capture, 2026-07-13 19:40 PDT:
 - The cadence exactly matches `runTicker()`: it sleeps for 2.6 seconds, then animates the parent `tickerIndex` solely to rotate the search-field placeholder. Because that state belongs to `DiscoverScreen`, every placeholder tick invalidates the entire visible activity feed during scrolling. No individual Discover body exceeded 16.67 ms and Instruments recorded no formal hitch in this capture, but the periodic batch explains the reported micro-stutter.
 - Created high-priority bug `REC-91` for implementation: isolate ticker state/animation inside `DiscoverSearchField` or a dedicated small ticker view so placeholder changes cannot rebuild activity rows; preserve stable row identity and make the feed lazy if it can grow. Physical-device acceptance requires that ticker rotation produce zero `LatestActivityRow` updates during steady scrolling.
 - Added the REC-91 evidence and link to Linear REC-85. REC-85 remains the Lists/global-store persistence fix; REC-91 is the distinct Discover placeholder-ticker fix. No runtime code changed during this follow-up diagnosis.
+
+## 2026-07-13 20:09 PDT - Codex - REC-85 + REC-91 implementation
+
+Agent: Codex using the `ios-fix` workflow
+Branch: `codex/rec-85-lists-jank`
+Worktree: `/private/tmp/recme-rec85-lists-jank`
+Linear: `REC-85` and `REC-91`, both moved to `In Progress`
+
+Goal: implement the confirmed Lists persistence/publication fix and the separate Discover ticker-isolation fix, validate both with focused/full tests and repeat physical-device traces, then release the validated latest `main` to TestFlight as explicitly requested.
+
+Starting status:
+
+- Fetched `origin`; the branch is clean, six investigation commits ahead of and zero commits behind current `origin/main`. Existing worktrees do not overlap this isolated branch. PR #91 was returned to draft for implementation.
+- Pre-fix evidence is retained in physical Instruments traces at `/private/tmp/rec85-device-swiftui.trace` and `/private/tmp/rec85-lists-discover-device.trace`. The first showed 59/59 `ListsScreen` updates over one frame with JSON persistence immediately preceding 53/59; the second showed 180 activity-row rebuilds at the exact 2.6-second placeholder-ticker cadence.
+- The `ios-fix` workflow normally captures a debug `StateServer` snapshot fixture before editing. This repo has no `StateServer`, `DebugBridge`, or restore API by prior documented decision, so the physical traces are the reproducing pre-fix snapshots and deterministic Swift test fixtures will provide the durable regression guard. No debug-server scope will be added.
+- Expected implementation files are `Wander/Features/Discover/DiscoverScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, focused files under `WanderTests/`, and this coordination log. `project.yml`, auth, payments, schema/RLS, and app build number are out of the implementation diff; build number changes only in the later explicit TestFlight release step.
+- Mission Control remains unavailable at `http://localhost:4000`; Linear and PR #91 are the durable trackers.
