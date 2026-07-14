@@ -11571,3 +11571,26 @@ Release completion, 2026-07-13 22:48 PDT:
 - Added final release evidence to Linear `REC-88` and `REC-89` and moved both issues to `Done` after the build was approved and attached to the public beta group.
 - Validation shipped with 324 tests / 0 failures, a passing generic arm64/x86_64 iOS Simulator build, a passing signed Release archive, REC-89 hosted pgTAP 44/44 plus linked smoke, and REC-88 hosted pgTAP 70/70 plus linked rollback smoke.
 - Known/deferred: Find Friends routes to Discover > Members until native Contacts import ships. The tester checklist explicitly prioritizes a fresh physical two-account/APNs pass for Shared Visits foreground, background, and cold-launch routing.
+## 2026-07-13 23:00 PDT - Codex - REC-93 List Place-Photo Design Review
+
+Agent: Codex using `plan-design-review`
+Branch: `codex/rec-93-list-place-photos`
+Worktree: `/private/tmp/recme-list-place-photos-design`
+Linear: `REC-93` (`In Progress`)
+
+Goal: audit the production place-card photo pipeline and specify how it should power adaptive list covers and list-detail place media across My Lists, Friends, and Collabs. This is a design/product review only; no app behavior is being changed in this task.
+
+Starting status:
+
+- The worktree is clean and starts from exact latest `origin/main` at `d959504`, which records approved TestFlight build 73.
+- Existing Lists cards use category-based cover mosaics; existing place-card photos include provider and viewer-visible user-photo behavior that must be reused without creating N+1 provider requests or weakening visibility rules.
+- Expected edits are this coordination log and a new design review/spec under `docs/reviews/`. Relevant implementation, migrations, photo plans, and current screenshots will be read but not modified.
+
+Design review completion:
+
+- Added `docs/reviews/2026-07-13-list-place-photos-design-review.md` with the current-state audit, recommended adaptive cover geometry, screen hierarchy, surface-by-surface behavior, complete state table, privacy semantics, accessibility, backend media manifest, thumbnail delivery, and implementation tasks.
+- Recommendation is automatic viewer-scoped visit-photo covers with the existing category fallback. Lists home, list-detail rows, and the full-screen list map rail must not invoke Google photo enrichment. Google remains on the deliberate place-open path because automatic list loading conflicts with the existing quota/no-prefetch posture and cannot legibly show required per-photo author attribution in a four-cell cover.
+- Generated and quality-checked the illustrative visual reference at `/Users/joelipshutz/.gstack/projects/wander-nametbd/designs/list-place-photos-20260713/recommended-adaptive-list-photos.png`. The design doc records the generator artifacts that must not be copied, including alternate navigation/type and a mismatched illustrative count.
+- Official source checks covered Google Place Photos attribution/no-cache requirements and Supabase private image transformations. The spec recommends authenticated 320px/128px transforms if the project plan supports them, otherwise a stored thumbnail derivative with the same RLS ancestry.
+- Wrote the required five-task gstack artifact to `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/tasks-design-review-20260713-232122.jsonl`. `git diff --check` passes. No app code, migration, hosted data, Xcode project, build number, build, or TestFlight state changed; iOS tests are not applicable to this docs-only review.
+- Mission Control remained unavailable at `http://localhost:4000`. Linear `REC-93` is the durable tracker. One product confirmation remains before implementation: automatic viewer-scoped visit photos only, with no Google photos or manual list-cover picker in v1.
