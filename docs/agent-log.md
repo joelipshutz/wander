@@ -11045,3 +11045,52 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - Final validation: hosted pgTAP 27/27; full release-branch iOS suite 291/291; generic iOS Simulator arm64 build; signed archive metadata and signature checks; TestFlight processing/attachment/review checks. Only the existing traditional-headermap warning remains.
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
+
+## 2026-07-13 18:53 PDT - Codex - REC-90 Discover Redesign Planning
+
+Agent: Codex
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`Redesign Discover around activity, nearby place memories, and people discovery`)
+
+Goal: produce the product, full-state UX, and engineering specification for a Beli-inspired Discover redesign before any implementation begins.
+
+Starting status:
+
+- Updated global gstack from `1.26.0.0` to `1.60.1.0`, installed the checksum-verified Bun runtime required by setup, rebuilt browse/design tooling, regenerated host skills, and ran gstack migrations.
+- Ran `git fetch origin`, inspected the clean but REC-60-dedicated root checkout, all active worktrees, recent project history, and the latest coordination log.
+- Created this isolated worktree from `origin/main` at `aa6cf21` because the root checkout belongs to REC-60 and REC-89 is active in a separate Profile-redesign branch.
+- Created Linear `REC-90`, assigned it to Joe, moved it to `In Progress`, and related it to REC-7, REC-9, REC-10, REC-39, and REC-86.
+- Mission Control task creation was attempted, but local `http://localhost:4000` is not running.
+- GBrain search was attempted twice serially and hit the documented PGLite lock timeout both times; the lock file was absent after timeout, so this session is falling back to canonical KB Markdown and repo docs.
+
+Expected planning files:
+
+- `docs/agent-log.md`
+- A feature design/spec document under `docs/plans/` or `docs/specs/`, after the gstack decision gates are complete
+- `docs/decisions.md` and/or `docs/open-questions.md` only if the reviews produce durable decisions or unresolved product questions
+- gstack design, state, and engineering review artifacts under `~/.gstack/projects/`
+
+Planned workflow:
+
+1. Run `office-hours` to lock the user problem, premises, alternatives, and recommended wedge.
+2. Run `plan-design-review` rather than post-implementation `design-review`, because the requested output is a pre-code specification of every Discover state.
+3. Run `plan-eng-review` to lock reuse boundaries, architecture, data flow, failure modes, performance, and complete test coverage.
+4. Stop before implementation and hand off an approved plan tied to REC-90.
+
+Office-hours checkpoint, 2026-07-13 19:16 PDT:
+
+- Joe confirmed that the canonical office-hours product spec, full-state design specification, and engineering plan must live inside the rec.me repo. The private gstack artifact repository is a mirror only, not the source of truth.
+- Current implementation audit: Discover already has Places/Members modes, a natural-language place search, privacy-filtered newest-first followed-user activity, member search, profile drill-in, and follow/unfollow behavior. The missing growth surfaces are proactive people recommendations and a confidence-aware “Places you may have been” recovery flow.
+- Existing locked guidance currently limits people discovery to contacts, exact/near-exact handle search, and visible profile links, and forbids a global people directory or ranking people. REC-90 must explicitly revise or preserve that boundary; the new Beli-inspired suggestions cannot silently bypass it.
+- Product goal carried into office-hours from Joe's brief: increase follow creation and network density so follow-powered place discovery becomes useful. No implementation or database seeding has started.
+
+Office-hours design-doc checkpoint, 2026-07-13 20:17 PDT:
+
+- Wrote the canonical repo-owned product design at `docs/specs/2026-07-13-rec-90-discover-redesign-product-spec.md`; the private gstack path is an artifact mirror only.
+- Joe selected the Beli-balanced direction: Places remains the default with newest-first Activity and a provenance-appropriate place-recovery shelf; People receives proactive recommendations and explicit follow value.
+- The spec separates prototype validation, People acquisition, place recovery, and later recommendation-source expansion into independently gated slices. Contacts and device-location people ranking are not in REC-90 v1.
+- Three cold adversarial review rounds scored 6/10, 8/10, then 9/10. Sixty issue instances were surfaced across completeness, consistency, clarity, scope, and feasibility. All final-round findings were addressed in the repo document without starting implementation.
+- Key locks include explicit recommendation consent, no protected pre-follow place previews, a narrow security-definer recommendation path by default, deterministic search/ranking/reason rules, complete product-state transitions, offline cache truthfulness, positive place-save success separated from dismissal, and powered rather than under-sampled production lift claims.
+- Joe approved the office-hours product spec and selected the recommended handoff into the pre-engineering full-state `plan-design-review`.
+- Joe added a hard visual gate: after the full-state design specification, create repo-owned mocks for the main end-to-end flows and important state variants, present them for approval, and do not proceed to `plan-eng-review` or implementation until he approves the mocks.
