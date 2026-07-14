@@ -11610,6 +11610,17 @@ Linear: `REC-92` (`In Progress`; move to `In Review` after draft PR)
 - Pushed remote branch `codex/rec-92-invitation-inbox` and opened draft PR #95: https://github.com/joelipshutz/wander/pull/95. Linked the PR and validation evidence on Linear `REC-92`, then moved the issue to `In Review`.
 - Next step is product approval of the transient banner, Profile placement, and `Review & save` / `Decline` inbox treatment. Production implementation should then add the three-second lifecycle, durable invite query/badge, review deep link, idempotent decline, error/retry handling, and accessibility/reduced-motion coverage.
 
+Release completion, 2026-07-13 22:48 PDT:
+
+- Opened ready release PR #94 with the three-file build-number/log diff and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/94. Exact released source commit: `8e123c17a4d7831d9869c1e234d1dee503c41b32`.
+- Archived exact released `main` successfully at `/private/tmp/Wander-0.1-build73.xcarchive`. Archive and embedded app metadata both confirm marketing version `0.1`, build `73`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export options used `destination=upload`, `method=app-store-connect`, automatic signing, and `manageAppVersionAndBuildNumber=false`. Upload with the configured App Store Connect API key succeeded without changing the archive build number.
+- App Store Connect build id `85eb8567-4158-47c4-a5ff-732cf947afcd` reached `VALID`. The helper set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 73 to `Wander Alpha`, submitted external beta review, and confirmed review state `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784007999287189. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Added final release evidence to Linear `REC-88` and `REC-89` and moved both issues to `Done` after the build was approved and attached to the public beta group.
+- Validation shipped with 324 tests / 0 failures, a passing generic arm64/x86_64 iOS Simulator build, a passing signed Release archive, REC-89 hosted pgTAP 44/44 plus linked smoke, and REC-88 hosted pgTAP 70/70 plus linked rollback smoke.
+- Known/deferred: Find Friends routes to Discover > Members until native Contacts import ships. The tester checklist explicitly prioritizes a fresh physical two-account/APNs pass for Shared Visits foreground, background, and cold-launch routing.
+
 ## 2026-07-13 22:55 PDT - Codex - REC-92 Production Invitation Inbox And Acceptance Repair
 
 Agent: Codex
