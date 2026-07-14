@@ -16,6 +16,7 @@ final class WanderBackend: ObservableObject {
     let listSuggestionRepository: (any ListSuggestionRepository)?
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
+    let sharedVisitRepository: (any SharedVisitRepository)?
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
@@ -36,6 +37,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
+            self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
         } else {
             self.profileRepository = nil
             self.profileAvatarRepository = nil
@@ -50,6 +52,7 @@ final class WanderBackend: ObservableObject {
             self.listSuggestionRepository = nil
             self.placePhotoRepository = nil
             self.notificationRepository = nil
+            self.sharedVisitRepository = nil
         }
     }
 
@@ -72,7 +75,8 @@ final class WanderBackend: ObservableObject {
         placeListRepository: (any PlaceListRepository)? = nil,
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
-        notificationRepository: (any NotificationRepository)? = nil
+        notificationRepository: (any NotificationRepository)? = nil,
+        sharedVisitRepository: (any SharedVisitRepository)? = nil
     ) {
         self.configuration = configuration
         self.profileRepository = profileRepository
@@ -88,6 +92,7 @@ final class WanderBackend: ObservableObject {
         self.listSuggestionRepository = listSuggestionRepository
         self.placePhotoRepository = placePhotoRepository
         self.notificationRepository = notificationRepository
+        self.sharedVisitRepository = sharedVisitRepository
     }
 
     var canUseRemoteData: Bool {
@@ -104,6 +109,7 @@ final class WanderBackend: ObservableObject {
             || listSuggestionRepository != nil
             || placePhotoRepository != nil
             || notificationRepository != nil
+            || sharedVisitRepository != nil
     }
 
     var canSyncProfileAvatars: Bool {
@@ -145,6 +151,16 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await profileRepository.currentProfile()
+    }
+
+    func updateProfilePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
+        guard let profileRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await profileRepository.updatePrivacy(
+            isPrivateProfile: isPrivateProfile,
+            defaultVisibility: defaultVisibility
+        )
     }
 
     func uploadProfileAvatar(jpegData: Data, userID: String) async throws -> ProfileAvatarResult {
@@ -440,5 +456,80 @@ final class WanderBackend: ObservableObject {
         }
 
         try await notificationRepository.unregisterPushToken(token, environment: environment)
+    }
+
+    var canUseSharedVisits: Bool {
+        sharedVisitRepository != nil
+    }
+
+    func createSharedVisitInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.createInvites(
+            sourceVisitID: sourceVisitID,
+            inviteeUserIDs: inviteeUserIDs
+        )
+    }
+
+    func sharedVisitInviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.inviteeUserIDs(sourceVisitID: sourceVisitID)
+    }
+
+    func setSharedVisitInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.setInvitees(
+            sourceVisitID: sourceVisitID,
+            inviteeUserIDs: inviteeUserIDs
+        )
+    }
+
+    func sharedVisitInbox(before: Date? = nil, limit: Int = 50) async throws -> [SharedVisitInvitation] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.inbox(before: before, limit: limit)
+    }
+
+    func sharedVisitContext(participantID: String, generation: Int) async throws -> SharedVisitInvitation? {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.context(participantID: participantID, generation: generation)
+    }
+
+    func resolveSharedVisitDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.resolveDestination(participantID: participantID, generation: generation)
+    }
+
+    func acceptSharedVisit(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.accept(draft)
+    }
+
+    func declineSharedVisit(participantID: String, generation: Int) async throws {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        try await sharedVisitRepository.decline(participantID: participantID, generation: generation)
+    }
+
+    func sharedVisitCompanions(visitIDs: [String]) async throws -> [SharedVisitCompanion] {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.companionContext(visitIDs: visitIDs)
+    }
+
+    func downloadSharedVisitPhoto(bucket: String, path: String) async throws -> Data {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        return try await sharedVisitRepository.downloadPhotoData(bucket: bucket, path: path)
+    }
+
+    func uploadSharedVisitPhoto(bucket: String, path: String, data: Data, contentType: String) async throws {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        try await sharedVisitRepository.uploadPhotoData(
+            bucket: bucket,
+            path: path,
+            data: data,
+            contentType: contentType
+        )
+    }
+
+    func markSharedVisitPhotoUploaded(photoID: String) async throws {
+        guard let sharedVisitRepository else { throw WanderRemoteError.notConfigured }
+        try await sharedVisitRepository.markPhotoUploaded(photoID: photoID)
     }
 }

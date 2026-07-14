@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -38,6 +38,8 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Supabase RLS authoritative | Locked | Client policy is for UI behavior only. |
 | Repository/protocol boundaries | Locked | Views should not call Clerk/Supabase directly. |
 | Profile avatar identity contract | Locked | Any new UI surface that shows a profile photo must be wired from a stable user/profile id through the store's freshest profile/avatar state. Do not copy ad hoc avatar strings from lower-fidelity place, list, search, or graph payloads without preserving richer cached profile metadata. |
+| Shared Visits ownership and privacy | Locked for REC-88 | A Shared Visit invite is available only between mutual, non-blocked, non-private profiles and only from a non-stealth persisted Been visit. The sender sees pending invitees in visit attribution immediately and can reconcile the exact friend set from Edit This Visit. Removing a friend clears pending or accepted attribution, snapshots, and unsent delivery, but never deletes that person's independently owned visit; re-adding them creates a new invitation generation. Each pending invitation generation holds an immutable private snapshot. Acceptance atomically creates or updates the recipient's independently owned save and creates one recipient visit with deterministic retry identities; recipient edits never mutate the sender's visit. Selected photos are copied into recipient-owned storage paths. Stealth, source deletion/status changes, blocks, and account privacy cancel affected sharing/attribution and erase pending snapshots while preserving already-created independent visit records. Client access is RPC-only and every acceptance is protected by a server operation ledger. |
+| Notification enrollment and account isolation | Locked for REC-88 | New backend preference rows default every category off. The one-tap Allow Notifications action requests iOS authorization, explicitly enables all categories, and registers the current device; Disable Notifications turns all categories off and deactivates the token. APNs tokens are exclusive to the current account, and asynchronous inbox, outbox, deep-link, and photo work must discard completions after an account switch. |
 | Backend extraction jobs | Locked | Link/photo extraction should run on backend, not fake client-only extraction. |
 | M2 extraction shells | Locked | Link/photo create unresolved drafts until backend jobs exist. |
 | Discover parser interface early | Locked | Deterministic local parser now; cheap swappable LLM parser in M5. |

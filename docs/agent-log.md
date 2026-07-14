@@ -11032,7 +11032,6 @@ Release validation checkpoint, 2026-07-13 17:43 PDT:
 - Full `WanderTests` suite passed on iPhone 16 Plus / iOS 18.6: 291 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-build71-test/Logs/Test/Test-Wander-2026.07.13_17-38-43--0700.xcresult`).
 - Generic iOS Simulator arm64 build passed with `CODE_SIGNING_ALLOWED=NO` using the same validated DerivedData.
 - `git diff --check` passes. Next: final diff inspection, build-number PR and squash merge, then signed archive/upload from the exact resulting `main` commit.
-
 Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 
 - Build-number PR #89 was reviewed clean and squash-merged to `main`: https://github.com/joelipshutz/wander/pull/89. Exact release source commit: `7b4d64082efae189a09abc9fd2831adecdbac671`.
@@ -11046,6 +11045,137 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
 
+## 2026-07-13 13:41 PDT - Codex - REC-88 Visit Friend Invite Mockup
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+
+Goal: create a visual-only SwiftUI mockup of inviting friends to a saved visit before implementing persistence, backend behavior, or invite wiring.
+
+Starting status:
+
+- Created REC-88 from the chat request and assigned it to Ryan.
+- Fetched latest `origin/main` and created this clean isolated worktree at `302324d9f` because the root checkout has unrelated untracked pnpm cache content and multiple agents/worktrees are active.
+- No overlapping active work was found in the planned DEBUG-only mockup file.
+- Design direction follows `DESIGN.md` and the existing New List collaborator block: warm bone surface, 44-point terracotta plus button, friend avatar/name rows, and compact social attribution.
+
+Expected files:
+
+- `Wander/Features/Map/PlaceActivityMockups.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Mockup scope:
+
+- Add an `add friends to this visit` section directly below rating and above tags/labels in the DEBUG visit editor mockup.
+- Add a compact `with Maya` treatment to a visit card.
+- Add deterministic launch pages and navigation-contract coverage, build the app, and capture iPhone screenshots for review.
+- Do not change production models, save submission payloads, Supabase schema/RPCs, notifications, or invite behavior in this pass.
+
+Completion, 2026-07-13 13:57 PDT:
+
+- Added two deterministic DEBUG-only SwiftUI review pages:
+  - `-WanderPlaceActivityMockup visitFriendsEditor` renders the requested `save this place` screen with `add friends to this visit` directly below rating and above tags.
+  - `-WanderPlaceActivityMockup visitWithFriend` renders a visit card with avatar-backed `with Maya Chen` attribution below the rating.
+- The invite block mirrors New List collaborator styling: warm bone section, concise helper copy, 44-point terracotta plus button, friend avatar/name/handle, and remove affordance. It deliberately does not mutate state or open a picker in this visual pass.
+- Added navigation-contract tests for both deterministic mockup launch arguments.
+- Visual verification passed with no clipping or overlap on:
+  - iPhone 17 Pro / iOS 26.5: `/private/tmp/rec88-save-place-friends-final.png` and `/private/tmp/rec88-visit-with-friend-final.png`.
+  - Smaller iPhone 17e / iOS 26.5: `/private/tmp/rec88-save-place-friends-17e.png`.
+- Focused `NavigationContractTests` passed: 13 passed, 0 failed.
+- Full iOS suite passed: 279 passed, 0 failed, 0 skipped (`/private/tmp/DerivedData-rec88/Logs/Test/Test-Wander-2026.07.13_13-50-53--0700.xcresult`).
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning was emitted.
+- No production save/card UI, persistence models, backend contracts, Supabase migrations, notification triggers, or invite behavior changed. Functional implementation remains intentionally deferred until this visual direction is approved.
+
+## 2026-07-13 17:55 PDT - Codex - REC-88 Production Shared Visits
+
+Agent: Codex
+Branch: `codex/rec-88-visit-friends-mockup`
+Worktree: `/private/tmp/recme-rec88-visit-friends-mockup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: implement the approved Shared Visits system end to end: independent participant saves, invite picker, pending cards, prefilled acceptance, inherited recipient-owned photos, companion attribution, privacy transitions, notification settings/deep links, lifecycle inbox sync, hosted Supabase contracts, and regression coverage.
+
+Starting status and coordination:
+
+- Fetched `origin` and rebased the clean isolated worktree onto latest `origin/main`; preserved both sides of the expected `docs/agent-log.md` conflict. Rebased mockup commit is `69dfb40b4`.
+- The root checkout remains intentionally untouched. Another active worktree is implementing REC-89 profile redesign; production edits here will avoid profile-screen redesign and keep any `MapScreen.swift` touch narrowly scoped to shared-visit bindings/routes.
+- High-conflict files reserved for this task include `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`, `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, this log, and one new Supabase migration. No overlapping edit will be reverted.
+- Updated REC-88 from mockup-only wording to the full production Shared Visits contract and kept it assigned to Ryan/In Progress with PR #85 linked.
+- Completed the FULL office-hours and engineering reviews. The approved engineering plan is `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-88-visit-friends-mockup-eng-plan-20260713-175419.md`; all 13 recommended decisions were accepted, with 0 unresolved decisions and 0 critical plan gaps.
+
+Expected implementation files:
+
+- Shared Visits schema/RLS/RPC migration, pgTAP coverage, and `scripts/supabase-smoke-test.mjs`.
+- Shared-visit local/remote models, persistence, repositories, backend composition, inbox lifecycle coordinator, private photo transport, deep links, and transactional push enrollment.
+- Focused `Wander/Features/SharedVisits/` components, reusable mutual-friend picker extraction, narrow Map save/card integration, and Settings notification/privacy integration.
+- `project.yml`, regenerated Xcode project, unit/navigation tests, and focused `WanderUITests` target.
+- `docs/decisions.md`, notification/backend documentation where contracts change, and this coordination log.
+
+Validation plan:
+
+- Run pgTAP locally when Docker is available, deploy only the reviewed linked migration, verify migration/metadata posture, and run the extended two-account hosted rollback smoke test.
+- Run XcodeGen, focused tests, the full iPhone 16 Plus / iOS 18.6 suite, focused UI automation, generic simulator build, and current/small-phone screenshots.
+- Physical two-account/APNs delivery is the final manual proof; no TestFlight build-number bump, archive, upload, or release is authorized by this request.
+
+Production checkpoint, 2026-07-13 18:55 PDT:
+
+- Completed the outside engineering hardening pass with the recommended defaults: server-authoritative private-profile enforcement, generation-scoped pending snapshots that are erased on every terminal path, deterministic client acceptance identities plus a unique server operation ledger, account-exclusive active APNs tokens, generation-aware notification resolution, and an account-scoped sender outbox that waits for the source visit and selected photos to finish syncing.
+- Wired signed-in/foreground maintenance for own-save sync, failed photo retry, invite-outbox drain, push-token registration, and recipient inbox refresh. Pending invitations appear on Map, open the prefilled Save This Place flow, support decline, and resolve terminal deep links safely. Accepted source and recipient visit cards load server companion attribution.
+- Moved local visit-photo file persistence into `Wander/Services/VisitPhotoLocalFileStore.swift` so background retries do not depend on a Map feature implementation detail. Visit photos now use private signed URLs in both production and repository contract tests.
+- Local pgTAP could not run because Docker is unavailable on this machine; this is not counted as a pass. Added 49 Shared Visits pgTAP assertions and expanded the linked hosted rollback smoke test to cover invite creation, inbox/context isolation, atomic recipient acceptance, exactly-once retry, and companion attribution.
+- The documented iPhone 16 Plus / iOS 18.6 simulator runtime is not installed in the active Xcode; available runtimes are iOS 26.5. Focused testing on iPhone 17 Pro / iOS 26.5 passed 48 tests with 0 failures after correcting the private-storage test double (`/tmp/DerivedData-rec88-tests/Logs/Test/Test-Wander-2026.07.13_18-53-54--0700.xcresult`).
+
+Hardening and final-validation checkpoint, 2026-07-13 19:45 PDT:
+
+- Added account-generation guards to every Shared Visits inbox, destination, companion, decline, acceptance, outbox, and photo-retry path. A late async completion from a previous account can no longer populate the next account's store or finish its local acceptance work. Added a focused account-switch regression test.
+- Added a block cleanup trigger that cancels affected pending or accepted participant links, erases the private snapshot, and skips any pending/claimed Shared Visit push. Companion attribution now omits blocked profiles, including co-invitees.
+- Notification preferences now default all eight categories off for new backend rows. Existing explicit preference rows are preserved; the one-tap enrollment action remains the only path that enables every category. APNs token ownership remains exclusive to the current account.
+- Selected inherited photos are offered only when the sender has local bytes available, avoiding recipient copy metadata that could never complete. Acceptance still copies selected photos into recipient-owned storage and permits the recipient to remove inherited photos before saving.
+- Deployed linked hosted migrations `20260714013000_shared_visits.sql`, `20260714022000_fix_shared_visit_acceptance_source.sql`, `20260714024500_cancel_shared_visits_on_block.sql`, and `20260714031500_notification_preferences_opt_in_defaults.sql` to project `rugmtlgufrhlxwfkumhw`.
+- Hosted rollback-wrapped pgTAP passed 56/56 Shared Visits assertions and 45/45 notification assertions. Direct metadata checks confirmed the block trigger is enabled, sensitive RPCs/functions retain pinned `search_path` and intended security/grants, and all eight notification defaults are `false`. Local pgTAP remains unavailable because Docker is unavailable and is not counted as a pass.
+- Full iOS suite passed on iPhone 17 Pro / iOS 26.5: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-39-12--0700.xcresult`). The iPhone 16 Plus / iOS 18.6 runtime required by the repo command is not installed in the active Xcode.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO` using `/private/tmp/DerivedData-rec88-final-build`; only the existing traditional-headermap warning was emitted.
+- Final linked smoke passed: photo visibility, provider quota, and Shared Visits contracts are valid. `supabase migration list --linked` reports local/remote alignment through `20260714031500`; REC-89's separately owned `20260714003000` migration was restored only for this read-only comparison and removed from this branch afterward.
+- Final UI verification remains clean on iPhone 17 Pro and iPhone 17e: `/private/tmp/rec88-shared-visit-editor-17pro-final.png`, `/private/tmp/rec88-shared-visit-editor-17e-final.png`, and `/private/tmp/rec88-shared-visit-card-17pro-final.png`.
+
+PR handoff, 2026-07-13 19:51 PDT:
+
+- Committed the production implementation as `ec4709fe2` after rebasing onto latest `origin/main` (`aa6cf212d`). The only rebase conflict was this coordination log; both the completed TestFlight 71 release history and REC-88 history were preserved.
+- Post-rebase full iOS suite passed again: 296 tests, 0 failures, 0 skipped (`/tmp/DerivedData-rec88-final-tests/Logs/Test/Test-Wander-2026.07.13_19-48-27--0700.xcresult`). The post-rebase generic iOS Simulator build also passed with `CODE_SIGNING_ALLOWED=NO`.
+- PR #85 is the review and merge vehicle: https://github.com/joelipshutz/wander/pull/85. No TestFlight build number, archive, upload, or tester announcement is included because no release was requested for this implementation handoff.
+- Remaining manual proof is a physical two-account flow: sender creates a non-stealth Been visit and invites a mutual friend; recipient receives the push, edits/removes inherited data, saves an independent card, and both accounts verify companion attribution plus private/stealth/block cancellation behavior.
+- Pushed the rebased branch to `origin/codex/rec-88-visit-friends-mockup`, replaced PR #85's obsolete mockup-only description with the production contract and validation evidence, and marked the PR ready for review.
+- Moved Linear REC-88 to `In Review` and added a durable comment with the PR, deployed migration set, iOS/pgTAP/smoke results, local Docker gap, manual physical-device proof, and intentional no-TestFlight status.
+
+## 2026-07-13 20:11 PDT - Codex - REC-88 Physical-Test Follow-Up
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup`
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Goal: investigate and fix three failures found in the first physical two-account Shared Visits test: the sender card does not show the invited friend, tapping the recipient push does not open or surface the pending visit, and Edit This Visit cannot add or remove friends after the original save.
+
+Starting status and coordination:
+
+- Root Xcode checkout remains on the clean pushed REC-88 branch for Ryan's testing; its unrelated untracked `.pnpm-store/` is untouched.
+- Created this isolated follow-up branch from exact PR head `79a73857c` because the root checkout has untracked content and the fix touches high-conflict Map/store/backend files.
+- Moved REC-88 from In Review back to In Progress. No implementation edits have been made; root-cause investigation will trace hosted participant state, card companion loading, notification routing, and edit-visit submission before choosing the patch.
+- Expected files are narrowly scoped to Shared Visits UI/store/repository contracts, Map edit integration, focused tests, one additive Supabase migration only if hosted behavior is proven wrong, and this log. Existing user and other-agent changes will not be reverted.
+
+Root cause and hosted-validation checkpoint, 2026-07-13 21:37 PDT:
+
+- Hosted read-only evidence showed the reported physical invite was sent with the correct generation-aware deep link and private snapshot, while the participant remained pending and no recipient visit existed. That narrowed the failures to client routing/read behavior: source companion lookup omitted pending invitees, card refresh was keyed only to unchanged visit ids, Edit This Visit explicitly hid the picker and ignored membership, and the app delegate's asynchronous single-value notification handoff could lose a cold-launch tap before auth and Map were ready.
+- Added exact owner-only invitee listing/reconciliation RPCs in `20260714043000_manage_shared_visit_invitees.sql`. Pending invitees now appear in sender attribution; removal clears attribution, snapshots, and pending delivery while preserving any recipient-owned visit; re-addition uses a new generation. Edit This Visit loads the current set, safely leaves it unchanged if loading fails, supports add/remove/clear, and updates the card optimistically while its persisted outbox retries.
+- Replaced the transient push handoff with a lock-backed synchronous response buffer, event-id deduplication, auth-aware Map routing, explicit terminal versus retryable destination results, and bounded context/destination retries. A valid Shared Visit tap is retained through cold launch or a temporary backend failure and retried on app activation.
+- Focused iOS simulator validation passed 5/5 tests on iPhone 17 Pro / iOS 26.5, including exact empty reconciliation, latest-outbox selection, RPC payloads, and duplicate buffered/delivered notification handling (`/private/tmp/DerivedData-rec88-followup-focused/Logs/Test/Test-Wander-2026.07.13_21-28-34--0700.xcresult`). XcodeGen produced no project-file churn.
+- Deployed linked hosted migration `20260714043000_manage_shared_visit_invitees.sql` to `rugmtlgufrhlxwfkumhw`. Hosted rollback pgTAP passed 70/70 assertions and the expanded linked rollback smoke passed pending attribution, invitee loading, atomic acceptance, exact removal, and preservation of the recipient independent visit. Direct metadata verification confirmed all three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`; migration ledger alignment was verified through `20260714043000` with REC-89's separately owned `003000` and `033000` files materialized only for comparison and removed afterward.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The required `npm --prefix scripts ci --ignore-scripts` command also could not run because this Codex runtime has Node but no npm binary; the exact pinned `pg@8.22.0` dependency was installed with pnpm instead. Direct smoke could not resolve hosted database credentials on Ryan's machine, so the stronger linked Management API rollback smoke was run and passed.
 ## 2026-07-12 18:08 PDT - Codex - REC-85 Lists performance investigation
 
 Agent: Codex
@@ -11213,3 +11343,23 @@ Release completion, 2026-07-13 21:10 PDT:
 - Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784002212136389. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
 - Added final release evidence to Linear `REC-85` and `REC-91` and moved both issues from `In Review` to `Done`. Mission Control remained unavailable at `http://localhost:4000` throughout this release.
 - Validation shipped with 296 tests / 0 failures, a passing generic iOS Simulator build, and a passing signed Release archive. Known follow-up remains the post-fix physical Instruments comparison because the paired iPhone disconnected; this is called out in both TestFlight What to Test and Slack rather than treated as passed.
+
+## 2026-07-13 21:48 PDT - Codex - REC-88 Physical-Test Follow-Up Completion
+
+Agent: Codex
+Branch: `codex/rec-88-shared-visit-followup` (to be fast-forwarded into `codex/rec-88-visit-friends-mockup`)
+Worktree: `/private/tmp/recme-rec88-shared-visit-followup`
+Linear: `REC-88` (`In Progress`; move to `In Review` after push)
+PR: https://github.com/joelipshutz/wander/pull/85
+
+Final outcome:
+
+- Fixed all three failures from the first physical Shared Visits test. Pending invitees now render immediately on the sender card; notification responses are synchronously buffered, deduplicated, auth-aware, and retained across retryable cold-launch failures; and Edit This Visit now safely loads and exactly reconciles add/remove/clear membership.
+- Deployed hosted migration `20260714043000_manage_shared_visit_invitees.sql` to project `rugmtlgufrhlxwfkumhw`. The owner-only exact-membership RPC removes pending delivery/snapshots without deleting an already accepted recipient-owned visit, and source companion attribution includes pending invitees.
+- Hosted rollback pgTAP passed 70/70 before merge. Metadata checks confirmed the three touched RPCs are security-definer, pin `search_path=public, app`, grant execute to `authenticated`, and deny `anon`. The linked rollback smoke passed again after merging latest `origin/main`: photo visibility, provider quota, and Shared Visits contracts are valid.
+- Merged latest `origin/main` at `258414060`, preserving build 72 plus the REC-85/REC-91 Lists/Discover performance fixes. The only conflicts were additive changes in `WanderLocalStore.swift` and chronological entries in this log; both implementations and histories were retained in merge commit `ab6f6fa8f`.
+- Final iPhone 17 Pro / iOS 26.5 suite passed 305 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec88-followup-final/Logs/Test/Test-Wander-2026.07.13_21-41-56--0700.xcresult`.
+- Final generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning remains.
+- Visual verification passed with no clipping or overlap on iPhone 17 Pro and smaller iPhone 17e. Screenshots: `/private/tmp/rec88-followup-editor-17pro.png`, `/private/tmp/rec88-followup-editor-17e.png`, and `/private/tmp/rec88-followup-card-17pro.png`.
+- Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
+- No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.

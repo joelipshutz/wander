@@ -72,6 +72,10 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeAttributes: [LocalPlaceAttribute]
     @Published private(set) var placeVisits: [LocalPlaceVisit]
     @Published private(set) var visitPhotos: [LocalVisitPhoto]
+    @Published private(set) var sharedVisitInvitations: [SharedVisitInvitation]
+    @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
+    @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
+    private(set) var sharedVisitInboxUserID: String?
     @Published private(set) var follows: [LocalFollow]
     @Published private(set) var blocks: [LocalBlock]
     @Published private(set) var placeLists: [LocalPlaceList]
@@ -81,6 +85,11 @@ final class WanderStore: ObservableObject {
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
+    private var sharedVisitInboxTask: (
+        id: UUID,
+        userID: String,
+        task: Task<[SharedVisitInvitation], Error>
+    )?
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
     @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = []
@@ -153,6 +162,9 @@ final class WanderStore: ObservableObject {
             self.placeAttributes = restored.placeAttributes
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
+            self.sharedVisitInvitations = restored.sharedVisitInvitations
+            self.sharedVisitInboxUserID = restored.sharedVisitInboxUserID
+            self.pendingSharedVisitInvites = restored.pendingSharedVisitInvites
             self.follows = restored.follows
             self.blocks = restored.blocks
             self.placeLists = restored.placeLists
@@ -174,6 +186,9 @@ final class WanderStore: ObservableObject {
             self.placeAttributes = fixtures.placeAttributes
             self.placeVisits = fixtures.placeVisits
             self.visitPhotos = fixtures.visitPhotos
+            self.sharedVisitInvitations = []
+            self.sharedVisitInboxUserID = nil
+            self.pendingSharedVisitInvites = []
             self.follows = fixtures.follows
             self.blocks = fixtures.blocks
             self.placeLists = fixtures.placeLists
@@ -204,6 +219,294 @@ final class WanderStore: ObservableObject {
         }
 
         persistence.save(WanderStoreSnapshot(store: self))
+    }
+
+    func refreshSharedVisitInbox(backend: WanderBackend?) async {
+        guard let backend, backend.canUseSharedVisits else { return }
+        let requestUserID = currentUser.id
+
+        let taskID: UUID
+        let task: Task<[SharedVisitInvitation], Error>
+        if let existingTask = sharedVisitInboxTask, existingTask.userID == requestUserID {
+            taskID = existingTask.id
+            task = existingTask.task
+        } else {
+            sharedVisitInboxTask?.task.cancel()
+            taskID = UUID()
+            let createdTask = Task { @MainActor in
+                try await backend.sharedVisitInbox(limit: 50)
+            }
+            sharedVisitInboxTask = (taskID, requestUserID, createdTask)
+            task = createdTask
+        }
+
+        defer {
+            if sharedVisitInboxTask?.id == taskID {
+                sharedVisitInboxTask = nil
+            }
+        }
+
+        do {
+            let invitations = try await task.value
+            guard currentUser.id == requestUserID else { return }
+            sharedVisitInvitations = invitations
+            sharedVisitInboxUserID = requestUserID
+            lastRemoteError = nil
+            persist()
+        } catch {
+            guard currentUser.id == requestUserID else { return }
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
+    func refreshSharedVisitContext(
+        participantID: String,
+        generation: Int,
+        backend: WanderBackend?
+    ) async -> SharedVisitInvitation? {
+        let requestUserID = currentUser.id
+        guard let backend, backend.canUseSharedVisits else {
+            return sharedVisitInvitations.first {
+                $0.participantID == participantID && $0.invitationGeneration == generation
+            }
+        }
+
+        do {
+            guard let invitation = try await backend.sharedVisitContext(
+                participantID: participantID,
+                generation: generation
+            ) else {
+                guard currentUser.id == requestUserID else { return nil }
+                sharedVisitInvitations.removeAll { $0.participantID == participantID }
+                persist()
+                return nil
+            }
+            guard currentUser.id == requestUserID else { return nil }
+            sharedVisitInvitations.removeAll { $0.participantID == participantID }
+            sharedVisitInvitations.append(invitation)
+            sharedVisitInvitations.sort { $0.invitedAt > $1.invitedAt }
+            sharedVisitInboxUserID = currentUser.id
+            lastRemoteError = nil
+            persist()
+            return invitation
+        } catch {
+            guard currentUser.id == requestUserID else { return nil }
+            lastRemoteError = remoteErrorMessage(error)
+            return sharedVisitInvitations.first {
+                $0.participantID == participantID && $0.invitationGeneration == generation
+            }
+        }
+    }
+
+    func resolveSharedVisitDestination(
+        participantID: String,
+        generation: Int,
+        backend: WanderBackend?
+    ) async -> SharedVisitDestinationResolution {
+        guard let backend, backend.canUseSharedVisits else { return .retryableFailure }
+        let requestUserID = currentUser.id
+        do {
+            let destination = try await backend.resolveSharedVisitDestination(
+                participantID: participantID,
+                generation: generation
+            )
+            guard currentUser.id == requestUserID else { return .retryableFailure }
+            return destination.map(SharedVisitDestinationResolution.resolved) ?? .unavailable
+        } catch {
+            guard currentUser.id == requestUserID else { return .retryableFailure }
+            lastRemoteError = remoteErrorMessage(error)
+            return .retryableFailure
+        }
+    }
+
+    func declineSharedVisit(
+        participantID: String,
+        generation: Int,
+        backend: WanderBackend?
+    ) async -> Bool {
+        guard let backend, backend.canUseSharedVisits else { return false }
+        let requestUserID = currentUser.id
+        do {
+            try await backend.declineSharedVisit(participantID: participantID, generation: generation)
+            guard currentUser.id == requestUserID else { return false }
+            sharedVisitInvitations.removeAll { $0.participantID == participantID }
+            lastRemoteError = nil
+            persist()
+            return true
+        } catch {
+            guard currentUser.id == requestUserID else { return false }
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    func refreshSharedVisitCompanions(visitIDs: [String], backend: WanderBackend?) async {
+        guard let backend, backend.canUseSharedVisits else { return }
+        let requestUserID = currentUser.id
+        let remoteIDs = Array(Set(visitIDs.filter { UUID(uuidString: $0) != nil })).prefix(50)
+        guard !remoteIDs.isEmpty else { return }
+
+        do {
+            let companions = try await backend.sharedVisitCompanions(visitIDs: Array(remoteIDs))
+            guard currentUser.id == requestUserID else { return }
+            var grouped = Dictionary(grouping: companions, by: \.visitID)
+            for visitID in remoteIDs where grouped[visitID] == nil {
+                grouped[visitID] = []
+            }
+            sharedVisitCompanionsByVisitID.merge(grouped) { _, refreshed in refreshed }
+            lastRemoteError = nil
+        } catch {
+            guard currentUser.id == requestUserID else { return }
+            lastRemoteError = remoteErrorMessage(error)
+        }
+    }
+
+    func sharedVisitCompanions(for visitID: String) -> [SharedVisitCompanion] {
+        let ids = matchingVisitIDs(visitID)
+        var seenUserIDs: Set<String> = []
+        return ids
+            .compactMap { sharedVisitCompanionsByVisitID[$0] }
+            .flatMap { $0 }
+            .filter { seenUserIDs.insert($0.userID).inserted }
+    }
+
+    func sharedVisitInviteeUserIDs(sourceVisitID: String, backend: WanderBackend?) async throws -> [String] {
+        guard let backend, backend.canUseSharedVisits else { throw WanderRemoteError.notConfigured }
+        let requestUserID = currentUser.id
+        guard let visit = currentUserVisit(matching: sourceVisitID) else { return [] }
+
+        if let pending = pendingSharedVisitInvites.last(where: {
+            $0.ownerUserID == requestUserID && currentUserVisit(matching: $0.sourceVisitID)?.id == visit.id
+        }) {
+            return pending.inviteeUserIDs
+        }
+
+        guard let remoteVisitID = visit.serverID else { return [] }
+        let inviteeUserIDs = try await backend.sharedVisitInviteeUserIDs(sourceVisitID: remoteVisitID)
+        guard currentUser.id == requestUserID else { throw CancellationError() }
+        return Array(Set(inviteeUserIDs)).sorted()
+    }
+
+    func queueSharedVisitInvites(sourceVisitID: String, inviteeUserIDs: [String]) {
+        let normalizedInvitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty })).sorted()
+        guard !normalizedInvitees.isEmpty else { return }
+
+        queueSharedVisitInviteeReconciliation(
+            sourceVisitID: sourceVisitID,
+            inviteeUserIDs: normalizedInvitees
+        )
+    }
+
+    func queueSharedVisitInviteeReconciliation(sourceVisitID: String, inviteeUserIDs: [String]) {
+        let normalizedInvitees = Array(Set(inviteeUserIDs.filter { !$0.isEmpty })).sorted()
+        let sourceVisit = currentUserVisit(matching: sourceVisitID)
+
+        pendingSharedVisitInvites.removeAll {
+            $0.ownerUserID == currentUser.id
+                && (
+                    $0.sourceVisitID == sourceVisitID
+                    || (
+                        sourceVisit != nil
+                        && currentUserVisit(matching: $0.sourceVisitID)?.id == sourceVisit?.id
+                    )
+                )
+        }
+        pendingSharedVisitInvites.append(
+            PendingSharedVisitInvite(
+                id: UUID().uuidString.lowercased(),
+                ownerUserID: currentUser.id,
+                sourceVisitID: sourceVisitID,
+                inviteeUserIDs: normalizedInvitees,
+                createdAt: .now
+            )
+        )
+        setOptimisticSharedVisitCompanions(
+            visitID: sourceVisit?.id ?? sourceVisitID,
+            inviteeUserIDs: normalizedInvitees
+        )
+        persist()
+    }
+
+    @discardableResult
+    func retryPendingSharedVisitInvites(backend: WanderBackend?) async -> Int {
+        guard let backend, backend.canUseSharedVisits else { return 0 }
+        let ownerUserID = currentUser.id
+        var sentCount = 0
+
+        for pending in pendingSharedVisitInvites where pending.ownerUserID == ownerUserID {
+            guard currentUser.id == ownerUserID else { break }
+            guard let visit = currentUserVisit(matching: pending.sourceVisitID) else {
+                pendingSharedVisitInvites.removeAll { $0.id == pending.id }
+                continue
+            }
+            if visit.serverID == nil || visit.syncState != .synced {
+                _ = await syncVisit(visitID: visit.id, backend: backend)
+            }
+            guard currentUser.id == ownerUserID else { break }
+            guard let remoteVisitID = visit.serverID else { continue }
+
+            let sourcePhotos = photos(for: visit.id)
+            guard sourcePhotos.allSatisfy({ $0.uploadState == .uploaded && $0.syncState == .synced }) else {
+                continue
+            }
+
+            do {
+                _ = try await backend.setSharedVisitInvitees(
+                    sourceVisitID: remoteVisitID,
+                    inviteeUserIDs: pending.inviteeUserIDs
+                )
+                guard currentUser.id == ownerUserID else { break }
+                pendingSharedVisitInvites.removeAll { $0.id == pending.id }
+                sentCount += pending.inviteeUserIDs.count
+                lastRemoteError = nil
+                await refreshSharedVisitCompanions(visitIDs: [remoteVisitID], backend: backend)
+            } catch {
+                guard currentUser.id == ownerUserID else { break }
+                lastRemoteError = remoteErrorMessage(error)
+            }
+        }
+
+        persist()
+        return sentCount
+    }
+
+    private func setOptimisticSharedVisitCompanions(visitID: String, inviteeUserIDs: [String]) {
+        guard let visit = currentUserVisit(matching: visitID) else { return }
+        let cacheVisitID = visit.serverID ?? visit.id
+        sharedVisitCompanionsByVisitID[cacheVisitID] = inviteeUserIDs.compactMap { userID in
+            guard let profile = profiles.first(where: { $0.id == userID }) else { return nil }
+            return SharedVisitCompanion(
+                visitID: cacheVisitID,
+                userID: profile.id,
+                handle: profile.handle,
+                displayName: profile.displayName,
+                avatarURL: profile.avatarURL
+            )
+        }
+    }
+
+    @discardableResult
+    func retryPendingVisitPhotoUploads(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+        let uploadUserID = currentUser.id
+        let pendingPhotos = visitPhotos.filter {
+            $0.deletedAt == nil
+                && $0.uploadState != .uploaded
+                && $0.localAssetRef?.isEmpty == false
+                && currentUserVisit(matching: $0.visitID) != nil
+        }
+        var uploadedCount = 0
+
+        for photo in pendingPhotos {
+            guard currentUser.id == uploadUserID else { break }
+            guard let data = VisitPhotoLocalFileStore.data(from: photo.localAssetRef) else { continue }
+            let result = await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+            guard currentUser.id == uploadUserID else { break }
+            if result?.uploadState == .uploaded && result?.syncState == .synced {
+                uploadedCount += 1
+            }
+        }
+        return uploadedCount
     }
 
     private func withDeferredPersistence<Result>(_ operation: () throws -> Result) rethrows -> Result {
@@ -263,6 +566,7 @@ final class WanderStore: ObservableObject {
             + pendingVisitPhotos
             + pendingArtifacts
             + pendingJobs
+            + pendingSharedVisitInvites.count
             + unresolvedDrafts.count
     }
 
@@ -301,6 +605,28 @@ final class WanderStore: ObservableObject {
 
         if enabled {
             makeCurrentUserContentPrivate()
+        }
+    }
+
+    @discardableResult
+    func updatePrivateProfile(_ enabled: Bool, backend: WanderBackend?) async -> Bool {
+        guard let backend else {
+            setPrivateProfile(enabled)
+            persist()
+            return true
+        }
+
+        do {
+            let profile = try await backend.updateProfilePrivacy(
+                isPrivateProfile: enabled,
+                defaultVisibility: enabled ? .selfOnly : defaultVisibility.normalizedForStealthMode
+            )
+            applyRemoteCurrentProfile(profile)
+            lastRemoteError = nil
+            return true
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return false
         }
     }
 
@@ -1335,6 +1661,154 @@ final class WanderStore: ObservableObject {
                 }
                 return lhs.createdAt < rhs.createdAt
             }
+    }
+
+    @discardableResult
+    func applySharedVisitAcceptance(
+        invitation: SharedVisitInvitation,
+        draft: SharedVisitAcceptanceDraft,
+        result: SharedVisitAcceptanceResult
+    ) -> LocalPlaceVisit {
+        let place = upsertPlace(from: invitation.candidate, sourceType: .socialSave)
+        let now = Date.now
+        let userPlace: LocalUserPlace
+
+        if let existing = userPlaces.first(where: {
+            $0.userID == currentUser.id
+                && $0.deletedAt == nil
+                && matchingPlaceIDs(place.id).contains($0.placeID)
+        }) {
+            if existing.status == .wannaGo {
+                preserveHistoricalWant(for: existing, attributes: attributeDrafts(for: existing.id))
+            }
+            existing.serverID = result.userPlaceID
+            existing.placeID = place.id
+            existing.statusRaw = PlaceStatus.been.rawValue
+            existing.visibilityRaw = draft.visibility.rawValue
+            existing.note = draft.note
+            existing.ratingScore = PlaceRating.normalized(draft.ratingScore)
+            existing.visitedAt = draft.visitedAt
+            existing.sourceType = AddSourceType.socialSave.rawValue
+            existing.sourceUserPlaceID = nil
+            existing.attributionUserID = invitation.sourceOwnerUserID
+            existing.syncStateRaw = SyncState.synced.rawValue
+            existing.serverUpdatedAt = now
+            existing.lastSyncError = nil
+            existing.updatedAt = now
+            existing.localUpdatedAt = now
+            userPlace = existing
+        } else {
+            userPlace = LocalUserPlace(
+                localID: "local_up_shared_\(result.userPlaceID)",
+                serverID: result.userPlaceID,
+                userID: currentUser.id,
+                placeID: place.id,
+                status: .been,
+                visibility: draft.visibility,
+                note: draft.note,
+                ratingScore: draft.ratingScore,
+                nearbyConfirmed: false,
+                visitedAt: draft.visitedAt,
+                sourceType: AddSourceType.socialSave.rawValue,
+                attributionUserID: invitation.sourceOwnerUserID,
+                syncState: .synced,
+                serverUpdatedAt: now
+            )
+            userPlaces.append(userPlace)
+        }
+
+        replaceAttributes(for: userPlace.id, with: draft.attributes, syncState: .synced)
+
+        let visit: LocalPlaceVisit
+        if let existingVisit = placeVisits.first(where: {
+            $0.serverID == result.visitID || $0.localID == result.visitID
+        }) {
+            existingVisit.userPlaceID = userPlace.id
+            existingVisit.visitedAt = draft.visitedAt
+            existingVisit.note = draft.note
+            existingVisit.ratingScore = PlaceRating.normalized(draft.ratingScore)
+            existingVisit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: draft.attributes)
+            existingVisit.setDerivedTags(VisitAttributeAnswers.tags(from: draft.attributes))
+            existingVisit.backfilledFromUserPlace = result.backfilledFromUserPlace
+            existingVisit.syncStateRaw = SyncState.synced.rawValue
+            existingVisit.serverUpdatedAt = now
+            existingVisit.lastSyncError = nil
+            existingVisit.deletedAt = nil
+            existingVisit.updatedAt = now
+            existingVisit.localUpdatedAt = now
+            visit = existingVisit
+        } else {
+            visit = LocalPlaceVisit(
+                localID: "local_visit_shared_\(result.visitID)",
+                serverID: result.visitID,
+                userPlaceID: userPlace.id,
+                visitedAt: draft.visitedAt,
+                note: draft.note,
+                ratingScore: draft.ratingScore,
+                attributeAnswersJSON: VisitAttributeAnswers.encoded(from: draft.attributes),
+                tags: VisitAttributeAnswers.tags(from: draft.attributes),
+                backfilledFromUserPlace: result.backfilledFromUserPlace,
+                syncState: .synced,
+                serverUpdatedAt: now
+            )
+            placeVisits.append(visit)
+        }
+
+        sharedVisitInvitations.removeAll { $0.participantID == invitation.participantID }
+        refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+        objectWillChange.send()
+        persist()
+        return visit
+    }
+
+    func recordAcceptedSharedVisitPhoto(
+        copy: SharedVisitPhotoCopy,
+        visitID: String,
+        localAssetRef: String?,
+        byteSize: Int?,
+        width: Int?,
+        height: Int?,
+        uploaded: Bool = true
+    ) {
+        let now = Date.now
+        if let existing = visitPhotos.first(where: {
+            $0.serverID == copy.destinationPhotoID || $0.localID == copy.destinationPhotoID
+        }) {
+            existing.visitID = visitID
+            existing.localAssetRef = localAssetRef
+            existing.storageBucket = copy.destinationBucket
+            existing.storagePath = copy.destinationPath
+            existing.contentType = copy.contentType
+            existing.byteSize = byteSize
+            existing.width = width
+            existing.height = height
+            existing.uploadStateRaw = (uploaded ? VisitPhotoUploadState.uploaded : .pendingUpload).rawValue
+            existing.syncStateRaw = (uploaded ? SyncState.synced : .pendingUpdate).rawValue
+            existing.serverUpdatedAt = now
+            existing.lastSyncError = nil
+            existing.updatedAt = now
+            existing.localUpdatedAt = now
+        } else {
+            visitPhotos.append(
+                LocalVisitPhoto(
+                    localID: "local_photo_shared_\(copy.destinationPhotoID)",
+                    serverID: copy.destinationPhotoID,
+                    visitID: visitID,
+                    storageBucket: copy.destinationBucket,
+                    storagePath: copy.destinationPath,
+                    localAssetRef: localAssetRef,
+                    contentType: copy.contentType,
+                    byteSize: byteSize,
+                    width: width,
+                    height: height,
+                    uploadState: uploaded ? .uploaded : .pendingUpload,
+                    syncState: uploaded ? .synced : .pendingUpdate,
+                    serverUpdatedAt: now
+                )
+            )
+        }
+        objectWillChange.send()
+        persist()
     }
 
     func firstVisitPhoto(forPlaceID placeID: String) -> LocalVisitPhoto? {
@@ -3027,6 +3501,17 @@ final class WanderStore: ObservableObject {
 
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
+        if let previousUserID = previousCurrentUser.serverID, previousUserID != session.userID {
+            cancelSharedVisitInboxTask()
+            sharedVisitInvitations = []
+            sharedVisitInboxUserID = nil
+            sharedVisitCompanionsByVisitID = [:]
+        } else if sharedVisitInboxUserID != nil, sharedVisitInboxUserID != session.userID {
+            cancelSharedVisitInboxTask()
+            sharedVisitInvitations = []
+            sharedVisitInboxUserID = nil
+            sharedVisitCompanionsByVisitID = [:]
+        }
         let handle = normalizedSessionHandle(from: session)
         let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: handle)
         let localID = "local_profile_current"
@@ -3097,6 +3582,10 @@ final class WanderStore: ObservableObject {
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile
+        cancelSharedVisitInboxTask()
+        sharedVisitInvitations = []
+        sharedVisitInboxUserID = nil
+        sharedVisitCompanionsByVisitID = [:]
         let profile = LocalProfile(
             localID: localID,
             handle: "you",
@@ -3112,6 +3601,11 @@ final class WanderStore: ObservableObject {
         profiles.insert(profile, at: 0)
         defaultVisibility = preferredVisibility
         isPrivateProfile = preferredPrivateProfile
+    }
+
+    private func cancelSharedVisitInboxTask() {
+        sharedVisitInboxTask?.task.cancel()
+        sharedVisitInboxTask = nil
     }
 
     private func normalizedSessionHandle(from session: AuthSession) -> String {
@@ -4087,6 +4581,7 @@ final class WanderStore: ObservableObject {
         let now = Date()
         let currentLocalID = currentUser.localID
         let currentProfileID = remoteProfile.id
+        let becamePrivate = !isPrivateProfile && remoteProfile.isPrivateProfile
 
         currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
         currentUser.handle = remoteProfile.handle
@@ -4099,6 +4594,7 @@ final class WanderStore: ObservableObject {
         currentUser.bio = remoteProfile.bio
         currentUser.homeArea = remoteProfile.homeArea
         currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+        currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
         currentUser.syncStateRaw = SyncState.synced.rawValue
         currentUser.serverUpdatedAt = now
         currentUser.updatedAt = now
@@ -4112,12 +4608,19 @@ final class WanderStore: ObservableObject {
             profile.bio = currentUser.bio
             profile.homeArea = currentUser.homeArea
             profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
+            profile.isPrivateProfile = remoteProfile.isPrivateProfile
             profile.syncStateRaw = SyncState.synced.rawValue
             profile.serverUpdatedAt = now
             profile.updatedAt = now
         }
 
         defaultVisibility = remoteProfile.defaultVisibility
+        isPrivateProfile = remoteProfile.isPrivateProfile
+        if becamePrivate {
+            makeCurrentUserContentPrivate()
+            sharedVisitInvitations.removeAll()
+            sharedVisitCompanionsByVisitID.removeAll()
+        }
         persist()
     }
 

@@ -26,6 +26,27 @@ struct SupabaseProfileRepository: ProfileRepository {
         )
         return rows.map { $0.profileShell() }
     }
+
+    func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
+        let response: RemoteCurrentProfileDTO = try await rpc.call(
+            "update_profile_privacy",
+            params: UpdateProfilePrivacyParams(
+                isPrivateProfile: isPrivateProfile,
+                defaultVisibility: defaultVisibility.rawValue
+            )
+        )
+        return response.localProfile()
+    }
+}
+
+private struct UpdateProfilePrivacyParams: Encodable {
+    let isPrivateProfile: Bool
+    let defaultVisibility: String
+
+    enum CodingKeys: String, CodingKey {
+        case isPrivateProfile = "input_is_private_profile"
+        case defaultVisibility = "input_default_visibility"
+    }
 }
 
 struct SupabaseProfileAvatarRepository: ProfileAvatarRepository {
@@ -300,7 +321,16 @@ struct SupabaseVisitRepository: VisitRepository {
                 URLQueryItem(name: "order", value: "sort_order.asc,created_at.asc")
             ]
         )
-        return rows.map(\.result)
+        var results: [VisitPhotoResult] = []
+        for row in rows {
+            let remoteURL = try await storage.signedObjectURL(
+                bucket: row.storageBucket,
+                path: row.storagePath,
+                expiresIn: 3600
+            )
+            results.append(row.result(remoteURLString: remoteURL.absoluteString))
+        }
+        return results
     }
 
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
@@ -313,12 +343,12 @@ struct SupabaseVisitRepository: VisitRepository {
         guard let row = rows.first else {
             throw WanderRemoteError.invalidResponse("visit_photos upsert returned no rows")
         }
-        return row.result
+        return row.result()
     }
 
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
         try await storage.uploadObject(bucket: bucket, path: path, data: data, contentType: contentType, upsert: true)
-        return try storage.publicObjectURL(bucket: bucket, path: path, cacheBust: UUID().uuidString)
+        return try await storage.signedObjectURL(bucket: bucket, path: path, expiresIn: 3600)
     }
 
     func deletePhoto(photoID: String, bucket: String, path: String) async throws {
@@ -435,13 +465,13 @@ private struct VisitPhotoRow: Decodable {
         case uploadStateRaw = "upload_state"
     }
 
-    var result: VisitPhotoResult {
+    func result(remoteURLString: String? = nil) -> VisitPhotoResult {
         VisitPhotoResult(
             photoID: id,
             visitID: visitID,
             storageBucket: storageBucket,
             storagePath: storagePath,
-            remoteURLString: nil,
+            remoteURLString: remoteURLString,
             contentType: contentType,
             byteSize: byteSize,
             width: width,
@@ -495,6 +525,556 @@ private struct VisitPhotoUpsertBody: Encodable {
         case sortOrder = "sort_order"
         case uploadStateRaw = "upload_state"
         case deletedAt = "deleted_at"
+    }
+}
+
+struct SupabaseSharedVisitRepository: SharedVisitRepository {
+    private let rpc: RemoteProcedureCalling
+    private let table: RemoteTableCalling
+    private let storage: RemoteStorageCalling
+
+    init(rpc: RemoteProcedureCalling, table: RemoteTableCalling, storage: RemoteStorageCalling) {
+        self.rpc = rpc
+        self.table = table
+        self.storage = storage
+    }
+
+    func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        let rows: [SharedVisitInviteRow] = try await rpc.call(
+            "create_shared_visit_invites",
+            params: CreateSharedVisitInvitesParams(
+                sourceVisitID: sourceVisitID,
+                inviteeUserIDs: inviteeUserIDs
+            )
+        )
+        return rows.map(\.result)
+    }
+
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String] {
+        let rows: [SharedVisitInviteeRow] = try await rpc.call(
+            "list_shared_visit_invitees",
+            params: SharedVisitSourceVisitParams(sourceVisitID: sourceVisitID)
+        )
+        return rows.map(\.inviteeUserID)
+    }
+
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] {
+        let rows: [SharedVisitInviteRow] = try await rpc.call(
+            "set_shared_visit_invitees",
+            params: CreateSharedVisitInvitesParams(
+                sourceVisitID: sourceVisitID,
+                inviteeUserIDs: inviteeUserIDs
+            )
+        )
+        return rows.map(\.result)
+    }
+
+    func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
+        let rows: [SharedVisitInvitationRow] = try await rpc.call(
+            "list_shared_visit_inbox",
+            params: SharedVisitInboxParams(before: before, limit: limit)
+        )
+        return rows.map(\.invitation)
+    }
+
+    func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? {
+        let rows: [SharedVisitInvitationRow] = try await rpc.call(
+            "get_shared_visit_context",
+            params: SharedVisitContextParams(participantID: participantID, generation: generation)
+        )
+        return rows.first?.invitation
+    }
+
+    func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? {
+        let rows: [SharedVisitDestinationRow] = try await rpc.call(
+            "resolve_shared_visit_destination",
+            params: SharedVisitContextParams(participantID: participantID, generation: generation)
+        )
+        return rows.first?.destination
+    }
+
+    func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        let response: SharedVisitAcceptanceResponse = try await rpc.call(
+            "accept_shared_visit",
+            params: SharedVisitAcceptanceParams(draft: draft)
+        )
+        return response.result
+    }
+
+    func decline(participantID: String, generation: Int) async throws {
+        let _: Bool = try await rpc.call(
+            "decline_shared_visit",
+            params: SharedVisitContextParams(participantID: participantID, generation: generation)
+        )
+    }
+
+    func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion] {
+        guard !visitIDs.isEmpty else { return [] }
+        let rows: [SharedVisitCompanionRow] = try await rpc.call(
+            "get_shared_visit_companion_context",
+            params: SharedVisitCompanionParams(visitIDs: Array(visitIDs.prefix(50)))
+        )
+        return rows.map(\.companion)
+    }
+
+    func downloadPhotoData(bucket: String, path: String) async throws -> Data {
+        try await storage.downloadObject(bucket: bucket, path: path)
+    }
+
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {
+        try await storage.uploadObject(
+            bucket: bucket,
+            path: path,
+            data: data,
+            contentType: contentType,
+            upsert: true
+        )
+    }
+
+    func markPhotoUploaded(photoID: String) async throws {
+        let _: [VisitPhotoRow] = try await table.update(
+            table: "visit_photos",
+            queryItems: [URLQueryItem(name: "id", value: "eq.\(photoID)")],
+            body: SharedVisitPhotoUploadedBody()
+        )
+    }
+}
+
+private struct CreateSharedVisitInvitesParams: Encodable {
+    let sourceVisitID: String
+    let inviteeUserIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case sourceVisitID = "input_source_visit_id"
+        case inviteeUserIDs = "input_invitee_user_ids"
+    }
+}
+
+private struct SharedVisitSourceVisitParams: Encodable {
+    let sourceVisitID: String
+
+    enum CodingKeys: String, CodingKey {
+        case sourceVisitID = "input_source_visit_id"
+    }
+}
+
+private struct SharedVisitInviteeRow: Decodable {
+    let inviteeUserID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteeUserID = "invitee_user_id"
+    }
+}
+
+private struct SharedVisitInviteRow: Decodable {
+    let participantID: String
+    let inviteeUserID: String
+    let participantStatus: String
+    let invitationGeneration: Int
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case inviteeUserID = "invitee_user_id"
+        case participantStatus = "participant_status"
+        case invitationGeneration = "invitation_generation"
+    }
+
+    var result: SharedVisitInviteResult {
+        SharedVisitInviteResult(
+            participantID: participantID,
+            inviteeUserID: inviteeUserID,
+            status: SharedVisitParticipantStatus(rawValue: participantStatus) ?? .pending,
+            invitationGeneration: invitationGeneration
+        )
+    }
+}
+
+private struct SharedVisitInboxParams: Encodable {
+    let before: Date?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case before = "input_before"
+        case limit = "input_limit"
+    }
+}
+
+private struct SharedVisitContextParams: Encodable {
+    let participantID: String
+    let generation: Int
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "input_participant_id"
+        case generation = "input_generation"
+    }
+}
+
+private struct SharedVisitInvitationRow: Decodable {
+    let participantID: String
+    let groupID: String
+    let invitationGeneration: Int
+    let snapshotRevision: Int
+    let participantStatus: String
+    let invitedAt: Date
+    let sourceVisitID: String
+    let sourceOwnerUserID: String
+    let sourceOwnerHandle: String
+    let sourceOwnerDisplayName: String
+    let sourceOwnerAvatarURL: String?
+    let placeID: String
+    let canonicalName: String
+    let category: String
+    let primaryCategory: String?
+    let subcategory: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double
+    let longitude: Double
+    let sourceProvider: String
+    let sourceProviderPlaceID: String?
+    let sourceSnapshot: SharedVisitSnapshotRow
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case groupID = "group_id"
+        case invitationGeneration = "invitation_generation"
+        case snapshotRevision = "snapshot_revision"
+        case participantStatus = "participant_status"
+        case invitedAt = "invited_at"
+        case sourceVisitID = "source_visit_id"
+        case sourceOwnerUserID = "source_owner_user_id"
+        case sourceOwnerHandle = "source_owner_handle"
+        case sourceOwnerDisplayName = "source_owner_display_name"
+        case sourceOwnerAvatarURL = "source_owner_avatar_url"
+        case placeID = "place_id"
+        case canonicalName = "canonical_name"
+        case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case address
+        case locality
+        case region
+        case country
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case sourceSnapshot = "source_snapshot"
+    }
+
+    var invitation: SharedVisitInvitation {
+        SharedVisitInvitation(
+            participantID: participantID,
+            groupID: groupID,
+            invitationGeneration: invitationGeneration,
+            snapshotRevision: snapshotRevision,
+            status: SharedVisitParticipantStatus(rawValue: participantStatus) ?? .pending,
+            invitedAt: invitedAt,
+            sourceVisitID: sourceVisitID,
+            sourceOwnerUserID: sourceOwnerUserID,
+            sourceOwnerHandle: sourceOwnerHandle,
+            sourceOwnerDisplayName: sourceOwnerDisplayName,
+            sourceOwnerAvatarURL: sourceOwnerAvatarURL,
+            placeID: placeID,
+            placeName: canonicalName,
+            category: category,
+            primaryCategory: primaryCategory ?? category,
+            subcategory: subcategory,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            visitedAt: sourceSnapshot.visitedAt,
+            note: sourceSnapshot.note,
+            ratingScore: sourceSnapshot.ratingScore,
+            attributeAnswers: sourceSnapshot.attributeAnswers,
+            tags: sourceSnapshot.tags,
+            photos: sourceSnapshot.photos
+        )
+    }
+}
+
+private struct SharedVisitSnapshotRow: Decodable {
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswers: [VisitAttributeAnswer]
+    let tags: [String]
+    let photoRows: [SharedVisitPhotoSnapshotRow]
+
+    enum CodingKeys: String, CodingKey {
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case attributeAnswers = "attribute_answers"
+        case tags
+        case photoRows = "photos"
+    }
+
+    var photos: [SharedVisitPhotoSnapshot] { photoRows.map(\.snapshot) }
+}
+
+private struct SharedVisitPhotoSnapshotRow: Decodable {
+    let photoID: String
+    let storageBucket: String
+    let storagePath: String
+    let contentType: String
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case photoID = "photo_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case contentType = "content_type"
+        case byteSize = "byte_size"
+        case width
+        case height
+        case capturedAt = "captured_at"
+        case sortOrder = "sort_order"
+    }
+
+    var snapshot: SharedVisitPhotoSnapshot {
+        SharedVisitPhotoSnapshot(
+            photoID: photoID,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
+            contentType: contentType,
+            byteSize: byteSize,
+            width: width,
+            height: height,
+            capturedAt: capturedAt,
+            sortOrder: sortOrder
+        )
+    }
+}
+
+private struct SharedVisitAcceptanceParams: Encodable {
+    let participantID: String
+    let generation: Int
+    let snapshotRevision: Int
+    let operationID: String
+    let userPlaceID: String
+    let visitID: String
+    let userPlace: SharedVisitUserPlacePayload
+    let visit: SharedVisitVisitPayload
+    let attributes: [SharedVisitAttributePayload]
+    let selectedPhotoIDs: [String]
+
+    init(draft: SharedVisitAcceptanceDraft) {
+        participantID = draft.participantID
+        generation = draft.invitationGeneration
+        snapshotRevision = draft.snapshotRevision
+        operationID = draft.operationID
+        userPlaceID = draft.userPlaceID
+        visitID = draft.visitID
+        userPlace = SharedVisitUserPlacePayload(visibility: draft.visibility.rawValue)
+        visit = SharedVisitVisitPayload(draft: draft)
+        attributes = draft.attributes.map(SharedVisitAttributePayload.init)
+        selectedPhotoIDs = draft.selectedPhotoIDs
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "input_participant_id"
+        case generation = "input_generation"
+        case snapshotRevision = "input_snapshot_revision"
+        case operationID = "input_operation_id"
+        case userPlaceID = "input_user_place_id"
+        case visitID = "input_visit_id"
+        case userPlace = "input_user_place"
+        case visit = "input_visit"
+        case attributes = "input_attributes"
+        case selectedPhotoIDs = "input_selected_photo_ids"
+    }
+}
+
+private struct SharedVisitUserPlacePayload: Encodable {
+    let visibility: String
+}
+
+private struct SharedVisitVisitPayload: Encodable {
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswers: [SharedVisitAttributePayload]
+
+    init(draft: SharedVisitAcceptanceDraft) {
+        visitedAt = draft.visitedAt
+        note = draft.note
+        ratingScore = PlaceRating.normalized(draft.ratingScore)
+        attributeAnswers = draft.attributes.map(SharedVisitAttributePayload.init)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case attributeAnswers = "attribute_answers"
+    }
+}
+
+private struct SharedVisitAttributePayload: Encodable {
+    let questionKey: String
+    let valueType: String
+    let value: JSONValue
+
+    init(_ draft: PlaceAttributeDraft) {
+        questionKey = draft.questionKey
+        valueType = draft.valueType
+        value = (try? JSONDecoder().decode(JSONValue.self, from: Data(draft.valueJSON.utf8))) ?? .null
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case questionKey = "question_key"
+        case valueType = "value_type"
+        case value
+    }
+}
+
+private struct SharedVisitAcceptanceResponse: Decodable {
+    let operationID: String
+    let participantID: String
+    let userPlaceID: String
+    let visitID: String
+    let backfilledFromUserPlace: Bool
+    let statusRaw: String
+    let photoCopies: [SharedVisitPhotoCopyRow]
+
+    enum CodingKeys: String, CodingKey {
+        case operationID = "operation_id"
+        case participantID = "participant_id"
+        case userPlaceID = "user_place_id"
+        case visitID = "visit_id"
+        case backfilledFromUserPlace = "backfilled_from_user_place"
+        case statusRaw = "status"
+        case photoCopies = "photo_copies"
+    }
+
+    var result: SharedVisitAcceptanceResult {
+        SharedVisitAcceptanceResult(
+            operationID: operationID,
+            participantID: participantID,
+            userPlaceID: userPlaceID,
+            visitID: visitID,
+            backfilledFromUserPlace: backfilledFromUserPlace,
+            status: SharedVisitParticipantStatus(rawValue: statusRaw) ?? .accepted,
+            photoCopies: photoCopies.map(\.copy)
+        )
+    }
+}
+
+private struct SharedVisitPhotoCopyRow: Decodable {
+    let sourcePhotoID: String
+    let sourceBucket: String
+    let sourcePath: String
+    let destinationPhotoID: String
+    let destinationBucket: String
+    let destinationPath: String
+    let contentType: String
+
+    enum CodingKeys: String, CodingKey {
+        case sourcePhotoID = "source_photo_id"
+        case sourceBucket = "source_bucket"
+        case sourcePath = "source_path"
+        case destinationPhotoID = "destination_photo_id"
+        case destinationBucket = "destination_bucket"
+        case destinationPath = "destination_path"
+        case contentType = "content_type"
+    }
+
+    var copy: SharedVisitPhotoCopy {
+        SharedVisitPhotoCopy(
+            sourcePhotoID: sourcePhotoID,
+            sourceBucket: sourceBucket,
+            sourcePath: sourcePath,
+            destinationPhotoID: destinationPhotoID,
+            destinationBucket: destinationBucket,
+            destinationPath: destinationPath,
+            contentType: contentType
+        )
+    }
+}
+
+private struct SharedVisitDestinationRow: Decodable {
+    let participantID: String
+    let requestedGeneration: Int
+    let currentGeneration: Int
+    let routeStatus: String
+    let placeID: String
+    let acceptedVisitID: String?
+    let sourceVisitID: String
+
+    enum CodingKeys: String, CodingKey {
+        case participantID = "participant_id"
+        case requestedGeneration = "requested_generation"
+        case currentGeneration = "current_generation"
+        case routeStatus = "route_status"
+        case placeID = "place_id"
+        case acceptedVisitID = "accepted_visit_id"
+        case sourceVisitID = "source_visit_id"
+    }
+
+    var destination: SharedVisitDestination {
+        SharedVisitDestination(
+            participantID: participantID,
+            requestedGeneration: requestedGeneration,
+            currentGeneration: currentGeneration,
+            status: routeStatus,
+            placeID: placeID,
+            acceptedVisitID: acceptedVisitID,
+            sourceVisitID: sourceVisitID
+        )
+    }
+}
+
+private struct SharedVisitCompanionParams: Encodable {
+    let visitIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case visitIDs = "input_visit_ids"
+    }
+}
+
+private struct SharedVisitCompanionRow: Decodable {
+    let visitID: String
+    let userID: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case visitID = "visit_id"
+        case userID = "companion_user_id"
+        case handle = "companion_handle"
+        case displayName = "companion_display_name"
+        case avatarURL = "companion_avatar_url"
+    }
+
+    var companion: SharedVisitCompanion {
+        SharedVisitCompanion(
+            visitID: visitID,
+            userID: userID,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL
+        )
+    }
+}
+
+private struct SharedVisitPhotoUploadedBody: Encodable {
+    let uploadState = VisitPhotoUploadState.uploaded.rawValue
+
+    enum CodingKeys: String, CodingKey {
+        case uploadState = "upload_state"
     }
 }
 
@@ -835,6 +1415,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let pushEnabled: Bool
     let socialGraphEnabled: Bool
     let sharedListsEnabled: Bool
+    let sharedVisitsEnabled: Bool?
     let recommendationsEnabled: Bool
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
@@ -844,6 +1425,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case pushEnabled = "push_enabled"
         case socialGraphEnabled = "social_graph_enabled"
         case sharedListsEnabled = "shared_lists_enabled"
+        case sharedVisitsEnabled = "shared_visits_enabled"
         case recommendationsEnabled = "recommendations_enabled"
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
@@ -855,6 +1437,7 @@ private struct NotificationPreferencesResponse: Decodable {
             pushEnabled: pushEnabled,
             socialGraphEnabled: socialGraphEnabled,
             sharedListsEnabled: sharedListsEnabled,
+            sharedVisitsEnabled: sharedVisitsEnabled ?? true,
             recommendationsEnabled: recommendationsEnabled,
             captureEnabled: captureEnabled,
             discoveryDigestEnabled: discoveryDigestEnabled,
@@ -879,6 +1462,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let pushEnabled: Bool?
     let socialGraphEnabled: Bool?
     let sharedListsEnabled: Bool?
+    let sharedVisitsEnabled: Bool?
     let recommendationsEnabled: Bool?
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
@@ -888,6 +1472,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.pushEnabled = update.pushEnabled
         self.socialGraphEnabled = update.socialGraphEnabled
         self.sharedListsEnabled = update.sharedListsEnabled
+        self.sharedVisitsEnabled = update.sharedVisitsEnabled
         self.recommendationsEnabled = update.recommendationsEnabled
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
@@ -898,6 +1483,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case pushEnabled = "push_enabled"
         case socialGraphEnabled = "social_graph_enabled"
         case sharedListsEnabled = "shared_lists_enabled"
+        case sharedVisitsEnabled = "shared_visits_enabled"
         case recommendationsEnabled = "recommendations_enabled"
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
