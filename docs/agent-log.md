@@ -11682,3 +11682,14 @@ Build-74 pre-landing validation, 2026-07-14 13:55 PDT:
 - The full iPhone Simulator suite passed 325 tests with 0 failures on the regenerated build-74 tree: `/private/tmp/DerivedData-build74-test/Logs/Test/Test-Wander-2026.07.14_13-46-15--0700.xcresult`.
 - The required generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-build74-test/Build/Products/Debug-iphonesimulator/Wander.app`.
 - `git diff --check` passes. The release branch diff contains exactly `project.yml`, generated `Wander.xcodeproj/project.pbxproj`, and this required coordination log. Next: commit, push, open and squash-merge the release PR, then archive and upload exact resulting `main`.
+
+Release completion, 2026-07-14 14:07 PDT:
+
+- Opened ready release PR #100 and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/100. Exact released source commit: `a73eec375ba1d6debef54834b1808328440e7016`; REC-94 fix PR #99 had already landed as `444c14fe5856ffbf14b95f925e20536247ba9ca3`.
+- Archived exact released `main` successfully at `/private/tmp/Wander-0.1-build74.xcarchive`. Archive and embedded app metadata both confirm marketing version `0.1`, build `74`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export options used `destination=upload`, `method=app-store-connect`, automatic signing, and `manageAppVersionAndBuildNumber=false`. Upload with the configured App Store Connect API key succeeded, and archive upload metadata confirms build 74 with no Xcode build-number drift.
+- App Store Connect build id `2b419e48-b5f7-4742-8192-de302d234f92` reached `VALID`. The release helper set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 74 to the public `Wander Alpha` group, submitted external beta review, and confirmed review state `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784063173892249. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Added the final merge, archive, validation, TestFlight, and Slack evidence to Linear REC-94. The issue was already `Done` after PR #99 merged; that status now matches the shipped and approved release.
+- Validation shipped with the exact affected iPhone 15 Pro physical repro passing, 325 tests with 0 failures, a generic arm64/x86_64 iOS Simulator build, and a signed Release archive/upload. No backend, schema, tester-data, auth, sync, or privacy behavior changed.
+- Known/deferred: build 74 specifically fixes the Profile calendar/map scroll freeze. The broader build 73 Profile and Shared Visits scope is unchanged and remains subject to its existing tester checklist.
