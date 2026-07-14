@@ -11155,3 +11155,10 @@ Implementation checkpoint, 2026-07-13 20:25 PDT:
 - List detail appearance refreshes only the selected remote list instead of the entire list collection, and its task identity is stable across local-to-server id reconciliation. Lists home computes the visible social-place candidate set once and reuses it for all card projections.
 - Added regression coverage for ticker state ownership, batched list-projection equivalence, one persisted snapshot per full hydration batch, and selected-list detail refresh without a global summary request.
 - Focused REC-85/REC-91 run passed: 5 tests, 0 failures. Full iPhone 16 Plus / iOS 18.6 simulator suite passed: 295 tests, 0 failures. Both used `/private/tmp/DerivedData-rec85-focused`; the only build warning is the existing traditional-headermap warning.
+
+Device-build checkpoint, 2026-07-13 20:36 PDT:
+
+- The first signed-device attempt exposed a host problem rather than a code failure: the data volume had only 116 MB free, leaving an incomplete `Wander.debug.dylib` that `codesign` reported as an internal subsystem error. A disposable signing probe confirmed the development identity itself remained valid.
+- Removed only failed REC-85 device DerivedData and stale Wander Xcode DerivedData caches, recovering 7.3 GB. Source, archives, installed app data, and the passing simulator result bundle were not touched.
+- Rebuilt the patched branch for generic iOS with automatic provisioning and one build job. The signed Debug device build succeeded in 158.812 seconds with only the existing traditional-headermap warning; app path: `/private/tmp/DerivedData-rec85-device/Build/Products/Debug-iphoneos/Wander.app`.
+- The iPhone 16 Pro remains visible to Xcode/Instruments but is currently marked offline, so installation and the required post-fix physical SwiftUI trace are pending unlock/reconnect. No app uninstall or data reset will be used when it returns online.
