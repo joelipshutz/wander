@@ -31,7 +31,20 @@ struct SupabaseProfileRepository: ProfileRepository {
     }
 
     func profile(id: String) async throws -> ProfileViewState {
-        throw WanderRemoteError.notImplemented("profile_visible_places profile shell")
+        let rows: [RemoteProfileShellDTO] = try await rpc.call(
+            "profile_detail",
+            params: ProfileDetailParams(profileID: id)
+        )
+        guard let shell = rows.first?.profileShell() else {
+            throw WanderRemoteError.invalidResponse("Profile detail returned no visible profile")
+        }
+        return ProfileViewState(
+            shell: shell,
+            visiblePlaces: [],
+            canFollow: shell.relationship == .nonFollower,
+            canBlock: shell.relationship != .owner,
+            isBlocked: false
+        )
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
@@ -1682,6 +1695,14 @@ private struct ProfileIDParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case profileID = "profile_id"
+    }
+}
+
+private struct ProfileDetailParams: Encodable {
+    let profileID: String
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "input_profile_id"
     }
 }
 

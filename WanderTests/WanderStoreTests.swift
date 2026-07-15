@@ -39,6 +39,233 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.friends(of: ownerID).map(\.id), expected)
     }
 
+    func testPlacesInCommonIncludesBeenAndWannaMatchesWithoutDuplicates() {
+        let store = makeStore()
+
+        let matches = store.placesInCommon(with: "user_maya")
+
+        XCTAssertEqual(
+            Set(matches.map { $0.place.canonicalName }),
+            ["Circuit Coffee", "Bar Nido", "Elysian Picnic Steps"]
+        )
+        XCTAssertEqual(matches.filter { $0.place.canonicalName == "Elysian Picnic Steps" }.map(\.userPlace.status), [.been])
+        XCTAssertEqual(matches.count, Set(matches.map { VisiblePlaceGrouping.key(for: $0) }).count)
+        XCTAssertTrue(store.placesInCommon(with: store.currentUser.id).isEmpty)
+    }
+
+    func testPlacesInCommonMatchesCanonicalProviderAliasesAndExcludesUnrelatedPlaces() {
+        let currentUser = LocalProfile(
+            localID: "local_profile_current",
+            serverID: "user_current",
+            handle: "current",
+            displayName: "Current",
+            syncState: .synced
+        )
+        let friend = LocalProfile(
+            localID: "local_profile_friend",
+            serverID: "user_friend",
+            handle: "friend",
+            displayName: "Friend",
+            syncState: .synced
+        )
+        let mine = LocalPlace(
+            localID: "local_place_mine",
+            serverID: "place_mine",
+            canonicalName: "L.A. Cafe",
+            category: "coffee",
+            latitude: 34.0522,
+            longitude: -118.2437,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "shared-provider-id",
+            syncState: .synced
+        )
+        let theirAlias = LocalPlace(
+            localID: "local_place_theirs",
+            serverID: "place_theirs",
+            canonicalName: "Los Angeles Cafe",
+            category: "coffee",
+            latitude: 34.0523,
+            longitude: -118.2436,
+            sourceProvider: "MAPKIT",
+            sourceProviderPlaceID: "shared-provider-id",
+            syncState: .synced
+        )
+        let unrelated = LocalPlace(
+            localID: "local_place_unrelated",
+            serverID: "place_unrelated",
+            canonicalName: "Different Cafe",
+            category: "coffee",
+            latitude: 35,
+            longitude: -119,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "different-provider-id",
+            syncState: .synced
+        )
+        let fixture = WanderFixtures(
+            currentUser: currentUser,
+            profiles: [currentUser, friend],
+            places: [mine, theirAlias, unrelated],
+            userPlaces: [
+                LocalUserPlace(
+                    localID: "local_up_mine",
+                    serverID: "up_mine",
+                    userID: currentUser.id,
+                    placeID: mine.id,
+                    status: .wannaGo,
+                    visibility: .followers,
+                    sourceType: "manual",
+                    syncState: .synced
+                ),
+                LocalUserPlace(
+                    localID: "local_up_theirs",
+                    serverID: "up_theirs",
+                    userID: friend.id,
+                    placeID: theirAlias.id,
+                    status: .been,
+                    visibility: .followers,
+                    sourceType: "manual",
+                    syncState: .synced
+                ),
+                LocalUserPlace(
+                    localID: "local_up_unrelated",
+                    serverID: "up_unrelated",
+                    userID: friend.id,
+                    placeID: unrelated.id,
+                    status: .been,
+                    visibility: .followers,
+                    sourceType: "manual",
+                    syncState: .synced
+                )
+            ],
+            placeAttributes: [],
+            follows: [
+                LocalFollow(
+                    localID: "local_follow_current_friend",
+                    serverID: "follow_current_friend",
+                    followerUserID: currentUser.id,
+                    followedUserID: friend.id,
+                    source: .profile,
+                    syncState: .synced
+                )
+            ],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        )
+        let store = WanderStore(fixtures: fixture)
+
+        let matches = store.placesInCommon(with: friend.id)
+
+        XCTAssertEqual(matches.map { $0.place.canonicalName }, ["Los Angeles Cafe"])
+        XCTAssertEqual(matches.map(\.userPlace.status), [.been])
+    }
+
+    func testMemberProfileRefreshHydratesDetailPlacesGraphAndVisitsForSelectedUser() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_current", displayName: "Current", handle: "current")))
+        let joinedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2023-10-01T12:00:00Z"))
+        let visitedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-10T19:00:00Z"))
+        let shell = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Friend Name",
+            avatarURL: "https://example.com/friend.jpg",
+            bio: "Trusted neighborhood picks.",
+            homeArea: "Santa Monica",
+            isPrivateProfile: false,
+            createdAt: joinedAt,
+            relationship: .mutual
+        )
+        let owner = LocalProfile(
+            localID: "remote_profile_friend",
+            serverID: shell.id,
+            handle: shell.handle,
+            displayName: shell.displayName,
+            avatarURL: shell.avatarURL,
+            syncState: .synced
+        )
+        let place = LocalPlace(
+            localID: "remote_place_friend",
+            serverID: "place_friend",
+            canonicalName: "Friend Cafe",
+            category: "coffee",
+            latitude: 34.02,
+            longitude: -118.49,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "friend-cafe",
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "remote_up_friend",
+            serverID: "up_friend",
+            userID: shell.id,
+            placeID: place.id,
+            status: .been,
+            visibility: .mutuals,
+            visitedAt: visitedAt,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let visiblePlace = VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
+        let profileRepository = FakeProfileRepository(
+            profileStates: [
+                shell.id: ProfileViewState(
+                    shell: shell,
+                    visiblePlaces: [],
+                    canFollow: false,
+                    canBlock: true,
+                    isBlocked: false
+                )
+            ]
+        )
+        let userPlaceRepository = FakeUserPlaceRepository(userPlacesByUserID: [shell.id: [visiblePlace]])
+        let followRepository = FakeFollowRepository(relationships: [shell.id: .mutual])
+        let visitRepository = FakeVisitRepository(
+            visitsByUserPlaceID: [
+                userPlace.id: [
+                    PlaceVisitResult(
+                        visitID: "visit_friend",
+                        userPlaceID: userPlace.id,
+                        visitedAt: visitedAt,
+                        note: "Dinner",
+                        ratingScore: 4.5,
+                        tags: ["cozy"],
+                        backfilledFromUserPlace: false
+                    )
+                ]
+            ]
+        )
+        let backend = WanderBackend(
+            profileRepository: profileRepository,
+            followRepository: followRepository,
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+
+        await store.refreshRemoteProfileData(profileID: shell.id, backend: backend)
+
+        let hydrated = try XCTUnwrap(store.profile(for: shell.id))
+        XCTAssertEqual(hydrated.displayName, "Friend Name")
+        XCTAssertEqual(hydrated.avatarURL, "https://example.com/friend.jpg")
+        XCTAssertEqual(hydrated.bio, "Trusted neighborhood picks.")
+        XCTAssertEqual(hydrated.homeArea, "Santa Monica")
+        XCTAssertEqual(hydrated.createdAt, joinedAt)
+        XCTAssertEqual(store.visiblePlaces(for: shell.id).map { $0.place.canonicalName }, ["Friend Cafe"])
+        XCTAssertEqual(profileRepository.profileIDs, [shell.id])
+        XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), [shell.id])
+        XCTAssertEqual(followRepository.followersUserIDs, [shell.id])
+        XCTAssertEqual(followRepository.followingUserIDs, [shell.id])
+        XCTAssertEqual(visitRepository.visitRequests, [userPlace.id])
+        XCTAssertEqual(store.placeVisits.first { $0.id == "visit_friend" }?.visitedAt, visitedAt)
+    }
+
     private func makeStore() -> WanderStore {
         WanderStore(fixtures: WanderFixtures.seed())
     }
@@ -4335,18 +4562,22 @@ final class WanderStoreTests: XCTestCase {
 @MainActor
 private final class FakeProfileRepository: ProfileRepository {
     private let shells: [ProfileShell]
+    private let profileStates: [String: ProfileViewState]
     private let currentProfileResult: LocalProfile?
     private let updateError: Error?
     private let updatedProfileResult: LocalProfile?
     private(set) var queries: [String] = []
+    private(set) var profileIDs: [String] = []
 
     init(
         shells: [ProfileShell] = [],
+        profileStates: [String: ProfileViewState] = [:],
         currentProfile: LocalProfile? = nil,
         updateError: Error? = nil,
         updatedProfile: LocalProfile? = nil
     ) {
         self.shells = shells
+        self.profileStates = profileStates
         self.currentProfileResult = currentProfile
         self.updateError = updateError
         self.updatedProfileResult = updatedProfile
@@ -4367,7 +4598,11 @@ private final class FakeProfileRepository: ProfileRepository {
     }
 
     func profile(id: String) async throws -> ProfileViewState {
-        throw WanderRemoteError.notImplemented("fake profile")
+        profileIDs.append(id)
+        guard let state = profileStates[id] else {
+            throw WanderRemoteError.notImplemented("fake profile")
+        }
+        return state
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {

@@ -14,6 +14,15 @@ struct WanderShareContent: Equatable {
         )
     }
 
+    static func profileMap(id: String, displayName: String, handle: String) -> WanderShareContent? {
+        guard let item = appURL(host: "profiles", pathComponent: id) else { return nil }
+        return WanderShareContent(
+            item: item,
+            subject: "\(displayName)'s map",
+            message: "Explore @\(handle)'s saved places on rec.me"
+        )
+    }
+
     static func place(item: URL, name: String, message: String) -> WanderShareContent {
         WanderShareContent(item: item, subject: name, message: message)
     }

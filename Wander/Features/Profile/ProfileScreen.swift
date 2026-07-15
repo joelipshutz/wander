@@ -43,6 +43,7 @@ struct ProfileScreen: View {
         NavigationStack {
             ProfileOwnerHome(
                 profile: store.currentUser,
+                mode: .owner,
                 stats: profileStats,
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
@@ -53,11 +54,15 @@ struct ProfileScreen: View {
                 avatarAction: toggleProfilePhotoMenu,
                 editAction: { showsEditProfile = true },
                 settingsAction: { showsSettings = true },
+                relationshipAction: {},
+                backAction: nil,
+                memberActions: nil,
                 graphAction: { socialGraphTab = $0 },
                 sharedVisitInvitationsAction: { showsVisitInvitations = true },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
                 },
+                inCommonAction: {},
                 calendarDateAction: { date, placeIDs in
                     placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
                 },
@@ -80,7 +85,11 @@ struct ProfileScreen: View {
                     }
                 }
                 .sheet(item: $socialGraphTab) { tab in
-                    ProfileSocialGraphScreen(initialTab: tab, onFindFriends: onFindFriends)
+                    ProfileSocialGraphScreen(
+                        profileID: store.currentUser.id,
+                        initialTab: tab,
+                        onFindFriends: onFindFriends
+                    )
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
@@ -103,13 +112,13 @@ struct ProfileScreen: View {
                     }
                 }
                 .navigationDestination(item: $savedListMode) { mode in
-                    SavedPlacesListScreen(mode: mode)
+                    SavedPlacesListScreen(mode: mode, profileID: store.currentUser.id)
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
                 .navigationDestination(item: $placeCollectionRoute) { route in
-                    SavedPlacesListScreen(collection: route)
+                    SavedPlacesListScreen(collection: route, profileID: store.currentUser.id)
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
@@ -804,195 +813,226 @@ private struct ProfileCameraPicker: UIViewControllerRepresentable {
 }
 
 struct ProfileDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let profileID: String
     let onBlock: (String) -> Void
+    @State private var selectedMonth = Date.now
+    @State private var socialGraphTab: ProfileSocialGraphTab?
+    @State private var savedListMode: SavedPlacesListMode?
+    @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
+    @State private var isLoading = true
 
     init(profileID: String, onBlock: @escaping (String) -> Void = { _ in }) {
         self.profileID = profileID
         self.onBlock = onBlock
     }
 
-    private var state: ProfileViewState? {
-        store.profileState(for: profileID)
+    private var profile: LocalProfile? {
+        store.profile(for: profileID)
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                if let state {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        profileHeader(state: state)
-
-                        if state.isBlocked {
-                            AccessChangedPanel(title: "This profile isn't available", subtitle: "Blocked profiles stay out of search, lists, and map results.")
-                        } else if state.visiblePlaces.isEmpty && state.shell.relationship == .nonFollower {
-                            AccessChangedPanel(title: "Follow to see shared places", subtitle: "You'll only see places this person shares with followers.")
-                        } else {
-                            ForEach(state.visiblePlaces) { visiblePlace in
-                                ProfilePlaceRow(visiblePlace: visiblePlace)
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if let profile {
+                        ProfileOwnerHome(
+                            profile: profile,
+                            mode: .member(
+                                relationship: store.relationship(to: profileID),
+                                inCommonCount: inCommonPlaces.count
+                            ),
+                            stats: profileStats,
+                            followerCount: store.followers(of: profileID).count,
+                            followingCount: store.following(of: profileID).count,
+                            insights: profileInsights,
+                            selectedMonth: $selectedMonth,
+                            isAvatarSaving: false,
+                            avatarAction: {},
+                            editAction: {},
+                            settingsAction: {},
+                            relationshipAction: handleRelationshipAction,
+                            backAction: { dismiss() },
+                            memberActions: ProfileMemberActions(
+                                canUnfollow: store.relationship(to: profileID) == .follower || store.relationship(to: profileID) == .mutual,
+                                isMuted: store.isMuted(userID: profileID),
+                                unfollowAction: { showUnfollowConfirm = true },
+                                toggleMuteAction: toggleMute,
+                                blockAction: { showBlockConfirm = true }
+                            ),
+                            graphAction: { socialGraphTab = $0 },
+                            savedPlacesAction: { status in
+                                savedListMode = status == .been ? .been : .wanna
+                            },
+                            inCommonAction: { savedListMode = .inCommon },
+                            calendarDateAction: { date, placeIDs in
+                                placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                            },
+                            mapSummaryAction: { kind, item in
+                                placeCollectionRoute = .mapSummary(kind: kind, item: item)
                             }
-                        }
+                        )
+                    } else if isLoading {
+                        ProgressView("Loading profile")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .wanderScreen()
+                    } else {
+                        AccessChangedPanel(
+                            title: "This profile isn't available",
+                            subtitle: "It may have been removed, blocked, or become unavailable."
+                        )
+                        .padding(WanderTheme.spacing4)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .wanderScreen()
                     }
-                    .padding(WanderTheme.spacing3)
+                }
+
+                if profile == nil {
+                    ProfileHeaderActionButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Back",
+                        action: { dismiss() }
+                    )
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
                 }
             }
-            .wanderScreen()
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $savedListMode) { mode in
+                SavedPlacesListScreen(mode: mode, profileID: profileID)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
+            .navigationDestination(item: $placeCollectionRoute) { route in
+                SavedPlacesListScreen(collection: route, profileID: profileID)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
+            .sheet(item: $socialGraphTab) { tab in
+                ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
             .alert("Block this person?", isPresented: $showBlockConfirm) {
-                Button("Block", role: .destructive) {
-                    confirmBlock()
-                }
-                Button("Cancel", role: .cancel) {
-                    showBlockConfirm = false
-                }
+                Button("Block", role: .destructive) { confirmBlock() }
+                Button("Cancel", role: .cancel) { showBlockConfirm = false }
             } message: {
                 Text("You won't see each other's profiles, places, or search results.")
             }
             .alert(unfollowConfirmationTitle, isPresented: $showUnfollowConfirm) {
-                Button("Yes, unfollow", role: .destructive) {
-                    confirmUnfollow()
-                }
-                Button("No, cancel", role: .cancel) {
-                    showUnfollowConfirm = false
-                }
+                Button("Yes, unfollow", role: .destructive) { confirmUnfollow() }
+                Button("No, cancel", role: .cancel) { showUnfollowConfirm = false }
+            } message: {
+                Text("Their places will stop appearing in your social map.")
             }
             .task(id: profileID) {
                 await refreshRemoteProfile()
                 await store.refreshRemoteMutes(backend: backend)
+                isLoading = false
+            }
+        }
+    }
+
+    private var profileVisiblePlaces: [VisiblePlace] {
+        store.visiblePlaces(for: profileID)
+    }
+
+    private var inCommonPlaces: [VisiblePlace] {
+        store.placesInCommon(with: profileID)
+    }
+
+    private var profileStats: ProfileStats {
+        let places = VisiblePlaceGrouping.representativePlaces(
+            from: profileVisiblePlaces,
+            currentUserID: store.currentUser.id
+        )
+        return ProfileStats(
+            been: places.filter { $0.userPlace.status == .been }.count,
+            wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
+            friends: store.friends(of: profileID).count
+        )
+    }
+
+    private var profileInsights: ProfileInsights {
+        ProfileInsightsPresenter.present(
+            ownerID: profileID,
+            userPlaces: profileVisiblePlaces.map(\.userPlace),
+            visits: store.placeVisits,
+            places: profileVisiblePlaces.map(\.place),
+            month: selectedMonth
+        )
+    }
+
+    private func handleRelationshipAction() {
+        switch store.relationship(to: profileID) {
+        case .nonFollower:
+            auth.requireSignIn(for: .followPeople) {
+                Task {
+                    await store.follow(userID: profileID, source: .profile, backend: backend)
+                    await refreshRemoteProfile()
+                }
+            }
+        case .follower, .mutual:
+            showUnfollowConfirm = true
+        case .owner:
+            break
+        }
+    }
+
+    private func toggleMute() {
+        auth.requireSignIn(for: .manageBlocks) {
+            Task {
+                if store.isMuted(userID: profileID) {
+                    await store.unmute(userID: profileID, backend: backend)
+                } else {
+                    await store.mute(userID: profileID, backend: backend)
+                }
             }
         }
     }
 
     private func confirmBlock() {
-        let profile = state?.shell
+        let shell = profile.map(store.shell(for:))
         showBlockConfirm = false
         auth.requireSignIn(for: .manageBlocks) {
             Task {
-                if let profile {
-                    await store.block(profile: profile, backend: backend)
+                if let shell {
+                    await store.block(profile: shell, backend: backend)
                 } else {
                     await store.block(userID: profileID, backend: backend)
                 }
                 await MainActor.run {
                     onBlock(profileID)
+                    dismiss()
                 }
             }
         }
-    }
-
-    private func profileHeader(state: ProfileViewState) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            HStack(alignment: .top) {
-                WanderAvatar(
-                    initials: initials(for: state.shell.displayName),
-                    avatarURL: state.shell.avatarURL,
-                    size: 56,
-                    color: WanderTheme.pinSocial.color
-                )
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(state.shell.displayName)
-                        .font(.system(size: 23, weight: .black))
-                        .lineLimit(1)
-                    Text("@\(state.shell.handle) · \(state.shell.relationship.displayTitle)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-
-                Spacer()
-
-                Menu {
-                    if state.shell.relationship != .owner && state.shell.relationship != .nonFollower && !state.isBlocked {
-                        Button("Unfollow", role: .destructive) {
-                            showUnfollowConfirm = true
-                        }
-                    }
-                    if state.shell.relationship != .owner && !state.isBlocked {
-                        Button(store.isMuted(userID: profileID) ? "Unmute activity" : "Mute activity") {
-                            auth.requireSignIn(for: .manageBlocks) {
-                                Task {
-                                    if store.isMuted(userID: profileID) {
-                                        await store.unmute(userID: profileID, backend: backend)
-                                    } else {
-                                        await store.mute(userID: profileID, backend: backend)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Button("Block", role: .destructive) {
-                        showBlockConfirm = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .bold))
-                        .frame(width: 40, height: 40)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-            }
-
-            if let bio = state.shell.bio {
-                Text(bio)
-                    .font(.system(size: 14))
-                    .italic()
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            if state.shell.relationship == .nonFollower && !state.isBlocked {
-                HStack {
-                    WanderPrimaryButton(title: "follow", systemImage: "person.badge.plus") {
-                        auth.requireSignIn(for: .followPeople) {
-                            Task {
-                                await store.follow(userID: state.shell.id, backend: backend)
-                                await refreshRemoteProfile()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private func refreshRemoteProfile() async {
-        await store.refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        await store.refreshRemoteProfileData(profileID: profileID, backend: backend)
     }
 
     private var unfollowConfirmationTitle: String {
-        guard let state else {
-            return "Are you sure you want to unfollow this person"
-        }
-        return "Are you sure you want to unfollow \(state.shell.displayName)"
+        guard let profile else { return "Are you sure you want to unfollow this person" }
+        return "Are you sure you want to unfollow \(profile.displayName)"
     }
 
     private func confirmUnfollow() {
         showUnfollowConfirm = false
-
         auth.requireSignIn(for: .followPeople) {
             Task {
                 await store.unfollow(userID: profileID, backend: backend)
                 await refreshRemoteProfile()
             }
         }
-    }
-
-    private func initials(for name: String) -> String {
-        name
-            .split(separator: " ")
-            .prefix(2)
-            .compactMap(\.first)
-            .map(String.init)
-            .joined()
-            .uppercased()
     }
 }
 
@@ -1023,6 +1063,7 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
 private enum SavedPlacesListMode: String, Identifiable {
     case been
     case wanna
+    case inCommon
 
     var id: String { rawValue }
 
@@ -1030,13 +1071,15 @@ private enum SavedPlacesListMode: String, Identifiable {
         switch self {
         case .been: "Been"
         case .wanna: "Wanna"
+        case .inCommon: "In Common"
         }
     }
 
-    var status: PlaceStatus {
+    var status: PlaceStatus? {
         switch self {
         case .been: .been
         case .wanna: .wannaGo
+        case .inCommon: nil
         }
     }
 }
@@ -1070,6 +1113,7 @@ private struct SavedPlacesListScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     let mode: SavedPlacesListMode
     let collection: ProfilePlaceCollectionRoute?
+    let profileID: String
     @State private var query = ""
     @State private var selectedCategory: String?
     @State private var selectedMetadataTag: String?
@@ -1078,19 +1122,20 @@ private struct SavedPlacesListScreen: View {
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
 
-    init(mode: SavedPlacesListMode) {
+    init(mode: SavedPlacesListMode, profileID: String) {
         self.mode = mode
         self.collection = nil
+        self.profileID = profileID
     }
 
-    init(collection: ProfilePlaceCollectionRoute) {
+    init(collection: ProfilePlaceCollectionRoute, profileID: String) {
         self.mode = .been
         self.collection = collection
+        self.profileID = profileID
     }
 
     private var places: [VisiblePlace] {
-        store.currentUserVisiblePlaces
-            .filter { $0.userPlace.status == mode.status }
+        modePlaces
             .filter(matchesCollection)
             .filter(matchesSelectedCategory)
             .filter(matchesSelectedMetadataTag)
@@ -1101,9 +1146,16 @@ private struct SavedPlacesListScreen: View {
     }
 
     private var allModePlaces: [VisiblePlace] {
-        store.currentUserVisiblePlaces
-            .filter { $0.userPlace.status == mode.status }
+        modePlaces
             .filter(matchesCollection)
+    }
+
+    private var modePlaces: [VisiblePlace] {
+        let base = mode == .inCommon
+            ? store.placesInCommon(with: profileID)
+            : store.visiblePlaces(for: profileID)
+        guard let status = mode.status else { return base }
+        return base.filter { $0.userPlace.status == status }
     }
 
     private var categories: [String] {
@@ -1575,7 +1627,7 @@ private struct GraphListScreen: View {
             .scrollContentBackground(.hidden)
             .wanderScreen()
             .navigationTitle(mode.rawValue.capitalized)
-            .sheet(item: $selectedProfile) { selection in
+            .fullScreenCover(item: $selectedProfile) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)

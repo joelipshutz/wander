@@ -282,11 +282,32 @@ begin
 end
 $profile_metadata$;
 
+do $member_profile_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=app, public' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'profile_detail'
+    and pg_get_function_identity_arguments(p.oid) = 'input_profile_id text';
+  if valid is distinct from true then
+    raise exception 'member profile detail metadata contract failed';
+  end if;
+end
+$member_profile_metadata$;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 do $profile_behavior$
-declare updated jsonb; muted_id text; visible_city text;
+declare updated jsonb; muted_id text; visible_city text; member_home text; member_relationship text;
 begin
   updated := public.update_own_profile(
     'Backend smoke-test profile.', 'Test', 'mutuals', true, 'Backend Smoke Tester', 'recme_smoke_profile'
@@ -307,6 +328,13 @@ begin
   limit 1;
   if visible_city is distinct from 'Los Angeles' then
     raise exception 'profile geography payload failed';
+  end if;
+
+  select home_area, relationship into member_home, member_relationship
+  from public.profile_detail(${collaboratorUser});
+  if member_home is distinct from 'Test'
+     or member_relationship not in ('follower', 'mutual', 'non_follower') then
+    raise exception 'member profile detail payload failed';
   end if;
 
   perform public.unmute_profile(${collaboratorUser});
@@ -895,6 +923,28 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
     },
   );
 
+  await expectQuery(
+    client,
+    "member profile detail RPC metadata",
+    `
+      select
+        not proc.prosecdef as invoker,
+        'search_path=app, public' = any(proc.proconfig) as search_path,
+        has_function_privilege('authenticated', proc.oid, 'execute') as authenticated,
+        not has_function_privilege('anon', proc.oid, 'execute') as anon_denied
+      from pg_proc proc
+      where proc.oid = 'public.profile_detail(text)'::regprocedure
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.invoker === true
+        && row?.search_path === true
+        && row?.authenticated === true
+        && row?.anon_denied === true;
+    },
+  );
+
   await setAuthenticatedUser(client, smokeUserID);
   await expectQuery(
     client,
@@ -929,6 +979,20 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
     `,
     [collaboratorUserID],
     (result) => result.rows[0]?.id === collaboratorUserID,
+  );
+
+  await expectQuery(
+    client,
+    "authenticated viewer can hydrate another member profile",
+    `
+      select id, home_area, created_at, relationship
+      from public.profile_detail($1)
+    `,
+    [collaboratorUserID],
+    (result) => result.rows[0]?.id === collaboratorUserID
+      && result.rows[0]?.home_area === "Test"
+      && Boolean(result.rows[0]?.created_at)
+      && ["follower", "mutual", "non_follower"].includes(result.rows[0]?.relationship),
   );
 
   await expectQuery(

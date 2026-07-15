@@ -32,6 +32,65 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
     }
 
+    func testSharedProfileMapContentUsesSharedNativeShareWorker() throws {
+        let content = try XCTUnwrap(
+            WanderShareContent.profileMap(id: "user maya", displayName: "Maya Chen", handle: "maya")
+        )
+
+        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20maya")
+        XCTAssertEqual(content.subject, "Maya Chen's map")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+    }
+
+    func testOtherMemberProfileUsesSharedHomeWithoutOwnerEditActions() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(profileScreen.contains("mode: .member("))
+        XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
+        XCTAssertTrue(home.contains("if mode.isOwner"))
+        XCTAssertTrue(home.contains("label: \"IN COMMON\""))
+        XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
+    }
+
+    func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
+        let presentations = [
+            ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
+            ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
+        ]
+
+        for (file, presentation) in presentations {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
+            XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
+        }
+    }
+
+    func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+
+        XCTAssertTrue(home.contains("systemImage: \"chevron.left\""))
+        XCTAssertTrue(home.contains(".popover("))
+        XCTAssertTrue(home.contains("attachmentAnchor: .rect(.bounds)"))
+        XCTAssertTrue(home.contains("arrowEdge: .top"))
+        XCTAssertTrue(home.contains(".presentationCompactAdaptation(.popover)"))
+        XCTAssertFalse(profileScreen.contains(".confirmationDialog(\"Profile actions\""))
+        XCTAssertTrue(profileScreen.contains("if profile == nil"), "Full-screen loading and unavailable states need a dismiss control")
+    }
+
     func testNativeSharingStaysBehindTheSharedShareComponent() throws {
         let appRoot = projectRoot.appendingPathComponent("Wander")
         let sharedComponent = appRoot.appendingPathComponent("DesignSystem/WanderShareButton.swift").standardizedFileURL
@@ -45,6 +104,21 @@ final class NavigationContractTests: XCTestCase {
             [],
             "Use WanderShareButton so native sharing copy and behavior stay consistent."
         )
+    }
+
+    func testProfileCalendarDatesUseScrollCompatibleTapHandling() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(source.contains("ScrollView {"))
+        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: WanderTheme.spacing6)"))
+        XCTAssertTrue(source.contains("Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2)"))
+        XCTAssertFalse(source.contains("LazyVStack"))
+        XCTAssertFalse(source.contains("LazyVGrid"))
+        XCTAssertTrue(source.contains(".onTapGesture { selectDate(date, day: day) }"))
+        XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
+        XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
     }
 
     @MainActor
@@ -187,6 +261,22 @@ final class NavigationContractTests: XCTestCase {
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
+    }
+
+    @MainActor
+    func testRootViewCanOpenMemberProfileForVisualQA() {
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "user_maya"]
+            ),
+            SharedProfileRoute(profileID: "user_maya")
+        )
+        XCTAssertNil(WanderRootView.resolvedInitialSharedProfile(from: ["Wander"]))
+        XCTAssertNil(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "   "]
+            )
+        )
     }
 
     func testProfileRedesignMockupLaunchArgumentResolvesEveryApprovalState() {

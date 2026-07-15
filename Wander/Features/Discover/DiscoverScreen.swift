@@ -176,7 +176,7 @@ struct DiscoverScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
-            .sheet(item: $selectedProfile) { profile in
+            .fullScreenCover(item: $selectedProfile) { profile in
                 ProfileDetailView(profileID: profile.id) { blockedProfileID in
                     handleMemberBlocked(profileID: blockedProfileID)
                 }
@@ -356,9 +356,11 @@ struct DiscoverScreen: View {
                 EmptyPanel(title: "No activity yet", action: "follow more people to fill this in")
             } else {
                 ForEach(latestActivityPlaces) { visiblePlace in
-                    LatestActivityRow(visiblePlace: visiblePlace) {
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace)
-                    }
+                    LatestActivityRow(
+                        visiblePlace: visiblePlace,
+                        openPlace: { selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace) },
+                        openProfile: { selectedProfile = SelectedProfile(id: visiblePlace.owner.id) }
+                    )
                 }
             }
         }
@@ -941,18 +943,24 @@ private struct DiscoverPlaceResultCard: View {
 
 private struct LatestActivityRow: View {
     let visiblePlace: VisiblePlace
-    let open: () -> Void
+    let openPlace: () -> Void
+    let openProfile: () -> Void
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: WanderTheme.spacing3) {
+        HStack(spacing: WanderTheme.spacing3) {
+            Button(action: openProfile) {
                 WanderAvatar(
                     initials: visiblePlace.owner.initials,
                     avatarURL: visiblePlace.owner.avatarURL,
                     size: 42,
                     color: avatarColor
                 )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(visiblePlace.owner.displayName)'s profile")
 
+            Button(action: openPlace) {
+                HStack(spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
                         .font(.system(size: 15, weight: .black))
@@ -982,12 +990,13 @@ private struct LatestActivityRow: View {
                 Text(visiblePlace.userPlace.status.displayTitle)
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
+                }
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
     private var metadataSubtitle: String {
