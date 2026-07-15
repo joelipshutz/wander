@@ -6203,12 +6203,15 @@ private struct PlaceActivityCard: View {
     @State private var isShowingPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var photoError: String?
+    @State private var selectedProfileID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             header
 
-            SharedVisitCompanionLabel(companions: companions)
+            SharedVisitCompanionLabel(companions: companions) { profileID in
+                selectedProfileID = profileID
+            }
 
             if let note = entry.note {
                 Text("\"\(note)\"")
@@ -6272,26 +6275,44 @@ private struct PlaceActivityCard: View {
                 await importPhotos(from: items)
             }
         }
+        .sheet(isPresented: profileDestinationBinding) {
+            if let selectedProfileID {
+                ProfileDetailView(profileID: selectedProfileID)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
+        }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-            WanderAvatar(
-                initials: entry.owner.initials,
-                avatarURL: entry.owner.avatarURL,
-                size: 34,
-                color: entry.avatarColor
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayName)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                Text("@\(entry.owner.handle) · \(entry.timestampText)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+            Button {
+                guard !entry.isCurrentUser else { return }
+                selectedProfileID = entry.owner.id
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    WanderAvatar(
+                        initials: entry.owner.initials,
+                        avatarURL: entry.owner.avatarURL,
+                        size: 34,
+                        color: entry.avatarColor
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.displayName)
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("@\(entry.owner.handle) · \(entry.timestampText)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+                }
             }
+            .buttonStyle(.plain)
+            .disabled(entry.isCurrentUser)
+            .accessibilityLabel(entry.isCurrentUser ? "Your save" : "Open \(entry.owner.displayName)'s profile")
             Spacer()
             if entry.canEdit {
                 Button(action: onEdit) {
@@ -6308,6 +6329,13 @@ private struct PlaceActivityCard: View {
             }
             StatusBadge(status: entry.status)
         }
+    }
+
+    private var profileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedProfileID != nil },
+            set: { if !$0 { selectedProfileID = nil } }
+        )
     }
 
     @ViewBuilder

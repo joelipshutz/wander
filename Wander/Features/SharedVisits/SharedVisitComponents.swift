@@ -193,19 +193,27 @@ struct SharedVisitFriendPicker: View {
 
 struct SharedVisitCompanionLabel: View {
     let companions: [SharedVisitCompanion]
+    var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         if !companions.isEmpty {
             HStack(spacing: WanderTheme.spacing2) {
                 HStack(spacing: -8) {
                     ForEach(companions.prefix(3)) { companion in
-                        WanderAvatar(
-                            initials: String(companion.displayName.prefix(2)).uppercased(),
-                            avatarURL: companion.avatarURL,
-                            size: 26,
-                            color: WanderTheme.pinSocial.color
-                        )
-                        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+                        Button {
+                            onSelect?(companion.userID)
+                        } label: {
+                            WanderAvatar(
+                                initials: String(companion.displayName.prefix(2)).uppercased(),
+                                avatarURL: companion.avatarURL,
+                                size: 26,
+                                color: WanderTheme.pinSocial.color
+                            )
+                            .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(onSelect == nil)
+                        .accessibilityLabel("Open \(companion.displayName)'s profile")
                     }
                 }
                 Text(companionText)
@@ -213,7 +221,7 @@ struct SharedVisitCompanionLabel: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: onSelect == nil ? .combine : .contain)
         }
     }
 

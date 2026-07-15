@@ -1,8 +1,28 @@
 import MapKit
 import SwiftUI
 
+enum ProfileHomeMode: Equatable {
+    case owner
+    case member(relationship: ViewerRelationship, inCommonCount: Int)
+
+    var isOwner: Bool {
+        self == .owner
+    }
+
+    var inCommonCount: Int? {
+        guard case .member(_, let count) = self else { return nil }
+        return count
+    }
+
+    var relationship: ViewerRelationship? {
+        guard case .member(let relationship, _) = self else { return nil }
+        return relationship
+    }
+}
+
 struct ProfileOwnerHome: View {
     let profile: LocalProfile
+    let mode: ProfileHomeMode
     let stats: ProfileStats
     let followerCount: Int
     let followingCount: Int
@@ -12,8 +32,11 @@ struct ProfileOwnerHome: View {
     let avatarAction: () -> Void
     let editAction: () -> Void
     let settingsAction: () -> Void
+    let relationshipAction: () -> Void
+    let moreAction: () -> Void
     let graphAction: (ProfileSocialGraphTab) -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
+    let inCommonAction: () -> Void
     let calendarDateAction: (Date, [String]) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
 
@@ -25,11 +48,14 @@ struct ProfileOwnerHome: View {
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
+                    ownerLabel: ownerLabel,
                     dateAction: calendarDateAction
                 )
                 ProfileMapSection(
+                    profile: profile,
                     insights: insights,
                     beenCount: stats.been,
+                    ownerLabel: ownerLabel,
                     summaryAction: mapSummaryAction
                 )
             }
@@ -57,7 +83,9 @@ struct ProfileOwnerHome: View {
 
                     Spacer(minLength: WanderTheme.spacing2)
 
-                    ProfileHeaderActionButton(systemImage: "pencil", accessibilityLabel: "Edit profile", action: editAction)
+                    if mode.isOwner {
+                        ProfileHeaderActionButton(systemImage: "pencil", accessibilityLabel: "Edit profile", action: editAction)
+                    }
 
                     if let shareContent = WanderShareContent.profile(
                         id: profile.id,
@@ -71,32 +99,27 @@ struct ProfileOwnerHome: View {
                         .accessibilityLabel("Share profile")
                     }
 
-                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                }
-            }
-
-            Button(action: avatarAction) {
-                ZStack {
-                    WanderAvatar(
-                        initials: profile.initials,
-                        avatarURL: profile.avatarURL,
-                        size: 132,
-                        color: WanderTheme.avatarRyan.color
-                    )
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, y: 6)
-
-                    if isAvatarSaving {
-                        Circle()
-                            .fill(WanderTheme.textInk.color.opacity(0.42))
-                            .frame(width: 132, height: 132)
-                        ProgressView()
-                            .tint(WanderTheme.textOnAction.color)
+                    if mode.isOwner {
+                        ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                    } else {
+                        ProfileHeaderActionButton(systemImage: "ellipsis", accessibilityLabel: "More profile actions", action: moreAction)
                     }
                 }
             }
-            .buttonStyle(.plain)
-            .disabled(isAvatarSaving)
-            .accessibilityLabel(profile.avatarURL == nil ? "Add profile photo" : "Change profile photo")
+
+            Group {
+                if mode.isOwner {
+                    Button(action: avatarAction) {
+                        profileAvatar
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isAvatarSaving)
+                    .accessibilityLabel(profile.avatarURL == nil ? "Add profile photo" : "Change profile photo")
+                } else {
+                    profileAvatar
+                        .accessibilityLabel("\(profile.displayName)'s profile photo")
+                }
+            }
 
             VStack(spacing: WanderTheme.spacing1) {
                 Text("@\(profile.handle)")
@@ -112,6 +135,21 @@ struct ProfileOwnerHome: View {
                         .font(.system(size: 15, weight: .medium))
                         .multilineTextAlignment(.center)
                         .padding(.top, WanderTheme.spacing1)
+                }
+
+                if let relationship = mode.relationship {
+                    Button(action: relationshipAction) {
+                        Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
+                            .font(.system(size: 14, weight: .black))
+                            .padding(.horizontal, WanderTheme.spacing4)
+                            .frame(minHeight: WanderTheme.tapMinimum)
+                            .background(relationship == .nonFollower ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
+                            .foregroundStyle(relationship == .nonFollower ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, WanderTheme.spacing2)
                 }
             }
 
@@ -136,14 +174,35 @@ struct ProfileOwnerHome: View {
         }
     }
 
+    private var profileAvatar: some View {
+        ZStack {
+            WanderAvatar(
+                initials: profile.initials,
+                avatarURL: profile.avatarURL,
+                size: 132,
+                color: WanderTheme.avatarRyan.color
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, y: 6)
+
+            if isAvatarSaving && mode.isOwner {
+                Circle()
+                    .fill(WanderTheme.textInk.color.opacity(0.42))
+                    .frame(width: 132, height: 132)
+                ProgressView()
+                    .tint(WanderTheme.textOnAction.color)
+            }
+        }
+    }
+
     private var savedPlacesSection: some View {
-        HStack(spacing: WanderTheme.spacing3) {
+        HStack(spacing: mode.isOwner ? WanderTheme.spacing3 : WanderTheme.spacing2) {
             OwnerProfileSaveTile(
                 value: stats.been,
                 label: "BEEN",
                 symbol: "checkmark.circle.fill",
                 color: WanderTheme.stateSuccess.color,
-                fill: WanderTheme.categorySage.color.opacity(0.22)
+                fill: WanderTheme.categorySage.color.opacity(0.22),
+                isCompact: !mode.isOwner
             ) {
                 savedPlacesAction(.been)
             }
@@ -153,11 +212,41 @@ struct ProfileOwnerHome: View {
                 label: "WANNA",
                 symbol: "bookmark.fill",
                 color: WanderTheme.stateWarning.color,
-                fill: WanderTheme.sunTint.color
+                fill: WanderTheme.sunTint.color,
+                isCompact: !mode.isOwner
             ) {
                 savedPlacesAction(.wannaGo)
             }
+
+            if let inCommonCount = mode.inCommonCount {
+                OwnerProfileSaveTile(
+                    value: inCommonCount,
+                    label: "IN COMMON",
+                    symbol: "arrow.triangle.2.circlepath.circle.fill",
+                    color: WanderTheme.pinSocial.color,
+                    fill: WanderTheme.skyTint.color,
+                    isCompact: true,
+                    action: inCommonAction
+                )
+            }
         }
+    }
+
+    private var ownerLabel: String {
+        mode.isOwner ? "your" : "\(profile.displayName.components(separatedBy: " ").first ?? profile.displayName)'s"
+    }
+
+    private func relationshipTitle(_ relationship: ViewerRelationship) -> String {
+        switch relationship {
+        case .owner: "You"
+        case .mutual: "Friends"
+        case .follower: "Following"
+        case .nonFollower: "Follow"
+        }
+    }
+
+    private func relationshipSymbol(_ relationship: ViewerRelationship) -> String {
+        relationship == .nonFollower ? "person.badge.plus" : "checkmark"
     }
 
     private var profileMetadata: String {
@@ -233,29 +322,32 @@ private struct OwnerProfileSaveTile: View {
     let symbol: String
     let color: Color
     let fill: Color
+    var isCompact = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                HStack(spacing: WanderTheme.spacing2) {
+                HStack(spacing: isCompact ? WanderTheme.spacing1 : WanderTheme.spacing2) {
                     Image(systemName: symbol)
-                        .font(.system(size: 19, weight: .black))
+                        .font(.system(size: isCompact ? 16 : 19, weight: .black))
                     Text("\(value)")
-                        .font(.system(size: 28, weight: .black))
-                    Spacer(minLength: WanderTheme.spacing2)
+                        .font(.system(size: isCompact ? 23 : 28, weight: .black))
+                    Spacer(minLength: isCompact ? 0 : WanderTheme.spacing2)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 28, height: 28)
+                        .font(.system(size: isCompact ? 10 : 12, weight: .black))
+                        .frame(width: isCompact ? 24 : 28, height: isCompact ? 24 : 28)
                         .background(WanderTheme.surfaceRaised.color.opacity(0.8))
                         .clipShape(Circle())
                 }
 
                 Text(label)
-                    .font(.system(size: 13, weight: .black))
+                    .font(.system(size: isCompact ? 11 : 13, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
-            .padding(WanderTheme.spacing3)
+            .padding(isCompact ? WanderTheme.spacing2 : WanderTheme.spacing3)
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
             .background(fill)
             .foregroundStyle(color)
@@ -272,6 +364,7 @@ private struct OwnerProfileSaveTile: View {
 private struct ProfileCalendarSection: View {
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
+    let ownerLabel: String
     let dateAction: (Date, [String]) -> Void
 
     private var calendar: Calendar { .current }
@@ -281,7 +374,7 @@ private struct ProfileCalendarSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("your calendar")
+                    Text("\(ownerLabel) calendar")
                         .font(.system(size: 23, weight: .black))
                     Text(monthTitle)
                         .font(.system(size: 14, weight: .bold))
@@ -336,7 +429,7 @@ private struct ProfileCalendarSection: View {
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(Circle())
-                Text("Dates show where your Been visits happened.")
+                Text("Dates show where \(ownerLabel) Been visits happened.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -474,19 +567,35 @@ enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
 }
 
 private struct ProfileMapSection: View {
+    let profile: LocalProfile
     let insights: ProfileInsights
     let beenCount: Int
+    let ownerLabel: String
     let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("your map")
-                    .font(.system(size: 23, weight: .black))
-                Text("\(insights.mapCityCount) \(insights.mapCityCount == 1 ? "city" : "cities")  •  \(beenCount) Been places")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(ownerLabel) map")
+                        .font(.system(size: 23, weight: .black))
+                    Text("\(insights.mapCityCount) \(insights.mapCityCount == 1 ? "city" : "cities")  •  \(beenCount) Been places")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                Spacer()
+                if let shareContent = WanderShareContent.profileMap(
+                    id: profile.id,
+                    displayName: profile.displayName,
+                    handle: profile.handle
+                ) {
+                    WanderShareButton(content: shareContent) {
+                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Share \(profile.displayName)'s map")
+                }
             }
 
             Map(
@@ -514,7 +623,7 @@ private struct ProfileMapSection: View {
             .frame(height: 205)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             .allowsHitTesting(false)
-            .accessibilityLabel("Map of your Been places")
+            .accessibilityLabel("Map of \(ownerLabel) Been places")
 
             Picker("Map summary", selection: $selectedSummary) {
                 ForEach(ProfileMapSummaryKind.allCases) { kind in
@@ -566,9 +675,9 @@ private struct ProfileMapSection: View {
 
     private var emptyCopy: String {
         switch selectedSummary {
-        case .places: "Your Been places will appear here."
-        case .cities: "Cities appear after your Been places have location details."
-        case .countries: "Countries appear after your Been places have location details."
+        case .places: "\(ownerLabel.capitalized) Been places will appear here."
+        case .cities: "Cities appear after \(ownerLabel) Been places have location details."
+        case .countries: "Countries appear after \(ownerLabel) Been places have location details."
         }
     }
 }

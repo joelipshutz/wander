@@ -7,6 +7,8 @@ struct RemoteProfileShellDTO: Codable, Equatable {
     let avatarURL: String?
     let bio: String?
     let homeArea: String?
+    let isPrivateProfile: Bool?
+    let createdAt: Date?
     let relationship: String?
 
     enum CodingKeys: String, CodingKey {
@@ -16,6 +18,8 @@ struct RemoteProfileShellDTO: Codable, Equatable {
         case avatarURL = "avatar_url"
         case bio
         case homeArea = "home_area"
+        case isPrivateProfile = "is_private_profile"
+        case createdAt = "created_at"
         case relationship
     }
 
@@ -26,6 +30,9 @@ struct RemoteProfileShellDTO: Codable, Equatable {
             displayName: displayName,
             avatarURL: avatarURL,
             bio: bio,
+            homeArea: homeArea,
+            isPrivateProfile: isPrivateProfile,
+            createdAt: createdAt,
             relationship: relationship.flatMap(ViewerRelationship.init(rawValue:)) ?? fallbackRelationship
         )
     }

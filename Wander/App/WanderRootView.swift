@@ -29,6 +29,7 @@ struct WanderRootView: View {
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
+        _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: WanderStore(
@@ -316,6 +317,19 @@ struct WanderRootView: View {
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
         arguments.contains("-WanderOpenSettings") ? .settings : nil
+    }
+
+    static func resolvedInitialSharedProfile(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> SharedProfileRoute? {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderOpenProfile") else {
+            return nil
+        }
+
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        let profileID = arguments[valueIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        return profileID.isEmpty ? nil : SharedProfileRoute(profileID: profileID)
     }
 
     static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {

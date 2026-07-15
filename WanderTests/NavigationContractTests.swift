@@ -32,6 +32,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
     }
 
+    func testSharedProfileMapContentUsesSharedNativeShareWorker() throws {
+        let content = try XCTUnwrap(
+            WanderShareContent.profileMap(id: "user maya", displayName: "Maya Chen", handle: "maya")
+        )
+
+        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20maya")
+        XCTAssertEqual(content.subject, "Maya Chen's map")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+    }
+
+    func testOtherMemberProfileUsesSharedHomeWithoutOwnerEditActions() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(profileScreen.contains("mode: .member("))
+        XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
+        XCTAssertTrue(home.contains("if mode.isOwner"))
+        XCTAssertTrue(home.contains("label: \"IN COMMON\""))
+        XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
+    }
+
+    func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
+        let files = [
+            "Wander/Features/Discover/DiscoverScreen.swift",
+            "Wander/Features/Lists/ListsScreen.swift",
+            "Wander/Features/Map/MapScreen.swift",
+            "Wander/Features/Profile/ProfileSocialGraphScreen.swift"
+        ]
+
+        for file in files {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
+        }
+    }
+
     func testNativeSharingStaysBehindTheSharedShareComponent() throws {
         let appRoot = projectRoot.appendingPathComponent("Wander")
         let sharedComponent = appRoot.appendingPathComponent("DesignSystem/WanderShareButton.swift").standardizedFileURL
@@ -158,6 +197,22 @@ final class NavigationContractTests: XCTestCase {
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
+    }
+
+    @MainActor
+    func testRootViewCanOpenMemberProfileForVisualQA() {
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "user_maya"]
+            ),
+            SharedProfileRoute(profileID: "user_maya")
+        )
+        XCTAssertNil(WanderRootView.resolvedInitialSharedProfile(from: ["Wander"]))
+        XCTAssertNil(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "   "]
+            )
+        )
     }
 
     func testProfileRedesignMockupLaunchArgumentResolvesEveryApprovalState() {

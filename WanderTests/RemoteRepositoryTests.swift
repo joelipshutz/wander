@@ -62,6 +62,56 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(rpc.rawBodies[0].isEmpty)
     }
 
+    func testMemberProfileCallsDetailRPCAndMapsReadOnlyProfileMetadata() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["profile_detail"] = """
+        [
+          {
+            "id": "user_maya",
+            "handle": "maya",
+            "display_name": "Maya Chen",
+            "avatar_url": "https://example.com/maya.jpg",
+            "bio": "coffee and hikes",
+            "home_area": "Los Angeles",
+            "is_private_profile": false,
+            "created_at": "2023-10-01T12:00:00Z",
+            "relationship": "mutual"
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let state = try await repository.profile(id: "user_maya")
+
+        XCTAssertEqual(state.shell.id, "user_maya")
+        XCTAssertEqual(state.shell.displayName, "Maya Chen")
+        XCTAssertEqual(state.shell.avatarURL, "https://example.com/maya.jpg")
+        XCTAssertEqual(state.shell.bio, "coffee and hikes")
+        XCTAssertEqual(state.shell.homeArea, "Los Angeles")
+        XCTAssertEqual(state.shell.isPrivateProfile, false)
+        XCTAssertEqual(state.shell.createdAt, ISO8601DateFormatter().date(from: "2023-10-01T12:00:00Z"))
+        XCTAssertEqual(state.shell.relationship, .mutual)
+        XCTAssertFalse(state.canFollow)
+        XCTAssertTrue(state.canBlock)
+        XCTAssertEqual(rpc.calls.map(\.name), ["profile_detail"])
+        XCTAssertEqual(rpc.calls[0].body["input_profile_id"] as? String, "user_maya")
+    }
+
+    func testMemberProfileRejectsProfileHiddenByRLS() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["profile_detail"] = "[]".data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        do {
+            _ = try await repository.profile(id: "user_blocked")
+            XCTFail("Expected hidden profile detail to be rejected")
+        } catch let error as WanderRemoteError {
+            guard case .invalidResponse = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testProfileDetailsUpdateCallsOwnerRPCAndMapsResult() async throws {
         let rpc = RecordingRPC()
         rpc.responses["update_own_profile"] = """

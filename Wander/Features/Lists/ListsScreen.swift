@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ListsScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     private let scenario: ListsScreenScenario
@@ -13,6 +14,7 @@ struct ListsScreen: View {
     @State private var selectedList: PlaceListMock?
     @State private var collaboratorList: PlaceListMock?
     @State private var mapList: PlaceListMock?
+    @State private var selectedProfileID: String?
     @State private var deletedListIDs = Set<String>()
 
     init(scenario: ListsScreenScenario = .resolved()) {
@@ -80,6 +82,14 @@ struct ListsScreen: View {
                     initialSelectedPlaceID: scenario == .mapSelectedPlace ? list.places.first?.id : nil
                 )
             }
+            .sheet(isPresented: profileDestinationBinding) {
+                if let selectedProfileID {
+                    ProfileDetailView(profileID: selectedProfileID)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+            }
         }
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
@@ -123,7 +133,18 @@ struct ListsScreen: View {
             onListChanged: { sourceListID in
                 refreshOpenList(sourceListID: sourceListID)
             },
+            onOpenProfile: { profileID in
+                guard profileID != store.currentUser.id else { return }
+                selectedProfileID = profileID
+            },
             initialSelectedPlace: initialSelectedPlace
+        )
+    }
+
+    private var profileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedProfileID != nil },
+            set: { if !$0 { selectedProfileID = nil } }
         )
     }
 
@@ -656,6 +677,7 @@ private struct ListDetailScreen: View {
     var onCollaborators: (PlaceListMock) -> Void
     var onOpenMap: (PlaceListMock) -> Void
     var onListChanged: (String) -> Void
+    var onOpenProfile: (String) -> Void
     @State private var removedPlaceIDs = Set<String>()
     @State private var selectedPlace: ListPlaceMock?
     @State private var isAddingPlaces = false
@@ -670,6 +692,7 @@ private struct ListDetailScreen: View {
         onCollaborators: @escaping (PlaceListMock) -> Void = { _ in },
         onOpenMap: @escaping (PlaceListMock) -> Void = { _ in },
         onListChanged: @escaping (String) -> Void = { _ in },
+        onOpenProfile: @escaping (String) -> Void = { _ in },
         initialSelectedPlace: ListPlaceMock? = nil
     ) {
         self.list = list
@@ -677,6 +700,7 @@ private struct ListDetailScreen: View {
         self.onCollaborators = onCollaborators
         self.onOpenMap = onOpenMap
         self.onListChanged = onListChanged
+        self.onOpenProfile = onOpenProfile
         _selectedPlace = State(initialValue: initialSelectedPlace)
     }
 
@@ -816,7 +840,30 @@ private struct ListDetailScreen: View {
             }
 
             HStack(spacing: WanderTheme.spacing2) {
-                FacePileView(collaborators: displayList.collaborators, size: 30)
+                if let owner = listOwnerProfile {
+                    Button {
+                        onOpenProfile(owner.id)
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            WanderAvatar(
+                                initials: owner.initials,
+                                avatarURL: owner.avatarURL,
+                                size: 30,
+                                color: WanderTheme.pinSocial.color
+                            )
+                            Text(owner.displayName)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(owner.displayName)'s profile")
+                }
+                FacePileView(
+                    collaborators: displayList.collaborators,
+                    size: 30,
+                    onSelect: onOpenProfile
+                )
                 Text(displayList.collaboratorSummary)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -916,6 +963,15 @@ private struct ListDetailScreen: View {
 
     private var displayList: PlaceListMock {
         sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
+    }
+
+    private var listOwnerProfile: LocalProfile? {
+        guard !displayList.isOwnedByCurrentUser else { return nil }
+        return store.profiles.first { profile in
+            profile.id == displayList.ownerUserID
+                || profile.handle.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
+                || profile.displayName.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
+        }
     }
 
     private var canManageList: Bool {
@@ -2637,16 +2693,24 @@ private struct FacePileView: View {
     @EnvironmentObject private var store: WanderStore
     let collaborators: [ListCollaboratorMock]
     var size: CGFloat
+    var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: -8) {
             ForEach(collaborators.prefix(3)) { collaborator in
-                WanderAvatar(
-                    initials: collaborator.initials,
-                    avatarURL: avatarURL(for: collaborator),
-                    size: size,
-                    color: collaborator.color
-                )
+                Button {
+                    onSelect?(profileID(for: collaborator))
+                } label: {
+                    WanderAvatar(
+                        initials: collaborator.initials,
+                        avatarURL: avatarURL(for: collaborator),
+                        size: size,
+                        color: collaborator.color
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(onSelect == nil)
+                .accessibilityLabel("Open \(collaborator.name)'s profile")
             }
         }
         .frame(minWidth: collaborators.isEmpty ? 0 : size + CGFloat(max(0, min(collaborators.count, 3) - 1)) * (size - 8), alignment: .leading)
@@ -2660,6 +2724,13 @@ private struct FacePileView: View {
         return store.profiles.first { profile in
             profile.id == collaborator.id || profile.handle == collaborator.handle
         }?.avatarURL
+    }
+
+    private func profileID(for collaborator: ListCollaboratorMock) -> String {
+        store.profiles.first { profile in
+            profile.id == collaborator.id
+                || profile.handle.caseInsensitiveCompare(collaborator.handle) == .orderedSame
+        }?.id ?? collaborator.id
     }
 }
 
