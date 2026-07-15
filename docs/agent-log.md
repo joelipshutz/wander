@@ -11791,3 +11791,33 @@ Final presentation validation checkpoint, 2026-07-14 18:32 PDT:
 - Deterministic visual QA passed with the action popover open on iPhone 17 Pro and smaller iPhone 17e. The header fits without clipping, full-screen edges are correct, the back arrow is next to `Maya`, and the popover caret points directly to the ellipsis. Screenshots: `/private/tmp/rec96-member-profile-popover-17pro.png` and `/private/tmp/rec96-member-profile-popover-17e.png`.
 - Pre-landing edge-case review added the same back control to the full-screen loading and unavailable states so a slow or revoked profile cannot trap the viewer before the named header renders. The final post-review suite passed 335 tests with 0 failures: `/private/tmp/DerivedData-rec96-followup-focused/Logs/Test/Test-Wander-2026.07.14_18-39-57--0700.xcresult`.
 - The final generic iOS Simulator build passed after the fallback edit. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-rec96-followup-universal/Build/Products/Debug-iphonesimulator/Wander.app`. `git diff --check` passes, and no build-number, project, dependency, signing, backend, schema, or hosted-data change is present in this follow-up.
+
+## 2026-07-14 18:45 PDT - Codex - REC-96 TestFlight Build 75
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-75`
+Worktree: `/private/tmp/recme-build75-release`
+Linear: `REC-96` (`In Review` through TestFlight availability)
+
+Goal: package the complete other-member Profile experience and final full-screen/anchored-action presentation from exact latest `main` into explicit TestFlight build 75, attach it to `Wander Alpha`, publish tester-facing notes, and close REC-96 only after availability is confirmed.
+
+Starting status:
+
+- PR #104 passed final scope/security/behavior review, 335/335 tests, a generic arm64/x86_64 simulator build, and iPhone 17 Pro/17e visual QA, then squash-merged to `main`: https://github.com/joelipshutz/wander/pull/104. Exact implementation merge commit: `6d9f1b3243a4dfc0425afa5ec7fb12b83323c71a`; the remote implementation branch was deleted.
+- Latest completed TestFlight is build 74, documented as `VALID`, attached to `Wander Alpha`, externally approved, and announced to testers. Exact merged `main` still declares build 74, so this explicit release increments once to 75.
+- Eligible app/test/backend delta since build 74 is REC-96 only: the RLS-authoritative member-profile detail RPC, full other-member Profile parity across all identity entry points, canonical In Common intersections, read-only Been/Wanna/calendar/map/graph drilldowns, shared profile/map actions, and the final full-screen back/anchored ellipsis popover presentation. The hosted migration and linked smoke were already applied/passed during implementation; no additional hosted mutation is part of the release bump.
+- Release scope is limited to `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this coordination log. No signing, dependency, schema, auth, privacy, or tester-data change belongs in the build-number PR. The root checkout's unrelated `.pnpm-store/` remains untouched.
+
+Release plan:
+
+1. Increment build 74 to 75 and regenerate the Xcode project, auditing generated churn.
+2. Run the full iOS suite and generic simulator build on the release branch, then open/review/squash-merge the release PR.
+3. Archive and upload exact resulting `main` with `manageAppVersionAndBuildNumber=false`.
+4. Run the TestFlight helper with the archive path and tester copy, post `#testflight-feedback`, then add final evidence and move REC-96 to `Done` only when App Store Connect confirms availability.
+
+Release validation checkpoint, 2026-07-14 18:54 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 74 to 75 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj` with XcodeGen. Generated project churn is limited to the matching Debug and Release build-number settings.
+- The full iPhone 17 Pro / iOS 26.5 release-branch suite passed 335 tests with 0 failures: `/private/tmp/DerivedData-build75/Logs/Test/Test-Wander-2026.07.14_18-46-41--0700.xcresult`.
+- The generic iOS Simulator build passed. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-build75/Build/Products/Debug-iphonesimulator/Wander.app`.
+- The pre-PR diff contains exactly `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this append-only release log. No product behavior, migration, dependency, signing, entitlement, or hosted-data change is included in the build-number branch.
