@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-13
+Last updated: 2026-07-15
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -44,7 +44,8 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | M2 extraction shells | Locked | Link/photo create unresolved drafts until backend jobs exist. |
 | Discover parser interface early | Locked | Deterministic local parser now; cheap swappable LLM parser in M5. |
 | LLM data minimization | Locked | Send raw query phrase + schema only, not graph/place/contact/user data. |
-| Share extension | Deferred | Build after in-app add/map/social loop works. |
+| Share extension | Locked for REC-97, revised 2026-07-15 | The prior deferral is superseded for place imports. REC-97 includes a URL/text/file Share Extension behind `import_places_v1`; it writes bounded idempotent envelopes to an App Group and leaves authenticated upload, parsing, and network work to the host app. |
+| Multi-source place imports | Locked for REC-97 | Google Maps, Instagram, TikTok, and Text/Notes all feed one owner-private durable Import Inbox. Raw artifacts live in private storage and delete after seven days; scheduled workers use modular provider adapters, constrained evidence-grounded AI hints, and Apple Maps Server API resolution. Profile shows import progress and then Review Import. Each item remains private until the user chooses Been/Wanna and completes the regular shared save flow. Import commits are item-level, idempotent, and must return Already Saved without overwriting an existing save. |
 | Native Contacts | Planned later | Use `FakeContactProvider` in M2/v0.1 baseline. |
 | Analytics provider | Locked for alpha | Use PostHog through the vendor-neutral analytics interface. Keep sync/auth diagnostics non-PII: counts, enum metadata, and internal auth user id only; no place names, notes, coordinates, emails, or handles. |
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
