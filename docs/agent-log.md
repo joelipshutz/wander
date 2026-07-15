@@ -11720,6 +11720,13 @@ Implementation and local-validation checkpoint, 2026-07-14 22:12 PDT:
 - Focused regressions pass after the final accessibility cleanup. The full iPhone 17 Pro / iOS 26.5 XCTest suite passed 343/343 with zero failures (`DerivedData-rec92-final/Logs/Test/Test-Wander-2026.07.14_22-06-40--0700.xcresult`), and the universal arm64/x86_64 generic Simulator build passed. The only build warning is the existing traditional-headermap warning.
 - Local `supabase test db` remains unavailable because Docker is not installed (`docker: command not found`); this is not counted as a pass. The isolated worktree was linked to hosted project `rugmtlgufrhlxwfkumhw`, but the desktop automatic permission review timed out twice before the read-only migration dry run returned. Hosted dry run, apply, migration-ledger/metadata verification, 73/73 pgTAP, and linked rollback smoke remain required before merge.
 - The pre-landing review found no unresolved SQL, auth, privacy, concurrency, contract, or distribution issue. It auto-fixed the viewer avatar's misleading no-op button semantics and an empty-list presentation crash path. PR #95 has no Greptile line-level or top-level findings.
+
+Hosted Supabase validation checkpoint, 2026-07-14 22:18 PDT:
+
+- Ryan explicitly approved connecting this isolated worktree to hosted Supabase. `supabase db push --linked --dry-run --yes` showed only `20260714214500_shared_visit_copy_and_viewer_companions.sql`; the reviewed migration then applied successfully to project `rugmtlgufrhlxwfkumhw`.
+- `supabase migration list --linked` shows local/remote alignment through `20260714214500`. Direct live metadata assertions confirm both recreated RPCs are `security definer`, retain `search_path=public, app`, have the intended volatility (`volatile` invite creation, `stable` companion reads), grant execute to `authenticated`, and deny `anon`.
+- Hosted rollback-wrapped `supabase/tests/shared_visits.sql` passed all 73 assertions. The final linked rollback smoke passed profile, mute, photo visibility, preferred-photo, provider-quota, notification-copy, Shared Visit acceptance, remote viewer attribution, and cleanup contracts. No smoke fixture mutations persisted.
+- The local Docker/pgTAP gap remains accurately recorded, but the required deployed-schema metadata, hosted pgTAP, and linked smoke gates are now complete. PR #95 is ready for the final remote mergeability check and squash merge.
 ## 2026-07-13 23:25 PDT - Codex - REC-94 Profile Calendar Scroll Trace
 
 Agent: Codex using `investigate` and `recme-testflight-feedback-bug-catcher`
