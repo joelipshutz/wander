@@ -270,6 +270,44 @@ final class WanderStoreTests: XCTestCase {
         WanderStore(fixtures: WanderFixtures.seed())
     }
 
+    private func makeSharedVisitInvitation(
+        participantID: String = "participant-1",
+        generation: Int = 1
+    ) -> SharedVisitInvitation {
+        SharedVisitInvitation(
+            participantID: participantID,
+            groupID: "group-1",
+            invitationGeneration: generation,
+            snapshotRevision: 1,
+            status: .pending,
+            invitedAt: Date(timeIntervalSince1970: 1_720_000_000),
+            sourceVisitID: "source-visit-1",
+            sourceOwnerUserID: "user_ryan",
+            sourceOwnerHandle: "ryan",
+            sourceOwnerDisplayName: "Ryan",
+            sourceOwnerAvatarURL: nil,
+            placeID: "place-1",
+            placeName: "RVR",
+            category: "restaurant",
+            primaryCategory: "restaurant",
+            subcategory: "Italian",
+            address: "1 Main Street",
+            locality: "Los Angeles",
+            region: "CA",
+            country: "US",
+            latitude: 34.0,
+            longitude: -118.0,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-rvr",
+            visitedAt: Date(timeIntervalSince1970: 1_720_000_000),
+            note: "Great table",
+            ratingScore: 4,
+            attributeAnswers: [],
+            tags: ["group drinks"],
+            photos: []
+        )
+    }
+
     private func makeStoreWithStaleBlockedGraph() -> WanderStore {
         let joe = LocalProfile(
             localID: "local_profile_joe",
@@ -1929,11 +1967,68 @@ final class WanderStoreTests: XCTestCase {
 
         store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
         repository.resumeInbox()
-        await refreshTask.value
+        _ = await refreshTask.value
 
         XCTAssertEqual(store.currentUser.id, "user_sarah")
         XCTAssertNil(store.sharedVisitInboxUserID)
         XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+    }
+
+    func testPrivateProfileHydrationPreservesPendingSharedVisitInbox() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let invitation = makeSharedVisitInvitation()
+        let sharedVisitRepository = FakeSharedVisitRepository()
+        sharedVisitRepository.inboxInvitations = [invitation]
+
+        let loaded = await store.refreshSharedVisitInbox(
+            backend: WanderBackend(sharedVisitRepository: sharedVisitRepository)
+        )
+
+        XCTAssertTrue(loaded)
+        XCTAssertEqual(store.sharedVisitInvitations, [invitation])
+
+        let profileRepository = FakeProfileRepository(
+            currentProfile: LocalProfile(
+                localID: "local_profile_joe",
+                serverID: "user_joe",
+                handle: "joe",
+                displayName: "Joe",
+                isPrivateProfile: true,
+                defaultVisibility: .selfOnly,
+                syncState: .synced
+            )
+        )
+        await store.refreshRemoteCurrentProfile(
+            backend: WanderBackend(profileRepository: profileRepository)
+        )
+
+        XCTAssertTrue(store.currentUser.isPrivateProfile)
+        XCTAssertEqual(store.sharedVisitInvitations, [invitation])
+        XCTAssertEqual(store.sharedVisitInboxUserID, "user_joe")
+    }
+
+    func testDecliningSharedVisitRemovesTheRealInboxInvitation() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        let invitation = makeSharedVisitInvitation(participantID: "participant-decline", generation: 3)
+        let repository = FakeSharedVisitRepository()
+        repository.inboxInvitations = [invitation]
+        let backend = WanderBackend(sharedVisitRepository: repository)
+        _ = await store.refreshSharedVisitInbox(backend: backend)
+
+        let declined = await store.declineSharedVisit(
+            participantID: invitation.participantID,
+            generation: invitation.invitationGeneration,
+            backend: backend
+        )
+
+        XCTAssertTrue(declined)
+        XCTAssertTrue(store.sharedVisitInvitations.isEmpty)
+        XCTAssertEqual(
+            repository.declineRequests,
+            [.init(participantID: "participant-decline", generation: 3)]
+        )
     }
 
     func testOldPersistenceSnapshotClearsSavedPlaceDataButKeepsAccountGraph() throws {
@@ -4803,10 +4898,17 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
         let inviteeUserIDs: [String]
     }
 
+    struct DeclineRequest: Equatable {
+        let participantID: String
+        let generation: Int
+    }
+
     private(set) var inviteRequests: [InviteRequest] = []
     private(set) var inviteeListRequests: [String] = []
     private(set) var setRequests: [InviteRequest] = []
+    private(set) var declineRequests: [DeclineRequest] = []
     var activeInviteeUserIDs: [String] = []
+    var inboxInvitations: [SharedVisitInvitation] = []
     var shouldSuspendInbox = false
     private var inboxContinuation: CheckedContinuation<[SharedVisitInvitation], Error>?
 
@@ -4843,7 +4945,7 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
     }
 
     func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] {
-        guard shouldSuspendInbox else { return [] }
+        guard shouldSuspendInbox else { return inboxInvitations }
         return try await withCheckedThrowingContinuation { continuation in
             inboxContinuation = continuation
         }
@@ -4858,7 +4960,9 @@ private final class FakeSharedVisitRepository: SharedVisitRepository {
     func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
         throw WanderRemoteError.notImplemented("fake shared visit acceptance")
     }
-    func decline(participantID: String, generation: Int) async throws {}
+    func decline(participantID: String, generation: Int) async throws {
+        declineRequests.append(.init(participantID: participantID, generation: generation))
+    }
     func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion] { [] }
     func downloadPhotoData(bucket: String, path: String) async throws -> Data { Data() }
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws {}

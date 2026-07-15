@@ -1225,6 +1225,50 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[1]["input_invitee_user_ids"] as? [String], ["user_maya"])
     }
 
+    func testSharedVisitAcceptanceEncodesNestedVisitTimestampAsISO8601() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["accept_shared_visit"] = """
+        {
+          "operation_id": "48000000-0000-0000-0000-000000000010",
+          "participant_id": "48000000-0000-0000-0000-000000000001",
+          "user_place_id": "82000000-0000-0000-0000-000000000010",
+          "visit_id": "83000000-0000-0000-0000-000000000010",
+          "backfilled_from_user_place": false,
+          "status": "accepted",
+          "photo_copies": []
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseSharedVisitRepository(
+            rpc: rpc,
+            table: RecordingTable(),
+            storage: RecordingStorage()
+        )
+        let visitedAt = Date(timeIntervalSince1970: 1_786_665_600)
+
+        _ = try await repository.accept(
+            SharedVisitAcceptanceDraft(
+                participantID: "48000000-0000-0000-0000-000000000001",
+                invitationGeneration: 1,
+                snapshotRevision: 2,
+                operationID: "48000000-0000-0000-0000-000000000010",
+                userPlaceID: "82000000-0000-0000-0000-000000000010",
+                visitID: "83000000-0000-0000-0000-000000000010",
+                visibility: .mutuals,
+                visitedAt: visitedAt,
+                note: "Recipient copy",
+                ratingScore: 4.5,
+                attributes: [],
+                selectedPhotoIDs: []
+            )
+        )
+
+        let visitPayload = try XCTUnwrap(rpc.rawBodies.first?["input_visit"] as? [String: Any])
+        let encodedTimestamp = try XCTUnwrap(visitPayload["visited_at"] as? String)
+        let decodedTimestamp = try XCTUnwrap(ISO8601DateFormatter().date(from: encodedTimestamp))
+        XCTAssertEqual(decodedTimestamp.timeIntervalSince1970, visitedAt.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(visitPayload["visited_at"] as? Double)
+    }
+
     func testPushNotificationDeviceTokenHexEncoding() {
         XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
     }
@@ -1575,7 +1619,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {
-        let data = try JSONEncoder().encode(params)
+        let data = try WanderSupabaseClient.encodeRequestBody(params)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
         }

@@ -20,16 +20,22 @@ struct ProfileScreen: View {
     @State private var selectedPeopleMode: GraphListMode = .following
     @State private var savedListMode: SavedPlacesListMode?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
+    @State private var showsVisitInvitations = false
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
 
+    @Binding private var visitInvitationInboxRequestID: UUID?
     let onFindFriends: () -> Void
 
     private let profilePhotoMenuWidth: CGFloat = 232
     private let profilePhotoMenuAnchorOffsetX: CGFloat = 35
     private let profilePhotoMenuTopGap: CGFloat = 2
 
-    init(onFindFriends: @escaping () -> Void = {}) {
+    init(
+        visitInvitationInboxRequestID: Binding<UUID?> = .constant(nil),
+        onFindFriends: @escaping () -> Void = {}
+    ) {
+        _visitInvitationInboxRequestID = visitInvitationInboxRequestID
         self.onFindFriends = onFindFriends
     }
 
@@ -41,6 +47,7 @@ struct ProfileScreen: View {
                 stats: profileStats,
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
+                sharedVisitInvitationCount: store.sharedVisitInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
                 isAvatarSaving: isProfilePhotoSaving,
@@ -51,6 +58,7 @@ struct ProfileScreen: View {
                 backAction: nil,
                 memberActions: nil,
                 graphAction: { socialGraphTab = $0 },
+                sharedVisitInvitationsAction: { showsVisitInvitations = true },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
                 },
@@ -115,15 +123,33 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
+                .navigationDestination(isPresented: $showsVisitInvitations) {
+                    SharedVisitInvitationInboxScreen { invitation in
+                        showsVisitInvitations = false
+                        pushNotifications.openSharedVisit(
+                            participantID: invitation.participantID,
+                            generation: invitation.invitationGeneration
+                        )
+                    }
+                    .environmentObject(store)
+                    .environmentObject(backend)
+                }
                 .task(id: auth.isSignedIn) {
                     guard auth.isSignedIn else { return }
                     await store.refreshRemoteCurrentProfile(backend: backend)
                     await store.refreshRemoteSocialGraph(backend: backend)
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
+                    await store.refreshSharedVisitInbox(backend: backend)
                     handleNotificationRoute(pushNotifications.navigationRequest)
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
                     handleNotificationRoute(request)
+                }
+                .onAppear {
+                    openRequestedVisitInvitationInbox()
+                }
+                .onChange(of: visitInvitationInboxRequestID) { _, _ in
+                    openRequestedVisitInvitationInbox()
                 }
                 .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoMenu, titleVisibility: .visible) {
                     if isCameraAvailable {
@@ -136,6 +162,12 @@ struct ProfileScreen: View {
                     Button("Cancel", role: .cancel) {}
                 }
         }
+    }
+
+    private func openRequestedVisitInvitationInbox() {
+        guard visitInvitationInboxRequestID != nil else { return }
+        showsVisitInvitations = true
+        visitInvitationInboxRequestID = nil
     }
 
     private var profileInsights: ProfileInsights {
@@ -818,6 +850,7 @@ struct ProfileDetailView: View {
                             stats: profileStats,
                             followerCount: store.followers(of: profileID).count,
                             followingCount: store.following(of: profileID).count,
+                            sharedVisitInvitationCount: 0,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
                             isAvatarSaving: false,
@@ -834,6 +867,7 @@ struct ProfileDetailView: View {
                                 blockAction: { showBlockConfirm = true }
                             ),
                             graphAction: { socialGraphTab = $0 },
+                            sharedVisitInvitationsAction: {},
                             savedPlacesAction: { status in
                                 savedListMode = status == .been ? .been : .wanna
                             },

@@ -11522,6 +11522,39 @@ Final outcome:
 - Local pgTAP remains unavailable because Docker is not installed and is not counted as a pass. The documented iPhone 16 Plus / iOS 18.6 destination is not installed in this Xcode; the available iPhone 17 Pro / iOS 26.5 runtime was used. The remaining required proof is a fresh physical two-account/APNs retest from the updated branch.
 - No TestFlight build, archive, upload, or tester announcement was requested or performed. Build 72 metadata arrived only through the latest-main merge.
 
+## 2026-07-13 22:16 PDT - Codex - REC-92 Shared Visit Invitation Inbox Mockup
+
+Agent: Codex
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`, related to `REC-88`)
+Base: latest `origin/main` commit `672b60894`
+
+Goal: mock the replacement for the persistent Shared Visit card: a brief, tappable in-app banner with no dismiss control plus a durable Profile invitation inbox with clear review/save and decline actions.
+
+Starting coordination and decisions:
+
+- The root Xcode checkout remains on the merged REC-88 branch with unrelated untracked `.pnpm-store/`; it will not be touched. REC-88's recipient timestamp failure is separately preserved in `/private/tmp/recme-rec88-accept-timestamp` and paused before app-code edits.
+- No active worktree reports edits to the proposed mockup files. `docs/agent-log.md` is inherently shared; this entry is appended chronologically from latest `origin/main`.
+- The durable entry belongs immediately after Profile identity/stats rather than inside People: the pending object is a place action, not a relationship-management task. The page title and row label will be `visit invitations`.
+- The primary action is `Review & save`, not `Accept`, because opening an invite still requires the recipient to review and create an independent visit. `Decline` remains an explicit secondary action.
+- Mockup scope is DEBUG-only and deterministic. Expected files: a new Shared Visits mockup source, `Wander/App/WanderApp.swift`, `WanderTests/NavigationContractTests.swift`, generated project membership if needed, and this log. Live Map/Profile behavior, persistence, backend, and notification routing remain unchanged pending visual approval.
+
+Plan:
+
+1. Build Profile/banner and invitation-inbox mockup states against existing Wander tokens and components.
+2. Add deterministic launch-argument coverage and regenerate with XcodeGen.
+3. Run focused/full iOS validation plus generic build, then capture current and smaller-phone screenshots for review.
+
+Mockup completion, 2026-07-13 22:27 PDT:
+
+- Added three DEBUG-only deterministic states: `profileBanner`, `inbox`, and `emptyInbox`, launched with `-WanderSharedVisitInvitationMockup <state>`. Production Map/Profile behavior and Shared Visit persistence remain unchanged.
+- The transient treatment is a compact, tappable banner with inviter avatar, place name, timestamp, and chevron; it intentionally has no X. The production implementation is specified to auto-dismiss after about three seconds while the durable invite remains in the inbox.
+- Profile now has a mock `visit invitations` action directly after stats with a pending-count badge. The dedicated inbox uses place context, inviter identity, tags, and large `Review & save` / `Decline` actions. `Review & save` preserves the independent-recipient-save contract instead of implying an instant accept.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e / iOS 26.5 with no clipped text, overlapping controls, or undersized actions in the populated states. Screenshots: `/private/tmp/rec92-profile-banner-17pro.png`, `/private/tmp/rec92-profile-banner-17e.png`, `/private/tmp/rec92-inbox-17pro.png`, and `/private/tmp/rec92-inbox-17e.png`.
+- Focused launch-contract test passed 1/1. Full suite passed 306 tests with 0 failures: `/private/tmp/DerivedData-rec92/Logs/Test/Test-Wander-2026.07.13_22-23-37--0700.xcresult`. Generic iOS Simulator build also passed; only the existing traditional-headermap warning remains.
+- No backend, migration, notification routing, app-state behavior, TestFlight build, or hosted state changed. Next step after design approval is production wiring: durable pending-invite Profile navigation, three-second banner state, review routing, decline confirmation/failure handling, badge refresh, and accessibility/reduced-motion behavior.
+
 ## 2026-07-13 22:18 PDT - Codex - REC-89 / REC-88 Latest-Main Integration
 
 Agent: Codex
@@ -11561,6 +11594,22 @@ Release validation checkpoint, 2026-07-13 22:32 PDT:
 - `git diff --check` passes and the release diff remains limited to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this coordination log. Tester-facing What to Test copy is staged outside the repo at `/private/tmp/recme-build73-what-to-test.md`.
 - Release validation carries forward the already completed hosted security proofs: REC-89 profile pgTAP 44/44 plus linked smoke, and REC-88 Shared Visits pgTAP 70/70 plus linked rollback smoke. The remaining high-value tester proof is the fresh two-account/APNs Shared Visits flow on physical devices.
 
+## 2026-07-13 22:39 PDT - Codex - REC-92 Latest-Profile Integration And Final Validation
+
+Agent: Codex
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`; move to `In Review` after draft PR)
+
+- Integrated `origin/main` through `8e123c17a`, including the REC-89 production Profile redesign and TestFlight build 73 metadata. Conflicts were additive in debug-root routing, generated Xcode project membership, and this coordination log; both mockup launch surfaces and all feature/release histories were retained.
+- Revised the Profile/banner mock to match the new owner Profile hierarchy. The durable `visit invitations` row now sits between follower/following/friend counts and BEEN/WANNA tiles, keeping a place action prominent without folding it into social-graph management.
+- Re-captured the merged mockups on iPhone 17 Pro and smaller iPhone 17e / iOS 26.5. No clipping, overlap, or undersized action issues were found. Screenshots: `/private/tmp/rec92-profile-banner-latest-17pro.png`, `/private/tmp/rec92-profile-banner-latest-17e.png`, `/private/tmp/rec92-inbox-latest-17pro.png`, and `/private/tmp/rec92-inbox-latest-17e.png`.
+- Focused launch-contract validation passed 1/1. After the build 73 merge, the final combined suite passed 325 tests with 0 failures and 0 skips: `/private/tmp/DerivedData-rec92-latest/Logs/Test/Test-Wander-2026.07.13_22-42-28--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; only the existing traditional-headermap warning remains.
+- Scope remains a DEBUG-only visual/product mock. No production banner timer, pending-invitation persistence, Profile navigation, decline mutation, notification routing, backend migration, hosted state, or TestFlight build was changed.
+- Pushed remote branch `codex/rec-92-invitation-inbox` and opened draft PR #95: https://github.com/joelipshutz/wander/pull/95. Linked the PR and validation evidence on Linear `REC-92`, then moved the issue to `In Review`.
+- Next step is product approval of the transient banner, Profile placement, and `Review & save` / `Decline` inbox treatment. Production implementation should then add the three-second lifecycle, durable invite query/badge, review deep link, idempotent decline, error/retry handling, and accessibility/reduced-motion coverage.
+
 Release completion, 2026-07-13 22:48 PDT:
 
 - Opened ready release PR #94 with the three-file build-number/log diff and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/94. Exact released source commit: `8e123c17a4d7831d9869c1e234d1dee503c41b32`.
@@ -11572,6 +11621,112 @@ Release completion, 2026-07-13 22:48 PDT:
 - Validation shipped with 324 tests / 0 failures, a passing generic arm64/x86_64 iOS Simulator build, a passing signed Release archive, REC-89 hosted pgTAP 44/44 plus linked smoke, and REC-88 hosted pgTAP 70/70 plus linked rollback smoke.
 - Known/deferred: Find Friends routes to Discover > Members until native Contacts import ships. The tester checklist explicitly prioritizes a fresh physical two-account/APNs pass for Shared Visits foreground, background, and cold-launch routing.
 
+## 2026-07-13 22:55 PDT - Codex - REC-92 Production Invitation Inbox And Acceptance Repair
+
+Agent: Codex
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (draft)
+
+Goal: replace the approved DEBUG-only invitation mock with production Profile inbox/banner wiring, and repair the two failures observed during Joe's physical Shared Visit acceptance test.
+
+Starting status and evidence:
+
+- The isolated worktree is clean at `0105efbe3` and tracks the remote branch. The root checkout has unrelated untracked `.pnpm-store/` content and remains untouched. No overlapping edits were reported in the production files expected for this pass.
+- Joe's captured Supabase response identifies a concrete acceptance defect: `accept_shared_visit` received `visited_at` as an Apple reference-date number (`805697890.004973`) and PostgreSQL rejected it as `timestamptz`. `WanderSupabaseClient.call` and `invoke` use a default `JSONEncoder` even though `RemoteEncoding.encoder` already defines ISO-8601 dates.
+- The same session captured `profile_visible_places` omitting required `saved_at`, causing `RemoteVisiblePlaceDTO` decoding to fail. All prior definitions of that RPC will be inspected before adding any compatibility migration or client fallback.
+- Expected production files include the Supabase client/DTO or migration contract, Shared Visit/Profile/root presentation, focused repository/navigation tests, hosted smoke coverage if an RPC changes, generated project membership if needed, and this log.
+
+Implementation plan:
+
+1. Repair and regression-test production request date encoding, then reconcile the latest `profile_visible_places` return contract with the iOS DTO.
+2. Add the durable Profile invitation inbox, three-second tappable banner, review deep link, decline progress/error handling, and lifecycle refresh using the existing Shared Visit repository.
+3. Run focused/full iOS tests, generic build, hosted migration/security/smoke verification when applicable, visual QA on current and smaller iPhones, then push and update PR/Linear before opening the exact branch in Xcode.
+
+Production implementation and validation checkpoint, 2026-07-13 23:25 PDT:
+
+- Replaced the persistent Map invitation card/X treatment with a global, tappable Shared Visit banner. Only newly fetched participant-generation pairs surface, the banner dismisses after three seconds, Reduce Motion uses an opacity transition, and tapping it reuses the existing generation-scoped Shared Visit notification route.
+- Added the durable `visit invitations` row to the owner Profile and a production inbox with persisted pending invitations, pull-to-refresh/retry, `Review & save` routing, idempotent decline progress/error handling, and an honest empty state. Invitations remain available after the transient banner disappears and are removed by the existing accept/decline backend mutations.
+- Fixed Joe's acceptance failure at its source: all Supabase RPC and Edge Function request bodies now use the shared ISO-8601 encoder. The regression test exercises the nested `input_visit.visited_at` payload and confirms it is an ISO-8601 string rather than the rejected Apple reference-date number (`805697890.004973`).
+- Added and deployed hosted migration `20260714050000_restore_profile_visible_place_activity.sql`. It restores `visited_at`, `saved_at`, `created_at`, and `updated_at` while preserving the latest profile geography/avatar contract, explicit `security invoker` posture, pinned search paths, and authenticated-only grants. Post-deploy metadata confirmed both app/public signatures, grants, volatility, search paths, and timestamp columns.
+- Hosted verification passed: the profile activity pgTAP suite completed 29/29 assertions in a rollback transaction, and `node scripts/supabase-smoke-test.mjs --linked` passed its rollback-only profile, visibility, photo, quota, and Shared Visits contracts. The first smoke attempt did not reach Supabase because the CLI subprocess lacked Node on `PATH`; rerunning with the bundled Node runtime passed.
+- Focused regressions passed 3/3. The final iPhone 17 Pro / iOS 26.5 suite passed 328 tests with 0 failures: `/private/tmp/DerivedData-rec92-production/Logs/Test/Test-Wander-2026.07.13_23-20-13--0700.xcresult`. The generic iOS Simulator build passed for arm64 and x86_64; the only warning is the existing traditional-headermap warning.
+- Production Profile visual QA passed on iPhone 17 Pro and smaller iPhone 17e with no clipping or overlap. Screenshots: `/private/tmp/rec92-production-profile-17pro.png` and `/private/tmp/rec92-production-profile-17e.png`. The approved populated inbox/banner mock screenshots remain `/private/tmp/rec92-inbox-latest-17pro.png`, `/private/tmp/rec92-inbox-latest-17e.png`, `/private/tmp/rec92-profile-banner-latest-17pro.png`, and `/private/tmp/rec92-profile-banner-latest-17e.png`.
+- No TestFlight build was requested or created. Remaining release evidence is the deliberate physical two-account test: receive a fresh invite, let the banner expire, recover it from Profile, review/edit/save the recipient copy with a photo, and verify decline on a second invite.
+
+Latest-main integration and handoff, 2026-07-13 23:28 PDT:
+
+- Production implementation commit: `b27c800f5`. Integrated `origin/main` through `d959504d6` with merge commit `41f74858d`; the only incoming file was this append-only build 73 release log, and both histories were preserved chronologically.
+- PR #95 remains the physical-test handoff: https://github.com/joelipshutz/wander/pull/95. Keep REC-92 `In Review` while Ryan and Joe run the two-account checklist; the exact branch is `codex/rec-92-invitation-inbox` in `/private/tmp/recme-rec92-invitation-inbox`.
+
+## 2026-07-14 00:17 PDT - Codex - REC-92 Joe Account Production Re-Investigation
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (draft)
+
+Goal: reproduce and fix the remaining Joe-account failures after the first production handoff: missing Profile invitation entry, stale/dummy invitations, inert Review/Decline actions, recipient save failure, banner copy, and incorrect banner destination.
+
+Starting evidence and coordination:
+
+- The isolated REC-92 worktree is clean at remote commit `c5adb598d`, zero commits behind `origin/main`; the root checkout still has unrelated `.pnpm-store/` content and remains untouched. No active worktree reports overlapping REC-92 production edits.
+- Joe's prior console was from authenticated user `user_3EhAT`. It shows `list_shared_visit_inbox` returned 3,812 bytes but maintenance reported `invite_count=0`; `accept_shared_visit` sent the rejected numeric `visited_at` value; and `profile_visible_places` decoded without `saved_at`. The hosted schema and encoder were repaired afterward, but Joe's latest physical behavior proves the account-specific workflow still requires fresh verification rather than inference from unit/rollback tests.
+- Investigation will distinguish four possible layers before editing: wrong/outdated device build, account-scoped local snapshot leakage or fixture mode, invalid hosted invitation rows, and navigation/action routing. Expected files, only after root cause confirmation, are Shared Visit/root/Profile/store code, focused tests, hosted smoke or a narrow forward migration if the data contract is wrong, and this log.
+
+Root cause, implementation, and validation, 2026-07-14 00:48 PDT:
+
+- The Joe/Maya invitation records and inert `Review & save` / `Decline` buttons were not hosted account data. They came from the approved DEBUG mock, whose launch argument could still replace the complete production app with `SharedVisitInvitationMockupRoot`. Removed that app replacement and deleted the retired 597-line fixture surface, so Joe now sees only invitations returned by `list_shared_visit_inbox`; an account with no real pending invitations gets the production empty state.
+- The real owner Profile invitation row is unconditional. Joe's missing row was therefore the same stale/debug-build problem, not account eligibility. Added a source-contract regression that prevents any retired Shared Visit mock identifier from re-entering the app target.
+- Found a second production race specific to private profiles: `applyRemoteCurrentProfile` cleared the pending inbox and companion context whenever profile hydration changed the user to private. Private accounts may not invite others, but they may receive invitations. Removed that destructive clearing while preserving the existing conversion of owned content to private, and added a regression that loads Joe's inbox before private-profile hydration.
+- Changed the transient banner copy to exactly `<name> tagged you at <location>`. Tapping it now switches to Profile and opens the durable Visit Invitations page; the existing three-second auto-dismiss remains. Review continues through the generation-scoped editable save flow, and Decline calls the production repository before removing the invitation. Added focused routing/copy and real decline-mutation tests.
+- Joe's previously captured recipient-save failures remain repaired by commit `b27c800f5`: ISO-8601 Supabase payload encoding fixes `accept_shared_visit`, and hosted migration `20260714050000_restore_profile_visible_place_activity.sql` restores the required `profile_visible_places.saved_at` contract. This pass did not change or reset hosted data because the apparent dummy records were local code constants.
+- Regenerated `Wander.xcodeproj` with XcodeGen. Five focused regressions passed, including ISO-8601 acceptance encoding. The final iPhone 17 Pro / iOS 26.5 suite passed 331 tests with 0 failures, and the generic arm64/x86_64 iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. `git diff --check` passes; only the existing traditional-headermap warning remains.
+- No TestFlight build was requested or created. Required physical verification remains: fresh Ryan-to-Joe invitation, three-second banner and inbox recovery, Review/edit/photo/save into Joe's independent visit, Decline on a second invite, and receipt while Joe's profile is private.
+
+Remote handoff, 2026-07-14 00:52 PDT:
+
+- Committed the production follow-up as `ee0d4a834` (`REC-92 fix production invitation inbox routing`) and pushed `codex/rec-92-invitation-inbox` to `origin`.
+- Updated PR #95 with the root-cause and validation report and marked it ready for review: https://github.com/joelipshutz/wander/pull/95.
+- Added the same evidence to Linear `REC-92` and moved it to `In Review` for Ryan/Joe physical-device validation.
+- Opened the exact isolated project `/private/tmp/recme-rec92-invitation-inbox/Wander.xcodeproj` in Xcode. The worktree contains an ignored/untracked local `DerivedData-rec92-focused/` test artifact only; it was not staged or pushed.
+
+## 2026-07-14 21:45 PDT - Codex - REC-92 Final Shared Visit Copy, Attribution, And Build 76
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (moved from `In Review` to `In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (temporarily returned to draft)
+
+Goal: apply Ryan's final physical-test copy and visit-card attribution corrections, integrate the branch over latest `main`, pass the full landing gate, squash-merge PR #95, and explicitly release the resulting latest `main` as TestFlight build 76.
+
+Starting status and root cause:
+
+- Fetched `origin`. The isolated branch is clean apart from its ignored/untracked `DerivedData-rec92-focused/` artifact, tracks the pushed remote at `750737c28`, and is eight commits behind current `origin/main` at `41a80149c`. Latest `main` includes completed REC-94/REC-96 app changes and fully completed TestFlight builds 74 and 75; no earlier explicit release is pending.
+- PR #95 is ready in product scope but currently conflicts with latest `main`; it was intentionally returned to draft while this pass integrates and revalidates it. The root checkout's unrelated `.pnpm-store/` and the clean, already-landed REC-94/REC-96 worktrees remain untouched.
+- Shared Visit push copy is authored by `public.create_shared_visit_invites` and still ends with `Add your version of the visit.`. The forward migration will change future events to `Add your details from this visit` and update the pgTAP expectation without rewriting delivered notification history.
+- `public.get_shared_visit_companion_context` currently accepts only caller-owned visits and excludes `app.current_user_id()` from every result. That supports a person's own card but guarantees Ryan cannot appear on Joe's readable accepted card. The replacement RPC will preserve the security-definer/search-path/grant posture, authorize caller-owned or RLS-readable requested visits, exclude the requested card's owner instead of the viewer, and include the current viewer's real profile/avatar as companion context. Client presentation will map the current viewer's name to `You` while retaining the returned avatar.
+- Expected implementation files are a forward Supabase migration, Shared Visits pgTAP and linked smoke coverage, `SharedVisitComponents.swift` plus its Map call site, focused iOS tests, and this coordination log. Any recreated iOS-called RPC will receive metadata/grant assertions, hosted migration verification, and the required linked rollback smoke before landing.
+
+Implementation and local-validation checkpoint, 2026-07-14 22:12 PDT:
+
+- Merged exact latest `origin/main` at `41a80149c` into the branch. The only textual conflict was this shared log; both histories were retained. Current-main compilation exposed one stale member-profile `ProfileOwnerHome` initializer call, which now supplies an owner-only zero invitation count and no-op inbox action.
+- Added forward migration `20260714214500_shared_visit_copy_and_viewer_companions.sql`. It preserves the existing `security definer`, pinned `search_path=public, app`, volatility, and authenticated-only grants for both recreated RPCs. Future Shared Visit events use the exact body suffix `Add your details from this visit`; only still-pending/claimed old-copy events are updated. Readable recipient visit cards now return the viewer as companion context while unreadable visits, blocked accounts, other private profiles, and self-only companion visits remain hidden.
+- Added client presentation that sorts the current viewer first, renders the label as `with You`, retains the returned viewer avatar, leaves other companions profile-tappable, and presents the viewer avatar as noninteractive. The helper handles an empty list without indexing into it.
+- Extended Shared Visits pgTAP from 70 to 73 assertions and the linked rollback smoke with exact notification-copy, viewer/avatar attribution, and unreadable-stranger checks. `node --check scripts/supabase-smoke-test.mjs`, `git diff --check`, and XcodeGen all pass; XcodeGen produced no project diff.
+- Focused regressions pass after the final accessibility cleanup. The full iPhone 17 Pro / iOS 26.5 XCTest suite passed 343/343 with zero failures (`DerivedData-rec92-final/Logs/Test/Test-Wander-2026.07.14_22-06-40--0700.xcresult`), and the universal arm64/x86_64 generic Simulator build passed. The only build warning is the existing traditional-headermap warning.
+- Local `supabase test db` remains unavailable because Docker is not installed (`docker: command not found`); this is not counted as a pass. The isolated worktree was linked to hosted project `rugmtlgufrhlxwfkumhw`, but the desktop automatic permission review timed out twice before the read-only migration dry run returned. Hosted dry run, apply, migration-ledger/metadata verification, 73/73 pgTAP, and linked rollback smoke remain required before merge.
+- The pre-landing review found no unresolved SQL, auth, privacy, concurrency, contract, or distribution issue. It auto-fixed the viewer avatar's misleading no-op button semantics and an empty-list presentation crash path. PR #95 has no Greptile line-level or top-level findings.
+
+Hosted Supabase validation checkpoint, 2026-07-14 22:18 PDT:
+
+- Ryan explicitly approved connecting this isolated worktree to hosted Supabase. `supabase db push --linked --dry-run --yes` showed only `20260714214500_shared_visit_copy_and_viewer_companions.sql`; the reviewed migration then applied successfully to project `rugmtlgufrhlxwfkumhw`.
+- `supabase migration list --linked` shows local/remote alignment through `20260714214500`. Direct live metadata assertions confirm both recreated RPCs are `security definer`, retain `search_path=public, app`, have the intended volatility (`volatile` invite creation, `stable` companion reads), grant execute to `authenticated`, and deny `anon`.
+- Hosted rollback-wrapped `supabase/tests/shared_visits.sql` passed all 73 assertions. The final linked rollback smoke passed profile, mute, photo visibility, preferred-photo, provider-quota, notification-copy, Shared Visit acceptance, remote viewer attribution, and cleanup contracts. No smoke fixture mutations persisted.
+- The local Docker/pgTAP gap remains accurately recorded, but the required deployed-schema metadata, hosted pgTAP, and linked smoke gates are now complete. PR #95 is ready for the final remote mergeability check and squash merge.
 ## 2026-07-13 23:25 PDT - Codex - REC-94 Profile Calendar Scroll Trace
 
 Agent: Codex using `investigate` and `recme-testflight-feedback-bug-catcher`
