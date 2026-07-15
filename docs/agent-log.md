@@ -11987,3 +11987,34 @@ Release completion, 2026-07-14 19:08 PDT:
 - Added final merge, validation, archive, TestFlight, tester-focus, and Slack evidence to Linear REC-96 and moved it from `In Review` to `Done` only after TestFlight approval.
 - Shipped validation: 335 tests with 0 failures, a generic arm64/x86_64 iOS Simulator build, deterministic visual QA on iPhone 17 Pro and iPhone 17e, the hosted member-profile migration/smoke verification completed during implementation, and a signed Release archive/upload from exact `main`.
 - Known/deferred: no known tester-blocking issues. The local pgTAP stack remained unavailable during implementation, but the linked hosted smoke passed; no additional backend, schema, tester-data, auth, or privacy mutation occurred during the release workflow.
+
+## 2026-07-14 22:50 PDT - Codex - REC-92 TestFlight Build 76
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-76`
+Worktree: `/private/tmp/recme-build76-release`
+Linear: `REC-92` (`In Review` through TestFlight availability)
+
+Goal: package the completed Shared Visit invitation inbox, acceptance fixes, final notification copy, and symmetric `with You` visit-card attribution from exact latest `main` into explicit TestFlight build 76, attach it to `Wander Alpha`, publish tester-facing notes, and close REC-92 only after availability is confirmed.
+
+Starting status:
+
+- Fully validated implementation PR #95 squash-merged to `main`: https://github.com/joelipshutz/wander/pull/95. Exact implementation merge commit: `a3f828d8d6bacdb0b68dd4252d159bdbb99752a8`.
+- Latest completed TestFlight is build 75 at released source `baedc07fa341b2d9a14da68f540979dcccd3cd51`; it is recorded as `VALID`, attached to public group `Wander Alpha`, externally approved, and announced to testers. Exact merged `main` still declares build 75, so this explicit release increments once to 76.
+- The only app/backend delta since build 75 is REC-92: a transient tappable Shared Visit banner, durable Profile invitation inbox, reliable review/save/decline and acceptance routing, ISO-8601 RPC body encoding, restored place-activity timestamp decoding, final push copy `Add your details from this visit`, and current-viewer `with You` attribution with profile image on readable recipient visit cards.
+- Hosted migration `20260714214500_shared_visit_copy_and_viewer_companions.sql` is already applied. The hosted ledger and RPC metadata/grants are verified, Shared Visits pgTAP passed 73/73, and the linked rollback smoke passed before merge. No additional hosted mutation belongs in the release bump.
+- Release scope is limited to `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this append-only log. The root checkout's unrelated `.pnpm-store/` and all other worktrees remain untouched.
+
+Release plan:
+
+1. Increment build 75 to 76 and regenerate the Xcode project, auditing generated churn.
+2. Run the full iOS suite and generic simulator build, then review/open/squash-merge the build-number PR.
+3. Archive and upload exact resulting `main` with `manageAppVersionAndBuildNumber=false`.
+4. Run the TestFlight helper with the archive path and tester copy, post `#testflight-feedback`, and move REC-92 to `Done` only after App Store Connect confirms availability.
+
+Release validation checkpoint, 2026-07-14 22:57 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 75 to 76 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj` with XcodeGen. Generated project churn is limited to the matching Debug and Release build-number settings.
+- The full iPhone 17 Pro / iOS 26.5 release-branch suite passed 343 tests with 0 failures: `/private/tmp/DerivedData-build76/Logs/Test/Test-Wander-2026.07.14_22-51-02--0700.xcresult`.
+- The generic iOS Simulator build passed. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-build76/Build/Products/Debug-iphonesimulator/Wander.app`.
+- The release diff contains exactly `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this append-only release log. No product behavior, migration, dependency, signing, entitlement, auth, privacy, or hosted-data change is included in the build-number branch. The only build warning is the existing traditional-headermap warning.
