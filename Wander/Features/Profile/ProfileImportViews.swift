@@ -343,7 +343,7 @@ struct PlaceImportSourceScreen: View {
 }
 
 private enum PlaceImportReviewFilter: String, CaseIterable, Identifiable {
-    case all
+    case unresolved
     case needsReview = "needs review"
     case duplicates
     case saved
@@ -360,25 +360,30 @@ private struct PlaceImportSaveRoute: Identifiable {
     var id: String { "\(itemID)|\(status.rawValue)" }
 }
 
+private struct PlaceImportQuickSaveIntent {
+    let itemID: String
+    let status: PlaceStatus
+}
+
 struct PlaceImportInboxScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
-    @State private var selectedBatchID: String?
-    @State private var selectedFilter: PlaceImportReviewFilter = .all
+    @State private var selectedFilter: PlaceImportReviewFilter = .unresolved
     @State private var visibleLimit = 50
     @State private var saveRoute: PlaceImportSaveRoute?
     @State private var candidatePickerItem: PlaceImportItem?
+    @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
     @State private var showsCancelConfirmation = false
 
     var body: some View {
         Group {
-            if let batch {
+            if !importStore.batches.isEmpty {
                 List {
                     Section {
-                        batchSummary(batch)
+                        inboxSummary
                             .listRowBackground(WanderTheme.surfaceBone.color)
                     }
 
@@ -390,9 +395,13 @@ struct PlaceImportInboxScreen: View {
 
                     if filteredItems.isEmpty {
                         ContentUnavailableView(
-                            "No matching imports",
-                            systemImage: "tray",
-                            description: Text("Choose another filter.")
+                            selectedFilter == .unresolved ? "All caught up" : "No matching imports",
+                            systemImage: selectedFilter == .unresolved ? "checkmark.circle" : "tray",
+                            description: Text(
+                                selectedFilter == .unresolved
+                                    ? "There are no unresolved imports waiting for you."
+                                    : "Choose another filter."
+                            )
                         )
                         .listRowBackground(Color.clear)
                     } else {
@@ -437,7 +446,7 @@ struct PlaceImportInboxScreen: View {
         .navigationTitle("Review Import")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let batch, batch.state == .processing {
+            if !processingBatchIDs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .destructive) {
                         showsCancelConfirmation = true
@@ -448,10 +457,12 @@ struct PlaceImportInboxScreen: View {
                 }
             }
         }
-        .confirmationDialog("Cancel this import?", isPresented: $showsCancelConfirmation) {
-            if let batchID = batch?.id {
-                Button("Cancel import", role: .destructive) {
-                    importStore.cancel(batchID: batchID)
+        .confirmationDialog("Cancel active imports?", isPresented: $showsCancelConfirmation) {
+            if !processingBatchIDs.isEmpty {
+                Button("Cancel active imports", role: .destructive) {
+                    for batchID in processingBatchIDs {
+                        importStore.cancel(batchID: batchID)
+                    }
                 }
             }
             Button("Keep importing", role: .cancel) {}
@@ -466,10 +477,17 @@ struct PlaceImportInboxScreen: View {
             }
             .environmentObject(store)
         }
-        .sheet(item: $candidatePickerItem) { item in
-            PlaceImportCandidatePicker(item: item) { candidateID in
-                importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
-            }
+        .sheet(item: $candidatePickerItem, onDismiss: beginPendingQuickSave) { item in
+            PlaceImportCandidatePicker(
+                item: item,
+                selectionAction: { candidateID in
+                    importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
+                },
+                quickSaveAction: { candidateID, status in
+                    importStore.selectCandidate(itemID: item.id, candidateID: candidateID)
+                    pendingQuickSave = PlaceImportQuickSaveIntent(itemID: item.id, status: status)
+                }
+            )
         }
         .sheet(item: $rescueItem) { item in
             PlaceImportRescueScreen(item: item) { name, area in
@@ -480,39 +498,50 @@ struct PlaceImportInboxScreen: View {
             importStore.reconcileDuplicates(with: existingPlaces)
         }
         .onAppear {
-            selectedBatchID = selectedBatchID ?? importStore.primaryBatch?.id
             importStore.resumePendingImports()
         }
-        .onChange(of: importStore.primaryBatch?.id) { _, newValue in
-            if selectedBatchID == nil {
-                selectedBatchID = newValue
+    }
+
+    private var inboxItems: [PlaceImportItem] {
+        let batchDates = Dictionary(uniqueKeysWithValues: importStore.batches.map { ($0.id, $0.createdAt) })
+        return importStore.items
+            .filter { $0.state != .dismissed }
+            .sorted { lhs, rhs in
+                let lhsDate = batchDates[lhs.batchID] ?? lhs.createdAt
+                let rhsDate = batchDates[rhs.batchID] ?? rhs.createdAt
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+                if lhs.seed.sourceLine != rhs.seed.sourceLine {
+                    return lhs.seed.sourceLine < rhs.seed.sourceLine
+                }
+                return lhs.createdAt < rhs.createdAt
             }
-        }
-    }
-
-    private var batch: PlaceImportBatch? {
-        let batchID = selectedBatchID ?? importStore.primaryBatch?.id
-        return importStore.batches.first(where: { $0.id == batchID })
-    }
-
-    private var batchItems: [PlaceImportItem] {
-        guard let batch else { return [] }
-        return importStore.items(for: batch.id)
     }
 
     private var filteredItems: [PlaceImportItem] {
         switch selectedFilter {
-        case .all:
-            batchItems.filter { $0.state != .dismissed }
+        case .unresolved:
+            inboxItems.filter {
+                [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
+            }
         case .needsReview:
-            batchItems.filter { [.ready, .ambiguous, .needsHelp].contains($0.state) }
+            inboxItems.filter { [.ready, .ambiguous, .needsHelp, .failed].contains($0.state) }
         case .duplicates:
-            batchItems.filter { $0.state == .duplicate }
+            inboxItems.filter { $0.state == .duplicate }
         case .saved:
-            batchItems.filter { $0.state == .saved }
+            inboxItems.filter { $0.state == .saved }
         case .failed:
-            batchItems.filter { $0.state == .failed }
+            inboxItems.filter { $0.state == .failed }
         }
+    }
+
+    private var processingBatchIDs: [String] {
+        importStore.batches
+            .filter { batch in
+                importStore.items(for: batch.id).contains {
+                    [.queued, .resolving].contains($0.state)
+                }
+            }
+            .map(\.id)
     }
 
     private var filterStrip: some View {
@@ -532,51 +561,36 @@ struct PlaceImportInboxScreen: View {
         }
     }
 
-    private func batchSummary(_ batch: PlaceImportBatch) -> some View {
-        let summary = summary(for: batch)
+    private var inboxSummary: some View {
+        let summary = importStore.summary
+        let unresolvedCount = inboxItems.filter {
+            [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        let sources = Set(inboxItems.map(\.source))
+
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .fill(batch.source.tint)
-                    Image(systemName: batch.source.systemImage)
+                        .fill(WanderTheme.skyTint.color)
+                    Image(systemName: "tray.full.fill")
                         .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(batch.source.accent)
+                        .foregroundStyle(WanderTheme.stateInfo.color)
                 }
                 .frame(width: 48, height: 48)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(batch.source.navigationTitle)
+                    Text("Unresolved imports")
                         .font(.system(size: 19, weight: .black))
-                    Text(batch.sourceName ?? batch.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    Text(
+                        "\(unresolvedCount) waiting across \(sources.count) source\(sources.count == 1 ? "" : "s")"
+                    )
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(1)
                 }
 
                 Spacer()
-
-                if importStore.batches.count > 1 {
-                    Menu {
-                        ForEach(importStore.batches.sorted(by: { $0.createdAt > $1.createdAt })) { option in
-                            Button {
-                                selectedBatchID = option.id
-                                selectedFilter = .all
-                                visibleLimit = 50
-                            } label: {
-                                Label(
-                                    "\(option.source.navigationTitle) · \(option.createdAt.formatted(date: .abbreviated, time: .omitted))",
-                                    systemImage: option.id == batch.id ? "checkmark" : option.source.systemImage
-                                )
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 20, weight: .bold))
-                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    }
-                    .accessibilityLabel("Choose import batch")
-                }
             }
 
             if summary.processingCount > 0 {
@@ -587,7 +601,7 @@ struct PlaceImportInboxScreen: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
-                    importMetric(summary.remainingCount, "to review", WanderTheme.terracotta.color)
+                    importMetric(unresolvedCount, "to review", WanderTheme.terracotta.color)
                     importMetric(summary.savedCount, "saved", WanderTheme.stateSuccess.color)
                     importMetric(summary.duplicateCount, "existing", WanderTheme.stateInfo.color)
                 }
@@ -612,21 +626,6 @@ struct PlaceImportInboxScreen: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func summary(for batch: PlaceImportBatch) -> PlaceImportSummary {
-        let items = importStore.items(for: batch.id)
-        let processing = items.filter { [.queued, .resolving].contains($0.state) }.count
-        return PlaceImportSummary(
-            batchID: batch.id,
-            totalCount: items.count,
-            processedCount: items.count - processing,
-            processingCount: processing,
-            readyCount: items.filter { $0.state == .ready }.count,
-            needsHelpCount: items.filter { [.ambiguous, .needsHelp, .failed].contains($0.state) }.count,
-            duplicateCount: items.filter { $0.state == .duplicate }.count,
-            savedCount: items.filter { $0.state == .saved }.count
-        )
     }
 
     private var existingPlaces: [PlaceImportExistingPlace] {
@@ -655,6 +654,13 @@ struct PlaceImportInboxScreen: View {
             defaultVisibility: store.effectiveDefaultVisibility
         )
         saveRoute = PlaceImportSaveRoute(itemID: item.id, status: status, context: context)
+    }
+
+    private func beginPendingQuickSave() {
+        guard let intent = pendingQuickSave else { return }
+        pendingQuickSave = nil
+        guard let item = importStore.item(id: intent.itemID) else { return }
+        beginSave(item, status: intent.status)
     }
 
     @MainActor
@@ -792,7 +798,21 @@ private struct PlaceImportReviewRow: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
-                importCommandButton("Add place details", systemImage: "magnifyingglass", color: WanderTheme.terracotta.color, action: rescueAction)
+                if item.source == .textNotes {
+                    importCommandButton(
+                        "Add place details",
+                        systemImage: "magnifyingglass",
+                        color: WanderTheme.terracotta.color,
+                        action: rescueAction
+                    )
+                } else {
+                    importCommandButton(
+                        item.source == .googleMaps ? "Retry list import" : "Retry automatic match",
+                        systemImage: "arrow.clockwise",
+                        color: WanderTheme.terracotta.color,
+                        action: retryAction
+                    )
+                }
             }
         case .duplicate:
             Label("Already saved", systemImage: "checkmark.seal.fill")
@@ -868,29 +888,71 @@ private struct PlaceImportReviewRow: View {
 private struct PlaceImportCandidatePicker: View {
     let item: PlaceImportItem
     let selectionAction: (String) -> Void
+    let quickSaveAction: (String, PlaceStatus) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            List(item.candidates) { candidate in
-                Button {
-                    selectionAction(candidate.id)
-                    dismiss()
-                } label: {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(candidate.name)
-                            .font(.system(size: 16, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text(candidate.previewSubtitle())
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(2)
+            ScrollView {
+                LazyVStack(spacing: WanderTheme.spacing3) {
+                    ForEach(item.candidates) { candidate in
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                            Button {
+                                selectionAction(candidate.id)
+                                dismiss()
+                            } label: {
+                                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                        Text(candidate.name)
+                                            .font(.system(size: 17, weight: .black))
+                                            .foregroundStyle(WanderTheme.textInk.color)
+                                        Text(candidate.previewSubtitle())
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(WanderTheme.textMuted.color)
+                                            .lineLimit(3)
+                                    }
+
+                                    Spacer(minLength: WanderTheme.spacing2)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 12, weight: .black))
+                                        .foregroundStyle(WanderTheme.textFaint.color)
+                                        .frame(width: 24, height: 24)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            HStack(spacing: WanderTheme.spacing2) {
+                                quickSaveButton(
+                                    "Been",
+                                    systemImage: "checkmark.circle.fill",
+                                    color: WanderTheme.stateSuccess.color
+                                ) {
+                                    quickSaveAction(candidate.id, .been)
+                                    dismiss()
+                                }
+                                quickSaveButton(
+                                    "Wanna",
+                                    systemImage: "bookmark.fill",
+                                    color: WanderTheme.stateWarning.color
+                                ) {
+                                    quickSaveAction(candidate.id, .wannaGo)
+                                    dismiss()
+                                }
+                            }
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        )
                     }
-                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
                 }
-                .buttonStyle(.plain)
+                .padding(WanderTheme.spacing4)
             }
-            .scrollContentBackground(.hidden)
             .background(WanderTheme.canvasWarm.color)
             .navigationTitle("Choose the Place")
             .navigationBarTitleDisplayMode(.inline)
@@ -900,6 +962,27 @@ private struct PlaceImportCandidatePicker: View {
                 }
             }
         }
+    }
+
+    private func quickSaveButton(
+        _ title: String,
+        systemImage: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 14, weight: .black))
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .background(color.opacity(0.13))
+                .foregroundStyle(color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                        .stroke(color.opacity(0.32), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

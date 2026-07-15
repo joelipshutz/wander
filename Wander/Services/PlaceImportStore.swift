@@ -3,6 +3,7 @@ import Foundation
 enum PlaceImportResolution: Equatable {
     case candidates([PlaceCandidate], selectedCandidateID: String?)
     case needsHelp(String)
+    case expanded([PlaceImportSeed], sourceName: String?)
 }
 
 @MainActor
@@ -11,51 +12,32 @@ protocol PlaceImportResolving {
 }
 
 @MainActor
-protocol SocialImportMetadataProviding {
-    func title(for url: URL, source: PlaceImportSource) async -> String?
-}
-
-@MainActor
-final class PublicSocialImportMetadataProvider: SocialImportMetadataProviding {
-    private struct TikTokResponse: Decodable {
-        let title: String?
-    }
-
-    func title(for url: URL, source: PlaceImportSource) async -> String? {
-        guard source == .tiktok else { return nil }
-        var components = URLComponents(string: "https://www.tiktok.com/oembed")
-        components?.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
-        guard let endpoint = components?.url else { return nil }
-
-        var request = URLRequest(url: endpoint, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 10)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode),
-              let payload = try? JSONDecoder().decode(TikTokResponse.self, from: data)
-        else {
-            return nil
-        }
-        return payload.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-@MainActor
 final class DevicePlaceImportResolver: PlaceImportResolving {
     private let placeResolver: any PlaceCandidateResolving
     private let metadataProvider: any SocialImportMetadataProviding
+    private let googleListLoader: any GoogleMapsSharedListLoading
+    private let thumbnailRecognizer: any SocialThumbnailTextRecognizing
 
     init(
         placeResolver: any PlaceCandidateResolving = MapKitPlaceResolver(),
-        metadataProvider: any SocialImportMetadataProviding = PublicSocialImportMetadataProvider()
+        metadataProvider: any SocialImportMetadataProviding = PublicSocialImportMetadataProvider(),
+        googleListLoader: any GoogleMapsSharedListLoading = GoogleMapsSharedListImporter(),
+        thumbnailRecognizer: any SocialThumbnailTextRecognizing = VisionSocialThumbnailTextRecognizer()
     ) {
         self.placeResolver = placeResolver
         self.metadataProvider = metadataProvider
+        self.googleListLoader = googleListLoader
+        self.thumbnailRecognizer = thumbnailRecognizer
     }
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         if let name = normalized(seed.nameHint) {
-            return try await manualResolution(name: name, area: seed.areaHint)
+            return try await manualResolution(
+                name: name,
+                area: seed.areaHint,
+                latitude: seed.latitude,
+                longitude: seed.longitude
+            )
         }
 
         guard let sourceURLString = seed.sourceURLString,
@@ -66,34 +48,89 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
 
         switch source {
         case .googleMaps:
-            do {
-                let candidates = try await placeResolver.resolveLink(LinkPlaceInput(rawValue: sourceURLString))
-                return candidateResolution(candidates, nameHint: nil)
-            } catch {
-                return .needsHelp(
-                    "This Google list link does not expose its places on device. Choose the Saved Places CSV or JSON from Google Takeout."
-                )
+            switch await googleListLoader.load(from: sourceURL) {
+            case .list(let list):
+                return .expanded(list.seeds, sourceName: list.name)
+            case .singlePlace(let expandedURLString):
+                do {
+                    let candidates = try await placeResolver.resolveLink(
+                        LinkPlaceInput(rawValue: expandedURLString)
+                    )
+                    return candidateResolution(candidates, seed: seed)
+                } catch {
+                    return .needsHelp("No matching Apple Maps place was found for this link.")
+                }
+            case .unavailable(let message):
+                return .needsHelp(message)
             }
-        case .tiktok:
-            guard let title = await metadataProvider.title(for: sourceURL, source: source),
-                  let hint = PlaceImportParser.manualHint(from: title)
-            else {
-                return .needsHelp("Add the place name and city from this TikTok, then match it on Apple Maps.")
-            }
-            return try await manualResolution(name: hint.name, area: hint.area)
-        case .instagram:
-            return .needsHelp("Add the place name and city from this Instagram post, then match it on Apple Maps.")
+        case .tiktok, .instagram:
+            return await socialResolution(url: sourceURL, source: source)
         case .textNotes:
             return .needsHelp("Add a place name and nearby city to match this line.")
         }
     }
 
-    private func manualResolution(name: String, area: String?) async throws -> PlaceImportResolution {
+    private func socialResolution(url: URL, source: PlaceImportSource) async -> PlaceImportResolution {
+        guard let metadata = await metadataProvider.metadata(for: url, source: source) else {
+            return .needsHelp(
+                "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
+            )
+        }
+        let recognizedText: String? = if let thumbnailURL = metadata.thumbnailURL {
+            await thumbnailRecognizer.recognizedText(at: thumbnailURL)
+        } else {
+            nil
+        }
+        let hints = SocialPlaceHintExtractor.hints(
+            from: metadata,
+            recognizedText: recognizedText,
+            limit: 8
+        )
+
+        var strongest: PlaceImportCandidateMatch?
+        for hint in hints {
+            guard let candidates = try? await placeResolver.resolveManualEntry(
+                ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
+            ), !candidates.isEmpty else { continue }
+            let match = PlaceImportCandidateMatcher.match(
+                candidates,
+                nameHint: hint.name,
+                areaHint: hint.area
+            )
+            if match.selectedCandidateID != nil {
+                return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
+            }
+            if match.bestScore > (strongest?.bestScore ?? 0) {
+                strongest = match
+            }
+        }
+
+        if let strongest, strongest.bestScore >= 0.38 {
+            return .candidates(strongest.candidates, selectedCandidateID: nil)
+        }
+        return .needsHelp(
+            "No confident place match was found from this post's caption or cover image. Retry automatic matching."
+        )
+    }
+
+    private func manualResolution(
+        name: String,
+        area: String?,
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    ) async throws -> PlaceImportResolution {
         do {
             let candidates = try await placeResolver.resolveManualEntry(
                 ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
             )
-            return candidateResolution(candidates, nameHint: name)
+            let match = PlaceImportCandidateMatcher.match(
+                candidates,
+                nameHint: name,
+                areaHint: area,
+                latitude: latitude,
+                longitude: longitude
+            )
+            return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
         } catch let error as LocalizedError {
             return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
         } catch {
@@ -101,21 +138,18 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         }
     }
 
-    private func candidateResolution(_ candidates: [PlaceCandidate], nameHint: String?) -> PlaceImportResolution {
+    private func candidateResolution(_ candidates: [PlaceCandidate], seed: PlaceImportSeed) -> PlaceImportResolution {
         guard !candidates.isEmpty else {
             return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
         }
-
-        let selectedID: String?
-        if let nameHint {
-            let normalizedHint = normalizedKey(nameHint)
-            selectedID = candidates.first(where: { normalizedKey($0.name) == normalizedHint })?.id
-        } else if candidates.count == 1 {
-            selectedID = candidates[0].id
-        } else {
-            selectedID = nil
-        }
-        return .candidates(candidates, selectedCandidateID: selectedID)
+        let match = PlaceImportCandidateMatcher.match(
+            candidates,
+            nameHint: seed.nameHint,
+            areaHint: seed.areaHint,
+            latitude: seed.latitude,
+            longitude: seed.longitude
+        )
+        return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -125,10 +159,6 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return value
     }
 
-    private func normalizedKey(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .filter { $0.isLetter || $0.isNumber }
-    }
 }
 
 protocol PlaceImportPersisting {
@@ -200,9 +230,18 @@ final class PlaceImportStore: ObservableObject {
             let snapshot = try persistence.load()
             batches = snapshot.batches
             items = snapshot.items.map { item in
-                guard item.state == .resolving else { return item }
                 var resumed = item
-                resumed.state = .queued
+                if item.state == .resolving {
+                    resumed.state = .queued
+                }
+                if Self.shouldUpgradeResolution(for: item) {
+                    resumed.state = .queued
+                    resumed.candidates = []
+                    resumed.selectedCandidateID = nil
+                    resumed.helpMessage = nil
+                    resumed.duplicateUserPlaceID = nil
+                    resumed.resolverVersion = PlaceImportItem.currentResolverVersion
+                }
                 return resumed
             }
             persistenceError = nil
@@ -220,20 +259,23 @@ final class PlaceImportStore: ObservableObject {
     }
 
     var summary: PlaceImportSummary {
-        guard let batch = primaryBatch else { return .empty }
-        let batchItems = items(for: batch.id)
-        let processingCount = batchItems.filter { [.queued, .resolving].contains($0.state) }.count
-        let readyCount = batchItems.filter { $0.state == .ready }.count
-        let needsHelpCount = batchItems.filter { [.ambiguous, .needsHelp, .failed].contains($0.state) }.count
+        let inboxItems = items.filter { $0.state != .dismissed }
+        guard !inboxItems.isEmpty else { return .empty }
+        let unresolvedItems = inboxItems.filter {
+            [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
+        }
+        let processingCount = unresolvedItems.filter { [.queued, .resolving].contains($0.state) }.count
+        let readyCount = unresolvedItems.filter { $0.state == .ready }.count
+        let needsHelpCount = unresolvedItems.filter { [.ambiguous, .needsHelp, .failed].contains($0.state) }.count
         return PlaceImportSummary(
-            batchID: batch.id,
-            totalCount: batchItems.count,
-            processedCount: batchItems.count - processingCount,
+            batchID: primaryBatch?.id ?? batches.first?.id,
+            totalCount: unresolvedItems.count,
+            processedCount: unresolvedItems.count - processingCount,
             processingCount: processingCount,
             readyCount: readyCount,
             needsHelpCount: needsHelpCount,
-            duplicateCount: batchItems.filter { $0.state == .duplicate }.count,
-            savedCount: batchItems.filter { $0.state == .saved }.count
+            duplicateCount: inboxItems.filter { $0.state == .duplicate }.count,
+            savedCount: inboxItems.filter { $0.state == .saved }.count
         )
     }
 
@@ -286,9 +328,12 @@ final class PlaceImportStore: ObservableObject {
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
         items[index].state = .queued
+        items[index].candidates = []
+        items[index].selectedCandidateID = nil
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
+        items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         let batchID = items[index].batchID
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
@@ -305,7 +350,11 @@ final class PlaceImportStore: ObservableObject {
             nameHint: trimmedName,
             areaHint: area?.trimmingCharacters(in: .whitespacesAndNewlines),
             sourceURLString: existingSeed.sourceURLString,
-            sourceLine: existingSeed.sourceLine
+            sourceLine: existingSeed.sourceLine,
+            latitude: existingSeed.latitude,
+            longitude: existingSeed.longitude,
+            sourceProvider: existingSeed.sourceProvider,
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil
@@ -313,6 +362,7 @@ final class PlaceImportStore: ObservableObject {
         items[index].helpMessage = nil
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
+        items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         let batchID = items[index].batchID
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
@@ -451,7 +501,25 @@ final class PlaceImportStore: ObservableObject {
             items[index].selectedCandidateID = nil
             items[index].state = .needsHelp
             items[index].helpMessage = message
+        case .expanded(let seeds, let sourceName):
+            let original = items[index]
+            let expandedItems = seeds.map { seed in
+                PlaceImportItem(
+                    batchID: original.batchID,
+                    source: original.source,
+                    seed: seed,
+                    resolverVersion: PlaceImportItem.currentResolverVersion,
+                    createdAt: original.createdAt
+                )
+            }
+            items.replaceSubrange(index...index, with: expandedItems)
+            if let sourceName,
+               let batchIndex = batches.firstIndex(where: { $0.id == original.batchID }) {
+                batches[batchIndex].sourceName = sourceName
+            }
+            return
         }
+        items[index].resolverVersion = PlaceImportItem.currentResolverVersion
         items[index].updatedAt = .now
     }
 
@@ -521,5 +589,13 @@ final class PlaceImportStore: ObservableObject {
     private func normalizedName(_ value: String) -> String {
         value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static func shouldUpgradeResolution(for item: PlaceImportItem) -> Bool {
+        guard (item.resolverVersion ?? 0) < PlaceImportItem.currentResolverVersion,
+              [.googleMaps, .instagram, .tiktok].contains(item.source),
+              [.ready, .ambiguous, .needsHelp, .failed].contains(item.state)
+        else { return false }
+        return true
     }
 }

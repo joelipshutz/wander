@@ -36,6 +36,10 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
     let areaHint: String?
     let sourceURLString: String?
     let sourceLine: Int
+    let latitude: Double?
+    let longitude: Double?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -43,7 +47,11 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         nameHint: String?,
         areaHint: String?,
         sourceURLString: String?,
-        sourceLine: Int
+        sourceLine: Int,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        sourceProvider: String? = nil,
+        sourceProviderPlaceID: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -51,13 +59,17 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         self.areaHint = areaHint
         self.sourceURLString = sourceURLString
         self.sourceLine = sourceLine
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
     }
 }
 
 struct PlaceImportBatch: Codable, Equatable, Identifiable {
     let id: String
     let source: PlaceImportSource
-    let sourceName: String?
+    var sourceName: String?
     let createdAt: Date
     var updatedAt: Date
     var state: PlaceImportBatchState
@@ -86,6 +98,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
+    static let currentResolverVersion = 2
+
     let id: String
     let batchID: String
     let source: PlaceImportSource
@@ -96,6 +110,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var helpMessage: String?
     var savedUserPlaceID: String?
     var duplicateUserPlaceID: String?
+    var resolverVersion: Int?
     let createdAt: Date
     var updatedAt: Date
 
@@ -110,6 +125,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         helpMessage: String? = nil,
         savedUserPlaceID: String? = nil,
         duplicateUserPlaceID: String? = nil,
+        resolverVersion: Int? = PlaceImportItem.currentResolverVersion,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -123,6 +139,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.helpMessage = helpMessage
         self.savedUserPlaceID = savedUserPlaceID
         self.duplicateUserPlaceID = duplicateUserPlaceID
+        self.resolverVersion = resolverVersion
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

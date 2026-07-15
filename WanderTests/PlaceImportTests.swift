@@ -75,6 +75,54 @@ final class PlaceImportParserTests: XCTestCase {
     }
 }
 
+final class GoogleMapsSharedListParserTests: XCTestCase {
+    func testExpandsEveryPlaceInAFortyFiveItemList() throws {
+        let list = try GoogleMapsSharedListParser.parse(googleSharedListPayload(count: 45))
+
+        XCTAssertEqual(list.name, "Ryan's Bakeries")
+        XCTAssertEqual(list.seeds.count, 45)
+        XCTAssertEqual(list.seeds.first?.nameHint, "Bakery 1")
+        XCTAssertEqual(list.seeds.first?.areaHint, "1 Main St, Los Angeles, CA")
+        XCTAssertEqual(list.seeds.first?.sourceProvider, "google_maps")
+        XCTAssertEqual(list.seeds.first?.sourceProviderPlaceID, "google-place-1")
+        XCTAssertEqual(list.seeds.last?.nameHint, "Bakery 45")
+        XCTAssertEqual(list.seeds.last?.sourceLine, 45)
+    }
+}
+
+@MainActor
+final class GoogleMapsSharedListImporterTests: XCTestCase {
+    func testLoadsTheBulkListEndpointInsteadOfTreatingTheLinkAsOneMapPin() async throws {
+        let listURL = try XCTUnwrap(
+            URL(string: "https://www.google.com/maps/@/data=!3m1!4b1!4m3!11m2!2slist_45!3e3")
+        )
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data("<html></html>".utf8),
+                finalURL: listURL,
+                statusCode: 200,
+                mimeType: "text/html"
+            ),
+            PlaceImportHTTPResponse(
+                data: try googleSharedListPayload(count: 45),
+                finalURL: URL(string: "https://www.google.com/maps/preview/entitylist/getlist")!,
+                statusCode: 200,
+                mimeType: "application/json"
+            )
+        ])
+        let importer = GoogleMapsSharedListImporter(httpClient: client)
+
+        let result = await importer.load(from: URL(string: "https://maps.app.goo.gl/bakeries")!)
+
+        guard case .list(let list) = result else {
+            return XCTFail("Expected the public shared list to expand, got \(result)")
+        }
+        XCTAssertEqual(list.seeds.count, 45)
+        XCTAssertEqual(client.requests.count, 2)
+        XCTAssertTrue(client.requests[1].url?.absoluteString.contains("4i1000") == true)
+    }
+}
+
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
     func testProcessingProducesReviewStatesAndSaveProgress() async throws {
@@ -189,6 +237,109 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.items(for: batchID).first?.state, .dismissed)
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.state, .cancelled)
     }
+
+    func testExpandedGoogleListReplacesOneURLWithEveryImportedPlace() async throws {
+        let seeds = (1...45).map { index in
+            PlaceImportSeed(
+                id: "seed-\(index)",
+                rawText: "Bakery \(index) | \(index) Main St",
+                nameHint: "Bakery \(index)",
+                areaHint: "\(index) Main St, Los Angeles, CA",
+                sourceURLString: nil,
+                sourceLine: index,
+                latitude: 34 + Double(index) / 10_000,
+                longitude: -118 - Double(index) / 10_000,
+                sourceProvider: "google_maps",
+                sourceProviderPlaceID: "google-place-\(index)"
+            )
+        }
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: ExpandingPlaceImportResolver(seeds: seeds)
+        )
+
+        let batchID = try store.enqueue(
+            source: .googleMaps,
+            text: "https://maps.app.goo.gl/bakeries"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        XCTAssertEqual(store.items(for: batchID).count, 45)
+        XCTAssertEqual(store.items(for: batchID).map(\.state), Array(repeating: .ready, count: 45))
+        XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.sourceName, "Ryan's Bakeries")
+        XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.totalCount, 45)
+        XCTAssertEqual(store.summary.totalCount, 45)
+    }
+
+    func testSummaryAggregatesUnresolvedItemsAcrossEveryImportBatch() async throws {
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: FakePlaceImportResolver()
+        )
+        let readyBatchID = try store.enqueue(source: .textNotes, text: "Ready, Los Angeles")
+        await store.waitForProcessing(batchID: readyBatchID)
+        let helpBatchID = try store.enqueue(source: .tiktok, text: "Needs Help")
+        await store.waitForProcessing(batchID: helpBatchID)
+
+        XCTAssertEqual(store.summary.totalCount, 2)
+        XCTAssertEqual(store.summary.readyCount, 1)
+        XCTAssertEqual(store.summary.needsHelpCount, 1)
+        XCTAssertEqual(Set(store.items.map(\.batchID)), [readyBatchID, helpBatchID])
+    }
+
+    func testSavedHistoryDoesNotInflateANewImportsProgress() async throws {
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: FakePlaceImportResolver()
+        )
+        let oldBatchID = try store.enqueue(source: .textNotes, text: "Ready, Los Angeles")
+        await store.waitForProcessing(batchID: oldBatchID)
+        let oldItem = try XCTUnwrap(store.items(for: oldBatchID).first)
+        store.markSaved(itemID: oldItem.id, userPlaceID: "saved-old")
+
+        let newBatchID = try store.enqueue(source: .textNotes, text: "Ambiguous, Santa Monica")
+        await store.waitForProcessing(batchID: newBatchID)
+
+        XCTAssertEqual(store.summary.totalCount, 1)
+        XCTAssertEqual(store.summary.processedCount, 1)
+        XCTAssertEqual(store.summary.savedCount, 1)
+        XCTAssertEqual(store.summary.needsHelpCount, 1)
+    }
+
+    func testLegacySocialAndGoogleFailuresAreRequeuedForTheNewResolver() {
+        let batch = PlaceImportBatch(
+            id: "legacy-batch",
+            source: .googleMaps,
+            sourceName: nil,
+            totalCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "legacy-item",
+            batchID: batch.id,
+            source: .googleMaps,
+            seed: PlaceImportSeed(
+                id: "legacy-seed",
+                rawText: "https://maps.app.goo.gl/bakeries",
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: "https://maps.app.goo.gl/bakeries",
+                sourceLine: 1
+            ),
+            state: .ambiguous,
+            candidates: (1...8).map { placeImportCandidate(name: "Nearby \($0)") },
+            resolverVersion: nil
+        )
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+            ),
+            resolver: FakePlaceImportResolver()
+        )
+
+        XCTAssertEqual(store.item(id: item.id)?.state, .queued)
+        XCTAssertEqual(store.item(id: item.id)?.candidates, [])
+        XCTAssertEqual(store.item(id: item.id)?.resolverVersion, PlaceImportItem.currentResolverVersion)
+    }
 }
 
 @MainActor
@@ -231,6 +382,194 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
+
+    func testResolvesMendocinoFarmsFromASocialCaptionHandle() async throws {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [candidate])
+        let metadata = SocialImportMetadata(
+            title: "Lunch in Los Angeles",
+            caption: "Lunch at @mendocinofarms restaurant in Los Angeles.",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let seed = PlaceImportSeed(
+            rawText: "https://www.instagram.com/reel/example/",
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: "https://www.instagram.com/reel/example/",
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+        XCTAssertEqual(placeResolver.manualInputs.first?.name, "mendocino farms")
+    }
+
+    func testUsesCoverFrameTextWhenTheSocialCaptionHasNoPlaceName() async throws {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: nil,
+            authorName: nil,
+            thumbnailURL: URL(string: "https://example.com/cover.jpg")
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [candidate]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(text: "MENDOCINO FARMS\nLos Angeles, CA")
+        )
+        let seed = PlaceImportSeed(
+            rawText: "https://www.tiktok.com/@creator/video/123",
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: "https://www.tiktok.com/@creator/video/123",
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .tiktok)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+    }
+}
+
+@MainActor
+final class SocialPlaceImportMetadataTests: XCTestCase {
+    func testInstagramMetaParserPreservesApostrophesAndReversedAttributeOrder() throws {
+        let html = """
+        <html><head>
+        <meta content="Ryan's lunch at @mendocinofarms &amp; a great patio" property="og:description">
+        <meta property="og:title" content="Ryan on Instagram">
+        <meta content="https://example.com/cover.jpg" property="og:image">
+        </head></html>
+        """
+
+        let metadata = try XCTUnwrap(PublicSocialHTMLMetadataParser.metadata(from: html))
+
+        XCTAssertEqual(metadata.caption, "Ryan's lunch at @mendocinofarms & a great patio")
+        XCTAssertEqual(metadata.authorName, "Ryan")
+        XCTAssertEqual(metadata.thumbnailURL, URL(string: "https://example.com/cover.jpg"))
+    }
+
+    func testCandidateMatcherTreatsRestaurantSuffixAsTheSamePlaceName() {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Mendocino Farms Restaurant",
+            areaHint: "Los Angeles"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testCandidateMatcherUsesAddressAndCoordinatesToChooseAChainBranch() {
+        let expected = placeImportCandidate(
+            name: "Corner Bakery Cafe",
+            address: "5312 Clark Ave, Lakewood, CA",
+            latitude: 33.8517,
+            longitude: -118.1338
+        )
+        let otherBranch = placeImportCandidate(
+            name: "Corner Bakery Cafe",
+            address: "1000 Main St, Los Angeles, CA",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [otherBranch, expected],
+            nameHint: "Corner Bakery Cafe",
+            areaHint: "5312 Clark Ave, Lakewood, CA",
+            latitude: 33.8517,
+            longitude: -118.1338
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, expected.id)
+        XCTAssertEqual(match.candidates.first?.id, expected.id)
+    }
+
+    func testCandidateMatcherLeavesSameNameBranchesAmbiguousWithoutLocationEvidence() {
+        let first = placeImportCandidate(
+            name: "Mendocino Farms",
+            address: "Branch One",
+            latitude: 34.0522,
+            longitude: -118.2437
+        )
+        let second = placeImportCandidate(
+            name: "Mendocino Farms",
+            address: "Branch Two",
+            latitude: 34.02,
+            longitude: -118.49
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [first, second],
+            nameHint: "Mendocino Farms Restaurant",
+            areaHint: nil
+        )
+
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testTikTokProviderReadsCaptionAndCoverFromPublicOEmbed() async throws {
+        let response = """
+        {
+          "title": "Lunch at @mendocinofarms in Los Angeles",
+          "author_name": "LA Food Guide",
+          "thumbnail_url": "https://example.com/tiktok-cover.jpg"
+        }
+        """
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(response.utf8),
+                finalURL: URL(string: "https://www.tiktok.com/oembed")!,
+                statusCode: 200,
+                mimeType: "application/json"
+            )
+        ])
+        let provider = PublicSocialImportMetadataProvider(httpClient: client)
+
+        let metadata = await provider.metadata(
+            for: URL(string: "https://www.tiktok.com/@creator/video/123")!,
+            source: .tiktok
+        )
+
+        XCTAssertEqual(metadata?.caption, "Lunch at @mendocinofarms in Los Angeles")
+        XCTAssertEqual(metadata?.authorName, "LA Food Guide")
+        XCTAssertEqual(metadata?.thumbnailURL, URL(string: "https://example.com/tiktok-cover.jpg"))
+        XCTAssertEqual(client.requests.first?.url?.host, "www.tiktok.com")
+        XCTAssertEqual(client.requests.first?.url?.path, "/oembed")
+    }
+
+    func testInstagramProviderReadsCaptionAndCoverFromPublicPageMetadata() async throws {
+        let html = """
+        <meta property="og:title" content="LA Food Guide on Instagram">
+        <meta property="og:description" content="Dinner at Mendocino Farms restaurant">
+        <meta property="og:image" content="https://example.com/instagram-cover.jpg">
+        """
+        let reelURL = URL(string: "https://www.instagram.com/reel/example/")!
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(html.utf8),
+                finalURL: reelURL,
+                statusCode: 200,
+                mimeType: "text/html"
+            )
+        ])
+        let provider = PublicSocialImportMetadataProvider(httpClient: client)
+
+        let metadata = await provider.metadata(for: reelURL, source: .instagram)
+
+        XCTAssertEqual(metadata?.caption, "Dinner at Mendocino Farms restaurant")
+        XCTAssertEqual(metadata?.authorName, "LA Food Guide")
+        XCTAssertEqual(metadata?.thumbnailURL, URL(string: "https://example.com/instagram-cover.jpg"))
+    }
 }
 
 private final class InMemoryPlaceImportPersistence: PlaceImportPersisting {
@@ -246,6 +585,22 @@ private final class InMemoryPlaceImportPersistence: PlaceImportPersisting {
 
     func save(_ snapshot: PlaceImportSnapshot) throws {
         self.snapshot = snapshot
+    }
+}
+
+@MainActor
+private final class FakePlaceImportHTTPClient: PlaceImportHTTPFetching {
+    private var responses: [PlaceImportHTTPResponse]
+    private(set) var requests: [URLRequest] = []
+
+    init(responses: [PlaceImportHTTPResponse]) {
+        self.responses = responses
+    }
+
+    func response(for request: URLRequest) async throws -> PlaceImportHTTPResponse {
+        requests.append(request)
+        guard !responses.isEmpty else { throw URLError(.badServerResponse) }
+        return responses.removeFirst()
     }
 }
 
@@ -284,6 +639,25 @@ private final class FakePlaceImportResolver: PlaceImportResolving {
 }
 
 @MainActor
+private final class ExpandingPlaceImportResolver: PlaceImportResolving {
+    private let seeds: [PlaceImportSeed]
+    private var hasExpanded = false
+
+    init(seeds: [PlaceImportSeed]) {
+        self.seeds = seeds
+    }
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        if !hasExpanded {
+            hasExpanded = true
+            return .expanded(seeds, sourceName: "Ryan's Bakeries")
+        }
+        let candidate = placeImportCandidate(name: seed.nameHint ?? "Imported Place")
+        return .candidates([candidate], selectedCandidateID: candidate.id)
+    }
+}
+
+@MainActor
 private final class SuspendedPlaceImportResolver: PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         try await Task.sleep(for: .seconds(60))
@@ -294,6 +668,7 @@ private final class SuspendedPlaceImportResolver: PlaceImportResolving {
 @MainActor
 private final class FakeDevicePlaceResolver: PlaceCandidateResolving {
     let candidates: [PlaceCandidate]
+    private(set) var manualInputs: [ManualPlaceInput] = []
 
     init(candidates: [PlaceCandidate]) {
         self.candidates = candidates
@@ -301,25 +676,83 @@ private final class FakeDevicePlaceResolver: PlaceCandidateResolving {
 
     func resolveCurrentLocation() async throws -> [PlaceCandidate] { candidates }
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { candidates }
-    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] { candidates }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        manualInputs.append(input)
+        return candidates
+    }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { candidates }
 }
 
 @MainActor
 private final class FakeSocialImportMetadataProvider: SocialImportMetadataProviding {
-    func title(for url: URL, source: PlaceImportSource) async -> String? { nil }
+    let providedMetadata: SocialImportMetadata?
+
+    init(metadata: SocialImportMetadata? = nil) {
+        providedMetadata = metadata
+    }
+
+    func metadata(for url: URL, source: PlaceImportSource) async -> SocialImportMetadata? {
+        providedMetadata
+    }
 }
 
-private func placeImportCandidate(name: String) -> PlaceCandidate {
+@MainActor
+private final class FakeSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing {
+    let text: String?
+
+    init(text: String? = nil) {
+        self.text = text
+    }
+
+    func recognizedText(at url: URL) async -> String? {
+        text
+    }
+}
+
+private func googleSharedListPayload(count: Int) throws -> Data {
+    var entries: [Any] = []
+    for index in 1...count {
+        var coordinates = Array<Any>(repeating: NSNull(), count: 4)
+        coordinates[2] = 34.0 + Double(index) / 10_000
+        coordinates[3] = -118.0 - Double(index) / 10_000
+
+        var placeInfo = Array<Any>(repeating: NSNull(), count: 8)
+        placeInfo[4] = "\(index) Main St, Los Angeles, CA"
+        placeInfo[5] = coordinates
+        placeInfo[7] = "google-place-\(index)"
+
+        var entry = Array<Any>(repeating: NSNull(), count: 4)
+        entry[1] = placeInfo
+        entry[2] = "Bakery \(index)"
+        entry[3] = "Imported bakery \(index)"
+        entries.append(entry)
+    }
+
+    var root = Array<Any>(repeating: NSNull(), count: 9)
+    root[4] = "Ryan's Bakeries"
+    root[8] = entries
+    let json = try JSONSerialization.data(withJSONObject: [root])
+    var payload = Data(")]}'\n".utf8)
+    payload.append(json)
+    return payload
+}
+
+private func placeImportCandidate(
+    name: String,
+    address: String? = nil,
+    latitude: Double = 34.0522,
+    longitude: Double = -118.2437
+) -> PlaceCandidate {
     PlaceCandidate(
-        id: "candidate-\(name)",
+        id: "candidate-\(name)-\(latitude)-\(longitude)",
         name: name,
         category: "restaurant",
+        address: address,
         locality: "Los Angeles",
         region: "CA",
         country: "United States",
-        latitude: 34.0522,
-        longitude: -118.2437,
+        latitude: latitude,
+        longitude: longitude,
         sourceProvider: "mapkit",
         sourceProviderPlaceID: "provider-\(name)",
         confidence: 0.9
