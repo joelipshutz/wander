@@ -11692,3 +11692,21 @@ Remote handoff, 2026-07-14 00:52 PDT:
 - Updated PR #95 with the root-cause and validation report and marked it ready for review: https://github.com/joelipshutz/wander/pull/95.
 - Added the same evidence to Linear `REC-92` and moved it to `In Review` for Ryan/Joe physical-device validation.
 - Opened the exact isolated project `/private/tmp/recme-rec92-invitation-inbox/Wander.xcodeproj` in Xcode. The worktree contains an ignored/untracked local `DerivedData-rec92-focused/` test artifact only; it was not staged or pushed.
+
+## 2026-07-14 21:45 PDT - Codex - REC-92 Final Shared Visit Copy, Attribution, And Build 76
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-92-invitation-inbox`
+Worktree: `/private/tmp/recme-rec92-invitation-inbox`
+Linear: `REC-92` (moved from `In Review` to `In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/95 (temporarily returned to draft)
+
+Goal: apply Ryan's final physical-test copy and visit-card attribution corrections, integrate the branch over latest `main`, pass the full landing gate, squash-merge PR #95, and explicitly release the resulting latest `main` as TestFlight build 76.
+
+Starting status and root cause:
+
+- Fetched `origin`. The isolated branch is clean apart from its ignored/untracked `DerivedData-rec92-focused/` artifact, tracks the pushed remote at `750737c28`, and is eight commits behind current `origin/main` at `41a80149c`. Latest `main` includes completed REC-94/REC-96 app changes and fully completed TestFlight builds 74 and 75; no earlier explicit release is pending.
+- PR #95 is ready in product scope but currently conflicts with latest `main`; it was intentionally returned to draft while this pass integrates and revalidates it. The root checkout's unrelated `.pnpm-store/` and the clean, already-landed REC-94/REC-96 worktrees remain untouched.
+- Shared Visit push copy is authored by `public.create_shared_visit_invites` and still ends with `Add your version of the visit.`. The forward migration will change future events to `Add your details from this visit` and update the pgTAP expectation without rewriting delivered notification history.
+- `public.get_shared_visit_companion_context` currently accepts only caller-owned visits and excludes `app.current_user_id()` from every result. That supports a person's own card but guarantees Ryan cannot appear on Joe's readable accepted card. The replacement RPC will preserve the security-definer/search-path/grant posture, authorize caller-owned or RLS-readable requested visits, exclude the requested card's owner instead of the viewer, and include the current viewer's real profile/avatar as companion context. Client presentation will map the current viewer's name to `You` while retaining the returned avatar.
+- Expected implementation files are a forward Supabase migration, Shared Visits pgTAP and linked smoke coverage, `SharedVisitComponents.swift` plus its Map call site, focused iOS tests, and this coordination log. Any recreated iOS-called RPC will receive metadata/grant assertions, hosted migration verification, and the required linked rollback smoke before landing.
