@@ -12090,3 +12090,30 @@ Planning handoff, 2026-07-15 01:46 PDT:
 - Linked PR #109 on Linear REC-97, posted the planning/review validation summary, and moved the issue from `In Progress` to `In Review`. Implementation has not started; the six stacked implementation PRs and their ordering are defined in the plan.
 - Validation: `git diff origin/main...HEAD --check` passed; the final GSTACK review record reports 12 findings resolved, zero unresolved findings, and zero critical gaps. No `xcodebuild` build/test was run because this branch changes no app, test, project, package, migration, or runtime source. No hosted backend, tester data, build number, TestFlight release, or Slack channel was changed.
 - Next step: review/merge PR #109, then begin stack 1 from latest `main` using the plan's contract-first task order. Physical iPhone Files/Share Extension/VoiceOver/backgrounding and 300-item progress/scroll validation remain mandatory implementation acceptance gates, not planning evidence.
+
+## 2026-07-15 08:45 PDT - Codex - REC-97 Implementation Resume
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: continue on the same approved REC-97 branch, implement and wire a testable multi-source import vertical slice, validate it with the iOS build/tests, and leave an Xcode-ready branch for Ryan.
+
+Starting status:
+
+- User explicitly requested implementation on the existing planning branch and PR #109 rather than waiting for the planning-only PR to merge or creating the six planned stacked branches. REC-97 was moved from `In Review` back to `In Progress` before product-code edits.
+- Fetched `origin`; `origin/main` has no commits beyond this branch's base and the worktree is clean at `1db19a9d6`. The root checkout and all sibling worktrees remain untouched.
+- Expected implementation scope includes the import domain/persistence boundary, source-specific capture views, Profile tiles and progress/review routing, file/text/link parsing, candidate resolution/dedupe, the existing regular save flow handoff, tests, XcodeGen project generation if needed, and this append-only log. Backend migration/worker work will only be included if it can be validated without weakening the approved security/RLS contract.
+- High-conflict surfaces likely include Profile presentation, `project.yml`, `WanderLocalStore`, and this log. No current log entry reports another agent editing REC-97 files; changes will remain isolated in this worktree and preserve unrelated user work.
+
+Implementation and validation checkpoint, 2026-07-15 09:34 PDT:
+
+- Implemented a testable owner-Profile import vertical slice on the existing REC-97 branch. The four adaptive source tiles appear directly after Visit Invitations and open source-specific capture for Google Maps, Instagram Reels, TikTok, and text/notes. Profile exposes durable `Importing N of M`, `Review Import`, and `Import Inbox` states.
+- Added a dedicated Codable import domain and `PlaceImportStore` with protected Application Support persistence, restart recovery, resumable sequential processing, batch switching, 50-row lazy review pagination, retry/cancel/dismiss/manual rescue, candidate selection, existing-save dedupe, and saved-item progress. A 300-row quoted Google Takeout CSV fixture parses and deduplicates successfully.
+- Added CSV, nested JSON, plain-text, Markdown, and RTF ingestion. ZIP selection gives explicit Files unzip guidance. Google place links resolve through the existing link resolver; large Google lists use Takeout CSV/JSON. TikTok uses the official public oEmbed title when available; Instagram and unsupported/private social metadata remain honest manual-rescue states rather than scraping or fabricated matches.
+- Reused the exact existing `MapPlaceSaveFlowSheet` for each row's Been/Wanna action, including visibility, rating, questions, tags, lists, notes, photos, local persistence, remote sync, and signed-out gate behavior. Completing the save marks that import row saved; cancelling returns to the review list without promotion.
+- Manual simulator tracing on iPhone 17 Pro verified text import, progress/review, candidate rows, and Been opening the regular save flow. The trace exposed an autocorrected wrong-name MapKit result; device resolution now auto-selects only an exact normalized name match and every actionable row offers review/search/dismiss recovery. Smaller-phone QA on iPhone 17e confirmed the four tiles fit, wrap cleanly, and retain the approved hierarchy; evidence: `/private/tmp/rec97-17e-profile.png`.
+- Final edge review fixed pasted text silently losing to a previously selected file, duplicate reconciliation missing candidates that resolved after first render, and resolver cancellation racing a dismissed row back to failed. Regression coverage includes parser scale/dedupe, persistence/relaunch/resume, review state transitions, provider and coordinate dedupe, name-match safety, and in-flight cancellation.
+- Final validation passed 354 tests with 0 failures: `/private/tmp/DerivedData-rec97/Logs/Test/Test-Wander-2026.07.15_09-33-10--0700.xcresult`. The generic iOS Simulator build passed after the final fixes; `/private/tmp/DerivedData-rec97-generic/Build/Products/Debug-iphonesimulator/Wander.app/Wander.debug.dylib` contains both `arm64` and `x86_64`.
+- This is deliberately the first device-local functional slice for Xcode testing, not the complete hosted REC-97 architecture. It does not yet include account-scoped/server-synced import persistence, Supabase schema/RLS/RPCs, the server worker/Cron/Vault path, Share Extension/App Group capture, bounded raw-artifact storage, provider live-smoke fixtures, or the non-destructive hosted import-commit RPC. Until account scoping lands, use one test account per install for import-inbox QA. No migration, hosted data, build number, TestFlight release, or Slack message was changed.

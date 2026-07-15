@@ -1,0 +1,525 @@
+import Foundation
+
+enum PlaceImportResolution: Equatable {
+    case candidates([PlaceCandidate], selectedCandidateID: String?)
+    case needsHelp(String)
+}
+
+@MainActor
+protocol PlaceImportResolving {
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+}
+
+@MainActor
+protocol SocialImportMetadataProviding {
+    func title(for url: URL, source: PlaceImportSource) async -> String?
+}
+
+@MainActor
+final class PublicSocialImportMetadataProvider: SocialImportMetadataProviding {
+    private struct TikTokResponse: Decodable {
+        let title: String?
+    }
+
+    func title(for url: URL, source: PlaceImportSource) async -> String? {
+        guard source == .tiktok else { return nil }
+        var components = URLComponents(string: "https://www.tiktok.com/oembed")
+        components?.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
+        guard let endpoint = components?.url else { return nil }
+
+        var request = URLRequest(url: endpoint, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 10)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode),
+              let payload = try? JSONDecoder().decode(TikTokResponse.self, from: data)
+        else {
+            return nil
+        }
+        return payload.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+@MainActor
+final class DevicePlaceImportResolver: PlaceImportResolving {
+    private let placeResolver: any PlaceCandidateResolving
+    private let metadataProvider: any SocialImportMetadataProviding
+
+    init(
+        placeResolver: any PlaceCandidateResolving = MapKitPlaceResolver(),
+        metadataProvider: any SocialImportMetadataProviding = PublicSocialImportMetadataProvider()
+    ) {
+        self.placeResolver = placeResolver
+        self.metadataProvider = metadataProvider
+    }
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        if let name = normalized(seed.nameHint) {
+            return try await manualResolution(name: name, area: seed.areaHint)
+        }
+
+        guard let sourceURLString = seed.sourceURLString,
+              let sourceURL = URL(string: sourceURLString)
+        else {
+            return .needsHelp("Add a place name and nearby city to match this item.")
+        }
+
+        switch source {
+        case .googleMaps:
+            do {
+                let candidates = try await placeResolver.resolveLink(LinkPlaceInput(rawValue: sourceURLString))
+                return candidateResolution(candidates, nameHint: nil)
+            } catch {
+                return .needsHelp(
+                    "This Google list link does not expose its places on device. Choose the Saved Places CSV or JSON from Google Takeout."
+                )
+            }
+        case .tiktok:
+            guard let title = await metadataProvider.title(for: sourceURL, source: source),
+                  let hint = PlaceImportParser.manualHint(from: title)
+            else {
+                return .needsHelp("Add the place name and city from this TikTok, then match it on Apple Maps.")
+            }
+            return try await manualResolution(name: hint.name, area: hint.area)
+        case .instagram:
+            return .needsHelp("Add the place name and city from this Instagram post, then match it on Apple Maps.")
+        case .textNotes:
+            return .needsHelp("Add a place name and nearby city to match this line.")
+        }
+    }
+
+    private func manualResolution(name: String, area: String?) async throws -> PlaceImportResolution {
+        do {
+            let candidates = try await placeResolver.resolveManualEntry(
+                ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+            )
+            return candidateResolution(candidates, nameHint: name)
+        } catch let error as LocalizedError {
+            return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
+        } catch {
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
+        }
+    }
+
+    private func candidateResolution(_ candidates: [PlaceCandidate], nameHint: String?) -> PlaceImportResolution {
+        guard !candidates.isEmpty else {
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
+        }
+
+        let selectedID: String?
+        if let nameHint {
+            let normalizedHint = normalizedKey(nameHint)
+            selectedID = candidates.first(where: { normalizedKey($0.name) == normalizedHint })?.id
+        } else if candidates.count == 1 {
+            selectedID = candidates[0].id
+        } else {
+            selectedID = nil
+        }
+        return .candidates(candidates, selectedCandidateID: selectedID)
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private func normalizedKey(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+protocol PlaceImportPersisting {
+    func load() throws -> PlaceImportSnapshot
+    func save(_ snapshot: PlaceImportSnapshot) throws
+}
+
+final class FilePlaceImportPersistence: PlaceImportPersisting {
+    private let fileURL: URL
+
+    init(fileURL: URL? = nil) {
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? FileManager.default.temporaryDirectory
+            self.fileURL = root
+                .appendingPathComponent("rec-me", isDirectory: true)
+                .appendingPathComponent("place-imports-v1.json", isDirectory: false)
+        }
+    }
+
+    func load() throws -> PlaceImportSnapshot {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return PlaceImportSnapshot()
+        }
+        let data = try Data(contentsOf: fileURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(PlaceImportSnapshot.self, from: data)
+        guard snapshot.version == PlaceImportSnapshot.currentVersion else {
+            return PlaceImportSnapshot()
+        }
+        return snapshot
+    }
+
+    func save(_ snapshot: PlaceImportSnapshot) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        try data.write(to: fileURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: fileURL.path
+        )
+    }
+}
+
+@MainActor
+final class PlaceImportStore: ObservableObject {
+    @Published private(set) var batches: [PlaceImportBatch]
+    @Published private(set) var items: [PlaceImportItem]
+    @Published private(set) var persistenceError: String?
+
+    private let persistence: any PlaceImportPersisting
+    private let resolver: any PlaceImportResolving
+    private var processingTasks: [String: Task<Void, Never>] = [:]
+
+    init(
+        persistence: any PlaceImportPersisting = FilePlaceImportPersistence(),
+        resolver: any PlaceImportResolving = DevicePlaceImportResolver()
+    ) {
+        self.persistence = persistence
+        self.resolver = resolver
+        do {
+            let snapshot = try persistence.load()
+            batches = snapshot.batches
+            items = snapshot.items.map { item in
+                guard item.state == .resolving else { return item }
+                var resumed = item
+                resumed.state = .queued
+                return resumed
+            }
+            persistenceError = nil
+        } catch {
+            batches = []
+            items = []
+            persistenceError = "Import history could not be restored. New imports will still work in this session."
+        }
+        synchronizeAllBatches(persist: false)
+    }
+
+    var primaryBatch: PlaceImportBatch? {
+        let sorted = batches.sorted { $0.createdAt > $1.createdAt }
+        return sorted.first(where: { ![.complete, .cancelled].contains($0.state) }) ?? sorted.first
+    }
+
+    var summary: PlaceImportSummary {
+        guard let batch = primaryBatch else { return .empty }
+        let batchItems = items(for: batch.id)
+        let processingCount = batchItems.filter { [.queued, .resolving].contains($0.state) }.count
+        let readyCount = batchItems.filter { $0.state == .ready }.count
+        let needsHelpCount = batchItems.filter { [.ambiguous, .needsHelp, .failed].contains($0.state) }.count
+        return PlaceImportSummary(
+            batchID: batch.id,
+            totalCount: batchItems.count,
+            processedCount: batchItems.count - processingCount,
+            processingCount: processingCount,
+            readyCount: readyCount,
+            needsHelpCount: needsHelpCount,
+            duplicateCount: batchItems.filter { $0.state == .duplicate }.count,
+            savedCount: batchItems.filter { $0.state == .saved }.count
+        )
+    }
+
+    @discardableResult
+    func enqueue(source: PlaceImportSource, text: String, sourceName: String? = nil) throws -> String {
+        let seeds = try PlaceImportParser.parse(source: source, text: text, fileName: sourceName)
+        let batch = PlaceImportBatch(source: source, sourceName: sourceName, totalCount: seeds.count)
+        batches.append(batch)
+        items.append(contentsOf: seeds.map { seed in
+            PlaceImportItem(batchID: batch.id, source: source, seed: seed)
+        })
+        persist()
+        startProcessing(batchID: batch.id)
+        return batch.id
+    }
+
+    func resumePendingImports() {
+        for index in items.indices where items[index].state == .resolving {
+            items[index].state = .queued
+        }
+        for batch in batches where items(for: batch.id).contains(where: { $0.state == .queued }) {
+            startProcessing(batchID: batch.id)
+        }
+    }
+
+    func items(for batchID: String) -> [PlaceImportItem] {
+        items.filter { $0.batchID == batchID }.sorted {
+            if $0.seed.sourceLine == $1.seed.sourceLine {
+                return $0.createdAt < $1.createdAt
+            }
+            return $0.seed.sourceLine < $1.seed.sourceLine
+        }
+    }
+
+    func item(id: String) -> PlaceImportItem? {
+        items.first(where: { $0.id == id })
+    }
+
+    func selectCandidate(itemID: String, candidateID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].candidates.contains(where: { $0.id == candidateID })
+        else { return }
+        items[index].selectedCandidateID = candidateID
+        items[index].state = .ready
+        items[index].helpMessage = nil
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
+    }
+
+    func retry(itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        items[index].state = .queued
+        items[index].helpMessage = nil
+        items[index].duplicateUserPlaceID = nil
+        items[index].updatedAt = .now
+        let batchID = items[index].batchID
+        synchronizeBatch(batchID)
+        startProcessing(batchID: batchID)
+    }
+
+    func retry(itemID: String, name: String, area: String?) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let existingSeed = items[index].seed
+        items[index].seed = PlaceImportSeed(
+            id: existingSeed.id,
+            rawText: existingSeed.rawText,
+            nameHint: trimmedName,
+            areaHint: area?.trimmingCharacters(in: .whitespacesAndNewlines),
+            sourceURLString: existingSeed.sourceURLString,
+            sourceLine: existingSeed.sourceLine
+        )
+        items[index].candidates = []
+        items[index].selectedCandidateID = nil
+        items[index].state = .queued
+        items[index].helpMessage = nil
+        items[index].duplicateUserPlaceID = nil
+        items[index].updatedAt = .now
+        let batchID = items[index].batchID
+        synchronizeBatch(batchID)
+        startProcessing(batchID: batchID)
+    }
+
+    func markSaved(itemID: String, userPlaceID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        items[index].state = .saved
+        items[index].savedUserPlaceID = userPlaceID
+        items[index].duplicateUserPlaceID = nil
+        items[index].helpMessage = nil
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
+    }
+
+    func dismiss(itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
+            return
+        }
+        items[index].state = .dismissed
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
+    }
+
+    func cancel(batchID: String) {
+        processingTasks[batchID]?.cancel()
+        processingTasks[batchID] = nil
+        for index in items.indices where items[index].batchID == batchID && [.queued, .resolving].contains(items[index].state) {
+            items[index].state = .dismissed
+            items[index].updatedAt = .now
+        }
+        if let index = batches.firstIndex(where: { $0.id == batchID }) {
+            batches[index].state = .cancelled
+            batches[index].updatedAt = .now
+        }
+        persist()
+    }
+
+    func deleteBatch(batchID: String) {
+        processingTasks[batchID]?.cancel()
+        processingTasks[batchID] = nil
+        items.removeAll(where: { $0.batchID == batchID })
+        batches.removeAll(where: { $0.id == batchID })
+        persist()
+    }
+
+    func reconcileDuplicates(with existingPlaces: [PlaceImportExistingPlace]) {
+        var changedBatchIDs = Set<String>()
+        for index in items.indices where [.ready, .ambiguous, .duplicate].contains(items[index].state) {
+            let match = items[index].candidates.lazy.compactMap { candidate in
+                existingPlaces.first(where: { self.existingPlaceMatches($0, candidate: candidate) })
+                    .map { (candidate, $0) }
+            }.first
+
+            if let (candidate, existing) = match {
+                if items[index].state != .duplicate || items[index].duplicateUserPlaceID != existing.userPlaceID {
+                    items[index].state = .duplicate
+                    items[index].selectedCandidateID = candidate.id
+                    items[index].duplicateUserPlaceID = existing.userPlaceID
+                    items[index].helpMessage = nil
+                    items[index].updatedAt = .now
+                    changedBatchIDs.insert(items[index].batchID)
+                }
+            } else if items[index].state == .duplicate {
+                items[index].duplicateUserPlaceID = nil
+                items[index].state = items[index].selectedCandidateID == nil && items[index].candidates.count > 1
+                    ? .ambiguous
+                    : .ready
+                items[index].updatedAt = .now
+                changedBatchIDs.insert(items[index].batchID)
+            }
+        }
+
+        for batchID in changedBatchIDs {
+            synchronizeBatch(batchID, persist: false)
+        }
+        if !changedBatchIDs.isEmpty {
+            persist()
+        }
+    }
+
+    func waitForProcessing(batchID: String) async {
+        await processingTasks[batchID]?.value
+    }
+
+    private func startProcessing(batchID: String) {
+        guard processingTasks[batchID] == nil,
+              items.contains(where: { $0.batchID == batchID && $0.state == .queued })
+        else { return }
+
+        processingTasks[batchID] = Task { [weak self] in
+            await self?.process(batchID: batchID)
+        }
+    }
+
+    private func process(batchID: String) async {
+        while !Task.isCancelled,
+              let index = items.firstIndex(where: { $0.batchID == batchID && $0.state == .queued }) {
+            items[index].state = .resolving
+            items[index].updatedAt = .now
+            let itemID = items[index].id
+            let seed = items[index].seed
+            let source = items[index].source
+            synchronizeBatch(batchID)
+
+            do {
+                let resolution = try await resolver.resolve(seed: seed, source: source)
+                guard !Task.isCancelled,
+                      let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
+                else { break }
+                apply(resolution, at: resolvedIndex)
+            } catch {
+                guard !Task.isCancelled,
+                      let failedIndex = items.firstIndex(where: { $0.id == itemID })
+                else { break }
+                items[failedIndex].state = .failed
+                items[failedIndex].helpMessage = error.localizedDescription
+                items[failedIndex].updatedAt = .now
+            }
+            synchronizeBatch(batchID)
+            await Task.yield()
+        }
+        processingTasks[batchID] = nil
+        synchronizeBatch(batchID)
+    }
+
+    private func apply(_ resolution: PlaceImportResolution, at index: Int) {
+        switch resolution {
+        case .candidates(let candidates, let selectedCandidateID):
+            items[index].candidates = candidates
+            items[index].selectedCandidateID = selectedCandidateID
+            items[index].state = selectedCandidateID == nil ? .ambiguous : .ready
+            items[index].helpMessage = nil
+        case .needsHelp(let message):
+            items[index].candidates = []
+            items[index].selectedCandidateID = nil
+            items[index].state = .needsHelp
+            items[index].helpMessage = message
+        }
+        items[index].updatedAt = .now
+    }
+
+    private func synchronizeAllBatches(persist: Bool) {
+        for batchID in batches.map(\.id) {
+            synchronizeBatch(batchID, persist: false)
+        }
+        if persist {
+            self.persist()
+        }
+    }
+
+    private func synchronizeBatch(_ batchID: String, persist: Bool = true) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        let batchItems = items(for: batchID)
+        let pendingCount = batchItems.filter { [.queued, .resolving].contains($0.state) }.count
+        let terminalCount = batchItems.filter { [.saved, .duplicate, .dismissed].contains($0.state) }.count
+        batches[index].totalCount = batchItems.count
+        batches[index].processedCount = batchItems.count - pendingCount
+        batches[index].updatedAt = .now
+
+        if batches[index].state != .cancelled {
+            if pendingCount > 0 {
+                batches[index].state = .processing
+            } else if terminalCount == batchItems.count {
+                batches[index].state = .complete
+            } else {
+                batches[index].state = .ready
+            }
+        }
+        if persist {
+            self.persist()
+        }
+    }
+
+    private func persist() {
+        do {
+            try persistence.save(PlaceImportSnapshot(batches: batches, items: items))
+            persistenceError = nil
+        } catch {
+            persistenceError = "Import progress could not be saved. Keep rec.me open and try again."
+        }
+    }
+
+    private func existingPlaceMatches(_ existing: PlaceImportExistingPlace, candidate: PlaceCandidate) -> Bool {
+        if let existingProviderID = existing.sourceProviderPlaceID,
+           let candidateProviderID = candidate.sourceProviderPlaceID,
+           existingProviderID == candidateProviderID,
+           existing.sourceProvider == candidate.sourceProvider {
+            return true
+        }
+
+        let existingName = normalizedName(existing.name)
+        let candidateName = normalizedName(candidate.name)
+        guard existingName == candidateName else { return false }
+        guard let existingLatitude = existing.latitude,
+              let existingLongitude = existing.longitude,
+              let candidateLatitude = candidate.latitude,
+              let candidateLongitude = candidate.longitude
+        else {
+            return true
+        }
+        return abs(existingLatitude - candidateLatitude) < 0.001
+            && abs(existingLongitude - candidateLongitude) < 0.001
+    }
+
+    private func normalizedName(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+}
