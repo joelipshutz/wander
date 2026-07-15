@@ -1,6 +1,6 @@
 # REC-90 Discover Redesign: Full-State Design Review
 
-Status: IN PROGRESS — mock v1 complete; Joe visual approval is the blocking gate before engineering review.
+Status: IN PROGRESS — mock v1.2 compares Direction A and Direction B; Joe’s direction choice is the blocking gate before engineering review.
 
 Linear: [REC-90](https://linear.app/recme/issue/REC-90/redesign-discover-around-activity-nearby-place-memories-and-people)
 
@@ -17,7 +17,7 @@ REC-90 gives Discover one stable structure with two peer modes:
 
 The design borrows Beli's scannable Places / People pattern without importing its leaderboard language, restaurant-only framing, five-tab navigation, blue brand system, or popularity model.
 
-Initial design completeness was 7/10. Mock v1 brings specified visual and state coverage to 9/10. The missing point is Joe's taste/approval pass and any resulting revision.
+Initial design completeness was 7/10. Mock v1.2 brings specified visual and state coverage to 9/10 across two directions. The missing point is Joe’s direction choice, taste/approval pass, and any resulting product-contract revision.
 
 ## Not in scope
 
@@ -209,6 +209,37 @@ The recommendation card is not a general-purpose profile card. Its reason, dismi
 
 ## Pass 7 — Decisions and Gates
 
+### Founder-requested Direction B exploration
+
+Joe requested a second visual direction after reviewing Direction A. Direction B reframes Discover as a social answer engine whose primary job is: `Find a place that fits this moment, using evidence from people I trust.` It is represented by three additional full-screen journeys and does not replace the approved product contract unless Joe selects it.
+
+Direction B zero-query order:
+
+1. Existing Places / People peer tabs for persistent wayfinding.
+2. One universal search for places, people, vibes, and moments.
+3. Horizontally scrolling useful prompts.
+4. `People Worth Following` using the same approved horizontal recommendation cards, placed before place and activity modules.
+5. `Nearby From Your People` with distance and human provenance.
+6. `New From Your People`, limited to useful recent evidence rather than a dominant event feed.
+7. Confidence-appropriate place recovery when eligible.
+
+Direction B active-answer order:
+
+1. Preserved query with clear control.
+2. Editable `Understood as` chips for person, category, intent, and area.
+3. A visible source-person anchor and plain-language answer summary.
+4. `Show on map` plus meaningful refinements.
+5. Results ordered by the requested truth rule, each with a `Why it matched` explanation.
+
+The visual mock makes the proposed truth contract explicit:
+
+- `Joe’s restaurants` may contain Joe’s Been and Wanna Go restaurants only when each status is clearly labeled.
+- `Joe’s favorite restaurants` means Been plus Joe’s explicit Favorite label or rating of 4+, sorted by Joe’s rating. Wanna Go is excluded.
+- Apostrophe-less `Joes` must resolve against eligible known people rather than silently dropping the owner.
+- A zero-favorite result remains zero and offers `Show Joe’s visited restaurants`; the query never broadens silently.
+
+The reported parser/race defects are engineering inputs, not claims that the mock fixes production behavior. If Joe selects Direction B, the office-hours product spec must be revised and `plan-eng-review` must cover cancellation/stale-result protection, semantic-empty filters, owner resolution, substring false matches, real LA filtering, and strict server/client truth enforcement before implementation.
+
 ### Resolved in the approved product contract
 
 - Places is the default peer mode; People is not a modal or onboarding-only screen.
@@ -222,9 +253,10 @@ The recommendation card is not a general-purpose profile card. Its reason, dismi
 
 ### Awaiting Joe visual approval
 
-1. Approve the mock v1 direction and density, especially the 180pt horizontal people cards and compact low-network value note.
-2. Approve the confidence-matched place recovery copy and provenance treatment.
-3. Approve using grouped body-state boards as the compact full-state handoff, with the 10 main journeys represented as full phone screens. Journey 02 explicitly shows the complete Activity-empty screen because the compact board crop hid persistent navigation chrome.
+1. Choose Direction A, Direction B, or request a named hybrid. Direction B currently preserves the Places / People tabs and moves the horizontal People shelf directly below search prompts.
+2. Approve the strict friend/favorite/Wanna Go truth contract before it becomes a product or engineering requirement.
+3. Approve the confidence-matched place recovery copy and provenance treatment shared by both directions.
+4. Approve using grouped body-state boards as the compact full-state handoff, with 10 Direction A journeys and 3 Direction B journeys represented as full phone screens. Journey A2 explicitly shows the complete Activity-empty screen because the compact board crop hid persistent navigation chrome.
 
 Any requested visual changes are applied to the mock and this document before the design gate closes.
 
@@ -238,6 +270,8 @@ Use five authenticated users who follow 0–4 non-blocked people.
 4. Complete the follow and switch to Places. Ask what changed and whether the new Activity content feels expected.
 5. Show one strong and one weak recovery candidate. Ask why each appeared, what rec.me knows, and whether either feels invasive.
 6. Exercise one Follow failure and offline cache state. Ask whether the current truth is clear and what action is available.
+7. Compare Direction A home with Direction B home. Ask which screen helps them choose a place sooner and whether People still feels sufficiently prominent.
+8. Give `Joe’s favorite restaurants` a zero-result and a populated result. Ask what each result claims, whether they expect Wanna Go places, and whether the suggested fallback feels honest.
 
 Gate metrics remain those in the canonical product contract. This review does not weaken them.
 
@@ -256,24 +290,27 @@ Gate metrics remain those in the canonical product contract. This review does no
 
 | Surface | Artifact | Status | Approval note |
 |---|---|---|---|
-| Main journeys | `preview/discover-redesign/index.html` → Main journeys | Pending Joe | Ten full-screen flow states. |
+| Main journeys | `preview/discover-redesign/index.html` → Main journeys | Pending Joe | Ten Direction A flows plus three Direction B flows. |
 | Full-state boards | `preview/discover-redesign/index.html` → State boards | Pending Joe | Five boards covering data, mutation, recovery, and accessibility states. |
 | Places overview | `preview/discover-redesign/discover-journeys.png` | Pending Joe | 390pt default Places. |
 | Activity-empty screen | `preview/discover-redesign/discover-activity-empty.png` | Pending Joe | Full 390pt screen with persistent Places / People tabs, search, and four-tab navigation. |
 | People overview | `preview/discover-redesign/discover-people.png` | Pending Joe | 390pt populated People. |
+| Direction B home | `preview/discover-redesign/discover-direction-b-home.png` | Pending Joe | Universal search, prompts, and horizontal People shelf first. |
+| Direction B answer | `preview/discover-redesign/discover-direction-b-answer.png` | Pending Joe | Joe-anchored favorite answer with interpretation, map, refinements, and match reasons. |
+| Direction B zero result | `preview/discover-redesign/discover-direction-b-zero.png` | Pending Joe | `Joes` resolves to Joe; strict Favorite returns zero and offers an explicit visited fallback. |
 | State overview | `preview/discover-redesign/discover-states.png` | Pending Joe | Places state board; other boards are interactive in HTML. |
 
 ## Review Log
 
 | Pass | Result | Evidence |
 |---|---|---|
-| IA | Pass pending taste approval | Stable Places/People hierarchy and search replacement contract. |
+| IA | Pass pending direction choice | Direction A and B both preserve Places/People wayfinding; Direction B changes zero-query priority and answer structure. |
 | States | Pass | Product-state table plus 5 rendered state boards. |
 | Emotional journey | Pass | Value comprehension and trust mechanisms mapped per moment. |
 | AI-slop/trust | Pass | No leaderboard, fake preview, generic travel treatment, or structural emoji. |
 | Design system | Pass pending final DESIGN.md reconciliation | Existing tokens/components are reused; conflict is explicit. |
-| Responsive/accessibility | Pass for artifact | No horizontal overflow across 10 screens at 390pt and 320pt/1.32×; 44pt product targets; zero console errors. |
-| Unresolved decisions | Blocked on one gate | Joe must approve or revise mock v1 before engineering review. |
+| Responsive/accessibility | Pass for artifact | No horizontal overflow across all 13 screens at 390pt and 320pt/1.32×; 44pt product targets; zero console errors. |
+| Unresolved decisions | Blocked on one gate | Joe must choose or revise Direction A/B before engineering review. |
 
 ## GSTACK REVIEW REPORT
 
@@ -285,15 +322,15 @@ What is ready:
 
 - Stable information architecture.
 - Full product-state and visual-state contract.
-- Ten full-screen main journeys.
+- Ten Direction A journeys plus three Direction B journeys.
 - Five grouped state boards.
 - Responsive/accessibility behavior and verification evidence.
 - Explicit design-to-engineering tasks.
 
 Concern:
 
-- This is still a designer/founder taste decision. No engineering review or implementation should begin until Joe approves the mock direction or provides revision notes.
+- The canonical product spec still reflects Direction A. No engineering review or implementation should begin until Joe chooses A, B, or a named hybrid and the product contract is reconciled.
 
 ### UNRESOLVED DECISIONS
 
-- Joe approval of mock v1 density, people-card treatment, value note, and strong/weak recovery presentation.
+- Joe selection of Direction A, Direction B, or a named hybrid, followed by approval of density, people-card treatment, search truth contract, and strong/weak recovery presentation.

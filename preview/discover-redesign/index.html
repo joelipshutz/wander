@@ -36,9 +36,9 @@
     <div>
       <p class="eyebrow">REC-90 · pre-engineering design gate</p>
       <h1>Discover that builds the network</h1>
-      <p class="lab-lede">Beli's scannable Places / People structure, translated into rec.me's trust model and warm map-first system.</p>
+      <p class="lab-lede">Compare a Beli-balanced social shelf with a provenance-first answer engine. Both keep people visible and trusted evidence legible.</p>
     </div>
-    <div class="status-chip"><span></span> Mock v1.1 · awaiting Joe</div>
+    <div class="status-chip"><span></span> Mock v1.2 · choose A or B</div>
   </header>
 
   <main class="design-room">
@@ -54,6 +54,7 @@
       <section class="control-group journey-controls">
         <p class="control-label">Journey</p>
         <nav class="scenario-list" aria-label="Journey screens">
+          <p class="scenario-group-label"><span>A</span>Beli-balanced</p>
           <button class="scenario-button is-active" data-screen="places-populated"><span>01</span><b>Places · home</b><small>Activity + strong recovery</small></button>
           <button class="scenario-button" data-screen="activity-empty"><span>02</span><b>Places · empty</b><small>Persistent tabs + Find People</small></button>
           <button class="scenario-button" data-screen="people-populated"><span>03</span><b>People · suggestions</b><small>Trust reasons + follow value</small></button>
@@ -64,6 +65,10 @@
           <button class="scenario-button" data-screen="weak-recovery"><span>08</span><b>Weak recovery</b><small>No false visit claim</small></button>
           <button class="scenario-button" data-screen="profile-open"><span>09</span><b>Profile · preview</b><small>Public shell before follow</small></button>
           <button class="scenario-button" data-screen="signed-out"><span>10</span><b>Signed out</b><small>Honest People auth gate</small></button>
+          <p class="scenario-group-label direction-b-label"><span>B</span>Social answer engine</p>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-home"><span>B1</span><b>Answer engine · home</b><small>Search + people first</small></button>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-answer"><span>B2</span><b>Answer · Joe’s favorites</b><small>Provenance + truth contract</small></button>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-empty"><span>B3</span><b>Answer · no favorites</b><small>Resolve Joe, never broaden</small></button>
         </nav>
       </section>
 
@@ -90,14 +95,14 @@
 
       <section class="decision-note">
         <p class="control-label">Locked intent</p>
-        <p>Places stays useful first. People explains why each person belongs. Following unlocks authorized place activity, never private previews.</p>
+        <p>People stays prominent in both directions. Every place answer names its human source. Following unlocks authorized place evidence, never private previews.</p>
       </section>
     </aside>
 
     <section class="preview-stage" aria-live="polite">
       <div class="journey-workspace">
         <div class="phone-note">
-          <span id="screen-kicker">Journey 01 of 10</span>
+          <span id="screen-kicker">Direction A · Journey 01 of 10</span>
           <strong id="screen-title">Places home</strong>
           <p id="screen-note">Default landing: newest-first Activity, then only the recovery shelf the evidence supports.</p>
         </div>

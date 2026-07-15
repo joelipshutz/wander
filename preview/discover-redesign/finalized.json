@@ -5,8 +5,8 @@
   "html_file": "preview/discover-redesign/index.html",
   "pretext_tier": "card/list layout with prepare() and layout()",
   "framework": "vanilla",
-  "iterations": 1,
-  "date": "2026-07-15T09:23:00-07:00",
+  "iterations": 2,
+  "date": "2026-07-15T09:48:08-07:00",
   "screen": "rec-90-discover-design-room",
   "branch": "codex/rec-90-discover-plan",
   "approval_status": "awaiting-joe"
