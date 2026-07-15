@@ -134,7 +134,7 @@ struct ProfileSocialGraphScreen: View {
             }
             .task { await refresh() }
             .refreshable { await refresh() }
-            .sheet(item: $selectedProfileID) { selection in
+            .fullScreenCover(item: $selectedProfileID) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)

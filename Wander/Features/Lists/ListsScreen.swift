@@ -82,7 +82,7 @@ struct ListsScreen: View {
                     initialSelectedPlaceID: scenario == .mapSelectedPlace ? list.places.first?.id : nil
                 )
             }
-            .sheet(isPresented: profileDestinationBinding) {
+            .fullScreenCover(isPresented: profileDestinationBinding) {
                 if let selectedProfileID {
                     ProfileDetailView(profileID: selectedProfileID)
                         .environmentObject(store)

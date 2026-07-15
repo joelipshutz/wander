@@ -176,7 +176,7 @@ struct DiscoverScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
-            .sheet(item: $selectedProfile) { profile in
+            .fullScreenCover(item: $selectedProfile) { profile in
                 ProfileDetailView(profileID: profile.id) { blockedProfileID in
                     handleMemberBlocked(profileID: blockedProfileID)
                 }

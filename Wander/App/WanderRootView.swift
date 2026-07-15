@@ -97,7 +97,7 @@ struct WanderRootView: View {
                     .environmentObject(pushNotifications)
             }
         }
-        .sheet(item: $sharedProfile) { route in
+        .fullScreenCover(item: $sharedProfile) { route in
             ProfileDetailView(profileID: route.profileID)
                 .environmentObject(store)
                 .environmentObject(auth)

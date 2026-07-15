@@ -58,17 +58,37 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
-        let files = [
-            "Wander/Features/Discover/DiscoverScreen.swift",
-            "Wander/Features/Lists/ListsScreen.swift",
-            "Wander/Features/Map/MapScreen.swift",
-            "Wander/Features/Profile/ProfileSocialGraphScreen.swift"
+        let presentations = [
+            ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
+            ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
         ]
 
-        for file in files {
+        for (file, presentation) in presentations {
             let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
             XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
+            XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
         }
+    }
+
+    func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+
+        XCTAssertTrue(home.contains("systemImage: \"chevron.left\""))
+        XCTAssertTrue(home.contains(".popover("))
+        XCTAssertTrue(home.contains("attachmentAnchor: .rect(.bounds)"))
+        XCTAssertTrue(home.contains("arrowEdge: .top"))
+        XCTAssertTrue(home.contains(".presentationCompactAdaptation(.popover)"))
+        XCTAssertFalse(profileScreen.contains(".confirmationDialog(\"Profile actions\""))
+        XCTAssertTrue(profileScreen.contains("if profile == nil"), "Full-screen loading and unavailable states need a dismiss control")
     }
 
     func testNativeSharingStaysBehindTheSharedShareComponent() throws {

@@ -20,6 +20,14 @@ enum ProfileHomeMode: Equatable {
     }
 }
 
+struct ProfileMemberActions {
+    let canUnfollow: Bool
+    let isMuted: Bool
+    let unfollowAction: () -> Void
+    let toggleMuteAction: () -> Void
+    let blockAction: () -> Void
+}
+
 struct ProfileOwnerHome: View {
     let profile: LocalProfile
     let mode: ProfileHomeMode
@@ -33,12 +41,14 @@ struct ProfileOwnerHome: View {
     let editAction: () -> Void
     let settingsAction: () -> Void
     let relationshipAction: () -> Void
-    let moreAction: () -> Void
+    let backAction: (() -> Void)?
+    let memberActions: ProfileMemberActions?
     let graphAction: (ProfileSocialGraphTab) -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
     let inCommonAction: () -> Void
     let calendarDateAction: (Date, [String]) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
+    @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
 
     var body: some View {
         ScrollView {
@@ -76,6 +86,14 @@ struct ProfileOwnerHome: View {
                     .accessibilityAddTraits(.isHeader)
 
                 HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                    if let backAction {
+                        ProfileHeaderActionButton(
+                            systemImage: "chevron.left",
+                            accessibilityLabel: "Back",
+                            action: backAction
+                        )
+                    }
+
                     Text(profile.displayName)
                         .font(.system(size: 30, weight: .black))
                         .lineLimit(2)
@@ -101,8 +119,24 @@ struct ProfileOwnerHome: View {
 
                     if mode.isOwner {
                         ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                    } else {
-                        ProfileHeaderActionButton(systemImage: "ellipsis", accessibilityLabel: "More profile actions", action: moreAction)
+                    } else if let memberActions {
+                        ProfileHeaderActionButton(
+                            systemImage: "ellipsis",
+                            accessibilityLabel: "More profile actions"
+                        ) {
+                            showsMemberActions.toggle()
+                        }
+                        .popover(
+                            isPresented: $showsMemberActions,
+                            attachmentAnchor: .rect(.bounds),
+                            arrowEdge: .top
+                        ) {
+                            ProfileMemberActionsPopover(
+                                actions: memberActions,
+                                dismiss: { showsMemberActions = false }
+                            )
+                            .presentationCompactAdaptation(.popover)
+                        }
                     }
                 }
             }
@@ -267,7 +301,62 @@ struct ProfileOwnerHome: View {
     }
 }
 
-private struct ProfileHeaderActionButton: View {
+private struct ProfileMemberActionsPopover: View {
+    let actions: ProfileMemberActions
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if actions.canUnfollow {
+                actionButton(
+                    title: "Unfollow",
+                    systemImage: "person.badge.minus",
+                    role: .destructive,
+                    action: actions.unfollowAction
+                )
+                Divider()
+            }
+
+            actionButton(
+                title: actions.isMuted ? "Unmute activity" : "Mute activity",
+                systemImage: actions.isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                action: actions.toggleMuteAction
+            )
+            Divider()
+            actionButton(
+                title: "Block",
+                systemImage: "hand.raised.fill",
+                role: .destructive,
+                action: actions.blockAction
+            )
+        }
+        .frame(width: 236)
+        .padding(.vertical, WanderTheme.spacing1)
+        .background(WanderTheme.surfaceBone.color)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Profile actions")
+    }
+
+    private func actionButton(
+        title: String,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role) {
+            dismiss()
+            action()
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 15, weight: .bold))
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                .padding(.horizontal, WanderTheme.spacing3)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct ProfileHeaderActionButton: View {
     let systemImage: String
     let accessibilityLabel: String
     let action: () -> Void

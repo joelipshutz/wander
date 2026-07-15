@@ -48,7 +48,8 @@ struct ProfileScreen: View {
                 editAction: { showsEditProfile = true },
                 settingsAction: { showsSettings = true },
                 relationshipAction: {},
-                moreAction: {},
+                backAction: nil,
+                memberActions: nil,
                 graphAction: { socialGraphTab = $0 },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
@@ -790,7 +791,6 @@ struct ProfileDetailView: View {
     @State private var socialGraphTab: ProfileSocialGraphTab?
     @State private var savedListMode: SavedPlacesListMode?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
-    @State private var showsMemberActions = false
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
     @State private var isLoading = true
@@ -806,49 +806,68 @@ struct ProfileDetailView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let profile {
-                    ProfileOwnerHome(
-                        profile: profile,
-                        mode: .member(
-                            relationship: store.relationship(to: profileID),
-                            inCommonCount: inCommonPlaces.count
-                        ),
-                        stats: profileStats,
-                        followerCount: store.followers(of: profileID).count,
-                        followingCount: store.following(of: profileID).count,
-                        insights: profileInsights,
-                        selectedMonth: $selectedMonth,
-                        isAvatarSaving: false,
-                        avatarAction: {},
-                        editAction: {},
-                        settingsAction: {},
-                        relationshipAction: handleRelationshipAction,
-                        moreAction: { showsMemberActions = true },
-                        graphAction: { socialGraphTab = $0 },
-                        savedPlacesAction: { status in
-                            savedListMode = status == .been ? .been : .wanna
-                        },
-                        inCommonAction: { savedListMode = .inCommon },
-                        calendarDateAction: { date, placeIDs in
-                            placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
-                        },
-                        mapSummaryAction: { kind, item in
-                            placeCollectionRoute = .mapSummary(kind: kind, item: item)
-                        }
-                    )
-                } else if isLoading {
-                    ProgressView("Loading profile")
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if let profile {
+                        ProfileOwnerHome(
+                            profile: profile,
+                            mode: .member(
+                                relationship: store.relationship(to: profileID),
+                                inCommonCount: inCommonPlaces.count
+                            ),
+                            stats: profileStats,
+                            followerCount: store.followers(of: profileID).count,
+                            followingCount: store.following(of: profileID).count,
+                            insights: profileInsights,
+                            selectedMonth: $selectedMonth,
+                            isAvatarSaving: false,
+                            avatarAction: {},
+                            editAction: {},
+                            settingsAction: {},
+                            relationshipAction: handleRelationshipAction,
+                            backAction: { dismiss() },
+                            memberActions: ProfileMemberActions(
+                                canUnfollow: store.relationship(to: profileID) == .follower || store.relationship(to: profileID) == .mutual,
+                                isMuted: store.isMuted(userID: profileID),
+                                unfollowAction: { showUnfollowConfirm = true },
+                                toggleMuteAction: toggleMute,
+                                blockAction: { showBlockConfirm = true }
+                            ),
+                            graphAction: { socialGraphTab = $0 },
+                            savedPlacesAction: { status in
+                                savedListMode = status == .been ? .been : .wanna
+                            },
+                            inCommonAction: { savedListMode = .inCommon },
+                            calendarDateAction: { date, placeIDs in
+                                placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                            },
+                            mapSummaryAction: { kind, item in
+                                placeCollectionRoute = .mapSummary(kind: kind, item: item)
+                            }
+                        )
+                    } else if isLoading {
+                        ProgressView("Loading profile")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .wanderScreen()
+                    } else {
+                        AccessChangedPanel(
+                            title: "This profile isn't available",
+                            subtitle: "It may have been removed, blocked, or become unavailable."
+                        )
+                        .padding(WanderTheme.spacing4)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .wanderScreen()
-                } else {
-                    AccessChangedPanel(
-                        title: "This profile isn't available",
-                        subtitle: "It may have been removed, blocked, or become unavailable."
+                    }
+                }
+
+                if profile == nil {
+                    ProfileHeaderActionButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Back",
+                        action: { dismiss() }
                     )
-                    .padding(WanderTheme.spacing4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .wanderScreen()
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
                 }
             }
             .navigationDestination(item: $savedListMode) { mode in
@@ -868,16 +887,6 @@ struct ProfileDetailView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
-            }
-            .confirmationDialog("Profile actions", isPresented: $showsMemberActions, titleVisibility: .visible) {
-                if store.relationship(to: profileID) == .follower || store.relationship(to: profileID) == .mutual {
-                    Button("Unfollow", role: .destructive) { showUnfollowConfirm = true }
-                }
-                Button(store.isMuted(userID: profileID) ? "Unmute activity" : "Mute activity") {
-                    toggleMute()
-                }
-                Button("Block", role: .destructive) { showBlockConfirm = true }
-                Button("Cancel", role: .cancel) {}
             }
             .alert("Block this person?", isPresented: $showBlockConfirm) {
                 Button("Block", role: .destructive) { confirmBlock() }
@@ -1586,7 +1595,7 @@ private struct GraphListScreen: View {
             .scrollContentBackground(.hidden)
             .wanderScreen()
             .navigationTitle(mode.rawValue.capitalized)
-            .sheet(item: $selectedProfile) { selection in
+            .fullScreenCover(item: $selectedProfile) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)

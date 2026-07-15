@@ -6275,7 +6275,7 @@ private struct PlaceActivityCard: View {
                 await importPhotos(from: items)
             }
         }
-        .sheet(isPresented: profileDestinationBinding) {
+        .fullScreenCover(isPresented: profileDestinationBinding) {
             if let selectedProfileID {
                 ProfileDetailView(profileID: selectedProfileID)
                     .environmentObject(store)
