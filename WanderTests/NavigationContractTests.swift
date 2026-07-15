@@ -236,6 +236,44 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.sharedVisitBannerDestinationTab, .profile)
     }
 
+    func testSharedVisitCompanionPresentationUsesViewerAvatarOrderAndYouCopy() {
+        let joe = SharedVisitCompanion(
+            visitID: "visit-joe",
+            userID: "user-joe",
+            handle: "joe",
+            displayName: "Joe Lipshutz",
+            avatarURL: "https://example.com/joe.jpg"
+        )
+        let ryan = SharedVisitCompanion(
+            visitID: "visit-joe",
+            userID: "user-ryan",
+            handle: "ryan",
+            displayName: "Ryan L",
+            avatarURL: "https://example.com/ryan.jpg"
+        )
+
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID),
+            [ryan, joe]
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [ryan], currentUserID: ryan.userID),
+            "with You"
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [], currentUserID: ryan.userID),
+            ""
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [joe, ryan], currentUserID: ryan.userID),
+            "with You and Joe Lipshutz"
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID).first?.avatarURL,
+            "https://example.com/ryan.jpg"
+        )
+    }
+
     func testSharedVisitBannerOnlySurfacesNewInvitationGenerations() {
         let generationOne = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 1)
         let generationTwo = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 2)

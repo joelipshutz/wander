@@ -6174,7 +6174,10 @@ private struct PlaceActivityCard: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             header
 
-            SharedVisitCompanionLabel(companions: companions) { profileID in
+            SharedVisitCompanionLabel(
+                companions: companions,
+                currentUserID: store.currentUser.id
+            ) { profileID in
                 selectedProfileID = profileID
             }
 

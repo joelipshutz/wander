@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(70);
+select plan(73);
 
 create temporary table test_shared_participant_ids (
   user_id text primary key,
@@ -163,6 +163,10 @@ values
   ('shared_friend_three', 'sharedfriendthree', 'Ari Friend', false),
   ('shared_private', 'sharedprivate', 'Private Friend', true),
   ('shared_stranger', 'sharedstranger', 'Stranger', false);
+
+update public.profiles
+set avatar_url = 'https://example.com/shared-owner.jpg'
+where id = 'shared_owner';
 
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
@@ -338,7 +342,7 @@ select results_eq(
     order by created_at desc
     limit 1
   $$,
-  $$ values ('Shared visit'::text, 'Joe Owner saved Shared Visit Cafe with you. Add your version of the visit.'::text) $$,
+  $$ values ('Shared visit'::text, 'Joe Owner saved Shared Visit Cafe with you. Add your details from this visit'::text) $$,
   'shared-visit notification uses recipient-safe copy'
 );
 select ok(
@@ -522,6 +526,39 @@ select is(
   ),
   'shared_recipient',
   'source owner sees the accepted friend attribution'
+);
+select is(
+  (
+    select companion_user_id
+    from public.get_shared_visit_companion_context(
+      array['87000000-0000-0000-0000-000000000001'::uuid]
+    )
+  ),
+  'shared_owner',
+  'source owner appears as the viewer companion on the recipients readable card'
+);
+select is(
+  (
+    select companion_avatar_url
+    from public.get_shared_visit_companion_context(
+      array['87000000-0000-0000-0000-000000000001'::uuid]
+    )
+    where companion_user_id = 'shared_owner'
+  ),
+  'https://example.com/shared-owner.jpg',
+  'viewer companion context preserves the current profiles avatar'
+);
+
+select set_config('request.jwt.claim.sub', 'shared_stranger', true);
+select is(
+  (
+    select count(*)::integer
+    from public.get_shared_visit_companion_context(
+      array['87000000-0000-0000-0000-000000000001'::uuid]
+    )
+  ),
+  0,
+  'an account that cannot read the recipient visit cannot read its companions'
 );
 
 select set_config('request.jwt.claim.sub', 'shared_recipient', true);

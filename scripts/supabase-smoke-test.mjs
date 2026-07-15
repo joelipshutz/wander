@@ -453,9 +453,22 @@ from public.create_shared_visit_invites(
 ) invite;
 
 do $shared_invite$
+declare
+  notification_body text;
 begin
   if (select count(*) from smoke_shared_visit_invitation) <> 1 then
     raise exception 'shared visit invite creation failed';
+  end if;
+
+  select event.body into notification_body
+  from public.notification_events event
+  where event.recipient_user_id = ${collaboratorUser}
+    and event.notification_type = 'shared_visit'
+  order by event.created_at desc
+  limit 1;
+  if notification_body not like '% with you. Add your details from this visit'
+     or notification_body like '%Add your version of the visit%' then
+    raise exception 'shared visit notification copy failed';
   end if;
 end
 $shared_invite$;
@@ -566,6 +579,20 @@ end
 $shared_companion$;
 
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+do $shared_owner_remote_companion$
+declare
+  companion_id text;
+begin
+  select companion.companion_user_id into companion_id
+  from public.get_shared_visit_companion_context(
+    array['58000000-0000-0000-0000-000000000003'::uuid]
+  ) companion;
+  if companion_id is distinct from ${smokeUser} then
+    raise exception 'shared visit viewer attribution on a readable remote visit failed';
+  end if;
+end
+$shared_owner_remote_companion$;
+
 do $shared_remove$
 declare
   active_count integer;

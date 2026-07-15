@@ -850,6 +850,7 @@ struct ProfileDetailView: View {
                             stats: profileStats,
                             followerCount: store.followers(of: profileID).count,
                             followingCount: store.following(of: profileID).count,
+                            sharedVisitInvitationCount: 0,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
                             isAvatarSaving: false,
@@ -866,6 +867,7 @@ struct ProfileDetailView: View {
                                 blockAction: { showBlockConfirm = true }
                             ),
                             graphAction: { socialGraphTab = $0 },
+                            sharedVisitInvitationsAction: {},
                             savedPlacesAction: { status in
                                 savedListMode = status == .been ? .been : .wanna
                             },

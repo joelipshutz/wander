@@ -191,32 +191,60 @@ struct SharedVisitFriendPicker: View {
     }
 }
 
+enum SharedVisitCompanionPresentation {
+    static func ordered(
+        _ companions: [SharedVisitCompanion],
+        currentUserID: String
+    ) -> [SharedVisitCompanion] {
+        companions.filter { $0.userID == currentUserID }
+            + companions.filter { $0.userID != currentUserID }
+    }
+
+    static func text(
+        companions: [SharedVisitCompanion],
+        currentUserID: String
+    ) -> String {
+        let names = ordered(companions, currentUserID: currentUserID).map { companion in
+            companion.userID == currentUserID ? "You" : companion.displayName
+        }
+        guard !names.isEmpty else { return "" }
+        if names.count == 1 { return "with \(names[0])" }
+        if names.count == 2 { return "with \(names[0]) and \(names[1])" }
+        return "with \(names[0]), \(names[1]) +\(names.count - 2)"
+    }
+}
+
 struct SharedVisitCompanionLabel: View {
     let companions: [SharedVisitCompanion]
+    let currentUserID: String
     var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         if !companions.isEmpty {
             HStack(spacing: WanderTheme.spacing2) {
                 HStack(spacing: -8) {
-                    ForEach(companions.prefix(3)) { companion in
-                        Button {
-                            onSelect?(companion.userID)
-                        } label: {
-                            WanderAvatar(
-                                initials: String(companion.displayName.prefix(2)).uppercased(),
-                                avatarURL: companion.avatarURL,
-                                size: 26,
-                                color: WanderTheme.pinSocial.color
-                            )
-                            .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+                    ForEach(displayCompanions.prefix(3)) { companion in
+                        if companion.userID == currentUserID {
+                            companionAvatar(companion)
+                                .accessibilityLabel("You")
+                        } else {
+                            Button {
+                                onSelect?(companion.userID)
+                            } label: {
+                                companionAvatar(companion)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(onSelect == nil)
+                            .accessibilityLabel("Open \(companion.displayName)'s profile")
                         }
-                        .buttonStyle(.plain)
-                        .disabled(onSelect == nil)
-                        .accessibilityLabel("Open \(companion.displayName)'s profile")
                     }
                 }
-                Text(companionText)
+                Text(
+                    SharedVisitCompanionPresentation.text(
+                        companions: companions,
+                        currentUserID: currentUserID
+                    )
+                )
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
@@ -225,11 +253,18 @@ struct SharedVisitCompanionLabel: View {
         }
     }
 
-    private var companionText: String {
-        let names = companions.map(\.displayName)
-        if names.count == 1 { return "with \(names[0])" }
-        if names.count == 2 { return "with \(names[0]) and \(names[1])" }
-        return "with \(names[0]), \(names[1]) +\(names.count - 2)"
+    private var displayCompanions: [SharedVisitCompanion] {
+        SharedVisitCompanionPresentation.ordered(companions, currentUserID: currentUserID)
+    }
+
+    private func companionAvatar(_ companion: SharedVisitCompanion) -> some View {
+        WanderAvatar(
+            initials: String(companion.displayName.prefix(2)).uppercased(),
+            avatarURL: companion.avatarURL,
+            size: 26,
+            color: WanderTheme.pinSocial.color
+        )
+        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
     }
 }
 
