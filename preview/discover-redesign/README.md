@@ -1,6 +1,6 @@
 # REC-90 Discover design room
 
-Status: mock v1, awaiting Joe's visual approval. This package is a design artifact only. It does not authorize engineering implementation.
+Status: mock v1.1, awaiting Joe's visual approval. This package is a design artifact only. It does not authorize engineering implementation.
 
 Open `index.html` through a local HTTP server so the vendored Pretext text-layout module can load:
 
@@ -14,14 +14,15 @@ Then open `http://127.0.0.1:4173/`.
 ## Main journeys
 
 1. Places default with newest-first Activity and strong place recovery.
-2. People suggestions with one trust reason, public profile context, and Follow.
-3. People search with active-query replacement behavior.
-4. Follow success that stays in place for the current appearance.
-5. Updated Activity after the new authorized follow.
-6. Strong place recovery using `Been` / `Wanna Go` and explicit foreground provenance.
-7. Weak place recovery using `Pick Up Where You Left Off`, with no visit claim.
-8. Public profile preview with no protected place names, counts, or categories.
-9. Signed-out People auth gate with no anonymous lookup or personalized request.
+2. Empty Activity with the full Discover chrome still present: Places / People, search, and the four-tab navigation.
+3. People suggestions with one trust reason, public profile context, and Follow.
+4. People search with active-query replacement behavior.
+5. Follow success that stays in place for the current appearance.
+6. Updated Activity after the new authorized follow.
+7. Strong place recovery using `Been` / `Wanna Go` and explicit foreground provenance.
+8. Weak place recovery using `Pick Up Where You Left Off`, with no visit claim.
+9. Public profile preview with no protected place names, counts, or categories.
+10. Signed-out People auth gate with no anonymous lookup or personalized request.
 
 ## State boards
 
@@ -30,6 +31,8 @@ Then open `http://127.0.0.1:4173/`.
 - Social mutations: ready, in flight, success, rollback, dismissal/Undo, unfollow/access revocation, and hard block.
 - Place recovery: strong/weak evidence, duplicate omission, save in flight/failure/success, dismissal/Undo.
 - Responsive/accessibility: 320pt, large type, VoiceOver order, non-color state, Reduce Motion, and long/localized identity copy.
+
+State boards are compact body-state comparisons, not full-screen compositions. Shared Discover chrome is intentionally cropped there; Journey 02 is the canonical full-screen Activity-empty state.
 
 ## Interaction notes
 

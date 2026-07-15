@@ -40,7 +40,7 @@ const profiles = {
 
 const screenMetadata = {
   'places-populated': {
-    kicker: 'Journey 01 of 09', title: 'Places home',
+    kicker: 'Journey 01 of 10', title: 'Places home',
     note: 'Default landing: newest-first Activity, then only the recovery shelf the evidence supports.',
     proofs: [
       'Search is available before any feed content loads.',
@@ -48,8 +48,17 @@ const screenMetadata = {
       'Strong foreground evidence earns “may have been” language and direct Been / Wanna Go actions.'
     ]
   },
+  'activity-empty': {
+    kicker: 'Journey 02 of 10', title: 'Activity empty',
+    note: 'Empty Activity is a content state, not a different Discover shell. Places / People, search, and the four-tab navigation all stay visible.',
+    proofs: [
+      'Places remains selected while People stays one tap away.',
+      'Search remains available even when the social Activity result is empty.',
+      'Find people to follow switches to People without auto-focusing or clearing either mode’s search field.'
+    ]
+  },
   'people-populated': {
-    kicker: 'Journey 02 of 09', title: 'People suggestions',
+    kicker: 'Journey 03 of 10', title: 'People suggestions',
     note: 'A proactive people surface that feels useful, not like a popularity leaderboard.',
     proofs: [
       'Every card names one understandable reason.',
@@ -58,7 +67,7 @@ const screenMetadata = {
     ]
   },
   'people-search': {
-    kicker: 'Journey 03 of 09', title: 'People search',
+    kicker: 'Journey 04 of 10', title: 'People search',
     note: 'An active query replaces proactive shelves. Dismissed suggestions may still appear here.',
     proofs: [
       'Search result hierarchy favors identity over recommendation metadata.',
@@ -67,7 +76,7 @@ const screenMetadata = {
     ]
   },
   'follow-success': {
-    kicker: 'Journey 04 of 09', title: 'Follow success',
+    kicker: 'Journey 05 of 10', title: 'Follow success',
     note: 'The card stays in place as Following for this appearance so the action has an obvious result.',
     proofs: [
       'Exactly one mutation can be sent while the control is in flight.',
@@ -76,7 +85,7 @@ const screenMetadata = {
     ]
   },
   'activity-unlocked': {
-    kicker: 'Journey 05 of 09', title: 'Activity unlocked',
+    kicker: 'Journey 06 of 10', title: 'Activity unlocked',
     note: 'Following must produce visible product value. Maya’s latest shared save now leads Activity.',
     proofs: [
       'The new authorized event is first because Activity remains newest-first.',
@@ -85,7 +94,7 @@ const screenMetadata = {
     ]
   },
   'strong-recovery': {
-    kicker: 'Journey 06 of 09', title: 'Strong place recovery',
+    kicker: 'Journey 07 of 10', title: 'Strong place recovery',
     note: 'A foreground “I’m here” draft supports a may-have-been prompt, but the user still decides.',
     proofs: [
       'The provenance says what rec.me remembered without implying background tracking.',
@@ -94,7 +103,7 @@ const screenMetadata = {
     ]
   },
   'weak-recovery': {
-    kicker: 'Journey 07 of 09', title: 'Weak place recovery',
+    kicker: 'Journey 08 of 10', title: 'Weak place recovery',
     note: 'A search/detail open is not presence evidence. The interface says “pick up,” never “you were here.”',
     proofs: [
       'The weak shelf title makes no visit claim.',
@@ -103,7 +112,7 @@ const screenMetadata = {
     ]
   },
   'profile-open': {
-    kicker: 'Journey 08 of 09', title: 'Public profile preview',
+    kicker: 'Journey 09 of 10', title: 'Public profile preview',
     note: 'The existing profile opens with enough public context to decide, but no protected place preview.',
     proofs: [
       'Name, handle, city, bio, and reason are public-shell fields.',
@@ -112,7 +121,7 @@ const screenMetadata = {
     ]
   },
   'signed-out': {
-    kicker: 'Journey 09 of 09', title: 'Signed-out gate',
+    kicker: 'Journey 10 of 10', title: 'Signed-out gate',
     note: 'Anonymous users do not receive member search, personalized shelves, or graph reasons.',
     proofs: [
       'The disabled search shape communicates where the capability will live.',
@@ -285,6 +294,23 @@ function placesHome({ unlocked = false } = {}) {
   });
 }
 
+function activityEmpty() {
+  return screenFrame({
+    mode: 'places',
+    content: `
+      ${searchField({ placeholder: 'Search places, vibes, or people' })}
+      <section class="section-block">
+        ${sectionHeader('Activity')}
+        ${emptyPanel({
+          title: 'Your Activity starts with people',
+          copy: 'Follow people you trust and places they choose to share can show up here.',
+          action: 'Find people to follow',
+          actionName: 'people'
+        })}
+      </section>`
+  });
+}
+
 function peopleHome({ success = false } = {}) {
   return screenFrame({
     mode: 'people',
@@ -409,6 +435,7 @@ function signedOut() {
 
 const screenTemplates = {
   'places-populated': () => placesHome(),
+  'activity-empty': () => activityEmpty(),
   'people-populated': () => peopleHome(),
   'people-search': () => peopleSearch(),
   'follow-success': () => peopleHome({ success: true }),
@@ -433,7 +460,7 @@ const boards = {
     note: 'Loading never flashes empty. Cached content names its age. A failed recovery classifier does not invent a shelf.',
     states: [
       { name: 'Initial loading', code: 'PL-01', explainer: 'Search and mode tabs are usable immediately. Activity gets bounded skeletons. Recovery stays omitted until local classification finishes.', body: `${miniSearch()}${sectionHeader('Activity')}<div class="activity-list">${skeletonRows(3)}</div>` },
-      { name: 'Activity empty', code: 'PL-02', explainer: 'One primary action explains the network loop. It switches to People without focusing or clearing either search field.', body: `${miniSearch()}${emptyPanel({ title: 'Your Activity starts with people', copy: 'Follow people you trust and their shared place saves can show up here.', action: 'Find people to follow', actionName: 'people' })}` },
+      { name: 'Activity empty', code: 'PL-02', explainer: 'Body-only comparison tile. The full screen in Journey 02 keeps the Discover title, Places / People tabs, search, and four-tab navigation. The action switches to People without focusing or clearing either search field.', body: `<div class="board-shell-note">Body detail · full chrome in Journey 02</div>${miniSearch()}${emptyPanel({ title: 'Your Activity starts with people', copy: 'Follow people you trust and places they choose to share can show up here.', action: 'Find people to follow', actionName: 'people' })}` },
       { name: 'Activity thin', code: 'PL-03', explainer: 'One or two valid rows stay visible. The Find People CTA appears before place recovery rather than replacing useful content.', body: `${miniSearch()}${sectionHeader('Activity')}<div class="activity-list">${activityRow({ profile: 'sofia', verb: 'saved', place: 'Dunsmoor', meta: '8m ago' })}</div><div class="inline-cta"><p><b>See more trusted places</b>Follow a few more people.</p><button class="small-action">Find people</button></div>` },
       { name: 'Cached offline', code: 'PL-04', explainer: 'Cached rows remain tappable when their details exist. The banner says Saved earlier and does not imply a fresh sync.', body: `${miniSearch()}${valueNote('<b>You’re offline.</b> Showing Activity saved earlier on this phone.', 'is-offline')}${sectionHeader('Activity')}<div class="activity-list">${activityRow({ profile: 'noah', verb: 'saved', place: 'Quarter Sheets', meta: 'Saved earlier' })}${activityRow({ profile: 'theo', verb: 'saved', place: 'The Ruby Fruit', meta: 'Saved earlier' })}</div>` },
       { name: 'Failure · no cache', code: 'PL-05', explainer: 'Navigation and search remain available. Retry is idempotent. No empty-state coaching appears because the graph state is unknown.', body: `${miniSearch()}${valueNote('<b>Activity couldn’t load.</b> Your places and people tabs are still available.', 'is-error')}<button class="secondary-action">Try again</button>` },
@@ -573,6 +600,7 @@ function wireScreenInteractions() {
   });
 
   $('[data-empty-action="signin"]', $('#phone-canvas'))?.addEventListener('click', () => showToast('Sign-in opens for: find and follow people.'));
+  $('[data-empty-action="people"]', $('#phone-canvas'))?.addEventListener('click', () => renderScreen('people-populated'));
 
   $('.bottom-sheet-backdrop', $('#phone-canvas'))?.addEventListener('click', event => {
     if (event.target.classList.contains('bottom-sheet-backdrop')) renderScreen('places-populated');

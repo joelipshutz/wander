@@ -11105,3 +11105,12 @@ Plan-design-review and mock-v1 checkpoint, 2026-07-13 22:22 PDT:
 - Verification: `node --check` passes, `git diff --check` passes, the local mock has zero browser console errors, and a scripted audit across all nine journeys reports no horizontal screen/body overflow at 390pt or 320pt with 1.32× type. Places, People, state-board, and small-phone screenshots were reviewed visually.
 - Design status remains intentionally incomplete: mock v1 awaits Joe's visual/taste approval. Per his hard gate, `plan-eng-review` and implementation remain blocked.
 - Pushed `codex/rec-90-discover-plan` and opened required draft PR #97: https://github.com/joelipshutz/wander/pull/97. The PR and Linear REC-90 both state the same blocking gate and validation evidence; it is not ready to merge.
+
+Mock-v1.1 empty-Activity correction, 2026-07-15 09:23 PDT:
+
+- Joe liked the Discover direction and horizontal people shelves, then correctly flagged that the compact Activity-empty state tile did not show the Places / People tabs.
+- Clarified the product contract: empty Activity is only a body-content state. The Discover title, Places / People peer tabs, search, and existing four-tab root navigation must remain persistent.
+- Added Journey 02 as a complete 390pt Activity-empty phone screen, wired `Find people to follow` to the People suggestions journey, renumbered the artifact to ten journeys, and labeled the compact PL-02 state-board tile as a body-only comparison.
+- Added `preview/discover-redesign/discover-activity-empty.png` and updated the mock README, metadata, and plan-design review. No SwiftUI, database, recommendation, or other engineering work started.
+- Verification: `node --check` and `git diff --check` pass; the browser reports zero console errors; the empty-state CTA opens People; both mode tabs, search, and all four root tabs are present; all ten journeys have no horizontal phone/body overflow at 320pt with 1.32× type.
+- Design approval remains open. `plan-eng-review` and implementation are still blocked until Joe approves the corrected mock direction.

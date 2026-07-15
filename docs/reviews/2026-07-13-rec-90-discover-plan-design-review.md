@@ -92,7 +92,7 @@ The primary risk was turning Discover into a generic social directory. The bound
 | ID | State | Visual contract |
 |---|---|---|
 | PL-01 | Initial loading | Search and tabs render immediately; bounded Activity skeletons; recovery omitted until classified. |
-| PL-02 | Activity empty | One centered explanation and one primary `Find people to follow` action. No fake rows. |
+| PL-02 | Activity empty | Full Discover chrome persists: title, Places / People tabs, search, and four-tab navigation. The body shows one centered explanation and one primary `Find people to follow` action. No fake rows. |
 | PL-03 | Activity thin | Render one or two real rows, then compact Find People callout before recovery. |
 | PL-04 | Activity populated | Open newest-first row list; author, action, place, area, age; row opens authorized place detail. |
 | PL-05 | Cached offline | Quiet offline banner says `Saved earlier`; cached rows remain usable if details exist. |
@@ -224,7 +224,7 @@ The recommendation card is not a general-purpose profile card. Its reason, dismi
 
 1. Approve the mock v1 direction and density, especially the 180pt horizontal people cards and compact low-network value note.
 2. Approve the confidence-matched place recovery copy and provenance treatment.
-3. Approve using grouped state boards as the full-state handoff, with the 9 main journeys represented as full phone screens.
+3. Approve using grouped body-state boards as the compact full-state handoff, with the 10 main journeys represented as full phone screens. Journey 02 explicitly shows the complete Activity-empty screen because the compact board crop hid persistent navigation chrome.
 
 Any requested visual changes are applied to the mock and this document before the design gate closes.
 
@@ -256,9 +256,10 @@ Gate metrics remain those in the canonical product contract. This review does no
 
 | Surface | Artifact | Status | Approval note |
 |---|---|---|---|
-| Main journeys | `preview/discover-redesign/index.html` → Main journeys | Pending Joe | Nine full-screen flow states. |
+| Main journeys | `preview/discover-redesign/index.html` → Main journeys | Pending Joe | Ten full-screen flow states. |
 | Full-state boards | `preview/discover-redesign/index.html` → State boards | Pending Joe | Five boards covering data, mutation, recovery, and accessibility states. |
 | Places overview | `preview/discover-redesign/discover-journeys.png` | Pending Joe | 390pt default Places. |
+| Activity-empty screen | `preview/discover-redesign/discover-activity-empty.png` | Pending Joe | Full 390pt screen with persistent Places / People tabs, search, and four-tab navigation. |
 | People overview | `preview/discover-redesign/discover-people.png` | Pending Joe | 390pt populated People. |
 | State overview | `preview/discover-redesign/discover-states.png` | Pending Joe | Places state board; other boards are interactive in HTML. |
 
@@ -271,7 +272,7 @@ Gate metrics remain those in the canonical product contract. This review does no
 | Emotional journey | Pass | Value comprehension and trust mechanisms mapped per moment. |
 | AI-slop/trust | Pass | No leaderboard, fake preview, generic travel treatment, or structural emoji. |
 | Design system | Pass pending final DESIGN.md reconciliation | Existing tokens/components are reused; conflict is explicit. |
-| Responsive/accessibility | Pass for artifact | No horizontal overflow across 9 screens at 390pt and 320pt/1.32×; 44pt product targets; zero console errors. |
+| Responsive/accessibility | Pass for artifact | No horizontal overflow across 10 screens at 390pt and 320pt/1.32×; 44pt product targets; zero console errors. |
 | Unresolved decisions | Blocked on one gate | Joe must approve or revise mock v1 before engineering review. |
 
 ## GSTACK REVIEW REPORT
@@ -284,7 +285,7 @@ What is ready:
 
 - Stable information architecture.
 - Full product-state and visual-state contract.
-- Nine full-screen main journeys.
+- Ten full-screen main journeys.
 - Five grouped state boards.
 - Responsive/accessibility behavior and verification evidence.
 - Explicit design-to-engineering tasks.
