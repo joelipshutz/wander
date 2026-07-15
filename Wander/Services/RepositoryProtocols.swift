@@ -7,7 +7,32 @@ struct ProfileShell: Identifiable, Equatable {
     let displayName: String
     let avatarURL: String?
     let bio: String?
+    let homeArea: String?
+    let isPrivateProfile: Bool?
+    let createdAt: Date?
     let relationship: ViewerRelationship
+
+    init(
+        id: String,
+        handle: String,
+        displayName: String,
+        avatarURL: String?,
+        bio: String?,
+        homeArea: String? = nil,
+        isPrivateProfile: Bool? = nil,
+        createdAt: Date? = nil,
+        relationship: ViewerRelationship
+    ) {
+        self.id = id
+        self.handle = handle
+        self.displayName = displayName
+        self.avatarURL = avatarURL
+        self.bio = bio
+        self.homeArea = homeArea
+        self.isPrivateProfile = isPrivateProfile
+        self.createdAt = createdAt
+        self.relationship = relationship
+    }
 }
 
 struct ProfileViewState {

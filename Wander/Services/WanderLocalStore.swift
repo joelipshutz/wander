@@ -1741,6 +1741,27 @@ final class WanderStore: ObservableObject {
         visiblePlaces().filter { $0.owner.id == profileID }
     }
 
+    func profile(for profileID: String) -> LocalProfile? {
+        profiles.first { $0.id == profileID }
+    }
+
+    func placesInCommon(with profileID: String) -> [VisiblePlace] {
+        guard profileID != currentUser.id else { return [] }
+        let mine = VisiblePlaceGrouping.representativePlaces(
+            from: currentUserVisiblePlaces,
+            currentUserID: currentUser.id
+        )
+        let theirs = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces(for: profileID),
+            currentUserID: currentUser.id
+        )
+        return theirs.filter { theirPlace in
+            mine.contains { myPlace in
+                VisiblePlaceGrouping.matches(myPlace, theirPlace)
+            }
+        }
+    }
+
     func attributes(for userPlaceID: String) -> [LocalPlaceAttribute] {
         let userPlaceIDs = matchingUserPlaceIDs(userPlaceID)
         return placeAttributes
@@ -2212,6 +2233,9 @@ final class WanderStore: ObservableObject {
             displayName: profile.displayName,
             avatarURL: profile.avatarURL,
             bio: profile.bio,
+            homeArea: profile.homeArea,
+            isPrivateProfile: profile.isPrivateProfile,
+            createdAt: profile.createdAt,
             relationship: relationship(to: profile.id)
         )
     }
@@ -3486,14 +3510,35 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    func refreshRemoteCurrentUserProfileData(backend: WanderBackend?) async {
+    func refreshRemoteProfileData(profileID: String, backend: WanderBackend?) async {
         guard let backend else { return }
-        await refreshRemoteProfileVisiblePlaces(profileID: currentUser.id, backend: backend)
+
+        if profileID != currentUser.id, backend.profileRepository != nil {
+            do {
+                let state = try await backend.profile(id: profileID)
+                upsertRemoteProfileShells([state.shell], preserveExistingProfileMetadataWhenMissing: true)
+                applyRemoteRelationship(profileID: profileID, relationship: state.shell.relationship)
+            } catch {
+                lastRemoteError = remoteErrorMessage(error)
+            }
+        }
+
+        await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        await refreshRemoteSocialGraph(userID: profileID, backend: backend)
+        await refreshRemoteProfileVisits(profileID: profileID, backend: backend)
+    }
+
+    func refreshRemoteCurrentUserProfileData(backend: WanderBackend?) async {
+        await refreshRemoteProfileData(profileID: currentUser.id, backend: backend)
+    }
+
+    private func refreshRemoteProfileVisits(profileID: String, backend: WanderBackend) async {
+        guard backend.visitRepository != nil else { return }
 
         let remoteUserPlaces = remoteVisiblePlaceCache
-            .filter { $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil }
+            .filter { $0.owner.id == profileID && $0.userPlace.deletedAt == nil }
         let remoteUserPlaceIDs = Set(remoteUserPlaces.map(\.userPlace.id))
-        guard backend.visitRepository != nil, !remoteUserPlaceIDs.isEmpty else { return }
+        guard !remoteUserPlaceIDs.isEmpty else { return }
 
         var hydrated: [LocalPlaceVisit] = []
         for userPlaceID in remoteUserPlaceIDs.sorted() {
@@ -4870,6 +4915,9 @@ final class WanderStore: ObservableObject {
                 displayName: visiblePlace.owner.displayName,
                 avatarURL: visiblePlace.owner.avatarURL,
                 bio: visiblePlace.owner.bio,
+                homeArea: visiblePlace.owner.homeArea,
+                isPrivateProfile: nil,
+                createdAt: nil,
                 relationship: relationship(to: visiblePlace.owner.id)
             )
         }
@@ -5033,6 +5081,17 @@ final class WanderStore: ObservableObject {
                     existing: existing.bio,
                     preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
                 )
+                existing.homeArea = mergedProfileMetadata(
+                    incoming: shell.homeArea,
+                    existing: existing.homeArea,
+                    preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
+                )
+                if let isPrivateProfile = shell.isPrivateProfile {
+                    existing.isPrivateProfile = isPrivateProfile
+                }
+                if let createdAt = shell.createdAt {
+                    existing.createdAt = createdAt
+                }
                 existing.syncStateRaw = SyncState.synced.rawValue
                 existing.updatedAt = .now
             } else {
@@ -5044,7 +5103,10 @@ final class WanderStore: ObservableObject {
                         displayName: shell.displayName,
                         avatarURL: shell.avatarURL,
                         bio: shell.bio,
-                        syncState: .synced
+                        homeArea: shell.homeArea,
+                        isPrivateProfile: shell.isPrivateProfile ?? false,
+                        syncState: .synced,
+                        createdAt: shell.createdAt ?? .now
                     )
                 )
             }
@@ -5096,6 +5158,9 @@ final class WanderStore: ObservableObject {
             displayName: incoming.displayName,
             avatarURL: nonEmpty(incoming.avatarURL) ?? existing.avatarURL,
             bio: nonEmpty(incoming.bio) ?? existing.bio,
+            homeArea: nonEmpty(incoming.homeArea) ?? existing.homeArea,
+            isPrivateProfile: incoming.isPrivateProfile ?? existing.isPrivateProfile,
+            createdAt: incoming.createdAt ?? existing.createdAt,
             relationship: strongestRelationship(existing.relationship, incoming.relationship)
         )
     }

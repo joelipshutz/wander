@@ -36,9 +36,11 @@ struct ProfileSocialGraphScreen: View {
     @State private var selectedProfileID: ProfileGraphProfileID?
     @State private var pendingUnfollow: LocalProfile?
     @State private var isRefreshing = false
+    let profileID: String
     let onFindFriends: () -> Void
 
-    init(initialTab: ProfileSocialGraphTab, onFindFriends: @escaping () -> Void) {
+    init(profileID: String, initialTab: ProfileSocialGraphTab, onFindFriends: @escaping () -> Void) {
+        self.profileID = profileID
         _selectedTab = State(initialValue: initialTab)
         self.onFindFriends = onFindFriends
     }
@@ -56,37 +58,39 @@ struct ProfileSocialGraphScreen: View {
 
                     ProfileGraphSearchField(query: $query)
 
-                    Button {
-                        dismiss()
-                        onFindFriends()
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing3) {
-                            Image(systemName: "person.badge.plus")
-                                .font(.system(size: 17, weight: .black))
-                                .frame(width: 36, height: 36)
-                                .background(WanderTheme.terracottaTint.color)
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                                .clipShape(Circle())
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Find friends")
-                                    .font(.system(size: 16, weight: .black))
-                                Text("Search rec.me members")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(WanderTheme.textMuted.color)
+                    if isOwnerGraph {
+                        Button {
+                            dismiss()
+                            onFindFriends()
+                        } label: {
+                            HStack(spacing: WanderTheme.spacing3) {
+                                Image(systemName: "person.badge.plus")
+                                    .font(.system(size: 17, weight: .black))
+                                    .frame(width: 36, height: 36)
+                                    .background(WanderTheme.terracottaTint.color)
+                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .clipShape(Circle())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Find friends")
+                                        .font(.system(size: 16, weight: .black))
+                                    Text("Search rec.me members")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .black))
+                                    .foregroundStyle(WanderTheme.textFaint.color)
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .black))
-                                .foregroundStyle(WanderTheme.textFaint.color)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .frame(minHeight: 62)
+                            .background(WanderTheme.surfaceBone.color)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                            .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(minHeight: 62)
-                        .background(WanderTheme.surfaceBone.color)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                     if isRefreshing && profiles.isEmpty {
                         ProgressView("Loading connections")
@@ -119,7 +123,7 @@ struct ProfileSocialGraphScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .wanderScreen()
-            .navigationTitle("friends")
+            .navigationTitle(isOwnerGraph ? "friends" : "connections")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -130,7 +134,7 @@ struct ProfileSocialGraphScreen: View {
             }
             .task { await refresh() }
             .refreshable { await refresh() }
-            .sheet(item: $selectedProfileID) { selection in
+            .fullScreenCover(item: $selectedProfileID) { selection in
                 ProfileDetailView(profileID: selection.id)
                     .environmentObject(store)
                     .environmentObject(auth)
@@ -155,9 +159,9 @@ struct ProfileSocialGraphScreen: View {
     private var profiles: [LocalProfile] {
         let base: [LocalProfile]
         switch selectedTab {
-        case .followers: base = store.followers(of: store.currentUser.id)
-        case .following: base = store.following(of: store.currentUser.id)
-        case .friends: base = store.friends(of: store.currentUser.id)
+        case .followers: base = store.followers(of: profileID)
+        case .following: base = store.following(of: profileID)
+        case .friends: base = store.friends(of: profileID)
         }
 
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -171,8 +175,12 @@ struct ProfileSocialGraphScreen: View {
     private func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
-        await store.refreshRemoteSocialGraph(backend: backend)
+        await store.refreshRemoteSocialGraph(userID: profileID, backend: backend)
         isRefreshing = false
+    }
+
+    private var isOwnerGraph: Bool {
+        profileID == store.currentUser.id
     }
 
     private func handleFollowAction(_ profile: LocalProfile) {
