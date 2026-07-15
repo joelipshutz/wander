@@ -11821,3 +11821,14 @@ Release validation checkpoint, 2026-07-14 18:54 PDT:
 - The full iPhone 17 Pro / iOS 26.5 release-branch suite passed 335 tests with 0 failures: `/private/tmp/DerivedData-build75/Logs/Test/Test-Wander-2026.07.14_18-46-41--0700.xcresult`.
 - The generic iOS Simulator build passed. `Wander.debug.dylib` contains both `x86_64` and `arm64`; artifact: `/private/tmp/DerivedData-build75/Build/Products/Debug-iphonesimulator/Wander.app`.
 - The pre-PR diff contains exactly `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this append-only release log. No product behavior, migration, dependency, signing, entitlement, or hosted-data change is included in the build-number branch.
+
+Release completion, 2026-07-14 19:08 PDT:
+
+- Opened ready release PR #105 and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/105. Exact released source commit: `baedc07fa341b2d9a14da68f540979dcccd3cd51`; REC-96 implementation PR #104 had already landed as `6d9f1b3243a4dfc0425afa5ec7fb12b83323c71a`.
+- Archived exact released `main` successfully at `/private/tmp/Wander-0.1-build75.xcarchive`. Archive and embedded app metadata both confirm marketing version `0.1`, build `75`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export options used `destination=upload`, `method=app-store-connect`, automatic signing, and `manageAppVersionAndBuildNumber=false`. The first account-based export lacked an App Store Connect GUI account; retrying the unchanged archive with Ryan's configured API key succeeded, Xcode reported `Uploaded Wander`, and archive upload metadata confirmed build 75 without build-number drift.
+- App Store Connect build id `d974c0fd-31fb-46a0-a1e3-7cf9b351b021` reached `VALID`. The release helper set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 75 to the public `Wander Alpha` group, submitted external beta review, and confirmed review state `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784081263291949. Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Added final merge, validation, archive, TestFlight, tester-focus, and Slack evidence to Linear REC-96 and moved it from `In Review` to `Done` only after TestFlight approval.
+- Shipped validation: 335 tests with 0 failures, a generic arm64/x86_64 iOS Simulator build, deterministic visual QA on iPhone 17 Pro and iPhone 17e, the hosted member-profile migration/smoke verification completed during implementation, and a signed Release archive/upload from exact `main`.
+- Known/deferred: no known tester-blocking issues. The local pgTAP stack remained unavailable during implementation, but the linked hosted smoke passed; no additional backend, schema, tester-data, auth, or privacy mutation occurred during the release workflow.
