@@ -98,7 +98,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 2
+    static let currentResolverVersion = 3
 
     let id: String
     let batchID: String
@@ -153,9 +153,14 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     }
 
     var displayName: String {
-        selectedCandidate?.name
-            ?? candidates.first?.name
+        if source == .googleMaps,
+           let sourceName = seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !sourceName.isEmpty {
+            return sourceName
+        }
+        return selectedCandidate?.name
             ?? seed.nameHint
+            ?? candidates.first?.name
             ?? sourceURLHost
             ?? "Imported place"
     }
@@ -164,13 +169,14 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         guard let candidate = selectedCandidate ?? candidates.first else {
             return seed.areaHint
         }
-        return [candidate.locality, candidate.region]
+        let candidateArea = [candidate.locality, candidate.region]
             .compactMap { value in
                 guard let value, !value.isEmpty else { return nil }
                 return value
             }
             .joined(separator: ", ")
             .nilIfEmpty
+        return candidateArea ?? seed.areaHint
     }
 
     private var sourceURLHost: String? {

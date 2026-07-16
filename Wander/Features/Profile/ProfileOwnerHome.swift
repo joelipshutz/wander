@@ -527,17 +527,6 @@ private struct ProfileCalendarSection: View {
                 }
             }
 
-            HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 12, weight: .black))
-                    .frame(width: 24, height: 24)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
-                Text("Dates show where \(ownerLabel) Been visits happened.")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
         }
         .padding(WanderTheme.spacing4)
         .background(WanderTheme.surfaceBone.color)
@@ -629,9 +618,6 @@ private struct ProfileCalendarDayCell: View {
             if visitCount != nil {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                     .fill(WanderTheme.terracotta.color)
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 20, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.24))
             }
 
             if let date {

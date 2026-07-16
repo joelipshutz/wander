@@ -39,6 +39,17 @@ struct ProfileImportSection: View {
                                 .font(.system(size: 16, weight: .black))
                                 .foregroundStyle(WanderTheme.stateInfo.color)
                         }
+
+                        if summary.processingCount == 0, summary.hasImports {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 7, weight: .black))
+                                .frame(width: 14, height: 14)
+                                .background(WanderTheme.stateSuccess.color)
+                                .foregroundStyle(Color.white)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                                .offset(x: 13, y: -13)
+                        }
                     }
                     .frame(width: 38, height: 38)
 
@@ -82,9 +93,9 @@ struct ProfileImportSection: View {
             return "Importing \(summary.processedCount) of \(summary.totalCount)"
         }
         if summary.remainingCount > 0 {
-            return "Review Import"
+            return "Import Review"
         }
-        return "Import Inbox"
+        return summary.hasImports ? "Imports done" : "Import Review"
     }
 
     private var actionSubtitle: String {
@@ -97,8 +108,8 @@ struct ProfileImportSection: View {
         if summary.remainingCount > 0 {
             return "\(summary.remainingCount) place\(summary.remainingCount == 1 ? "" : "s") waiting"
         }
-        if summary.savedCount > 0 || summary.duplicateCount > 0 {
-            return "\(summary.savedCount) saved  •  \(summary.duplicateCount) already in your places"
+        if summary.duplicateCount > 0 {
+            return "\(summary.duplicateCount) already in your places"
         }
         return "No imports waiting"
     }
@@ -344,9 +355,7 @@ struct PlaceImportSourceScreen: View {
 
 private enum PlaceImportReviewFilter: String, CaseIterable, Identifiable {
     case unresolved
-    case needsReview = "needs review"
     case duplicates
-    case saved
     case failed
 
     var id: String { rawValue }
@@ -408,6 +417,7 @@ struct PlaceImportInboxScreen: View {
                         ForEach(Array(filteredItems.prefix(visibleLimit))) { item in
                             PlaceImportReviewRow(
                                 item: item,
+                                loadsRemotePhoto: auth.isSignedIn,
                                 beenAction: { beginSave(item, status: .been) },
                                 wannaAction: { beginSave(item, status: .wannaGo) },
                                 candidateAction: { candidatePickerItem = item },
@@ -436,14 +446,14 @@ struct PlaceImportInboxScreen: View {
                 .background(WanderTheme.canvasWarm.color)
             } else {
                 ContentUnavailableView(
-                    "Import Inbox",
+                    "Import Review",
                     systemImage: "tray",
                     description: Text("Choose an import source from Profile to get started.")
                 )
                 .wanderScreen()
             }
         }
-        .navigationTitle("Review Import")
+        .navigationTitle("Import Review")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !processingBatchIDs.isEmpty {
@@ -505,7 +515,7 @@ struct PlaceImportInboxScreen: View {
     private var inboxItems: [PlaceImportItem] {
         let batchDates = Dictionary(uniqueKeysWithValues: importStore.batches.map { ($0.id, $0.createdAt) })
         return importStore.items
-            .filter { $0.state != .dismissed }
+            .filter { ![.dismissed, .saved].contains($0.state) }
             .sorted { lhs, rhs in
                 let lhsDate = batchDates[lhs.batchID] ?? lhs.createdAt
                 let rhsDate = batchDates[rhs.batchID] ?? rhs.createdAt
@@ -523,12 +533,8 @@ struct PlaceImportInboxScreen: View {
             inboxItems.filter {
                 [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
             }
-        case .needsReview:
-            inboxItems.filter { [.ready, .ambiguous, .needsHelp, .failed].contains($0.state) }
         case .duplicates:
             inboxItems.filter { $0.state == .duplicate }
-        case .saved:
-            inboxItems.filter { $0.state == .saved }
         case .failed:
             inboxItems.filter { $0.state == .failed }
         }
@@ -576,11 +582,22 @@ struct PlaceImportInboxScreen: View {
                     Image(systemName: "tray.full.fill")
                         .font(.system(size: 22, weight: .black))
                         .foregroundStyle(WanderTheme.stateInfo.color)
+
+                    if summary.processingCount == 0 {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .black))
+                            .frame(width: 16, height: 16)
+                            .background(WanderTheme.stateSuccess.color)
+                            .foregroundStyle(Color.white)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
+                            .offset(x: 17, y: -17)
+                    }
                 }
                 .frame(width: 48, height: 48)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Unresolved imports")
+                    Text(summary.processingCount > 0 ? "Importing places" : "Imports done")
                         .font(.system(size: 19, weight: .black))
                     Text(
                         "\(unresolvedCount) waiting across \(sources.count) source\(sources.count == 1 ? "" : "s")"
@@ -602,7 +619,6 @@ struct PlaceImportInboxScreen: View {
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
                     importMetric(unresolvedCount, "to review", WanderTheme.terracotta.color)
-                    importMetric(summary.savedCount, "saved", WanderTheme.stateSuccess.color)
                     importMetric(summary.duplicateCount, "existing", WanderTheme.stateInfo.color)
                 }
             }
@@ -700,8 +716,77 @@ struct PlaceImportInboxScreen: View {
     }
 }
 
+private struct PlaceImportPhotoThumb: View {
+    let item: PlaceImportItem
+    let loadsRemotePhoto: Bool
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .fill(item.source.tint)
+
+            Image(systemName: item.source.systemImage)
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(item.source.accent)
+
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: item.displayName,
+                    onLoadFailure: { failedPhoto in
+                        if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
+                            self.photo = nil
+                        }
+                    }
+                )
+
+                if photo.isGooglePlacesPhoto {
+                    VStack {
+                        Spacer()
+                        Text("Google Maps")
+                            .font(.system(size: 8, weight: .regular))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, minHeight: 15)
+                            .background(Color.black.opacity(0.68))
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .accessibilityHidden(true)
+        .task(id: photoTaskID) {
+            await loadPhoto()
+        }
+    }
+
+    private var photoTaskID: String {
+        "\(loadsRemotePhoto)|\(item.reviewPhotoRequest?.lookupKey ?? "none")"
+    }
+
+    private func loadPhoto() async {
+        guard loadsRemotePhoto, let request = item.reviewPhotoRequest else {
+            photo = nil
+            return
+        }
+        do {
+            let resolvedPhoto = try await backend.placePhoto(for: request)
+            try Task.checkCancellation()
+            photo = resolvedPhoto
+        } catch {
+            guard !Task.isCancelled else { return }
+            photo = nil
+        }
+    }
+}
+
 private struct PlaceImportReviewRow: View {
     let item: PlaceImportItem
+    let loadsRemotePhoto: Bool
     let beenAction: () -> Void
     let wannaAction: () -> Void
     let candidateAction: () -> Void
@@ -712,6 +797,8 @@ private struct PlaceImportReviewRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.displayName)
                         .font(.system(size: 17, weight: .black))
@@ -737,9 +824,9 @@ private struct PlaceImportReviewRow: View {
 
                 if ![.queued, .resolving, .saved, .dismissed].contains(item.state) {
                     Menu {
-                        if !item.candidates.isEmpty {
+                        if item.candidates.count > 1 {
                             Button(
-                                item.candidates.count == 1 ? "Review match" : "Review matches",
+                                "Review matches",
                                 systemImage: "map",
                                 action: candidateAction
                             )
@@ -798,16 +885,16 @@ private struct PlaceImportReviewRow: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
-                if item.source == .textNotes {
+                if item.seed.nameHint != nil {
                     importCommandButton(
-                        "Add place details",
+                        "Search for the correct place",
                         systemImage: "magnifyingglass",
                         color: WanderTheme.terracotta.color,
                         action: rescueAction
                     )
                 } else {
                     importCommandButton(
-                        item.source == .googleMaps ? "Retry list import" : "Retry automatic match",
+                        item.source == .googleMaps ? "Retry Google Maps import" : "Retry automatic match",
                         systemImage: "arrow.clockwise",
                         color: WanderTheme.terracotta.color,
                         action: retryAction
@@ -882,6 +969,30 @@ private struct PlaceImportReviewRow: View {
         case .duplicate: WanderTheme.stateInfo.color
         default: WanderTheme.borderHairline.color
         }
+    }
+}
+
+private extension PlaceImportItem {
+    var reviewPhotoRequest: PlacePhotoRequest? {
+        let candidate = selectedCandidate ?? candidates.first
+        let name: String
+        if source == .googleMaps {
+            name = seed.nameHint ?? candidate?.name ?? ""
+        } else {
+            name = candidate?.name ?? seed.nameHint ?? ""
+        }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+
+        return PlacePhotoRequest(
+            name: name,
+            address: source == .googleMaps ? (seed.areaHint ?? candidate?.address) : candidate?.address,
+            latitude: source == .googleMaps ? (seed.latitude ?? candidate?.latitude) : candidate?.latitude,
+            longitude: source == .googleMaps ? (seed.longitude ?? candidate?.longitude) : candidate?.longitude,
+            sourceProvider: source == .googleMaps ? (seed.sourceProvider ?? candidate?.sourceProvider) : candidate?.sourceProvider,
+            sourceProviderPlaceID: source == .googleMaps
+                ? (seed.sourceProviderPlaceID ?? candidate?.sourceProviderPlaceID)
+                : candidate?.sourceProviderPlaceID
+        )
     }
 }
 
@@ -1136,7 +1247,7 @@ private extension PlaceImportSource {
     }
 
     var fileButtonTitle: String {
-        self == .googleMaps ? "Choose Takeout file" : "Choose text or notes file"
+        self == .googleMaps ? "Choose Google Maps file" : "Choose text or notes file"
     }
 
     var allowedFileTypes: [UTType] {

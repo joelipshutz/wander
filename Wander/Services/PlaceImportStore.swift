@@ -1,9 +1,18 @@
+import CoreLocation
 import Foundation
+
+struct PlaceImportResolvedEntry: Equatable {
+    let seed: PlaceImportSeed
+    let candidates: [PlaceCandidate]
+    let selectedCandidateID: String?
+    let helpMessage: String?
+}
 
 enum PlaceImportResolution: Equatable {
     case candidates([PlaceCandidate], selectedCandidateID: String?)
     case needsHelp(String)
     case expanded([PlaceImportSeed], sourceName: String?)
+    case expandedResolved([PlaceImportResolvedEntry], sourceName: String?)
 }
 
 @MainActor
@@ -32,6 +41,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         if let name = normalized(seed.nameHint) {
+            if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
+                return await googleSeedResolution(seed, name: name)
+            }
             return try await manualResolution(
                 name: name,
                 area: seed.areaHint,
@@ -64,13 +76,17 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .needsHelp(message)
             }
         case .tiktok, .instagram:
-            return await socialResolution(url: sourceURL, source: source)
+            return await socialResolution(url: sourceURL, source: source, seed: seed)
         case .textNotes:
             return .needsHelp("Add a place name and nearby city to match this line.")
         }
     }
 
-    private func socialResolution(url: URL, source: PlaceImportSource) async -> PlaceImportResolution {
+    private func socialResolution(
+        url: URL,
+        source: PlaceImportSource,
+        seed: PlaceImportSeed
+    ) async -> PlaceImportResolution {
         guard let metadata = await metadataProvider.metadata(for: url, source: source) else {
             return .needsHelp(
                 "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
@@ -87,6 +103,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             limit: 8
         )
 
+        var resolvedEntries: [PlaceImportResolvedEntry] = []
+        var plausibleEntries: [PlaceImportResolvedEntry] = []
+        var seenResolvedCandidates = Set<String>()
+        var seenPlausibleHints = Set<String>()
         var strongest: PlaceImportCandidateMatch?
         for hint in hints {
             guard let candidates = try? await placeResolver.resolveManualEntry(
@@ -97,16 +117,48 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 nameHint: hint.name,
                 areaHint: hint.area
             )
-            if match.selectedCandidateID != nil {
-                return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
+            if let selectedCandidateID = match.selectedCandidateID,
+               let selectedCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
+                let identity = candidateIdentity(selectedCandidate)
+                if seenResolvedCandidates.insert(identity).inserted {
+                    resolvedEntries.append(
+                        PlaceImportResolvedEntry(
+                            seed: socialSeed(from: seed, hint: hint, candidate: selectedCandidate),
+                            candidates: match.candidates,
+                            selectedCandidateID: selectedCandidateID,
+                            helpMessage: nil
+                        )
+                    )
+                }
+                continue
+            }
+            if match.candidates.count > 1, match.bestScore >= 0.7 {
+                let identity = hintIdentity(hint)
+                if seenPlausibleHints.insert(identity).inserted {
+                    plausibleEntries.append(
+                        PlaceImportResolvedEntry(
+                            seed: socialSeed(from: seed, hint: hint, candidate: nil),
+                            candidates: match.candidates,
+                            selectedCandidateID: nil,
+                            helpMessage: "Choose the matching venue from this post."
+                        )
+                    )
+                }
             }
             if match.bestScore > (strongest?.bestScore ?? 0) {
                 strongest = match
             }
         }
 
+        let entries = resolvedEntries + plausibleEntries
+        if entries.count == 1, let entry = entries.first {
+            return .candidates(entry.candidates, selectedCandidateID: entry.selectedCandidateID)
+        }
+        if entries.count > 1 {
+            return .expandedResolved(entries, sourceName: nil)
+        }
         if let strongest, strongest.bestScore >= 0.38 {
-            return .candidates(strongest.candidates, selectedCandidateID: nil)
+            return candidateResolution(strongest)
         }
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
@@ -130,7 +182,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 latitude: latitude,
                 longitude: longitude
             )
-            return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
+            return candidateResolution(match)
         } catch let error as LocalizedError {
             return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
         } catch {
@@ -149,7 +201,135 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             latitude: seed.latitude,
             longitude: seed.longitude
         )
-        return .candidates(match.candidates, selectedCandidateID: match.selectedCandidateID)
+        return candidateResolution(match)
+    }
+
+    private func candidateResolution(_ match: PlaceImportCandidateMatch) -> PlaceImportResolution {
+        if let selectedCandidateID = match.selectedCandidateID {
+            return .candidates(match.candidates, selectedCandidateID: selectedCandidateID)
+        }
+        if match.candidates.count > 1 {
+            return .candidates(match.candidates, selectedCandidateID: nil)
+        }
+        return .needsHelp(
+            "The only Apple Maps result was not a confident venue match. Search for the correct place."
+        )
+    }
+
+    private func googleSeedResolution(_ seed: PlaceImportSeed, name: String) async -> PlaceImportResolution {
+        var candidates: [PlaceCandidate] = []
+
+        if let latitude = seed.latitude,
+           let longitude = seed.longitude {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            if CLLocationCoordinate2DIsValid(coordinate),
+               let nearby = try? await placeResolver.resolveNearbyPlaces(near: coordinate) {
+                appendUnique(nearby, to: &candidates)
+            }
+        }
+
+        var match = PlaceImportCandidateMatcher.match(
+            candidates,
+            nameHint: name,
+            areaHint: seed.areaHint,
+            latitude: seed.latitude,
+            longitude: seed.longitude
+        )
+        if match.selectedCandidateID == nil,
+           let manual = try? await placeResolver.resolveManualEntry(
+               ManualPlaceInput(name: name, areaHint: normalized(seed.areaHint), category: nil)
+           ) {
+            appendUnique(manual, to: &candidates)
+            match = PlaceImportCandidateMatcher.match(
+                candidates,
+                nameHint: name,
+                areaHint: seed.areaHint,
+                latitude: seed.latitude,
+                longitude: seed.longitude
+            )
+        }
+
+        let enrichment = match.selectedCandidateID.flatMap { selectedCandidateID in
+            match.candidates.first(where: { $0.id == selectedCandidateID })
+        }
+        let candidate = authoritativeGoogleCandidate(seed: seed, name: name, enrichment: enrichment)
+        return .candidates([candidate], selectedCandidateID: candidate.id)
+    }
+
+    private func authoritativeGoogleCandidate(
+        seed: PlaceImportSeed,
+        name: String,
+        enrichment: PlaceCandidate?
+    ) -> PlaceCandidate {
+        let provider = seed.sourceProvider ?? "google_maps"
+        let identity = seed.sourceProviderPlaceID ?? seed.id
+        return PlaceCandidate(
+            id: "import-\(provider)-\(identity)",
+            name: name,
+            category: enrichment?.category ?? WanderPlaceCategory.fallbackPlace,
+            primaryCategory: enrichment?.primaryCategory,
+            subcategory: enrichment?.subcategory,
+            categorySource: enrichment?.categorySource ?? PlaceCategorySource.unknown.rawValue,
+            categoryConfidence: enrichment?.categoryConfidence,
+            rawProviderType: enrichment?.rawProviderType,
+            address: seed.areaHint ?? enrichment?.address,
+            locality: enrichment?.locality,
+            region: enrichment?.region,
+            country: enrichment?.country,
+            latitude: seed.latitude ?? enrichment?.latitude,
+            longitude: seed.longitude ?? enrichment?.longitude,
+            sourceProvider: provider,
+            sourceProviderPlaceID: seed.sourceProviderPlaceID,
+            distanceMeters: enrichment?.distanceMeters,
+            websiteURLString: enrichment?.websiteURLString,
+            phoneNumber: enrichment?.phoneNumber,
+            timeZoneIdentifier: enrichment?.timeZoneIdentifier,
+            actionLinksJSON: enrichment?.actionLinksJSON,
+            confidence: 1
+        )
+    }
+
+    private func isAuthoritativeGoogleSeed(_ seed: PlaceImportSeed) -> Bool {
+        seed.sourceProviderPlaceID != nil || (seed.latitude != nil && seed.longitude != nil)
+    }
+
+    private func appendUnique(_ newCandidates: [PlaceCandidate], to candidates: inout [PlaceCandidate]) {
+        var identities = Set(candidates.map(candidateIdentity))
+        for candidate in newCandidates where identities.insert(candidateIdentity(candidate)).inserted {
+            candidates.append(candidate)
+        }
+    }
+
+    private func socialSeed(
+        from original: PlaceImportSeed,
+        hint: SocialPlaceSearchHint,
+        candidate: PlaceCandidate?
+    ) -> PlaceImportSeed {
+        PlaceImportSeed(
+            rawText: original.rawText,
+            nameHint: candidate?.name ?? hint.name,
+            areaHint: candidate?.address ?? hint.area,
+            sourceURLString: original.sourceURLString,
+            sourceLine: original.sourceLine,
+            latitude: candidate?.latitude,
+            longitude: candidate?.longitude,
+            sourceProvider: candidate?.sourceProvider,
+            sourceProviderPlaceID: candidate?.sourceProviderPlaceID
+        )
+    }
+
+    private func candidateIdentity(_ candidate: PlaceCandidate) -> String {
+        if let providerPlaceID = candidate.sourceProviderPlaceID {
+            return "\(candidate.sourceProvider)|\(providerPlaceID)"
+        }
+        return candidate.id
+    }
+
+    private func hintIdentity(_ hint: SocialPlaceSearchHint) -> String {
+        [hint.name, hint.area ?? ""]
+            .joined(separator: "|")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber || $0 == "|" }
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -494,8 +674,17 @@ final class PlaceImportStore: ObservableObject {
         case .candidates(let candidates, let selectedCandidateID):
             items[index].candidates = candidates
             items[index].selectedCandidateID = selectedCandidateID
-            items[index].state = selectedCandidateID == nil ? .ambiguous : .ready
-            items[index].helpMessage = nil
+            if selectedCandidateID != nil {
+                items[index].state = .ready
+                items[index].helpMessage = nil
+            } else if candidates.count > 1 {
+                items[index].state = .ambiguous
+                items[index].helpMessage = nil
+            } else {
+                items[index].state = .needsHelp
+                items[index].helpMessage =
+                    "The only Apple Maps result was not a confident venue match. Search for the correct place."
+            }
         case .needsHelp(let message):
             items[index].candidates = []
             items[index].selectedCandidateID = nil
@@ -508,6 +697,35 @@ final class PlaceImportStore: ObservableObject {
                     batchID: original.batchID,
                     source: original.source,
                     seed: seed,
+                    resolverVersion: PlaceImportItem.currentResolverVersion,
+                    createdAt: original.createdAt
+                )
+            }
+            items.replaceSubrange(index...index, with: expandedItems)
+            if let sourceName,
+               let batchIndex = batches.firstIndex(where: { $0.id == original.batchID }) {
+                batches[batchIndex].sourceName = sourceName
+            }
+            return
+        case .expandedResolved(let entries, let sourceName):
+            let original = items[index]
+            let expandedItems = entries.map { entry in
+                let state: PlaceImportItemState
+                if entry.selectedCandidateID != nil {
+                    state = .ready
+                } else if entry.candidates.count > 1 {
+                    state = .ambiguous
+                } else {
+                    state = .needsHelp
+                }
+                return PlaceImportItem(
+                    batchID: original.batchID,
+                    source: original.source,
+                    seed: entry.seed,
+                    state: state,
+                    candidates: entry.candidates,
+                    selectedCandidateID: entry.selectedCandidateID,
+                    helpMessage: entry.helpMessage,
                     resolverVersion: PlaceImportItem.currentResolverVersion,
                     createdAt: original.createdAt
                 )

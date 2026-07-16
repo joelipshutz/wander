@@ -12158,3 +12158,29 @@ Follow-up handoff, 2026-07-15 13:37 PDT:
 - Updated draft PR #109 with the root causes, user-visible fixes, 368-test/generic-build validation, live 136-entry Google list smoke, installed-simulator caveat, and unchanged hosted-production boundary: https://github.com/joelipshutz/wander/pull/109#issuecomment-4985051396.
 - Added the same implementation, validation, and remaining-production-scope handoff to Linear REC-97. The issue remains `In Progress` and PR #109 remains Draft while Ryan tests this device-local slice and the approved hosted stack remains incomplete.
 - Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch for physical-device retesting. Existing resolver-v1 Google/social failures should requeue automatically when Profile appears; a fresh import also exercises the new paths.
+
+## 2026-07-16 10:27 PDT - Codex - REC-97 Import Review Device Feedback
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: address Ryan's physical-device feedback across multi-venue social imports, Google-list candidate quality, import review states/copy/photos, duplicate behavior, and the Profile calendar presentation.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `e9f6b0146`. The root checkout and sibling worktrees remain untouched, and no current agent-log entry reports overlapping REC-97 edits.
+- Reviewed the five July 16 screenshots. They show Google source seeds with correct venue names being visually and behaviorally replaced by weaker MapKit postal-code, street-address, or neighborhood candidates; a one-candidate ambiguous state surfacing as `Review 1 matches`; retained saved history/counters; and restaurant-specific calendar decoration.
+- Expected files are `PlaceImportModels`, `PlaceImportStore`, candidate/social resolver services, `ProfileImportViews`, `ProfileScreen`, focused import/presentation tests, and this log. The existing place-photo repository will remain the sole remote photo boundary. No hosted schema, tester data, build number, TestFlight, or Slack action is in scope for this feedback pass.
+
+Implementation checkpoint, 2026-07-16 11:02 PDT:
+
+- Root causes confirmed: Google Takeout seeds already contained the correct venue identity, address, coordinates, and provider id, but the resolver let a weaker MapKit postal-code/street/neighborhood result become the visible and saveable candidate; social resolution returned after the first confident hint; and any non-selected candidate array, including one weak result, was represented as ambiguous, which produced `Review 1 matches`.
+- Google-list resolution now preserves the imported Google venue as canonical and uses MapKit only to enrich category/business metadata. Existing resolver-v2 Google/social rows automatically requeue under resolver v3, so the bad persisted titles are repaired without reimporting. A single weak MapKit result now becomes `needsHelp`; only two or more plausible candidates open the match chooser.
+- Social post resolution now evaluates all extracted caption/title/handle/cover-OCR hints, deduplicates canonical candidates, and expands one Instagram or TikTok URL into multiple review items when multiple venues resolve. Every expanded item retains the original link/provenance.
+- Import Review now hides saved rows immediately, removes the saved counter/filter and duplicate `needs review` filter, labels completion as `Imports done` with a green check badge, uses `Import Review` in Profile/navigation, adds lazy remote place-photo thumbnails through `WanderBackend.placePhoto`, and changes the Google picker copy to `Choose Google Maps file`.
+- Profile calendar copy and restaurant-specific fork/knife decoration were removed; visit dates use the existing solid terracotta fill and retain their multi-visit count badge.
+- Validation: focused import/resolver/social tests passed 21/21; the complete `WanderTests` suite passed 370/370 with zero failures on iPhone 17 / iOS 26.5; `git diff --check` passed; and a fresh unsigned generic iOS Simulator build succeeded. The built `Wander.debug.dylib` contains both arm64 and x86_64 simulator architectures.
+- Visual QA used a synthetic, non-user import snapshot on iPhone 17 Pro and iPhone 17e / iOS 26.5. Both widths rendered `Import Review`, the `Imports done` check state, three remaining filters, source-photo slots, Been/Wanna actions for a single canonical match, `Review 2 matches` only for a genuine ambiguity, and the rescue state without overlap or clipped controls. Evidence is in `/private/tmp/rec97-import-review-iphone17pro.png` and `/private/tmp/rec97-import-review-iphone17e.png`; the fixture touched no hosted or tester data.
+- No Supabase migration/RPC, hosted extraction deployment, tester-data rewrite, build-number change, TestFlight upload, or Slack announcement was performed in this pass.

@@ -271,6 +271,44 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.summary.totalCount, 45)
     }
 
+    func testOneSocialPostExpandsIntoEveryConfidentVenue() async throws {
+        let maru = placeImportCandidate(name: "Maru Coffee")
+        let gjusta = placeImportCandidate(name: "Gjusta Bakery")
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "maru coffee": [maru],
+                "gjusta bakery": [gjusta]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "Two coffee stops",
+                    caption: "Coffee at @marucoffee and pastries at @gjustabakery.",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: resolver
+        )
+
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/reel/two-venues/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items.map(\.state), [.ready, .ready])
+        XCTAssertEqual(Set(items.map(\.displayName)), ["Maru Coffee", "Gjusta Bakery"])
+        XCTAssertTrue(items.allSatisfy {
+            $0.seed.sourceURLString == "https://www.instagram.com/reel/two-venues/"
+        })
+    }
+
     func testSummaryAggregatesUnresolvedItemsAcrossEveryImportBatch() async throws {
         let store = PlaceImportStore(
             persistence: InMemoryPlaceImportPersistence(),
@@ -361,7 +399,59 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         let resolution = try await resolver.resolve(seed: seed, source: .textNotes)
 
-        XCTAssertEqual(resolution, .candidates([wrongCandidate], selectedCandidateID: nil))
+        XCTAssertEqual(
+            resolution,
+            .needsHelp("The only Apple Maps result was not a confident venue match. Search for the correct place.")
+        )
+    }
+
+    func testGoogleListPlaceKeepsGoogleNameAddressAndIdentityWhenMapKitReturnsAZipCode() async throws {
+        let wrongCandidate = placeImportCandidate(
+            name: "06700",
+            address: "Cuauhtemoc, CDMX",
+            latitude: 19.419,
+            longitude: -99.162
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(candidates: [wrongCandidate]),
+            metadataProvider: FakeSocialImportMetadataProvider()
+        )
+        let seed = PlaceImportSeed(
+            rawText: "Palo de Rosa Cafe | Monterrey 177-Local C",
+            nameHint: "Palo de Rosa Cafe",
+            areaHint: "Monterrey 177-Local C, Roma Norte, CDMX",
+            sourceURLString: "https://www.google.com/maps/place/?q=place_id:g/11inns9vzs",
+            sourceLine: 1,
+            latitude: 19.419,
+            longitude: -99.162,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "g/11inns9vzs"
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .googleMaps)
+
+        guard case .candidates(let candidates, let selectedCandidateID) = resolution else {
+            return XCTFail("Expected one authoritative Google Maps candidate, got \(resolution)")
+        }
+        let candidate = try XCTUnwrap(candidates.first)
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(selectedCandidateID, candidate.id)
+        XCTAssertEqual(candidate.name, "Palo de Rosa Cafe")
+        XCTAssertEqual(candidate.address, "Monterrey 177-Local C, Roma Norte, CDMX")
+        XCTAssertEqual(candidate.sourceProvider, "google_maps")
+        XCTAssertEqual(candidate.sourceProviderPlaceID, "g/11inns9vzs")
+        XCTAssertEqual(candidate.latitude, 19.419)
+        XCTAssertEqual(candidate.longitude, -99.162)
+
+        let item = PlaceImportItem(
+            batchID: "batch",
+            source: .googleMaps,
+            seed: seed,
+            state: .ready,
+            candidates: [wrongCandidate],
+            selectedCandidateID: wrongCandidate.id
+        )
+        XCTAssertEqual(item.displayName, "Palo de Rosa Cafe")
     }
 
     func testAutoSelectsAnExactNormalizedNameMatch() async throws {
@@ -681,6 +771,22 @@ private final class FakeDevicePlaceResolver: PlaceCandidateResolving {
         return candidates
     }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { candidates }
+}
+
+@MainActor
+private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
+    let routes: [String: [PlaceCandidate]]
+
+    init(routes: [String: [PlaceCandidate]]) {
+        self.routes = routes
+    }
+
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        routes[input.name.lowercased()] ?? []
+    }
+    func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
 }
 
 @MainActor
