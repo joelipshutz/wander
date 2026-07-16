@@ -12191,3 +12191,28 @@ Feedback-pass handoff, 2026-07-16 11:17 PDT:
 - Updated draft PR #109 with root causes, behavior answers, the 21-focused/370-full test results, generic build result, and two-size visual QA: https://github.com/joelipshutz/wander/pull/109#issuecomment-4995187199. The GitHub app integration returned a write-permission 403, so the authenticated `gh pr comment` fallback posted the update successfully.
 - Added the same implementation and validation handoff to Linear REC-97 in comment `0fa19931-2c72-4f47-aa7f-b2936e24aab5`. REC-97 remains `In Progress` and PR #109 remains Draft while Ryan tests; no merge or release was requested.
 - Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch. Suggested physical-device checks: re-open an older affected Google import to confirm resolver-v3 repair, import one multi-venue public Reel/TikTok, verify remote thumbnails on an authenticated account, save one item and confirm it disappears, and verify an already-saved place appears under Duplicates.
+
+## 2026-07-16 11:51 PDT - Codex - REC-97 Import Review Map Follow-up
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: address Ryan's second physical-device review pass: make imported-place photos open a map, add an interactive multi-pin map to ambiguous candidate selection, remove redundant source pills, show complete place names, add confirmed clear-all behavior, rename the header's existing count to duplicates, and case-insensitively deduplicate Profile map cities.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `73492eedb`. The root checkout and sibling worktrees remain untouched, and the latest agent log contains no overlapping REC-97 work.
+- Reviewed Ryan's 11:32 and 11:35 screenshots. The redundant blue `MAPS` source capsule is consuming the width needed by imported place names, while the photo thumbnail already carries required Google Maps attribution. The ambiguous eight-candidate row has coordinates available but exposes only the list chooser today.
+- Expected files are `ProfileImportViews`, `PlaceImportStore`, `ProfileInsightsPresenter`, focused import/profile presenter tests, and this log. No hosted schema/RPC/data, build number, TestFlight release, or Slack action is in scope for this follow-up.
+
+Implementation and validation checkpoint, 2026-07-16 14:18 PDT:
+
+- Imported-place thumbnails now open an interactive native map centered on the resolved place. Ambiguous candidate review now opens with a fitted, interactive map containing numbered pins; tapping a pin selects the same numbered candidate shown in the list below.
+- Removed the redundant blue provider capsule from import cards while retaining Google attribution on provider photos. Venue names use one consistent 16-point weight, wrap without a line limit, and receive layout priority so the complete name remains visible.
+- Added `Clear Imports` to the Import Review navigation bar with a destructive confirmation alert reading `Are you sure you want to clear the import list?`. `PlaceImportStore.clearAll()` cancels active tasks, clears every batch/item, and persists the empty inbox. The summary metric now says `duplicates` rather than `existing`.
+- Profile city insights now group case- and diacritic-insensitively and preserve a preferred human-readable casing, so values such as `Marina del Rey` and `Marina Del Rey` produce one city row, count, and route containing both place IDs.
+- Focused regression validation passed 17/17 tests. The complete iPhone 17 / iOS 26.5 suite passed 372/372 with zero failures: `/private/tmp/DerivedData-rec97-map-followup/Logs/Test/Test-Wander-2026.07.16_12-04-02--0700.xcresult`. A fresh generic iOS Simulator build passed for arm64 and x86_64 at `/private/tmp/DerivedData-rec97-map-followup-generic/Build/Products/Debug-iphonesimulator/Wander.app`; `git diff --check` also passes.
+- Installed the exact generic build with a synthetic eight-candidate/long-name snapshot on iPhone 17 Pro and confirmed the owner Profile/import entry point launches. Automated macOS click/scroll control then timed out at the host permission boundary, so no claim is made for a completed automated pin-tap screenshot pass; the new map surfaces are compile-checked and the state/store behavior is regression-tested, with final physical interaction left for Ryan's Xcode pass.
+- No hosted schema/function/data, migration, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred. Commit/push, PR/Linear handoff, and opening the exact Xcode worktree follow this checkpoint.

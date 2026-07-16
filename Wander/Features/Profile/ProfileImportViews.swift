@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -374,6 +375,18 @@ private struct PlaceImportQuickSaveIntent {
     let status: PlaceStatus
 }
 
+private struct PlaceImportMapLocation: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let latitude: Double
+    let longitude: Double
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
 struct PlaceImportInboxScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     @EnvironmentObject private var store: WanderStore
@@ -385,7 +398,7 @@ struct PlaceImportInboxScreen: View {
     @State private var candidatePickerItem: PlaceImportItem?
     @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
-    @State private var showsCancelConfirmation = false
+    @State private var showsClearConfirmation = false
 
     var body: some View {
         Group {
@@ -456,28 +469,26 @@ struct PlaceImportInboxScreen: View {
         .navigationTitle("Import Review")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !processingBatchIDs.isEmpty {
+            if !importStore.batches.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .destructive) {
-                        showsCancelConfirmation = true
+                        showsClearConfirmation = true
                     } label: {
-                        Image(systemName: "stop.circle")
+                        Text("Clear Imports")
                     }
-                    .accessibilityLabel("Cancel import")
+                    .accessibilityLabel("Clear all imports")
                 }
             }
         }
-        .confirmationDialog("Cancel active imports?", isPresented: $showsCancelConfirmation) {
-            if !processingBatchIDs.isEmpty {
-                Button("Cancel active imports", role: .destructive) {
-                    for batchID in processingBatchIDs {
-                        importStore.cancel(batchID: batchID)
-                    }
-                }
+        .alert("Clear imports?", isPresented: $showsClearConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear Import List", role: .destructive) {
+                importStore.clearAll()
+                selectedFilter = .unresolved
+                visibleLimit = 50
             }
-            Button("Keep importing", role: .cancel) {}
         } message: {
-            Text("Places already saved will stay saved. Unfinished items will be dismissed.")
+            Text("Are you sure you want to clear the import list?")
         }
         .sheet(item: $saveRoute) { route in
             MapPlaceSaveFlowSheet(context: route.context) { submission in
@@ -538,16 +549,6 @@ struct PlaceImportInboxScreen: View {
         case .failed:
             inboxItems.filter { $0.state == .failed }
         }
-    }
-
-    private var processingBatchIDs: [String] {
-        importStore.batches
-            .filter { batch in
-                importStore.items(for: batch.id).contains {
-                    [.queued, .resolving].contains($0.state)
-                }
-            }
-            .map(\.id)
     }
 
     private var filterStrip: some View {
@@ -619,7 +620,7 @@ struct PlaceImportInboxScreen: View {
             } else {
                 HStack(spacing: WanderTheme.spacing4) {
                     importMetric(unresolvedCount, "to review", WanderTheme.terracotta.color)
-                    importMetric(summary.duplicateCount, "existing", WanderTheme.stateInfo.color)
+                    importMetric(summary.duplicateCount, "duplicates", WanderTheme.stateInfo.color)
                 }
             }
 
@@ -721,8 +722,33 @@ private struct PlaceImportPhotoThumb: View {
     let loadsRemotePhoto: Bool
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
+    @State private var presentedMapLocation: PlaceImportMapLocation?
 
     var body: some View {
+        Group {
+            if let mapLocation = item.reviewMapLocation {
+                Button {
+                    presentedMapLocation = mapLocation
+                } label: {
+                    thumbnail
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(item.displayName) on a map")
+                .accessibilityHint("Opens an interactive place map")
+            } else {
+                thumbnail
+                    .accessibilityHidden(true)
+            }
+        }
+        .task(id: photoTaskID) {
+            await loadPhoto()
+        }
+        .sheet(item: $presentedMapLocation) { location in
+            PlaceImportLocationMapSheet(location: location)
+        }
+    }
+
+    private var thumbnail: some View {
         ZStack {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                 .fill(item.source.tint)
@@ -758,10 +784,6 @@ private struct PlaceImportPhotoThumb: View {
         }
         .frame(width: 64, height: 64)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-        .accessibilityHidden(true)
-        .task(id: photoTaskID) {
-            await loadPhoto()
-        }
     }
 
     private var photoTaskID: String {
@@ -801,9 +823,10 @@ private struct PlaceImportReviewRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.displayName)
-                        .font(.system(size: 17, weight: .black))
+                        .font(.system(size: 16, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     if let area = item.displayArea {
                         Text(area)
                             .font(.system(size: 13, weight: .semibold))
@@ -811,16 +834,7 @@ private struct PlaceImportReviewRow: View {
                             .lineLimit(2)
                     }
                 }
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                Label(item.source.shortBadgeTitle, systemImage: item.source.systemImage)
-                    .font(.system(size: 10, weight: .black))
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .frame(minHeight: 28)
-                    .background(item.source.tint)
-                    .foregroundStyle(item.source.accent)
-                    .clipShape(Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if ![.queued, .resolving, .saved, .dismissed].contains(item.state) {
                     Menu {
@@ -994,6 +1008,79 @@ private extension PlaceImportItem {
                 : candidate?.sourceProviderPlaceID
         )
     }
+
+    var reviewMapLocation: PlaceImportMapLocation? {
+        if let coordinate = usableImportCoordinate(latitude: seed.latitude, longitude: seed.longitude) {
+            return PlaceImportMapLocation(
+                id: "\(id)-source",
+                title: displayName,
+                subtitle: seed.areaHint ?? displayArea,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+        }
+
+        let candidate = selectedCandidate ?? (candidates.count == 1 ? candidates[0] : nil)
+        guard let candidate,
+              let coordinate = usableImportCoordinate(
+                  latitude: candidate.latitude,
+                  longitude: candidate.longitude
+              )
+        else { return nil }
+        return PlaceImportMapLocation(
+            id: "\(id)-\(candidate.id)",
+            title: candidate.name,
+            subtitle: candidate.address ?? candidate.previewSubtitle(),
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )
+    }
+}
+
+private struct PlaceImportLocationMapSheet: View {
+    let location: PlaceImportMapLocation
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Map(
+                initialPosition: .region(
+                    MKCoordinateRegion(
+                        center: location.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.025, longitudeDelta: 0.025)
+                    )
+                )
+            ) {
+                Marker(location.title, coordinate: location.coordinate)
+                    .tint(WanderTheme.terracotta.color)
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(location.title)
+                        .font(.system(size: 18, weight: .black))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle = location.subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(WanderTheme.spacing4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial)
+            }
+            .navigationTitle("Place Map")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
 }
 
 private struct PlaceImportCandidatePicker: View {
@@ -1006,17 +1093,29 @@ private struct PlaceImportCandidatePicker: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: WanderTheme.spacing3) {
-                    ForEach(item.candidates) { candidate in
+                    if let candidateMapRegion {
+                        candidateMap(region: candidateMapRegion)
+                    }
+
+                    ForEach(Array(item.candidates.enumerated()), id: \.element.id) { index, candidate in
                         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                             Button {
                                 selectionAction(candidate.id)
                                 dismiss()
                             } label: {
                                 HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 12, weight: .black))
+                                        .frame(width: 28, height: 28)
+                                        .background(WanderTheme.skyTint.color)
+                                        .foregroundStyle(WanderTheme.stateInfo.color)
+                                        .clipShape(Circle())
+
                                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                                         Text(candidate.name)
-                                            .font(.system(size: 17, weight: .black))
+                                            .font(.system(size: 16, weight: .black))
                                             .foregroundStyle(WanderTheme.textInk.color)
+                                            .fixedSize(horizontal: false, vertical: true)
                                         Text(candidate.previewSubtitle())
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(WanderTheme.textMuted.color)
@@ -1075,6 +1174,70 @@ private struct PlaceImportCandidatePicker: View {
         }
     }
 
+    private var candidateMapRegion: MKCoordinateRegion? {
+        MapRegionFitter.region(
+            fitting: item.candidates.compactMap { candidate in
+                usableImportCoordinate(latitude: candidate.latitude, longitude: candidate.longitude)
+            },
+            minimumSpan: 0.02,
+            paddingMultiplier: 1.5
+        )
+    }
+
+    private func candidateMap(region: MKCoordinateRegion) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Choose on the map")
+                    .font(.system(size: 17, weight: .black))
+                Text("Tap a numbered pin to select that place.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
+                ForEach(Array(item.candidates.enumerated()), id: \.element.id) { index, candidate in
+                    if let coordinate = usableImportCoordinate(
+                        latitude: candidate.latitude,
+                        longitude: candidate.longitude
+                    ) {
+                        Annotation(candidate.name, coordinate: coordinate) {
+                            Button {
+                                selectionAction(candidate.id)
+                                dismiss()
+                            } label: {
+                                ZStack {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 38, weight: .black))
+                                        .foregroundStyle(WanderTheme.terracotta.color)
+                                        .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 10, weight: .black))
+                                        .foregroundStyle(Color.white)
+                                        .offset(y: -3)
+                                }
+                                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Choose match \(index + 1), \(candidate.name)")
+                        }
+                        .annotationTitles(.hidden)
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .frame(height: 250)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+            .accessibilityLabel("Map of \(item.candidates.count) possible place matches")
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+    }
+
     private func quickSaveButton(
         _ title: String,
         systemImage: String,
@@ -1095,6 +1258,20 @@ private struct PlaceImportCandidatePicker: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+private func usableImportCoordinate(
+    latitude: Double?,
+    longitude: Double?
+) -> CLLocationCoordinate2D? {
+    guard let latitude,
+          let longitude,
+          latitude.isFinite,
+          longitude.isFinite,
+          !(latitude == 0 && longitude == 0)
+    else { return nil }
+    let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
 }
 
 private struct PlaceImportRescueScreen: View {

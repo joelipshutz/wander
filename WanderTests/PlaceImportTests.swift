@@ -238,6 +238,35 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.batches.first(where: { $0.id == batchID })?.state, .cancelled)
     }
 
+    func testClearAllRemovesEveryBatchAndPersistsTheEmptyInbox() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let firstBatchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles\nNeeds Help"
+        )
+        await store?.waitForProcessing(batchID: firstBatchID)
+        let secondBatchID = try XCTUnwrap(store).enqueue(
+            source: .instagram,
+            text: "Ready, Santa Monica"
+        )
+        await store?.waitForProcessing(batchID: secondBatchID)
+
+        store?.clearAll()
+
+        XCTAssertEqual(store?.batches, [])
+        XCTAssertEqual(store?.items, [])
+        XCTAssertEqual(store?.summary, .empty)
+        XCTAssertEqual(persistence.snapshot, PlaceImportSnapshot())
+
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(store?.batches, [])
+        XCTAssertEqual(store?.items, [])
+    }
+
     func testExpandedGoogleListReplacesOneURLWithEveryImportedPlace() async throws {
         let seeds = (1...45).map { index in
             PlaceImportSeed(

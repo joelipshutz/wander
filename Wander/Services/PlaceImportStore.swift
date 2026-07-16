@@ -589,6 +589,16 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    func clearAll() {
+        for task in processingTasks.values {
+            task.cancel()
+        }
+        processingTasks.removeAll()
+        items.removeAll()
+        batches.removeAll()
+        persist()
+    }
+
     func reconcileDuplicates(with existingPlaces: [PlaceImportExistingPlace]) {
         var changedBatchIDs = Set<String>()
         for index in items.indices where [.ready, .ambiguous, .duplicate].contains(items[index].state) {
