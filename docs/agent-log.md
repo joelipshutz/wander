@@ -12415,3 +12415,10 @@ Provider-specificity implementation and validation, 2026-07-17 16:27 PDT:
 - Regression coverage includes Noun, Boulevard, Costco-style food markets, Menya's Japanese-versus-sushi precedence, Ugo-style signed-in enrichment without opening Profile, Ghisallo-style bakery correction, user-edit precedence, no churn for already-specific places, metadata/photo cache separation, and metadata responses without photos.
 - Focused XCTest passed 74 tests with zero failures: `/private/tmp/DerivedData-rec98-provider-specificity/Logs/Test/Test-Wander-2026.07.17_16-13-28--0700.xcresult`. The full iPhone 17 Pro / iOS 26.5 suite passed 396 tests with zero failures: `/private/tmp/DerivedData-rec98-provider-specificity/Logs/Test/Test-Wander-2026.07.17_16-14-29--0700.xcresult`. Generic simulator build passed for arm64 and x86_64, signed arm64 device build passed, Deno place matching passed 10/10, Deno type-check passed, and `git diff --check` is clean.
 - Installed the exact signed app from `/private/tmp/DerivedData-rec98-integrity-device/Build/Products/Debug-iphoneos/Wander.app` on Ryan's paired iPhone 15 Pro. Automated relaunch remains blocked only because the phone is locked; CoreDevice reports `RequestDenied: Locked`. No merge, build-number bump, TestFlight release, tester-data rewrite, or Slack announcement occurred.
+
+Provider-specificity handoff, 2026-07-17 16:31 PDT:
+
+- Committed and pushed the complete provider reconciliation as `79d101319` (`fix: reconcile provider place categories`) to `origin/codex/rec-98-category-emojis`.
+- Updated ready PR #112 with root causes, systemic behavior, validation, deployment status, and the physical-device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5008505653.
+- Added matching Linear evidence in comment `806799af-1f5b-4768-bdd2-0c231dc621e1` and moved REC-98 from `In Progress` to `In Review`.
+- The branch is ready for Xcode testing. No merge, build-number bump, TestFlight upload, or Slack announcement was requested or performed.
