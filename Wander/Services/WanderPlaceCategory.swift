@@ -1662,9 +1662,17 @@ enum WanderPlaceCategory {
         subcategoryGroups(for: restaurantsFood).filter { $0.role == .cuisine }
     }
 
-    static var restaurantCuisineOptions: [String] {
+    static let restaurantCuisineOptions: [String] = {
         restaurantCuisineGroups().flatMap(\.subcategories)
-    }
+    }()
+
+    private static let normalizedRestaurantCuisineOptions: [(name: String, normalized: String)] = {
+        restaurantCuisineOptions
+            .map { cuisine in
+                (name: cuisine, normalized: normalizedCategoryText(cuisine))
+            }
+            .sorted { $0.normalized.count > $1.normalized.count }
+    }()
 
     static func isRestaurantCuisine(_ value: String?) -> Bool {
         cuisineGuess(forRawValue: value) != nil
@@ -1673,15 +1681,13 @@ enum WanderPlaceCategory {
     static func cuisineGuess(forRawValue rawValue: String?) -> String? {
         let normalized = normalizedCategoryText(rawValue)
         guard !normalized.isEmpty else { return nil }
+        let withoutCuisineSuffix = normalized.replacingOccurrences(of: " cuisine", with: "")
 
-        return restaurantCuisineOptions
-            .sorted { normalizedCategoryText($0).count > normalizedCategoryText($1).count }
-            .first { cuisine in
-                let normalizedCuisine = normalizedCategoryText(cuisine)
-                return normalized == normalizedCuisine
-                    || normalized.contains(normalizedCuisine)
-                    || normalized.replacingOccurrences(of: " cuisine", with: "") == normalizedCuisine
-            }
+        return normalizedRestaurantCuisineOptions.first { cuisine in
+            normalized == cuisine.normalized
+                || normalized.contains(cuisine.normalized)
+                || withoutCuisineSuffix == cuisine.normalized
+        }?.name
     }
 
     static func emoji(

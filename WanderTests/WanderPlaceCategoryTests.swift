@@ -1,3 +1,4 @@
+import Foundation
 import MapKit
 import XCTest
 @testable import Wander
@@ -195,6 +196,36 @@ final class WanderPlaceCategoryTests: XCTestCase {
             XCTAssertNotEqual(emoji, "🍽️", "\(cuisine) should be more specific than the broad restaurant icon")
             XCTAssertNotEqual(emoji, "📍", "\(cuisine) should never fall back to a generic pin")
         }
+    }
+
+    func testEmojiResolutionHotPathStaysCheapAcrossRepeatedListRendering() {
+        let assignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: "restaurant"
+        )
+        let cuisines = ["Thai", "South American", "Japanese BBQ", "Italian", "American"]
+
+        _ = WanderPlaceCategory.emoji(for: assignment, cuisine: cuisines[0], name: "Warmup")
+
+        let start = Date()
+        var checksum = 0
+        for index in 0..<2_000 {
+            checksum += WanderPlaceCategory.emoji(
+                for: assignment,
+                cuisine: cuisines[index % cuisines.count],
+                name: "Repeated list place \(index)"
+            ).utf8.count
+        }
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertGreaterThan(checksum, 0)
+        XCTAssertLessThan(
+            elapsed,
+            2,
+            "Emoji resolution took \(elapsed)s for 2,000 list-style renders; rendering must not rebuild the cuisine catalog"
+        )
     }
 
     func testKnownSubcategoriesResolveAndEachBroadCategoryHasUsefulVariety() {

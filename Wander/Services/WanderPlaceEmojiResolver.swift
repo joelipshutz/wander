@@ -3,7 +3,14 @@ import Foundation
 enum WanderPlaceEmojiResolver {
     private struct Rule {
         let emoji: String
-        let terms: [String]
+        let normalizedTerms: [String]
+
+        init(emoji: String, terms: [String]) {
+            self.emoji = emoji
+            self.normalizedTerms = terms
+                .map(WanderPlaceCategory.normalizedCategoryText)
+                .filter { !$0.isEmpty }
+        }
     }
 
     static func emoji(
@@ -131,8 +138,13 @@ enum WanderPlaceEmojiResolver {
 
     private static func firstMatch(in values: [String?], rules: [Rule]) -> String? {
         for value in values {
+            let normalizedValue = WanderPlaceCategory.normalizedCategoryText(value)
+            guard !normalizedValue.isEmpty else { continue }
+
             for rule in rules {
-                if rule.terms.contains(where: { matches(value, term: $0) }) {
+                if rule.normalizedTerms.contains(where: {
+                    matches(normalizedValue: normalizedValue, normalizedTerm: $0)
+                }) {
                     return rule.emoji
                 }
             }
@@ -143,6 +155,10 @@ enum WanderPlaceEmojiResolver {
     private static func matches(_ value: String?, term: String) -> Bool {
         let normalizedValue = WanderPlaceCategory.normalizedCategoryText(value)
         let normalizedTerm = WanderPlaceCategory.normalizedCategoryText(term)
+        return matches(normalizedValue: normalizedValue, normalizedTerm: normalizedTerm)
+    }
+
+    private static func matches(normalizedValue: String, normalizedTerm: String) -> Bool {
         guard !normalizedValue.isEmpty, !normalizedTerm.isEmpty else { return false }
 
         if normalizedValue == normalizedTerm {
@@ -166,31 +182,44 @@ enum WanderPlaceEmojiResolver {
             WanderPlaceCategory.broadCategory(for: primaryCategory),
             WanderPlaceCategory.defaultSubcategory(for: primaryCategory)
         ]
-        if broadValues.contains(where: { matches(normalized, term: $0 ?? "") }) {
+        if broadValues.contains(where: {
+            matches(
+                normalizedValue: normalized,
+                normalizedTerm: WanderPlaceCategory.normalizedCategoryText($0)
+            )
+        }) {
             return true
         }
 
-        return genericDetails[primaryCategory]?.contains(where: { matches(normalized, term: $0) }) == true
+        return genericDetails[primaryCategory]?.contains(where: {
+            matches(normalizedValue: normalized, normalizedTerm: $0)
+        }) == true
     }
 
-    private static let genericDetails: [String: [String]] = [
-        WanderPlaceCategory.restaurantsFood: ["restaurant", "casual family", "fine dining", "bistro"],
-        WanderPlaceCategory.coffeeTeaSweets: ["coffee shop", "cafe"],
-        WanderPlaceCategory.barsNightlife: ["bar", "lounge"],
-        WanderPlaceCategory.outdoorsNature: ["park", "tourist attraction"],
-        WanderPlaceCategory.thingsToDo: ["tourist attraction", "event venue"],
-        WanderPlaceCategory.shopping: ["store", "market"],
-        WanderPlaceCategory.wellnessFitness: [
-            "gym", "wellness center", "wellness studio", "doctor", "medical clinic", "medical center"
-        ],
-        WanderPlaceCategory.stays: ["hotel", "lodging"],
-        WanderPlaceCategory.servicesErrands: ["consultant", "service"],
-        WanderPlaceCategory.travelTransit: ["transit stop", "transit station", "transportation service"],
-        WanderPlaceCategory.workEducation: ["co working space", "business center"],
-        WanderPlaceCategory.civicFaith: ["government office", "place of worship"],
-        WanderPlaceCategory.areasAddresses: ["address", "area"],
-        WanderPlaceCategory.facilitiesOther: ["point of interest", "generic establishment", "unknown"]
-    ]
+    private static let genericDetails: [String: [String]] = {
+        let values: [String: [String]] = [
+            WanderPlaceCategory.restaurantsFood: ["restaurant", "casual family", "fine dining", "bistro"],
+            WanderPlaceCategory.coffeeTeaSweets: ["coffee shop", "cafe"],
+            WanderPlaceCategory.barsNightlife: ["bar", "lounge"],
+            WanderPlaceCategory.outdoorsNature: ["park", "tourist attraction"],
+            WanderPlaceCategory.thingsToDo: ["tourist attraction", "event venue"],
+            WanderPlaceCategory.shopping: ["store", "market"],
+            WanderPlaceCategory.wellnessFitness: [
+                "gym", "wellness center", "wellness studio", "doctor", "medical clinic", "medical center"
+            ],
+            WanderPlaceCategory.stays: ["hotel", "lodging"],
+            WanderPlaceCategory.servicesErrands: ["consultant", "service"],
+            WanderPlaceCategory.travelTransit: ["transit stop", "transit station", "transportation service"],
+            WanderPlaceCategory.workEducation: ["co working space", "business center"],
+            WanderPlaceCategory.civicFaith: ["government office", "place of worship"],
+            WanderPlaceCategory.areasAddresses: ["address", "area"],
+            WanderPlaceCategory.facilitiesOther: ["point of interest", "generic establishment", "unknown"]
+        ]
+
+        return values.mapValues { terms in
+            terms.map(WanderPlaceCategory.normalizedCategoryText)
+        }
+    }()
 
     private static let restaurantTypeRules: [Rule] = [
         Rule(emoji: "🌮", terms: ["taco stand", "taco truck", "taco"]),
