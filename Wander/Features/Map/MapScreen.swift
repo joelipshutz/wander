@@ -3581,7 +3581,6 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             )
             .disabled(store.isPrivateProfile)
-            .opacity(store.isPrivateProfile ? 0.56 : 1)
 
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
@@ -6274,32 +6273,7 @@ private struct PlaceActivityCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-            Button {
-                guard !entry.isCurrentUser else { return }
-                selectedProfileID = entry.owner.id
-            } label: {
-                HStack(spacing: WanderTheme.spacing2) {
-                    WanderAvatar(
-                        initials: entry.owner.initials,
-                        avatarURL: entry.owner.avatarURL,
-                        size: 34,
-                        color: entry.avatarColor
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.displayName)
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text("@\(entry.owner.handle) · \(entry.timestampText)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .disabled(entry.isCurrentUser)
-            .accessibilityLabel(entry.isCurrentUser ? "Your save" : "Open \(entry.owner.displayName)'s profile")
+            activityIdentity
             Spacer()
             if entry.canEdit {
                 Button(action: onEdit) {
@@ -6315,6 +6289,44 @@ private struct PlaceActivityCard: View {
                 .accessibilityLabel(entry.editAccessibilityLabel)
             }
             StatusBadge(status: entry.status)
+        }
+    }
+
+    @ViewBuilder
+    private var activityIdentity: some View {
+        if entry.isCurrentUser {
+            activityIdentityLabel
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Your save")
+        } else {
+            Button {
+                selectedProfileID = entry.owner.id
+            } label: {
+                activityIdentityLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(entry.owner.displayName)'s profile")
+        }
+    }
+
+    private var activityIdentityLabel: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            WanderAvatar(
+                initials: entry.owner.initials,
+                avatarURL: entry.owner.avatarURL,
+                size: 34,
+                color: entry.avatarColor
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("@\(entry.owner.handle) · \(entry.timestampText)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
         }
     }
 

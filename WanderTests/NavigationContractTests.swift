@@ -57,6 +57,67 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
     }
 
+    func testSharedProfileHomeHidesUnusedNavigationBar() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(home.contains(".toolbar(.hidden, for: .navigationBar)"))
+    }
+
+    func testOwnPlaceActivityAttributionIsStaticInsteadOfDisabled() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let activityCard = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct PlaceActivityCard: View")
+                .last?
+                .components(separatedBy: "private struct VisitPhotoThumbnail: View")
+                .first
+        )
+
+        XCTAssertTrue(activityCard.contains("if entry.isCurrentUser"))
+        XCTAssertTrue(activityCard.contains("activityIdentityLabel"))
+        XCTAssertFalse(activityCard.contains(".disabled(entry.isCurrentUser)"))
+    }
+
+    func testUnavailableContentAvoidsStackedOpacityTreatments() throws {
+        let privateProfileFiles = [
+            "Wander/Features/Add/AddScreen.swift",
+            "Wander/Features/Map/MapScreen.swift",
+            "Wander/Features/Settings/ProfileSettingsViews.swift",
+            "Wander/Features/Settings/SettingsScreen.swift",
+            "Wander/Features/Lists/ListsScreen.swift"
+        ]
+
+        for file in privateProfileFiles {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertFalse(
+                source.contains(".opacity(store.isPrivateProfile ? 0.56 : 1)"),
+                "Private Profile controls should not compound disabled-state opacity in \(file)"
+            )
+        }
+
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Settings/SettingsScreen.swift")
+        )
+        XCTAssertFalse(settings.contains(".opacity(notificationsEnabled ? 1 : 0.45)"))
+        XCTAssertFalse(settings.contains(".disabled(action == nil)"))
+
+        let staticAvatarFiles = [
+            "Wander/Features/Lists/ListsScreen.swift",
+            "Wander/Features/SharedVisits/SharedVisitComponents.swift"
+        ]
+        for file in staticAvatarFiles {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertFalse(
+                source.contains(".disabled(onSelect == nil)"),
+                "Static avatars should not be rendered through disabled buttons in \(file)"
+            )
+        }
+    }
+
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),

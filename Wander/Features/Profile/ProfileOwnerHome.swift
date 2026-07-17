@@ -91,6 +91,7 @@ struct ProfileOwnerHome: View {
         }
         .scrollIndicators(.hidden)
         .wanderScreen()
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var identitySection: some View {

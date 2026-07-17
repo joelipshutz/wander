@@ -247,7 +247,6 @@ struct ProfilePrivacyTrustScreen: View {
                     }
                 )
                 .disabled(store.isPrivateProfile)
-                .opacity(store.isPrivateProfile ? 0.56 : 1)
             }
 
             Section("how privacy works") {
