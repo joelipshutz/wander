@@ -659,9 +659,7 @@ private struct ListPreviewMosaic: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                 .fill(place.tint)
 
-            Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.68))
+            WanderCategoryEmoji(category: place.category, size: 22)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -1446,9 +1444,7 @@ private struct ListVisiblePlaceAddRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 18, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(category: place.category, size: 18)
                     }
                     .frame(width: 48, height: 48)
 
@@ -1509,9 +1505,7 @@ private struct ListPlaceCandidateAddRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                         .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
-                    Image(systemName: WanderPlaceCategory.symbolName(for: candidate.primaryCategory))
-                        .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(category: candidate.primaryCategory, size: 18)
                 }
                 .frame(width: 48, height: 48)
 
@@ -1644,9 +1638,7 @@ private struct ListPlaceRow: View {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
 
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 20, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(category: place.category, size: 20)
                     }
                     .frame(width: 56, height: 56)
 
@@ -2184,11 +2176,9 @@ private struct ListMapMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-            .font(.system(size: isSelected ? 17 : 16, weight: .black))
+        WanderCategoryEmoji(category: place.category, size: isSelected ? 17 : 16)
             .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
             .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -2244,9 +2234,7 @@ private struct ListMapPlaceTile: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .fill(place.tint)
-                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(category: place.category, size: 22)
                 }
                 .frame(width: 62, height: 62)
 

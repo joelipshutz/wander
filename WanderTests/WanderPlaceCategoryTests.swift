@@ -8,9 +8,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.primary(for: .nationalPark), WanderPlaceCategory.outdoorsNature)
     }
 
-    func testCategorySymbolsIncludePark() {
-        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "park"), "tree.fill")
-        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "hike"), "tree.fill")
+    func testCategoryEmojiLookupNormalizesAliases() {
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "park"), "🌲")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "hike"), "🌲")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "thai restaurant"), "🍽️")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "unknown provider value"), "📍")
     }
 
     func testDisplayTaxonomySeparatesBroadCategoryAndSubcategory() {
@@ -85,7 +87,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Lake Shrine"),
             WanderPlaceCategory.civicFaith
         )
-        XCTAssertEqual(WanderPlaceCategory.symbolName(for: "spiritual"), "building.columns.fill")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "spiritual"), "🏛️")
     }
 
     func testCandidatePreviewSubtitleDoesNotRepeatLocality() {
@@ -126,6 +128,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         struct SharedTaxonomy: Decodable {
             struct Category: Decodable {
                 let id: String
+                let emoji: String
                 let editable: Bool
             }
 
@@ -144,6 +147,15 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
         XCTAssertFalse(WanderPlaceCategory.editableCategories.contains(WanderPlaceCategory.fallbackPlace))
+
+        let swiftEmojiByCategory = Dictionary(
+            uniqueKeysWithValues: WanderPlaceCategory.taxonomy.map { ($0.id, $0.emoji) }
+        )
+        let sharedEmojiByCategory = Dictionary(
+            uniqueKeysWithValues: shared.categories.map { ($0.id, $0.emoji) }
+        )
+        XCTAssertEqual(swiftEmojiByCategory, sharedEmojiByCategory)
+        XCTAssertEqual(Set(WanderPlaceCategory.editableCategories.compactMap { swiftEmojiByCategory[$0] }).count, 14)
     }
 
     func testSubcategoryGroupsAreExhaustiveForEveryEditableCategory() {

@@ -1935,9 +1935,7 @@ private struct ProfilePlaceRow: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+            WanderCategoryEmoji(assignment: visiblePlace.categoryAssignment, size: 17)
                 .frame(width: 40, height: 40)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
@@ -1959,10 +1957,6 @@ private struct ProfilePlaceRow: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-
-    private var icon: String {
-        WanderPlaceCategory.symbolName(for: visiblePlace.categoryAssignment)
     }
 
     private var subtitle: String {

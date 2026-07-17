@@ -2095,9 +2095,7 @@ private struct MapTypeaheadRow: View {
         HStack(spacing: WanderTheme.spacing2) {
             Button(action: onSelect) {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: WanderPlaceCategory.symbolName(for: suggestion.category))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(iconColor)
+                    WanderCategoryEmoji(category: suggestion.category, size: 14)
                         .frame(width: 38, height: 38)
                         .background(iconBackground)
                         .clipShape(Circle())
@@ -2166,10 +2164,6 @@ private struct MapTypeaheadRow: View {
             return MapPinOutlineBuilder.outlines(for: saveStates)
         }
         return []
-    }
-
-    private var iconColor: Color {
-        isSavedSuggestion ? WanderTheme.textInk.color : Color(uiColor: .systemGray)
     }
 
     private var iconBackground: Color {
@@ -2317,11 +2311,9 @@ private struct SearchResultMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: isSelected ? 17 : 15, weight: .black))
+        WanderCategoryEmoji(category: candidate.category, size: isSelected ? 17 : 15)
             .frame(width: isSelected ? 42 : 38, height: isSelected ? 42 : 38)
             .background(WanderTheme.pinSocial.color)
-            .foregroundStyle(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -2338,9 +2330,6 @@ private struct SearchResultMarker: View {
             .accessibilityLabel("Unsaved map result, \(candidate.name)")
     }
 
-    private var symbol: String {
-        WanderPlaceCategory.symbolName(for: candidate.category)
-    }
 }
 
 private struct MapPlaceMarker: View {
@@ -2386,8 +2375,7 @@ private struct WanderMapPin: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 16, weight: .bold))
+        WanderCategoryEmoji(assignment: visiblePlace.categoryAssignment, size: 16)
             .frame(width: 38, height: 38)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
@@ -2414,10 +2402,6 @@ private struct WanderMapPin: View {
                 )
                 .padding(outlinePadding(for: index))
         }
-    }
-
-    private var symbol: String {
-        WanderPlaceCategory.symbolName(for: visiblePlace.categoryAssignment)
     }
 
     private var outlineLineWidth: CGFloat {
@@ -4588,7 +4572,7 @@ private struct PlaceTypePickerSheet: View {
         HStack(spacing: WanderTheme.spacing2) {
             CategoryPickerModePill(
                 title: selectedCategoryTitle,
-                systemImage: WanderPlaceCategory.symbolName(for: selectedPrimaryCategory),
+                category: selectedPrimaryCategory,
                 isSelected: true
             )
             Button {
@@ -4793,9 +4777,7 @@ struct PrimaryCategoryPickerTile: View {
                 HStack {
                     ZStack {
                         Circle().fill(accent.opacity(0.16))
-                        Image(systemName: WanderPlaceCategory.symbolName(for: category))
-                            .font(.system(size: 17, weight: .black))
-                            .foregroundStyle(accent)
+                        WanderCategoryEmoji(category: category, size: 17)
                     }
                     .frame(width: 42, height: 42)
 
@@ -4842,13 +4824,34 @@ struct PrimaryCategoryPickerTile: View {
 
 struct CategoryPickerModePill: View {
     let title: String
-    let systemImage: String
+    let systemImage: String?
+    let emoji: String?
     let isSelected: Bool
+
+    init(title: String, systemImage: String, isSelected: Bool) {
+        self.title = title
+        self.systemImage = systemImage
+        emoji = nil
+        self.isSelected = isSelected
+    }
+
+    init(title: String, category: String, isSelected: Bool) {
+        self.title = title
+        systemImage = nil
+        emoji = WanderPlaceCategory.emoji(for: category)
+        self.isSelected = isSelected
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .black))
+            if let emoji {
+                Text(emoji)
+                    .font(.system(size: 14))
+                    .accessibilityHidden(true)
+            } else if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .black))
+            }
             Text(title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -5435,7 +5438,7 @@ struct PlaceSheet: View {
                 spacing: WanderTheme.spacing2
             ) {
                 ForEach(facts) { fact in
-                    PlaceFactPill(title: fact.title, systemImage: fact.systemImage)
+                    PlaceFactPill(fact: fact)
                 }
             }
         }
@@ -5537,7 +5540,7 @@ struct PlaceSheet: View {
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
         if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, systemImage: WanderPlaceCategory.symbolName(for: place.categoryAssignment)))
+            facts.append(PlaceFact(title: categoryDisplay, emoji: WanderPlaceCategory.emoji(for: place.categoryAssignment)))
         }
         return facts
     }
@@ -5628,9 +5631,22 @@ struct PlaceSheet: View {
 }
 
 private struct PlaceFact: Identifiable {
-    var id: String { "\(systemImage)-\(title)" }
+    var id: String { "\(emoji ?? systemImage ?? "")-\(title)" }
     let title: String
-    let systemImage: String
+    let systemImage: String?
+    let emoji: String?
+
+    init(title: String, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+        emoji = nil
+    }
+
+    init(title: String, emoji: String) {
+        self.title = title
+        systemImage = nil
+        self.emoji = emoji
+    }
 }
 
 private struct PlaceProfileRatingStrip: View {
@@ -6799,7 +6815,7 @@ private struct SaveReviewCard: View {
             if !facts.isEmpty {
                 MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
                     ForEach(facts) { fact in
-                        PlaceFactPill(title: fact.title, systemImage: fact.systemImage)
+                        PlaceFactPill(fact: fact)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                 }
@@ -6923,12 +6939,31 @@ private struct Facepile: View {
 
 private struct PlaceFactPill: View {
     let title: String
-    let systemImage: String
+    let systemImage: String?
+    let emoji: String?
+
+    init(title: String, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+        emoji = nil
+    }
+
+    init(fact: PlaceFact) {
+        title = fact.title
+        systemImage = fact.systemImage
+        emoji = fact.emoji
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .bold))
+            if let emoji {
+                Text(emoji)
+                    .font(.system(size: 12))
+                    .accessibilityHidden(true)
+            } else if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .bold))
+            }
             Text(title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
@@ -6948,9 +6983,7 @@ private struct CategoryThumb: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: imageName)
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(WanderTheme.terracotta.color)
+            WanderCategoryEmoji(category: category, size: 19)
                 .frame(width: 46, height: 46)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(Circle())
@@ -6962,9 +6995,6 @@ private struct CategoryThumb: View {
         }
     }
 
-    private var imageName: String {
-        WanderPlaceCategory.symbolName(for: category)
-    }
 }
 
 struct SavedStatusBadge: View {

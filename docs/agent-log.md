@@ -12299,3 +12299,29 @@ Release completion, 2026-07-16 17:57 PDT:
 - Final validation: 375 tests with zero failures at `/private/tmp/DerivedData-build77/Logs/Test/Test-Wander-2026.07.16_17-29-42--0700.xcresult`; generic iOS Simulator build passed for arm64 and x86_64; signed archive/export/upload passed from exact `main`.
 - Linear REC-97 briefly auto-closed when PR #109 merged. Restored it to `In Progress` and added release evidence in comment `c7a1c467-15e7-4b18-a451-91f4d670c0e2` because the broader approved issue still tracks hosted account-scoped persistence/jobs, provider extraction architecture, and the Share Extension. The device-local alpha slice is live, but those deferred requirements remain real work.
 - Known tester limitation: the import inbox is device-local and not account-scoped or synced; use one test account per install for import-inbox testing. No tester-data reset, hosted schema mutation, marketing-version change, or broad `#all-recme` announcement occurred.
+
+## 2026-07-16 22:38 PDT - Codex - REC-98 Category Emojis
+
+Agent: Codex
+Branch: `codex/rec-98-category-emojis`
+Worktree: `/private/tmp/recme-rec98-category-emojis`
+Linear: `REC-98` (`In Progress`)
+
+Goal: replace category-specific SF Symbols with one canonical native Apple emoji mapping for all 14 editable map categories and reuse that mapping everywhere category iconography appears.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from exact latest `origin/main` at `062f16f74`. The root checkout is on unrelated REC-88 work and contains an untracked `.pnpm-store/`; both remain untouched.
+- REC-98 is assigned to Ryan and moved from `Todo` to `In Progress`. The issue explicitly delegates selection of the 14 emoji and requires the mapping to remain persistent across product surfaces.
+- The existing `WanderPlaceCategory.taxonomy` is the category source of truth and currently stores one SF Symbol per category. Direct category-symbol rendering appears across Map search/results/pins, Discover, Lists, Shared Visits, Profile, Add, and category pickers.
+- Implementation will add the emoji to the taxonomy, expose canonical string/assignment lookup helpers, introduce one shared SwiftUI category-emoji renderer, migrate category-only icon call sites, and add focused taxonomy/UI contract coverage. Unrelated command, status, navigation, and external-action SF Symbols remain unchanged.
+- Expected files are `Wander/Services/WanderPlaceCategory.swift`, one shared DesignSystem component, the category-rendering feature surfaces, focused tests under `WanderTests/`, and this log. No schema/RPC, hosted data, build number, TestFlight release, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-16 23:05 PDT:
+
+- Added the canonical 14-category mapping to both `WanderPlaceCategory.taxonomy` and version 4 of `shared/place-taxonomy.json`: Restaurants & Food `🍽️`, Coffee, Tea, & Sweets `☕️`, Bars & Nightlife `🍸`, Outdoors & Nature `🌲`, Things To Do `🎟️`, Shopping `🛍️`, Wellness & Fitness `💪`, Stays `🛏️`, Services & Errands `🧰`, Travel & Transit `🚆`, Work & Education `🎓`, Civic & Faith `🏛️`, Areas & Addresses `🗺️`, and Facilities & Other `📍`. The internal weak-data fallback also uses `📍`; category IDs and backend payload values are unchanged.
+- Removed the old taxonomy `symbolName` API and added one shared `WanderCategoryEmoji` renderer. Category icons now resolve through that component on Map pins and search results, place sheets, Add, Discover, Lists and list maps, Profile place rows, Shared Visit invitations, place-profile fallbacks, and category picker/handoff screens. Non-category command, navigation, status, cuisine, and calendar symbols remain SF Symbols.
+- Focused taxonomy coverage passed 13/13 tests. The complete iPhone 17 / iOS 26.5 suite passed 375/375 tests with zero failures: `/private/tmp/DerivedData-rec98-focused/Logs/Test/Test-Wander-2026.07.16_22-55-11--0700.xcresult`. Tests assert alias normalization, fallback behavior, exact Swift/shared-JSON parity, all 14 editable categories, and one unique emoji per editable category.
+- A generic iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`. XcodeGen regenerated cleanly without project-file churn; `jq empty`, `git diff --check`, and the obsolete category-symbol API scan are clean.
+- Visual QA passed on iPhone 17 Pro and compact iPhone 17e / iOS 26.5. The 14-category grid stays aligned and map emojis remain readable inside selection/status outlines. Evidence: `/private/tmp/rec98-category-emojis-iphone17pro.png`, `/private/tmp/rec98-category-emojis-iphone17e.png`, `/private/tmp/rec98-map-emojis-iphone17pro.png`, and `/private/tmp/rec98-map-emojis-iphone17e.png`.
+- No Supabase schema/RPC or hosted-data changes, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred.

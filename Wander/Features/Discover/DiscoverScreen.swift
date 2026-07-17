@@ -1157,9 +1157,7 @@ private struct DiscoverCategoryThumb: View {
     let iconSize: CGFloat
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: category))
-            .font(.system(size: iconSize, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
+        WanderCategoryEmoji(category: category, size: iconSize)
             .frame(width: size, height: size)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())

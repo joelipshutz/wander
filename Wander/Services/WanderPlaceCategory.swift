@@ -716,7 +716,7 @@ struct PlaceCategoryTaxonomyEntry: Equatable {
     let group: String
     let detail: String
     let defaultSubcategory: String?
-    let symbolName: String
+    let emoji: String
     let aliases: [String]
     let subcategories: [String]
     let isEditable: Bool
@@ -780,7 +780,7 @@ enum WanderPlaceCategory {
             group: "Restaurants & Food",
             detail: "Restaurants, cuisines, quick bites",
             defaultSubcategory: "Restaurant",
-            symbolName: "fork.knife",
+            emoji: "🍽️",
             aliases: [
             "restaurants_food", "restaurants food", "restaurants and food", "food_drink", "food drink",
             "food and drink", "restaurant", "restaurants", "fast food", "fine dining", "casual family", "diner",
@@ -813,7 +813,7 @@ enum WanderPlaceCategory {
             group: "Coffee, Tea, & Sweets",
             detail: "Coffee, tea, bakeries",
             defaultSubcategory: "Coffee shop",
-            symbolName: "cup.and.saucer.fill",
+            emoji: "☕️",
             aliases: [
             "coffee_tea_sweets", "coffee tea sweets", "coffee tea and sweets", "coffee", "coffee shop", "cafe",
             "espresso", "roaster", "roastery", "tea", "tea house", "tea store", "bakery", "dessert", "sweets",
@@ -832,7 +832,7 @@ enum WanderPlaceCategory {
             group: "Bars & Nightlife",
             detail: "Bars, lounges, clubs",
             defaultSubcategory: "Bar",
-            symbolName: "wineglass.fill",
+            emoji: "🍸",
             aliases: [
             "bars_nightlife", "bars nightlife", "bars and nightlife", "bar", "bars", "nightlife",
             "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "lounge", "club", "disco",
@@ -852,7 +852,7 @@ enum WanderPlaceCategory {
             group: "Outdoors & Nature",
             detail: "Parks, trails, water",
             defaultSubcategory: "Park",
-            symbolName: "tree.fill",
+            emoji: "🌲",
             aliases: [
             "outdoors_nature", "outdoors nature", "outdoors and nature", "outdoors", "nature", "hike", "hiking",
             "trail", "trailhead", "waterfall", "hot spring", "canyon", "mountain", "park", "national park",
@@ -873,7 +873,7 @@ enum WanderPlaceCategory {
             group: "Things To Do",
             detail: "Attractions, arts, venues",
             defaultSubcategory: "Tourist attraction",
-            symbolName: "ticket.fill",
+            emoji: "🎟️",
             aliases: [
             "things_to_do", "things to do", "arts_culture_faith", "arts culture faith", "entertainment",
             "tourist attraction", "attraction", "landmark", "museum", "gallery", "art gallery", "theater",
@@ -898,7 +898,7 @@ enum WanderPlaceCategory {
             group: "Shopping",
             detail: "Stores, markets, supplies",
             defaultSubcategory: "Store",
-            symbolName: "bag.fill",
+            emoji: "🛍️",
             aliases: [
             "shopping", "shop", "store", "retail", "market", "mall", "grocery", "supermarket", "book store",
             "bookstore", "art supply store", "craft store", "gift shop", "clothing", "shoe store", "jewelry",
@@ -921,7 +921,7 @@ enum WanderPlaceCategory {
             group: "Wellness & Fitness",
             detail: "Health, beauty, fitness",
             defaultSubcategory: "Gym",
-            symbolName: "heart.fill",
+            emoji: "💪",
             aliases: [
             "wellness_fitness", "wellness fitness", "wellness and fitness", "health_wellness", "health wellness",
             "sports_fitness", "sports fitness", "health", "wellness", "fitness", "gym", "fitness center", "yoga",
@@ -944,7 +944,7 @@ enum WanderPlaceCategory {
             group: "Stays",
             detail: "Hotels, rentals, camping",
             defaultSubcategory: "Hotel",
-            symbolName: "bed.double.fill",
+            emoji: "🛏️",
             aliases: [
             "stays", "stay", "lodging", "hotel", "motel", "resort", "inn", "hostel", "bnb", "bed and breakfast",
             "guest house", "airbnb", "vrbo", "extended stay", "cottage", "cabin", "campground", "rv park",
@@ -962,7 +962,7 @@ enum WanderPlaceCategory {
             group: "Services & Errands",
             detail: "Errands, repairs, pet care",
             defaultSubcategory: "Consultant",
-            symbolName: "scissors",
+            emoji: "🧰",
             aliases: [
             "services_errands", "services errands", "services and errands", "services", "service", "bank", "atm",
             "accounting", "insurance", "real estate", "lawyer", "consultant", "florist", "catering", "child care",
@@ -986,7 +986,7 @@ enum WanderPlaceCategory {
             group: "Travel & Transit",
             detail: "Airports, stations, parking",
             defaultSubcategory: "Transit stop",
-            symbolName: "tram.fill",
+            emoji: "🚆",
             aliases: [
             "travel_transit", "travel transit", "travel and transit", "transportation_transit",
             "transportation transit", "transportation and transit", "transportation", "transit", "airport",
@@ -1010,7 +1010,7 @@ enum WanderPlaceCategory {
             group: "Work & Education",
             detail: "Offices, schools, libraries",
             defaultSubcategory: "Co-working space",
-            symbolName: "graduationcap.fill",
+            emoji: "🎓",
             aliases: [
             "work_education", "work education", "work and education", "education", "work_venues", "work venues",
             "work and venues", "work", "school", "university", "college", "campus", "preschool", "library",
@@ -1029,7 +1029,7 @@ enum WanderPlaceCategory {
             group: "Civic & Faith",
             detail: "Government, worship, safety",
             defaultSubcategory: "Government office",
-            symbolName: "building.columns.fill",
+            emoji: "🏛️",
             aliases: [
             "civic_faith", "civic faith", "civic and faith", "public_services", "public service",
             "public services", "government", "city hall", "courthouse", "embassy", "post office", "police",
@@ -1048,7 +1048,7 @@ enum WanderPlaceCategory {
             group: "Areas & Addresses",
             detail: "Cities, addresses, regions",
             defaultSubcategory: "Address",
-            symbolName: "map.fill",
+            emoji: "🗺️",
             aliases: [
             "areas_addresses", "areas addresses", "areas and addresses", "home_neighborhood", "home neighborhood",
             "home and neighborhood", "area", "address", "neighborhood", "locality", "city", "postal area", "town",
@@ -1067,7 +1067,7 @@ enum WanderPlaceCategory {
             group: "Facilities & Other",
             detail: "Restrooms, facilities, unknown",
             defaultSubcategory: "Point of interest",
-            symbolName: "mappin",
+            emoji: "📍",
             aliases: [
             "facilities_other", "facilities other", "facilities and other", "facility", "facilities", "other",
             "public bathroom", "public bath", "public restroom", "restroom", "stable", "generic establishment",
@@ -1084,7 +1084,7 @@ enum WanderPlaceCategory {
             group: "Place",
             detail: "Internal fallback for weak provider data",
             defaultSubcategory: nil,
-            symbolName: "mappin",
+            emoji: "📍",
             aliases: [
             "place"
         ],
@@ -1669,12 +1669,12 @@ enum WanderPlaceCategory {
             }
     }
 
-    static func symbolName(for category: String) -> String {
-        entry(for: primaryCategory(for: category))?.symbolName ?? "mappin"
+    static func emoji(for category: String) -> String {
+        entry(for: primaryCategory(for: category))?.emoji ?? "📍"
     }
 
-    static func symbolName(for assignment: PlaceCategoryAssignment) -> String {
-        entry(for: assignment.primaryCategory)?.symbolName ?? "mappin"
+    static func emoji(for assignment: PlaceCategoryAssignment) -> String {
+        entry(for: assignment.primaryCategory)?.emoji ?? "📍"
     }
 
     static func broadCategory(for category: String) -> String {

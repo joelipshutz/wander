@@ -1032,11 +1032,9 @@ private struct PlaceProfileCategoryThumb: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: WanderPlaceCategory.symbolName(for: category))
-                .font(.system(size: max(17, size * 0.34), weight: .black))
+            WanderCategoryEmoji(category: category, size: max(17, size * 0.34))
                 .frame(width: size, height: size)
                 .background(WanderTheme.terracottaTint.color)
-                .foregroundStyle(WanderTheme.terracotta.color)
                 .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
                 .overlay(
                     RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2)
