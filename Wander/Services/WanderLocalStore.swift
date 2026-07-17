@@ -129,6 +129,7 @@ final class WanderStore: ObservableObject {
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
     private var discoverParseCache: [String: DiscoverFilters] = [:]
+    private var providerCategoryEnrichmentAttemptedKeys = Set<String>()
     private static let defaultRemoteViewport = MapViewport(
         minLatitude: 33.95,
         minLongitude: -118.45,
@@ -1991,6 +1992,121 @@ final class WanderStore: ObservableObject {
         types: [String],
         backend: WanderBackend?
     ) async -> Bool {
+        let changedPlaceIDs = updateProviderCategoryMetadata(
+            placeID: placeID,
+            primaryType: primaryType,
+            types: types,
+            markGenericAsVerified: false
+        )
+        guard !changedPlaceIDs.isEmpty else { return false }
+
+        let ownUserPlaceIDs = markOwnUserPlacesPending(forPlaceIDs: changedPlaceIDs)
+        objectWillChange.send()
+        persist()
+
+        guard let backend else { return true }
+        for userPlaceID in ownUserPlaceIDs {
+            _ = await retryOwnPlaceSync(
+                userPlaceID: userPlaceID,
+                backend: backend,
+                trigger: .providerEnrichment
+            )
+        }
+        return true
+    }
+
+    @discardableResult
+    func refreshOwnPlaceProviderCategories(
+        backend: WanderBackend?,
+        limit: Int = 24
+    ) async -> Int {
+        guard let backend,
+              backend.placePhotoRepository != nil,
+              limit > 0
+        else {
+            return 0
+        }
+
+        let enrichmentUserID = currentUser.id
+        let ownPlaceIDs = Set(
+            userPlaces
+                .filter { $0.userID == enrichmentUserID && $0.deletedAt == nil }
+                .flatMap { [$0.placeID, $0.id, $0.localID, $0.serverID].compactMap { $0 } }
+        )
+        let ownPlaces = places.filter { place in
+            ownPlaceIDs.contains(place.id)
+                || ownPlaceIDs.contains(place.localID)
+                || place.serverID.map(ownPlaceIDs.contains) == true
+        }
+
+        let requests = ownPlaces
+            .filter {
+                $0.categorySource != PlaceCategorySource.user.rawValue
+                    && WanderPlaceCategory.providerAssignmentNeedsEnrichment($0.categoryAssignment)
+            }
+            .sorted { lhs, rhs in
+                let lhsConfidence = lhs.categoryConfidence ?? 0
+                let rhsConfidence = rhs.categoryConfidence ?? 0
+                if lhsConfidence != rhsConfidence {
+                    return lhsConfidence < rhsConfidence
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            .compactMap { place -> (LocalPlace, PlacePhotoRequest)? in
+                let request = PlacePhotoRequest(
+                    placeID: place.id,
+                    name: place.canonicalName,
+                    address: place.address,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    sourceProvider: place.sourceProvider,
+                    sourceProviderPlaceID: place.sourceProviderPlaceID,
+                    requiresPhoto: false
+                )
+                guard !request.skipsGooglePlacesLookup,
+                      !providerCategoryEnrichmentAttemptedKeys.contains(request.lookupKey)
+                else {
+                    return nil
+                }
+                return (place, request)
+            }
+            .prefix(limit)
+
+        var changedPlaceIDs = Set<String>()
+        for (place, request) in requests {
+            guard currentUser.id == enrichmentUserID, !Task.isCancelled else { break }
+            providerCategoryEnrichmentAttemptedKeys.insert(request.lookupKey)
+            do {
+                let photo = try await backend.placePhoto(for: request)
+                guard photo.isGooglePlacesPhoto else { continue }
+                changedPlaceIDs.formUnion(
+                    updateProviderCategoryMetadata(
+                        placeID: place.id,
+                        primaryType: photo.providerPrimaryType,
+                        types: photo.providerTypes ?? [],
+                        markGenericAsVerified: true
+                    )
+                )
+            } catch is CancellationError {
+                break
+            } catch {
+                continue
+            }
+        }
+
+        guard !changedPlaceIDs.isEmpty else { return 0 }
+        let ownUserPlaceIDs = markOwnUserPlacesPending(forPlaceIDs: changedPlaceIDs)
+        objectWillChange.send()
+        persist()
+        return ownUserPlaceIDs.count
+    }
+
+    private func updateProviderCategoryMetadata(
+        placeID: String,
+        primaryType: String?,
+        types: [String],
+        markGenericAsVerified: Bool
+    ) -> Set<String> {
         var candidatePlaces = places.filter {
             $0.id == placeID || $0.localID == placeID || $0.serverID == placeID
         }
@@ -2003,74 +2119,89 @@ final class WanderStore: ObservableObject {
 
         var seen = Set<ObjectIdentifier>()
         candidatePlaces = candidatePlaces.filter { seen.insert(ObjectIdentifier($0)).inserted }
-        guard !candidatePlaces.isEmpty else { return false }
+        guard !candidatePlaces.isEmpty else { return [] }
 
         var changedPlaceIDs = Set<String>()
         for place in candidatePlaces {
             guard place.categorySource != PlaceCategorySource.user.rawValue else { continue }
 
             let existingAssignment = place.categoryAssignment
-            guard let providerType = WanderPlaceCategory.preferredProviderType(
+            let correctivePrimaryType = WanderPlaceCategory.correctiveProviderPrimaryType(
+                primaryType,
+                for: existingAssignment
+            )
+            let providerType = correctivePrimaryType ?? WanderPlaceCategory.preferredProviderType(
                 primaryType: primaryType,
                 types: types,
                 matchingPrimaryCategory: existingAssignment.primaryCategory
-            ),
-            WanderPlaceCategory.isMoreSpecificProviderType(
-                providerType,
-                than: existingAssignment.rawProviderType,
-                matchingPrimaryCategory: existingAssignment.primaryCategory
             )
-            else {
-                continue
+
+            if let providerType {
+                let comparisonPrimary = correctivePrimaryType == nil
+                    ? existingAssignment.primaryCategory
+                    : WanderPlaceCategory.primaryCategory(for: providerType)
+                let isMoreSpecific = WanderPlaceCategory.isMoreSpecificProviderType(
+                    providerType,
+                    than: existingAssignment.rawProviderType,
+                    matchingPrimaryCategory: comparisonPrimary
+                )
+                if correctivePrimaryType != nil || isMoreSpecific {
+                    let enrichedAssignment = WanderPlaceCategory.assignment(
+                        forRawCategory: providerType,
+                        source: PlaceCategorySource.provider.rawValue,
+                        confidence: 0.98,
+                        rawProviderType: providerType
+                    )
+                    let canApply = existingAssignment.primaryCategory == WanderPlaceCategory.fallbackPlace
+                        || enrichedAssignment.primaryCategory == existingAssignment.primaryCategory
+                        || correctivePrimaryType != nil
+                    if canApply,
+                       enrichedAssignment != existingAssignment {
+                        place.category = enrichedAssignment.legacyCategory
+                        place.primaryCategory = enrichedAssignment.primaryCategory
+                        place.subcategory = enrichedAssignment.subcategory
+                        place.categorySource = enrichedAssignment.source
+                        place.categoryConfidence = enrichedAssignment.confidence
+                        place.rawProviderType = enrichedAssignment.rawProviderType
+                        place.updatedAt = .now
+                        place.localUpdatedAt = .now
+                        changedPlaceIDs.formUnion(placeIdentityIDs(place))
+                        continue
+                    }
+                }
             }
 
-            let enrichedAssignment = WanderPlaceCategory.assignment(
-                forRawCategory: providerType,
-                source: PlaceCategorySource.provider.rawValue,
-                confidence: 0.98,
-                rawProviderType: providerType
-            )
-            guard existingAssignment.primaryCategory == WanderPlaceCategory.fallbackPlace
-                    || enrichedAssignment.primaryCategory == existingAssignment.primaryCategory
-            else {
-                continue
-            }
-
-            place.category = enrichedAssignment.legacyCategory
-            place.primaryCategory = enrichedAssignment.primaryCategory
-            place.subcategory = enrichedAssignment.subcategory
-            place.categorySource = enrichedAssignment.source
-            place.categoryConfidence = enrichedAssignment.confidence
-            place.rawProviderType = enrichedAssignment.rawProviderType
-            place.updatedAt = .now
-            place.localUpdatedAt = .now
-            changedPlaceIDs.formUnion([place.id, place.localID])
-            if let serverID = place.serverID {
-                changedPlaceIDs.insert(serverID)
+            if markGenericAsVerified,
+               WanderPlaceCategory.providerAssignmentNeedsEnrichment(existingAssignment),
+               primaryType?.isEmpty == false || !types.isEmpty {
+                place.categorySource = PlaceCategorySource.provider.rawValue
+                place.categoryConfidence = 0.99
+                place.updatedAt = .now
+                place.localUpdatedAt = .now
+                changedPlaceIDs.formUnion(placeIdentityIDs(place))
             }
         }
+        return changedPlaceIDs
+    }
 
-        guard !changedPlaceIDs.isEmpty else { return false }
-        objectWillChange.send()
-        persist()
+    private func placeIdentityIDs(_ place: LocalPlace) -> Set<String> {
+        Set([place.id, place.localID, place.serverID].compactMap { $0 })
+    }
 
-        guard let backend else { return true }
-        let ownUserPlaceIDs = userPlaces
-            .filter {
-                $0.userID == currentUser.id
-                    && $0.deletedAt == nil
-                    && changedPlaceIDs.contains($0.placeID)
+    private func markOwnUserPlacesPending(forPlaceIDs placeIDs: Set<String>) -> [String] {
+        var userPlaceIDs: [String] = []
+        let now = Date.now
+        for userPlace in userPlaces where userPlace.userID == currentUser.id
+            && userPlace.deletedAt == nil
+            && placeIDs.contains(userPlace.placeID) {
+            if userPlace.syncState == .synced {
+                userPlace.syncStateRaw = SyncState.pendingUpdate.rawValue
             }
-            .map(\.id)
-
-        for userPlaceID in ownUserPlaceIDs {
-            _ = await retryOwnPlaceSync(
-                userPlaceID: userPlaceID,
-                backend: backend,
-                trigger: .providerEnrichment
-            )
+            userPlace.updatedAt = now
+            userPlace.localUpdatedAt = now
+            userPlaceIDs.append(userPlace.id)
         }
-        return true
+        return userPlaceIDs
     }
 
     @discardableResult
@@ -3103,7 +3234,12 @@ final class WanderStore: ObservableObject {
         #endif
 
         for userPlaceID in userPlaceIDs {
-            switch await retryOwnPlaceSync(userPlaceID: userPlaceID, backend: backend, trigger: trigger) {
+            switch await retryOwnPlaceSync(
+                userPlaceID: userPlaceID,
+                backend: backend,
+                trigger: trigger,
+                refreshVisiblePlacesAfterSuccess: false
+            ) {
             case .succeeded:
                 syncedCount += 1
             case .failed:
@@ -3126,6 +3262,9 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         WanderDebugLog.sync.debug("sync batch completed trigger=\(trigger.rawValue, privacy: .public) synced=\(syncedCount, privacy: .public) failed=\(failedCount, privacy: .public) skipped=\(skippedCount, privacy: .public)")
         #endif
+        if syncedCount > 0 {
+            await refreshRemoteVisiblePlaces(backend: backend)
+        }
 
         return syncedCount
     }
@@ -3938,6 +4077,7 @@ final class WanderStore: ObservableObject {
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
         if let previousUserID = previousCurrentUser.serverID, previousUserID != session.userID {
+            providerCategoryEnrichmentAttemptedKeys = []
             cancelSharedVisitInboxTask()
             sharedVisitInvitations = []
             sharedVisitInboxUserID = nil
@@ -5318,7 +5458,12 @@ final class WanderStore: ObservableObject {
         return "unknown"
     }
 
-    private func retryOwnPlaceSync(userPlaceID: String, backend: WanderBackend, trigger: OwnPlaceSyncTrigger) async -> OwnPlaceSyncOutcome {
+    private func retryOwnPlaceSync(
+        userPlaceID: String,
+        backend: WanderBackend,
+        trigger: OwnPlaceSyncTrigger,
+        refreshVisiblePlacesAfterSuccess: Bool = true
+    ) async -> OwnPlaceSyncOutcome {
         guard let draft = userPlaceDraft(for: userPlaceID) else {
             trackOwnPlaceSyncEvent(
                 name: WanderAnalyticsEvents.ownPlaceSyncSkipped,
@@ -5357,7 +5502,9 @@ final class WanderStore: ObservableObject {
             #if DEBUG
             WanderDebugLog.sync.debug("own-place sync success trigger=\(trigger.rawValue, privacy: .public) local_user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) remote_user_place=\(WanderDebugLog.shortID(remoteResult.userPlaceID), privacy: .public) remote_place=\(WanderDebugLog.shortID(remoteResult.placeID), privacy: .public)")
             #endif
-            await refreshRemoteVisiblePlaces(backend: backend)
+            if refreshVisiblePlacesAfterSuccess {
+                await refreshRemoteVisiblePlaces(backend: backend)
+            }
             return .succeeded
         } catch {
             let message = remoteErrorMessage(error)

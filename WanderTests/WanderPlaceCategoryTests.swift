@@ -175,6 +175,91 @@ final class WanderPlaceCategoryTests: XCTestCase {
         )
     }
 
+    func testNonUserAssignmentsRepairStaleBroadCategoriesFromStrongerMetadata() {
+        let noun = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Coffee shop",
+            source: PlaceCategorySource.legacy.rawValue,
+            confidence: 0.86,
+            rawProviderType: "coffee"
+        )
+        XCTAssertEqual(noun.primaryCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(noun.subcategory, "Coffee shop")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: noun, name: "Noun"), "☕️")
+
+        let boulevard = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Coffee shop",
+            source: PlaceCategorySource.legacy.rawValue,
+            confidence: 0.86,
+            rawProviderType: "restaurant"
+        )
+        XCTAssertEqual(boulevard.primaryCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(boulevard.subcategory, "Coffee shop")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: boulevard, name: "Boulevard"), "☕️")
+
+        let costco = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Mkpoicategoryfoodmarket",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.86,
+            rawProviderType: "mkpoicategoryfoodmarket"
+        )
+        XCTAssertEqual(costco.primaryCategory, WanderPlaceCategory.shopping)
+        XCTAssertEqual(costco.subcategory, "Grocery store")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: costco, name: "Costco Wholesale"), "🛒")
+
+        let explicitUserChoice = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "coffee"
+        )
+        XCTAssertEqual(explicitUserChoice.primaryCategory, WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(explicitUserChoice.subcategory, "Restaurant")
+    }
+
+    func testSavedCuisineOutranksProviderCuisineWithoutOverstatingJapanese() {
+        let menya = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.98,
+            rawProviderType: "sushi_restaurant"
+        )
+
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: menya, cuisine: "Japanese", name: "Menya Tigre"),
+            "🇯🇵"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: menya, cuisine: "Sushi", name: "Menya Tigre"),
+            "🍣"
+        )
+    }
+
+    func testGenericAdjacentFoodCategoryCanUseExactProviderPrimaryType() {
+        let genericRestaurant = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.86,
+            rawProviderType: "mkpoicategoryrestaurant"
+        )
+
+        XCTAssertEqual(
+            WanderPlaceCategory.correctiveProviderPrimaryType("bakery", for: genericRestaurant),
+            "bakery"
+        )
+        XCTAssertNil(
+            WanderPlaceCategory.correctiveProviderPrimaryType(
+                "sporting_goods_store",
+                for: genericRestaurant
+            )
+        )
+    }
+
     func testPersistedMapKitRawTypesRecoverCanonicalCategoriesAndSubcategories() {
         let cases: [(rawType: String, primary: String, subcategory: String, emoji: String)] = [
             ("mkpoicategorybeauty", WanderPlaceCategory.servicesErrands, "Beauty service", "🪞"),

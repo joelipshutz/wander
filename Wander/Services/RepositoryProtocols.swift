@@ -723,6 +723,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
     let longitude: Double?
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
+    let requiresPhoto: Bool
 
     init(
         placeID: String? = nil,
@@ -731,7 +732,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
         latitude: Double?,
         longitude: Double?,
         sourceProvider: String?,
-        sourceProviderPlaceID: String?
+        sourceProviderPlaceID: String?,
+        requiresPhoto: Bool = true
     ) {
         self.placeID = placeID
         self.name = name
@@ -740,6 +742,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
         self.longitude = longitude
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.requiresPhoto = requiresPhoto
     }
 
     enum CodingKeys: String, CodingKey {
@@ -750,16 +753,20 @@ struct PlacePhotoRequest: Encodable, Equatable {
         case longitude
         case sourceProvider = "source_provider"
         case sourceProviderPlaceID = "source_provider_place_id"
+        case requiresPhoto = "requires_photo"
     }
 
     var lookupKey: String {
         let coordinate = [latitude, longitude]
             .compactMap { $0.map { String(format: "%.5f", $0) } }
             .joined(separator: ",")
-        return [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+        var components = [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
-            .joined(separator: "|")
+        if !requiresPhoto {
+            components.append("metadata-only")
+        }
+        return components.joined(separator: "|")
     }
 
     var skipsGooglePlacesLookup: Bool {

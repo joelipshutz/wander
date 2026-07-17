@@ -99,11 +99,15 @@ enum WanderPlaceEmojiResolver {
                 && WanderPlaceCategory.cuisineGuess(forRawValue: $0) == nil
         }
 
+        if let emoji = cuisineEmoji(for: cuisine) {
+            return emoji
+        }
+
         if let emoji = firstMatch(in: specificTypes, rules: restaurantTypeRules) {
             return emoji
         }
 
-        for value in [cuisine, assignment.subcategory, assignment.rawProviderType] {
+        for value in [assignment.subcategory, assignment.rawProviderType] {
             if let emoji = cuisineEmoji(for: value) {
                 return emoji
             }
@@ -582,7 +586,7 @@ enum WanderPlaceEmojiResolver {
             ("Vietnamese", "🍜"),
             ("Chinese", "🥟"),
             ("Korean", "🇰🇷"),
-            ("Japanese", "🍣"),
+            ("Japanese", "🇯🇵"),
             ("Sushi", "🍣"),
             ("Indian", "🍛"),
             ("Italian", "🍝"),

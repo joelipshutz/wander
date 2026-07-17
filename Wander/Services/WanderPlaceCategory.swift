@@ -25,13 +25,29 @@ struct PlaceCategoryAssignment: Equatable, Codable {
     ) {
         let normalizedSource = PlaceCategorySource(rawValue: source) ?? .unknown
         let requestedPrimary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
-        let providerAssignment = normalizedSource == .user
+        let evidenceAssignment = normalizedSource == .user
             ? nil
-            : WanderPlaceCategory.providerCategoryAssignment(for: rawProviderType)
-        let normalizedPrimary = requestedPrimary == WanderPlaceCategory.fallbackPlace
-            ? providerAssignment?.primaryCategory ?? requestedPrimary
-            : requestedPrimary
-        let inferredSubcategory = subcategory ?? providerAssignment?.subcategory
+            : WanderPlaceCategory.categoryEvidenceAssignment(
+                subcategory: subcategory,
+                rawProviderType: rawProviderType
+            )
+        let normalizedPrimary = evidenceAssignment?.primaryCategory ?? requestedPrimary
+        let requestedSubcategory = WanderPlaceCategory.canonicalSubcategory(
+            subcategory,
+            primaryCategory: requestedPrimary
+        )
+        let inferredSubcategory: String?
+        if normalizedSource == .user {
+            inferredSubcategory = requestedSubcategory
+        } else if normalizedPrimary != requestedPrimary
+                    || WanderPlaceCategory.isDefaultSubcategory(
+                        requestedSubcategory,
+                        primaryCategory: requestedPrimary
+                    ) {
+            inferredSubcategory = evidenceAssignment?.subcategory ?? requestedSubcategory
+        } else {
+            inferredSubcategory = requestedSubcategory ?? evidenceAssignment?.subcategory
+        }
 
         self.primaryCategory = normalizedPrimary
         self.subcategory = WanderPlaceCategory.canonicalSubcategory(
@@ -1691,6 +1707,53 @@ enum WanderPlaceCategory {
         } ?? normalized
     }
 
+    static func isDefaultSubcategory(_ value: String?, primaryCategory: String) -> Bool {
+        guard let value,
+              let defaultValue = defaultSubcategory(for: normalizedPrimaryCategory(primaryCategory))
+        else {
+            return value == nil
+        }
+        return normalizedCategoryText(value) == normalizedCategoryText(defaultValue)
+    }
+
+    static func categoryEvidenceAssignment(
+        subcategory: String?,
+        rawProviderType: String?
+    ) -> (primaryCategory: String, subcategory: String)? {
+        let candidates = [
+            (value: rawProviderType, isRawProviderType: true),
+            (value: subcategory, isRawProviderType: false)
+        ].compactMap { candidate -> (
+            assignment: (primaryCategory: String, subcategory: String),
+            score: Int,
+            isRawProviderType: Bool
+        )? in
+            guard let value = candidate.value else { return nil }
+            let primary = primaryCategory(for: value)
+            guard primary != fallbackPlace else { return nil }
+            let resolvedSubcategory = providerCategoryAssignment(for: value)?.subcategory
+                ?? Self.subcategory(forRawValue: value, primaryCategory: primary)
+                ?? defaultSubcategory(for: primary)
+            guard let resolvedSubcategory else { return nil }
+            return (
+                assignment: (primary, resolvedSubcategory),
+                score: categoryEvidenceSpecificity(
+                    value,
+                    primaryCategory: primary,
+                    subcategory: resolvedSubcategory
+                ),
+                isRawProviderType: candidate.isRawProviderType
+            )
+        }
+
+        return candidates.max { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score < rhs.score
+            }
+            return !lhs.isRawProviderType && rhs.isRawProviderType
+        }?.assignment
+    }
+
     static func normalizedProviderType(_ value: String?) -> String? {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1800,6 +1863,68 @@ enum WanderPlaceCategory {
                 matchingPrimaryCategory: requiredPrimary
             ) >= 0 ? candidate.element : nil
         }
+    }
+
+    static func correctiveProviderPrimaryType(
+        _ primaryType: String?,
+        for existingAssignment: PlaceCategoryAssignment
+    ) -> String? {
+        guard !existingAssignment.isUserEdited,
+              providerAssignmentIsGeneric(existingAssignment),
+              let primaryType,
+              !primaryType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        let candidate = assignment(
+            forRawCategory: primaryType,
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.98,
+            rawProviderType: primaryType
+        )
+        let existingPrimary = normalizedPrimaryCategory(existingAssignment.primaryCategory)
+        let candidatePrimary = normalizedPrimaryCategory(candidate.primaryCategory)
+        guard candidatePrimary != fallbackPlace,
+              candidatePrimary != existingPrimary
+        else {
+            return nil
+        }
+
+        if existingPrimary == fallbackPlace {
+            return primaryType
+        }
+
+        let normalizedType = normalizedCategoryText(primaryType)
+        let adjacentFoodCategories = Set([restaurantsFood, coffeeTeaSweets, barsNightlife])
+        if adjacentFoodCategories.contains(existingPrimary),
+           adjacentFoodCategories.contains(candidatePrimary) {
+            return primaryType
+        }
+
+        if existingPrimary == restaurantsFood,
+           candidatePrimary == shopping,
+           containsAny(normalizedType, [
+               "food market", "grocery", "supermarket", "hypermarket", "warehouse store", "wholesaler"
+           ]) {
+            return primaryType
+        }
+
+        let adjacentCareCategories = Set([wellnessFitness, servicesErrands])
+        if adjacentCareCategories.contains(existingPrimary),
+           adjacentCareCategories.contains(candidatePrimary) {
+            return primaryType
+        }
+
+        return nil
+    }
+
+    static func providerAssignmentNeedsEnrichment(_ assignment: PlaceCategoryAssignment) -> Bool {
+        guard !assignment.isUserEdited else { return false }
+        if assignment.confidence == 0.99 {
+            return false
+        }
+        return providerAssignmentIsGeneric(assignment)
     }
 
     static func isMoreSpecificProviderType(
@@ -2047,6 +2172,61 @@ enum WanderPlaceCategory {
             score += 5
         }
         return score
+    }
+
+    private static func categoryEvidenceSpecificity(
+        _ value: String,
+        primaryCategory: String,
+        subcategory: String
+    ) -> Int {
+        let normalized = normalizedCategoryText(value)
+        let ignoredGenericTypes: Set<String> = [
+            "establishment", "point of interest", "premise", "geocode", "political"
+        ]
+        guard !normalized.isEmpty, !ignoredGenericTypes.contains(normalized) else {
+            return -1
+        }
+
+        let lowInformationTypes: Set<String> = [
+            "place", "food", "restaurant", "bar", "cafe", "store", "service",
+            normalizedCategoryText(primaryCategory),
+            normalizedCategoryText(broadCategory(for: primaryCategory))
+        ]
+        var score = lowInformationTypes.contains(normalized) ? 10 : 30
+        if cuisineGuess(forRawValue: value) != nil {
+            score += 200
+        }
+        if normalizedCategoryText(subcategory)
+            != normalizedCategoryText(defaultSubcategory(for: primaryCategory)) {
+            score += 80
+        }
+        return score
+    }
+
+    private static func providerAssignmentIsGeneric(_ assignment: PlaceCategoryAssignment) -> Bool {
+        let primary = normalizedPrimaryCategory(assignment.primaryCategory)
+        if primary == fallbackPlace {
+            return true
+        }
+
+        let normalizedType = normalizedCategoryText(assignment.rawProviderType)
+        let normalizedSubcategory = normalizedCategoryText(assignment.subcategory)
+        let genericValues = Set([
+            normalizedCategoryText(primary),
+            normalizedCategoryText(broadCategory(for: primary)),
+            normalizedCategoryText(defaultSubcategory(for: primary)),
+            "place",
+            "establishment",
+            "point of interest",
+            "food",
+            "restaurant",
+            "bar",
+            "cafe",
+            "store",
+            "service"
+        ])
+        return genericValues.contains(normalizedType)
+            && genericValues.contains(normalizedSubcategory)
     }
 
     static func providerCategoryAssignment(

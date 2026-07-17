@@ -5,6 +5,7 @@ export type PlacePhotoInput = {
   longitude: number | null;
   sourceProvider: string | null;
   sourceProviderPlaceID: string | null;
+  requiresPhoto: boolean;
 };
 
 export type GoogleAuthorAttribution = {
@@ -41,7 +42,10 @@ export function selectGooglePlace(
 
   const ranked = places
     .map((place) => ({ place, score: placeScore(place, input, requestedName) }))
-    .filter((candidate) => candidate.score >= 0 && representativePhoto(candidate.place))
+    .filter((candidate) =>
+      candidate.score >= 0 &&
+      (!input.requiresPhoto || representativePhoto(candidate.place))
+    )
     .sort((lhs, rhs) => rhs.score - lhs.score);
 
   return ranked[0]?.place ?? null;
@@ -58,7 +62,8 @@ export function representativePhoto(place: GooglePlace): GooglePhoto | null {
 
 export function isGoogleProvider(sourceProvider: string | null): boolean {
   const provider = normalize(sourceProvider ?? "");
-  return provider === "google" || provider === "google maps" || provider === "google places";
+  return provider === "google" || provider === "google maps" ||
+    provider === "google places";
 }
 
 export function shouldUseGooglePlaces(input: PlacePhotoInput): boolean {
@@ -80,8 +85,12 @@ function placeScore(
 
   const exactName = candidateName === requestedName;
   const nameSimilarity = tokenSimilarity(candidateName, requestedName);
-  const includesName = candidateName.includes(requestedName) || requestedName.includes(candidateName);
-  const sharedDistinctiveTokens = sharedDistinctiveNameTokens(candidateName, requestedName);
+  const includesName = candidateName.includes(requestedName) ||
+    requestedName.includes(candidateName);
+  const sharedDistinctiveTokens = sharedDistinctiveNameTokens(
+    candidateName,
+    requestedName,
+  );
   const distance = distanceMeters(
     input.latitude,
     input.longitude,
@@ -100,12 +109,16 @@ function placeScore(
     distance !== null &&
     !conflictingStreetNumbers &&
     (
-      (distance <= 75 && (!hasComparableAddresses || addressSimilarity >= 0.5)) ||
+      (distance <= 75 &&
+        (!hasComparableAddresses || addressSimilarity >= 0.5)) ||
       (distance <= 250 && addressSimilarity >= 0.5)
     );
 
-  const similarDistinctiveName = nameSimilarity >= 0.4 && sharedDistinctiveTokens > 0;
-  if (!exactName && !includesName && !similarDistinctiveName && !nearbyAlias) return -1;
+  const similarDistinctiveName = nameSimilarity >= 0.4 &&
+    sharedDistinctiveTokens > 0;
+  if (!exactName && !includesName && !similarDistinctiveName && !nearbyAlias) {
+    return -1;
+  }
 
   let score = exactName
     ? 120
@@ -126,8 +139,12 @@ function placeScore(
 
   // A coordinate-backed nearby result may have a shortened display name, but a
   // text-only result must still look like the requested venue.
-  if (distance === null && !exactName && !includesName && nameSimilarity < 0.5) return -1;
-  if (distance !== null && distance > 1_000 && !exactName && nameSimilarity < 0.7) return -1;
+  if (
+    distance === null && !exactName && !includesName && nameSimilarity < 0.5
+  ) return -1;
+  if (
+    distance !== null && distance > 1_000 && !exactName && nameSimilarity < 0.7
+  ) return -1;
 
   return score;
 }
@@ -163,10 +180,14 @@ const genericVenueNameTokens = new Set([
 
 function sharedDistinctiveNameTokens(lhs: string, rhs: string): number {
   const lhsTokens = new Set(
-    lhs.split(" ").filter((token) => token && !genericVenueNameTokens.has(token)),
+    lhs.split(" ").filter((token) =>
+      token && !genericVenueNameTokens.has(token)
+    ),
   );
   const rhsTokens = new Set(
-    rhs.split(" ").filter((token) => token && !genericVenueNameTokens.has(token)),
+    rhs.split(" ").filter((token) =>
+      token && !genericVenueNameTokens.has(token)
+    ),
   );
 
   let overlap = 0;
@@ -210,8 +231,12 @@ function tokenContainment(lhs: string, rhs: string): number {
 }
 
 function haveConflictingAddressNumbers(lhs: string, rhs: string): boolean {
-  const lhsStreetNumber = lhs.split(" ").find((token) => /^\d+[a-z]?$/.test(token));
-  const rhsStreetNumber = rhs.split(" ").find((token) => /^\d+[a-z]?$/.test(token));
+  const lhsStreetNumber = lhs.split(" ").find((token) =>
+    /^\d+[a-z]?$/.test(token)
+  );
+  const rhsStreetNumber = rhs.split(" ").find((token) =>
+    /^\d+[a-z]?$/.test(token)
+  );
   return Boolean(
     lhsStreetNumber && rhsStreetNumber && lhsStreetNumber !== rhsStreetNumber,
   );

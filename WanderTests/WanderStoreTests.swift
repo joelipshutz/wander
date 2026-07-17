@@ -3150,6 +3150,180 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved.place.rawProviderType, "italian_restaurant")
     }
 
+    func testSignedInProviderRefreshEnrichesGenericPlacesWithoutOpeningTheirProfiles() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_ugo",
+                syncState: .synced,
+                placeID: "place_remote_ugo"
+            )
+        )
+        let photoRepository = FakePlacePhotoRepository(
+            photo: PlacePhoto(
+                provider: "google_places",
+                providerPlaceID: "google_ugo",
+                providerPrimaryType: "italian_restaurant",
+                providerTypes: ["restaurant", "food", "italian_restaurant"],
+                photoURLString: "https://example.com/ugo.jpg",
+                width: 1200,
+                height: 900,
+                authorName: nil,
+                authorProfileURLString: nil,
+                authorAvatarURLString: nil,
+                sourcePhotoURLString: "https://maps.google.com/ugo",
+                flagContentURLString: nil,
+                storageBucket: nil,
+                storagePath: nil,
+                localAssetRef: nil
+            )
+        )
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            placePhotoRepository: photoRepository
+        )
+        let result = await store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_ugo",
+                name: "Ugo",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.86,
+                rawProviderType: "mkpoicategoryrestaurant",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.86
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .currentLocation,
+            backend: backend
+        )
+
+        let changedCount = await store.refreshOwnPlaceProviderCategories(backend: backend)
+        let enriched = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(changedCount, 1)
+        XCTAssertEqual(photoRepository.requests.map(\.name), ["Ugo"])
+        XCTAssertEqual(photoRepository.requests.map(\.requiresPhoto), [false])
+        XCTAssertEqual(enriched.place.rawProviderType, "italian_restaurant")
+        XCTAssertEqual(enriched.categoryEmoji, "🍝")
+        XCTAssertEqual(enriched.userPlace.syncState, .pendingUpdate)
+
+        let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 2)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.last?.place.rawProviderType, "italian_restaurant")
+
+        let repeatedChangeCount = await store.refreshOwnPlaceProviderCategories(backend: backend)
+        XCTAssertEqual(repeatedChangeCount, 0)
+        XCTAssertEqual(photoRepository.requests.count, 1)
+    }
+
+    func testProviderPrimaryTypeCanCorrectGenericRestaurantToBakery() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_ghisallo",
+                name: "Ghisallo",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.86,
+                rawProviderType: "mkpoicategoryrestaurant",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.86
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .currentLocation
+        )
+        let saved = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        let changed = await store.applyProviderCategoryEnrichment(
+            placeID: saved.place.id,
+            primaryType: "bakery",
+            types: ["bakery", "italian_restaurant", "restaurant", "food"],
+            backend: nil
+        )
+        XCTAssertTrue(changed)
+        let enriched = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        XCTAssertEqual(enriched.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(enriched.effectiveSubcategory, "Bakery")
+        XCTAssertEqual(enriched.categoryEmoji, "🥐")
+    }
+
+    func testProviderRefreshDoesNotRewriteAlreadySpecificLegacyMetadata() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_noun",
+                name: "Noun",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Coffee shop",
+                categorySource: PlaceCategorySource.legacy.rawValue,
+                categoryConfidence: 0.86,
+                rawProviderType: "coffee",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.86
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .currentLocation
+        )
+        let photoRepository = FakePlacePhotoRepository(
+            photo: PlacePhoto(
+                provider: "google_places",
+                providerPlaceID: "unused",
+                providerPrimaryType: "restaurant",
+                providerTypes: ["restaurant"],
+                photoURLString: "https://example.com/unused.jpg",
+                width: 1200,
+                height: 900,
+                authorName: nil,
+                authorProfileURLString: nil,
+                authorAvatarURLString: nil,
+                sourcePhotoURLString: nil,
+                flagContentURLString: nil,
+                storageBucket: nil,
+                storagePath: nil,
+                localAssetRef: nil
+            )
+        )
+        let backend = WanderBackend(placePhotoRepository: photoRepository)
+
+        let changedCount = await store.refreshOwnPlaceProviderCategories(backend: backend)
+        let saved = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(changedCount, 0)
+        XCTAssertTrue(photoRepository.requests.isEmpty)
+        XCTAssertEqual(saved.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(saved.effectiveSubcategory, "Coffee shop")
+        XCTAssertEqual(saved.categoryEmoji, "☕️")
+        XCTAssertEqual(saved.place.categorySource, PlaceCategorySource.legacy.rawValue)
+        XCTAssertEqual(saved.place.categoryConfidence, 0.86)
+    }
+
     func testSyncPendingVisitsSyncsParentThenExplicitVisit() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -4801,6 +4975,29 @@ private final class FakePlaceRepository: PlaceRepository {
 
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
         []
+    }
+}
+
+@MainActor
+private final class FakePlacePhotoRepository: PlacePhotoRepository {
+    let resolvedPhoto: PlacePhoto
+    private(set) var requests: [PlacePhotoRequest] = []
+
+    init(photo: PlacePhoto) {
+        resolvedPhoto = photo
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        requests.append(request)
+        return resolvedPhoto
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw WanderRemoteError.invalidResponse("No fallback photo")
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        Data()
     }
 }
 

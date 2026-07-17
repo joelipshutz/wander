@@ -16,47 +16,101 @@ Deno.serve(async (request) => {
   try {
     return await handleRequest(request);
   } catch (error) {
-    console.error("place_photo_error", error instanceof Error ? error.message : "unknown_error");
-    return Response.json({ error: "internal_error" }, { status: 500, headers: noStoreHeaders });
+    console.error(
+      "place_photo_error",
+      error instanceof Error ? error.message : "unknown_error",
+    );
+    return Response.json({ error: "internal_error" }, {
+      status: 500,
+      headers: noStoreHeaders,
+    });
   }
 });
 
 async function handleRequest(request: Request): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json({ error: "method_not_allowed" }, { status: 405, headers: noStoreHeaders });
+    return Response.json({ error: "method_not_allowed" }, {
+      status: 405,
+      headers: noStoreHeaders,
+    });
   }
   const authorization = request.headers.get("authorization");
   if (!authorization) {
-    return Response.json({ error: "missing_authorization" }, { status: 401, headers: noStoreHeaders });
+    return Response.json({ error: "missing_authorization" }, {
+      status: 401,
+      headers: noStoreHeaders,
+    });
   }
   if (!await hasValidSupabaseSession(authorization)) {
-    return Response.json({ error: "invalid_authorization" }, { status: 401, headers: noStoreHeaders });
+    return Response.json({ error: "invalid_authorization" }, {
+      status: 401,
+      headers: noStoreHeaders,
+    });
   }
 
   const input = placePhotoInput(await readBody(request));
   if (!input) {
-    return Response.json({ error: "invalid_place" }, { status: 400, headers: noStoreHeaders });
+    return Response.json({ error: "invalid_place" }, {
+      status: 400,
+      headers: noStoreHeaders,
+    });
   }
   if (!shouldUseGooglePlaces(input)) {
-    return Response.json({ error: "photo_not_found" }, { status: 404, headers: noStoreHeaders });
+    return Response.json({ error: "photo_not_found" }, {
+      status: 404,
+      headers: noStoreHeaders,
+    });
   }
   if (!await consumePlacePhotoQuota(authorization)) {
-    return Response.json({ error: "rate_limited" }, { status: 429, headers: noStoreHeaders });
+    return Response.json({ error: "rate_limited" }, {
+      status: 429,
+      headers: noStoreHeaders,
+    });
   }
 
   const apiKey = googlePlacesAPIKey();
   if (!apiKey) {
-    return Response.json({ error: "provider_unavailable" }, { status: 503, headers: noStoreHeaders });
+    return Response.json({ error: "provider_unavailable" }, {
+      status: 503,
+      headers: noStoreHeaders,
+    });
   }
 
   const place = await resolvePlace(input, apiKey);
   const photo = place ? representativePhoto(place) : null;
-  if (!place?.id || !photo?.name) {
-    return Response.json({ error: "photo_not_found" }, { status: 404, headers: noStoreHeaders });
+  if (!place?.id) {
+    return Response.json({ error: "photo_not_found" }, {
+      status: 404,
+      headers: noStoreHeaders,
+    });
+  }
+  if (!input.requiresPhoto) {
+    return Response.json({
+      provider: "google_places",
+      provider_place_id: place.id,
+      provider_primary_type: cleanString(place.primaryType),
+      provider_types: cleanStrings(place.types),
+      photo_url: "",
+      width: null,
+      height: null,
+      author_name: null,
+      author_profile_url: null,
+      author_avatar_url: null,
+      source_photo_url: null,
+      flag_content_url: null,
+    }, { headers: noStoreHeaders });
+  }
+  if (!photo?.name) {
+    return Response.json({ error: "photo_not_found" }, {
+      status: 404,
+      headers: noStoreHeaders,
+    });
   }
 
   const media = await fetchJSON<{ photoUri?: string }>(
-    `${googlePlacesBaseURL}/${photo.name}/media?maxWidthPx=1600&maxHeightPx=1200&skipHttpRedirect=true&key=${encodeURIComponent(apiKey)}`,
+    `${googlePlacesBaseURL}/${photo.name}/media?maxWidthPx=1600&maxHeightPx=1200&skipHttpRedirect=true&key=${
+      encodeURIComponent(apiKey)
+    }`,
     { method: "GET" },
   );
   if (!media.photoUri) {
@@ -66,7 +120,10 @@ async function handleRequest(request: Request): Promise<Response> {
   const author = photo.authorAttributions?.[0];
   const sourcePhotoURL = absoluteGoogleURL(photo.googleMapsUri);
   if (!sourcePhotoURL) {
-    return Response.json({ error: "photo_attribution_unavailable" }, { status: 404, headers: noStoreHeaders });
+    return Response.json({ error: "photo_attribution_unavailable" }, {
+      status: 404,
+      headers: noStoreHeaders,
+    });
   }
   return Response.json({
     provider: "google_places",
@@ -84,17 +141,34 @@ async function handleRequest(request: Request): Promise<Response> {
   }, { headers: noStoreHeaders });
 }
 
-async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<GooglePlace | null> {
+async function resolvePlace(
+  input: PlacePhotoInput,
+  apiKey: string,
+): Promise<GooglePlace | null> {
+  const directFieldMask = input.requiresPhoto
+    ? "id,displayName,formattedAddress,location,primaryType,types,photos"
+    : "id,displayName,formattedAddress,location,primaryType,types";
+  const searchFieldMask = input.requiresPhoto
+    ? "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.photos"
+    : "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types";
+
   if (isGoogleProvider(input.sourceProvider) && input.sourceProviderPlaceID) {
     try {
       const directPlace = await fetchJSON<GooglePlace>(
-        `${googlePlacesBaseURL}/places/${encodeURIComponent(input.sourceProviderPlaceID)}`,
+        `${googlePlacesBaseURL}/places/${
+          encodeURIComponent(input.sourceProviderPlaceID)
+        }`,
         {
           method: "GET",
-          headers: googleHeaders(apiKey, "id,displayName,formattedAddress,location,primaryType,types,photos"),
+          headers: googleHeaders(
+            apiKey,
+            directFieldMask,
+          ),
         },
       );
-      if (representativePhoto(directPlace)) return directPlace;
+      if (!input.requiresPhoto || representativePhoto(directPlace)) {
+        return directPlace;
+      }
     } catch (error) {
       console.warn(
         "place_photo_direct_lookup_failed",
@@ -122,7 +196,7 @@ async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<Goo
       method: "POST",
       headers: googleHeaders(
         apiKey,
-        "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.photos",
+        searchFieldMask,
       ),
       body: JSON.stringify(searchBody),
     },
@@ -130,19 +204,27 @@ async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<Goo
   return selectGooglePlace(search.places ?? [], input);
 }
 
-async function fetchJSON<Value>(url: string, init: RequestInit): Promise<Value> {
+async function fetchJSON<Value>(
+  url: string,
+  init: RequestInit,
+): Promise<Value> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6_000);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    if (!response.ok) throw new Error(`google_places_status_${response.status}`);
+    if (!response.ok) {
+      throw new Error(`google_places_status_${response.status}`);
+    }
     return await response.json() as Value;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function googleHeaders(apiKey: string, fieldMask: string): Record<string, string> {
+function googleHeaders(
+  apiKey: string,
+  fieldMask: string,
+): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "X-Goog-Api-Key": apiKey,
@@ -163,7 +245,9 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
   }
 }
 
-function placePhotoInput(body: Record<string, unknown>): PlacePhotoInput | null {
+function placePhotoInput(
+  body: Record<string, unknown>,
+): PlacePhotoInput | null {
   const name = cleanString(body.name);
   if (!name) return null;
   return {
@@ -172,7 +256,9 @@ function placePhotoInput(body: Record<string, unknown>): PlacePhotoInput | null 
     latitude: coordinate(body.latitude, -90, 90),
     longitude: coordinate(body.longitude, -180, 180),
     sourceProvider: cleanString(body.source_provider)?.slice(0, 80) ?? null,
-    sourceProviderPlaceID: cleanString(body.source_provider_place_id)?.slice(0, 300) ?? null,
+    sourceProviderPlaceID:
+      cleanString(body.source_provider_place_id)?.slice(0, 300) ?? null,
+    requiresPhoto: body.requires_photo !== false,
   };
 }
 
@@ -181,7 +267,9 @@ function googlePlacesAPIKey(): string | null {
     cleanString(Deno.env.get("GOOGLE_PLACES_API_KEY"));
 }
 
-async function hasValidSupabaseSession(authorization: string): Promise<boolean> {
+async function hasValidSupabaseSession(
+  authorization: string,
+): Promise<boolean> {
   const supabaseURL = cleanString(Deno.env.get("SUPABASE_URL"));
   const publishableKey = cleanString(Deno.env.get("SUPABASE_ANON_KEY"));
   if (!supabaseURL || !publishableKey) return false;
@@ -208,15 +296,18 @@ async function consumePlacePhotoQuota(authorization: string): Promise<boolean> {
   if (!supabaseURL || !publishableKey) return false;
 
   try {
-    const response = await fetch(`${supabaseURL}/rest/v1/rpc/consume_place_photo_quota`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: publishableKey,
-        Authorization: authorization,
+    const response = await fetch(
+      `${supabaseURL}/rest/v1/rpc/consume_place_photo_quota`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: publishableKey,
+          Authorization: authorization,
+        },
+        body: "{}",
       },
-      body: "{}",
-    });
+    );
     if (!response.ok) return false;
     return await response.json() === true;
   } catch {
@@ -224,9 +315,15 @@ async function consumePlacePhotoQuota(authorization: string): Promise<boolean> {
   }
 }
 
-function coordinate(value: unknown, minimum: number, maximum: number): number | null {
+function coordinate(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | null {
   const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
+  return Number.isFinite(number) && number >= minimum && number <= maximum
+    ? number
+    : null;
 }
 
 function finiteInteger(value: unknown): number | null {
