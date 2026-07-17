@@ -12252,3 +12252,27 @@ Feedback-pass handoff, 2026-07-16 17:08 PDT:
 - Committed and pushed the validated implementation as `f239d677c` (`fix: improve REC-97 social import review`) to `origin/codex/rec-97-place-imports`.
 - Updated draft PR #109 with the root cause, implementation details, and 375-test/two-architecture/dual-size visual validation: https://github.com/joelipshutz/wander/pull/109#issuecomment-4997635103. Added the matching handoff to Linear REC-97 in comment `3e0a725b-797b-407d-83aa-d7d7801d3fcc` and kept the issue `In Progress`.
 - Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch. Physical-device checks: open an older affected TikTok import and confirm resolver-v4 requeues it; import the reported One Cedar post and confirm generic coffee businesses are absent; verify authenticated Google thumbnails persist while scrolling/reopening; exercise single and Mark-all Wanna/Been selections; and confirm Duplicate/Failed tabs never show the floating Save action.
+
+## 2026-07-16 17:18 PDT - Codex - REC-97 Landing And Explicit TestFlight Release
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress` entering the merge gate)
+PR: https://github.com/joelipshutz/wander/pull/109
+
+Goal: review the complete device-local REC-97 place-import vertical slice against latest `main`, squash-merge it when the landing gate is clean, then explicitly package latest `main` as the next TestFlight build and publish tester-facing status.
+
+Starting status:
+
+- Fetched `origin`; the isolated branch is clean, exactly tracks `origin/codex/rec-97-place-imports` at `4c19c96ec`, contains latest `origin/main`, and PR #109 is mergeable with `CLEAN` merge state. It remains Draft only because Ryan was completing physical-device testing; Ryan's explicit merge-and-TestFlight request authorizes clearing that hold after review.
+- Latest completed TestFlight is build 76. The main-branch release log records archive `/private/tmp/Wander-0.1-build76.xcarchive`, successful API-key upload without build-number drift, App Store Connect state `VALID`, public `Wander Alpha` attachment, external approval, and the required `#testflight-feedback` announcement. No prior explicit release is pending.
+- Current `main` declares marketing version `0.1`, build `76`; this explicit release will increment exactly once after the implementation PR lands. The release batch currently consists of PR #109's owner-Profile import tiles, durable local import inbox, Google/text/social parsing and resolution, dense review/save UX, map/photo/duplicate handling, and regression fixes. The approved account-scoped hosted import architecture remains deferred and REC-97 should not be marked `Done` merely because this device-local slice reaches TestFlight.
+- Expected pre-merge work is review evidence, Linear/PR status, and this append-only log. Expected post-merge release work is a fresh latest-main worktree, build 77 bump in `project.yml`, XcodeGen output, full validation, signed archive/upload/helper processing, TestFlight Slack note, and final durable handoff. The root checkout and unrelated worktrees remain untouched.
+
+Pre-landing review:
+
+- Reviewed the full `origin/main...HEAD` diff and REC-97 plan against the repository landing checklist. No blocking code, data, security, concurrency, or UI findings remain. There are no Supabase migrations or RPC changes in this slice.
+- The import store is main-actor isolated, processing tasks are cancellable, and local snapshots use atomic JSON writes plus `completeUntilFirstUserAuthentication` file protection. URL-backed importers constrain Google list parsing to Google hosts and use public Instagram/TikTok metadata paths.
+- The known device-local, one-test-account-per-install limitation is declared in PR #109 and remains tracked under REC-97 together with the hosted account-scoped worker and Share Extension work. This is an intentional alpha boundary, not a reason to close the broader issue.
+- Validation remains green: 375 tests with zero failures, generic iOS Simulator build for arm64 and x86_64, and visual QA on iPhone 17 Pro and iPhone 17e across unresolved, selected, duplicate, and failed states. The optional gstack JSON review-log helper could not persist because `bun` is unavailable, so this durable repository log is the review record.
