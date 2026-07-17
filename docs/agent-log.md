@@ -12350,3 +12350,10 @@ Nuanced-emoji implementation and validation, 2026-07-17 01:53 PDT:
 - A fresh generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; `git diff --check` and `jq empty shared/place-taxonomy.json` are clean. XcodeGen added only the new resolver source reference to the generated project.
 - Debug-only visual comparison QA passed on iPhone 17 Pro and compact iPhone 17e / iOS 26.5 with no clipped or overlapping labels. The first pass exposed and the implementation corrected an adjacent-bucket nail/hair fallback before handoff. Final evidence: `/private/tmp/rec98-emoji-gallery-final-17-pro.png` and `/private/tmp/rec98-emoji-gallery-final-17e.png`.
 - No Supabase schema/RPC, hosted data, tester-data rewrite, build number, TestFlight upload, merge, or Slack announcement occurred. PR #112 and Linear REC-98 remain the handoff surfaces.
+
+Nuanced-emoji handoff, 2026-07-17 01:57 PDT:
+
+- Committed and pushed the complete feedback pass as `cc45f4720` (`fix: resolve nuanced place category emojis`) to `origin/codex/rec-98-category-emojis`.
+- Updated ready, merge-clean PR #112 with root cause, implementation scope, 381-test validation, dual-size visual evidence, and the physical-device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5001002883.
+- Moved Linear REC-98 to `In Review` and added matching validation/device guidance in comment `6eb8a048-fa99-4b4b-ab20-bf7eb08690c5`.
+- Xcode handoff target is `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj`. No merge, build-number bump, TestFlight upload, or Slack announcement was requested or performed.
