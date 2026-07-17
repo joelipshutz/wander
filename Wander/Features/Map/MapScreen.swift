@@ -1944,6 +1944,15 @@ private struct MapSearchSuggestion: Identifiable {
     let category: String
     let source: Source
 
+    var emoji: String {
+        switch source {
+        case .saved(let visiblePlace, _):
+            return visiblePlace.categoryEmoji
+        case .mapKit(let candidate):
+            return candidate.categoryEmoji
+        }
+    }
+
     static func saved(
         _ visiblePlace: VisiblePlace,
         saveCount: Int = 1,
@@ -2095,7 +2104,7 @@ private struct MapTypeaheadRow: View {
         HStack(spacing: WanderTheme.spacing2) {
             Button(action: onSelect) {
                 HStack(spacing: WanderTheme.spacing2) {
-                    WanderCategoryEmoji(category: suggestion.category, size: 14)
+                    WanderCategoryEmoji(emoji: suggestion.emoji, size: 14)
                         .frame(width: 38, height: 38)
                         .background(iconBackground)
                         .clipShape(Circle())
@@ -2311,7 +2320,7 @@ private struct SearchResultMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        WanderCategoryEmoji(category: candidate.category, size: isSelected ? 17 : 15)
+        WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: isSelected ? 17 : 15)
             .frame(width: isSelected ? 42 : 38, height: isSelected ? 42 : 38)
             .background(WanderTheme.pinSocial.color)
             .clipShape(Circle())
@@ -2375,7 +2384,7 @@ private struct WanderMapPin: View {
     let isSelected: Bool
 
     var body: some View {
-        WanderCategoryEmoji(assignment: visiblePlace.categoryAssignment, size: 16)
+        WanderCategoryEmoji(emoji: visiblePlace.categoryEmoji, size: 16)
             .frame(width: 38, height: 38)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
@@ -2531,6 +2540,7 @@ struct PlaceSheetPlace {
     let categorySource: String
     let categoryConfidence: Double?
     let rawProviderType: String?
+    let cuisine: String?
     let address: String?
     let locality: String?
     let region: String?
@@ -2558,6 +2568,14 @@ struct PlaceSheetPlace {
         )
     }
 
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(
+            for: categoryAssignment,
+            cuisine: cuisine,
+            name: name
+        )
+    }
+
     var photoRequest: PlacePhotoRequest {
         PlacePhotoRequest(
             placeID: id,
@@ -2581,6 +2599,7 @@ struct PlaceSheetPlace {
         self.categorySource = visiblePlace.categoryAssignment.source
         self.categoryConfidence = visiblePlace.categoryAssignment.confidence
         self.rawProviderType = visiblePlace.place.rawProviderType
+        self.cuisine = visiblePlace.restaurantCuisine
         self.address = visiblePlace.place.address
         self.locality = visiblePlace.place.locality
         self.region = visiblePlace.place.region
@@ -2608,6 +2627,7 @@ struct PlaceSheetPlace {
         self.categorySource = candidate.categorySource
         self.categoryConfidence = candidate.categoryConfidence
         self.rawProviderType = candidate.rawProviderType
+        self.cuisine = nil
         self.address = candidate.address
         self.locality = candidate.locality
         self.region = candidate.region
@@ -3698,7 +3718,13 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var candidateCard: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: selectedAssignment.primaryCategory)
+            CategoryThumb(
+                emoji: WanderPlaceCategory.emoji(
+                    for: selectedAssignment,
+                    cuisine: selectedCuisine,
+                    name: context.candidate.name
+                )
+            )
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(context.candidate.name)
@@ -5286,7 +5312,7 @@ struct PlaceSheet: View {
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                CategoryThumb(category: place.primaryCategory)
+                CategoryThumb(emoji: place.categoryEmoji)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     HStack {
@@ -5358,7 +5384,7 @@ struct PlaceSheet: View {
 
     private var expandedHeader: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            CategoryThumb(category: place.primaryCategory, status: ownSave?.visiblePlace.userPlace.status)
+            CategoryThumb(emoji: place.categoryEmoji, status: ownSave?.visiblePlace.userPlace.status)
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(place.name)
                     .font(.system(size: 26, weight: .black))
@@ -5540,7 +5566,7 @@ struct PlaceSheet: View {
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
         if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, emoji: WanderPlaceCategory.emoji(for: place.categoryAssignment)))
+            facts.append(PlaceFact(title: categoryDisplay, emoji: place.categoryEmoji))
         }
         return facts
     }
@@ -6978,12 +7004,12 @@ private struct PlaceFactPill: View {
 }
 
 private struct CategoryThumb: View {
-    let category: String
+    let emoji: String
     var status: PlaceStatus? = nil
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            WanderCategoryEmoji(category: category, size: 19)
+            WanderCategoryEmoji(emoji: emoji, size: 19)
                 .frame(width: 46, height: 46)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(Circle())

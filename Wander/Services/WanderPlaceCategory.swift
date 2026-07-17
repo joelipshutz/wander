@@ -926,16 +926,19 @@ enum WanderPlaceCategory {
             "wellness_fitness", "wellness fitness", "wellness and fitness", "health_wellness", "health wellness",
             "sports_fitness", "sports fitness", "health", "wellness", "fitness", "gym", "fitness center", "yoga",
             "sports club", "sports complex", "hospital", "medical", "clinic", "doctor", "dentist", "pharmacy",
-            "drugstore", "spa", "massage", "sauna", "therapy", "veterinary care", "veterinarian"
+            "drugstore", "spa", "massage", "sauna", "therapy", "veterinary care", "veterinarian", "urgent care",
+            "optometrist", "ophthalmologist", "eye doctor", "eye care center", "vision center", "physical therapy",
+            "dermatologist", "pediatrician", "podiatrist"
         ],
             subcategories: [
             "Gym", "Fitness center", "Yoga studio", "Wellness studio", "Wellness center", "Sports club",
             "Sports complex", "Sports coaching", "Sports school", "Athletic field", "Swimming pool",
             "Tennis court", "Golf course", "Indoor golf", "Ice skating rink", "Volleyball court", "Soccer field",
             "Basketball court", "Pickleball court", "Spa", "Massage", "Massage spa", "Sauna", "Chiropractor",
-            "Dentist", "Dental clinic", "Doctor", "Medical clinic", "Medical center", "Hospital", "Medical lab",
-            "Pharmacy", "Drugstore", "Physiotherapist", "Foot care", "Veterinary care", "Mental health/therapy",
-            "Retreat"
+            "Dentist", "Dental clinic", "Optometrist", "Ophthalmologist", "Eye care center", "Doctor",
+            "Dermatologist", "Pediatrician", "Urgent care", "Medical clinic", "Medical center", "Hospital",
+            "Medical lab", "Pharmacy", "Drugstore", "Physiotherapist", "Physical therapy", "Foot care",
+            "Podiatrist", "Veterinary care", "Mental health/therapy", "Retreat"
         ],
             isEditable: true
         ),
@@ -1118,6 +1121,16 @@ enum WanderPlaceCategory {
         "pilates studio": "Fitness center",
         "spiritual": "Place of worship",
         "hospital": "Hospital",
+        "urgent care": "Urgent care",
+        "optometrist": "Optometrist",
+        "ophthalmologist": "Ophthalmologist",
+        "eye doctor": "Optometrist",
+        "eye care center": "Eye care center",
+        "vision center": "Eye care center",
+        "dermatologist": "Dermatologist",
+        "pediatrician": "Pediatrician",
+        "physical therapy": "Physical therapy",
+        "podiatrist": "Podiatrist",
         "pharmacy": "Pharmacy",
         "veterinarian": "Veterinary care",
         "hotel": "Hotel",
@@ -1313,8 +1326,10 @@ enum WanderPlaceCategory {
                 "Mental health/therapy", "Retreat"
             ]),
             PlaceCategorySubcategoryGroup(title: "Medical care", subcategories: [
-                "Dentist", "Dental clinic", "Doctor", "Medical clinic", "Medical center", "Hospital",
-                "Medical lab", "Pharmacy", "Drugstore", "Veterinary care"
+                "Dentist", "Dental clinic", "Optometrist", "Ophthalmologist", "Eye care center", "Doctor",
+                "Dermatologist", "Pediatrician", "Urgent care", "Medical clinic", "Medical center", "Hospital",
+                "Medical lab", "Pharmacy", "Drugstore", "Physiotherapist", "Physical therapy", "Foot care",
+                "Podiatrist", "Veterinary care"
             ])
         ],
         stays: [
@@ -1669,12 +1684,32 @@ enum WanderPlaceCategory {
             }
     }
 
-    static func emoji(for category: String) -> String {
-        entry(for: primaryCategory(for: category))?.emoji ?? "📍"
+    static func emoji(
+        for category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        rawProviderType: String? = nil,
+        name: String? = nil
+    ) -> String {
+        WanderPlaceEmojiResolver.emoji(
+            forRawCategory: category,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            rawProviderType: rawProviderType,
+            name: name
+        )
     }
 
-    static func emoji(for assignment: PlaceCategoryAssignment) -> String {
-        entry(for: assignment.primaryCategory)?.emoji ?? "📍"
+    static func emoji(
+        for assignment: PlaceCategoryAssignment,
+        cuisine: String? = nil,
+        name: String? = nil
+    ) -> String {
+        WanderPlaceEmojiResolver.emoji(for: assignment, cuisine: cuisine, name: name)
+    }
+
+    static func broadEmoji(for category: String) -> String {
+        entry(for: normalizedPrimaryCategory(category))?.emoji ?? "📍"
     }
 
     static func broadCategory(for category: String) -> String {
@@ -1789,16 +1824,27 @@ enum WanderPlaceCategory {
             return wellnessFitness
         }
 
+        if containsAny(normalizedName, ["optometrist", "ophthalmologist", "eye doctor", "eye care", "vision center", "optical"]) {
+            return wellnessFitness
+        }
+
         if containsAny(normalizedName, ["temple", "shrine", "spiritual", "church", "chapel", "cathedral", "mosque", "synagogue"]) {
             return civicFaith
         }
 
-        if containsAny(normalizedName, ["hospital", "medical center", "health center", "urgent care", "pharmacy", "drugstore", "wellness studio", "spa"]) {
+        if containsAny(normalizedName, [
+            "hospital", "medical center", "health center", "urgent care", "pharmacy", "drugstore",
+            "dermatology", "pediatrics", "physical therapy", "chiropractor", "wellness studio", "spa"
+        ]) {
             return wellnessFitness
         }
 
         if containsAny(normalizedName, ["pilates", "plankhaus", "lagree", "reformer", " gym ", "fitness", "training", "strength", "workout"]) {
             return wellnessFitness
+        }
+
+        if containsAny(normalizedName, ["nail salon", "nails", "manicure", "pedicure", "hair salon", "barbershop", "barber shop", "tattoo"]) {
+            return servicesErrands
         }
 
         let isFitnessCategory = pointCategory == .fitnessCenter

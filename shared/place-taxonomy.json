@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "categories": [
     {
       "id": "restaurants_food",
@@ -581,7 +581,17 @@
         "sauna",
         "therapy",
         "veterinary care",
-        "veterinarian"
+        "veterinarian",
+        "urgent care",
+        "optometrist",
+        "ophthalmologist",
+        "eye doctor",
+        "eye care center",
+        "vision center",
+        "physical therapy",
+        "dermatologist",
+        "pediatrician",
+        "podiatrist"
       ],
       "subcategories": [
         "Gym",
@@ -610,7 +620,13 @@
         "Chiropractor",
         "Dentist",
         "Dental clinic",
+        "Optometrist",
+        "Ophthalmologist",
+        "Eye care center",
         "Doctor",
+        "Dermatologist",
+        "Pediatrician",
+        "Urgent care",
         "Medical clinic",
         "Medical center",
         "Hospital",
@@ -618,7 +634,9 @@
         "Pharmacy",
         "Drugstore",
         "Physiotherapist",
+        "Physical therapy",
         "Foot care",
+        "Podiatrist",
         "Veterinary care",
         "Mental health/therapy",
         "Retreat"

@@ -595,7 +595,7 @@ private struct SharedVisitInboxInvitationCard: View {
 
     private var placeRow: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            WanderCategoryEmoji(category: invitation.primaryCategory, size: 27)
+            WanderCategoryEmoji(emoji: invitation.categoryEmoji, size: 27)
                 .frame(width: 82, height: 82)
                 .background(WanderTheme.categoryMoss.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))

@@ -1935,7 +1935,7 @@ private struct ProfilePlaceRow: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            WanderCategoryEmoji(assignment: visiblePlace.categoryAssignment, size: 17)
+            WanderCategoryEmoji(emoji: visiblePlace.categoryEmoji, size: 17)
                 .frame(width: 40, height: 40)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))

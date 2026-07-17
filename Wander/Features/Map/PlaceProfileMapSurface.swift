@@ -818,7 +818,7 @@ private struct PlaceProfileMapHeader: View {
         if let latitude = place.latitude, let longitude = place.longitude {
             Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
                 Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                    PlaceProfileCategoryThumb(category: place.primaryCategory, size: 54)
+                    PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 54)
                         .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
                 }
             }
@@ -945,7 +945,7 @@ private struct PlaceProfilePhotoThumb: View {
 
     var body: some View {
         ZStack {
-            PlaceProfileCategoryThumb(category: place.primaryCategory, size: size)
+            PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: size)
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
@@ -1026,13 +1026,13 @@ private struct PlaceProfileMapFallback: View {
 }
 
 private struct PlaceProfileCategoryThumb: View {
-    let category: String
+    let emoji: String
     var status: PlaceStatus? = nil
     var size: CGFloat
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            WanderCategoryEmoji(category: category, size: max(17, size * 0.34))
+            WanderCategoryEmoji(emoji: emoji, size: max(17, size * 0.34))
                 .frame(width: size, height: size)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))

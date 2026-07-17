@@ -9,10 +9,232 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     func testCategoryEmojiLookupNormalizesAliases() {
-        XCTAssertEqual(WanderPlaceCategory.emoji(for: "park"), "🌲")
-        XCTAssertEqual(WanderPlaceCategory.emoji(for: "hike"), "🌲")
-        XCTAssertEqual(WanderPlaceCategory.emoji(for: "thai restaurant"), "🍽️")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: WanderPlaceCategory.outdoorsNature), "🌲")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "park"), "🌳")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "hike"), "🥾")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "thai restaurant"), "🇹🇭")
         XCTAssertEqual(WanderPlaceCategory.emoji(for: "unknown provider value"), "📍")
+    }
+
+    func testCategoryEmojiUsesSpecificSubtypeBeforeBroadCategory() {
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "hospital"), "🏥")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "fitness center"), "💪")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "nail salon"), "💅")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "hair salon"), "💇")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "bakery"), "🥐")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "coffee shop"), "☕️")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "tea house"), "🫖")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "pharmacy"), "💊")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "dentist"), "🦷")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "airport"), "✈️")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "church"), "⛪️")
+    }
+
+    func testCategoryEmojiRefinesGenericProviderTypesWithNarrowPlaceNames() {
+        let genericDoctor = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.wellnessFitness,
+            subcategory: "Doctor",
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: "doctor"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: genericDoctor, name: "Santa Monica Eye Care Center"),
+            "👁️"
+        )
+
+        let broadWellness = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.wellnessFitness,
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: WanderPlaceCategory.wellnessFitness
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: broadWellness, name: "Providence Saint John's Hospital"),
+            "🏥"
+        )
+
+        let broadCoffee = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: WanderPlaceCategory.coffeeTeaSweets
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: broadCoffee, name: "Wild Leaven Bakery"),
+            "🥐"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.wellnessFitness,
+                name: "Providence Saint John's Hospital"
+            ),
+            "🏥"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.servicesErrands,
+                name: "Gloss Nail Salon"
+            ),
+            "💅"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.wellnessFitness,
+                subcategory: "Nail salon",
+                name: "Gloss Nail Salon"
+            ),
+            "💅"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.wellnessFitness,
+                subcategory: "Hair salon",
+                name: "Proper Hair"
+            ),
+            "💇"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.servicesErrands,
+                subcategory: "Hospital",
+                name: "Providence Saint John's Hospital"
+            ),
+            "🏥"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.coffeeTeaSweets,
+                name: "Wild Leaven Bakery"
+            ),
+            "🥐"
+        )
+    }
+
+    func testUserEditedSubcategoryWinsOverProviderAndNameHints() {
+        let assignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.wellnessFitness,
+            subcategory: "Gym",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "hospital"
+        )
+
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: assignment, name: "Providence Hospital"),
+            "💪"
+        )
+    }
+
+    func testRichPlaceAdaptersPreserveSubtypeAndCuisineEmojiContext() {
+        let hospital = PlaceCandidate(
+            id: "hospital",
+            name: "Providence Saint John's Hospital",
+            category: WanderPlaceCategory.wellnessFitness,
+            primaryCategory: WanderPlaceCategory.wellnessFitness,
+            subcategory: "Hospital",
+            categorySource: PlaceCategorySource.provider.rawValue,
+            rawProviderType: "hospital",
+            latitude: 34.0,
+            longitude: -118.0,
+            sourceProvider: "mapkit",
+            confidence: 1
+        )
+        XCTAssertEqual(hospital.categoryEmoji, "🏥")
+
+        let owner = LocalProfile(
+            localID: "owner",
+            handle: "owner",
+            displayName: "Owner"
+        )
+        let restaurant = LocalPlace(
+            localID: "restaurant",
+            canonicalName: "Jitlada",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            rawProviderType: "restaurant",
+            latitude: 34.0,
+            longitude: -118.0
+        )
+        let userPlace = LocalUserPlace(
+            localID: "user-place",
+            userID: owner.id,
+            placeID: restaurant.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let cuisine = LocalPlaceAttribute(
+            localID: "cuisine",
+            userPlaceID: userPlace.id,
+            questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+            valueType: "single_choice",
+            valueJSON: "\"Thai\""
+        )
+        let visiblePlace = VisiblePlace(
+            id: userPlace.id,
+            place: restaurant,
+            userPlace: userPlace,
+            owner: owner,
+            attributes: [cuisine]
+        )
+
+        XCTAssertEqual(visiblePlace.restaurantCuisine, "Thai")
+        XCTAssertEqual(visiblePlace.categoryEmoji, "🇹🇭")
+    }
+
+    func testEveryRestaurantCuisineHasDishOrRegionalEmoji() {
+        let assignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: "restaurant"
+        )
+
+        for cuisine in WanderPlaceCategory.restaurantCuisineOptions {
+            let emoji = WanderPlaceCategory.emoji(for: assignment, cuisine: cuisine)
+            XCTAssertFalse(emoji.isEmpty, "\(cuisine) should resolve an emoji")
+            XCTAssertNotEqual(emoji, "🍽️", "\(cuisine) should be more specific than the broad restaurant icon")
+            XCTAssertNotEqual(emoji, "📍", "\(cuisine) should never fall back to a generic pin")
+        }
+    }
+
+    func testKnownSubcategoriesResolveAndEachBroadCategoryHasUsefulVariety() {
+        let minimumDistinctEmojiCounts: [String: Int] = [
+            WanderPlaceCategory.restaurantsFood: 15,
+            WanderPlaceCategory.coffeeTeaSweets: 10,
+            WanderPlaceCategory.barsNightlife: 10,
+            WanderPlaceCategory.outdoorsNature: 15,
+            WanderPlaceCategory.thingsToDo: 20,
+            WanderPlaceCategory.shopping: 15,
+            WanderPlaceCategory.wellnessFitness: 18,
+            WanderPlaceCategory.stays: 7,
+            WanderPlaceCategory.servicesErrands: 25,
+            WanderPlaceCategory.travelTransit: 18,
+            WanderPlaceCategory.workEducation: 9,
+            WanderPlaceCategory.civicFaith: 10,
+            WanderPlaceCategory.areasAddresses: 8,
+            WanderPlaceCategory.facilitiesOther: 4
+        ]
+
+        for category in WanderPlaceCategory.editableCategories {
+            let emojis = WanderPlaceCategory.subcategorySuggestions(for: category).map { subcategory in
+                WanderPlaceCategory.emoji(
+                    for: PlaceCategoryAssignment(
+                        primaryCategory: category,
+                        subcategory: subcategory,
+                        source: PlaceCategorySource.user.rawValue,
+                        confidence: 1
+                    ),
+                    cuisine: category == WanderPlaceCategory.restaurantsFood ? subcategory : nil
+                )
+            }
+
+            XCTAssertTrue(emojis.allSatisfy { !$0.isEmpty }, "\(category) should resolve every known subcategory")
+            XCTAssertGreaterThanOrEqual(
+                Set(emojis).count,
+                minimumDistinctEmojiCounts[category] ?? 2,
+                "\(category) should not collapse its subcategories into one broad emoji"
+            )
+        }
     }
 
     func testDisplayTaxonomySeparatesBroadCategoryAndSubcategory() {
@@ -87,7 +309,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
             WanderPlaceCategory.primary(for: .fitnessCenter, name: "Lake Shrine"),
             WanderPlaceCategory.civicFaith
         )
-        XCTAssertEqual(WanderPlaceCategory.emoji(for: "spiritual"), "🏛️")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: "spiritual"), "🙏")
     }
 
     func testCandidatePreviewSubtitleDoesNotRepeatLocality() {
@@ -130,8 +352,21 @@ final class WanderPlaceCategoryTests: XCTestCase {
                 let id: String
                 let emoji: String
                 let editable: Bool
+                let aliases: [String]
+                let subcategories: [String]
+                let defaultSubcategory: String?
+
+                enum CodingKeys: String, CodingKey {
+                    case id
+                    case emoji
+                    case editable
+                    case aliases
+                    case subcategories
+                    case defaultSubcategory = "default_subcategory"
+                }
             }
 
+            let version: Int
             let categories: [Category]
         }
 
@@ -143,6 +378,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
+        XCTAssertEqual(shared.version, 5)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -156,6 +392,13 @@ final class WanderPlaceCategoryTests: XCTestCase {
         )
         XCTAssertEqual(swiftEmojiByCategory, sharedEmojiByCategory)
         XCTAssertEqual(Set(WanderPlaceCategory.editableCategories.compactMap { swiftEmojiByCategory[$0] }).count, 14)
+
+        for swiftCategory in WanderPlaceCategory.taxonomy {
+            let sharedCategory = try XCTUnwrap(shared.categories.first { $0.id == swiftCategory.id })
+            XCTAssertEqual(swiftCategory.defaultSubcategory, sharedCategory.defaultSubcategory)
+            XCTAssertEqual(swiftCategory.aliases, sharedCategory.aliases)
+            XCTAssertEqual(swiftCategory.subcategories, sharedCategory.subcategories)
+        }
     }
 
     func testSubcategoryGroupsAreExhaustiveForEveryEditableCategory() {

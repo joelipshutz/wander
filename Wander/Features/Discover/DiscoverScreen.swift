@@ -821,7 +821,7 @@ private struct DiscoverPlaceResultCard: View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Button(action: openPlace) {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                    DiscoverCategoryThumb(category: visiblePlace.effectiveCategory, size: 62, iconSize: 24)
+                    DiscoverCategoryThumb(emoji: visiblePlace.categoryEmoji, size: 62, iconSize: 24)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         HStack(spacing: WanderTheme.spacing2) {
@@ -1152,12 +1152,12 @@ private struct FriendListRow: View {
 }
 
 private struct DiscoverCategoryThumb: View {
-    let category: String
+    let emoji: String
     let size: CGFloat
     let iconSize: CGFloat
 
     var body: some View {
-        WanderCategoryEmoji(category: category, size: iconSize)
+        WanderCategoryEmoji(emoji: emoji, size: iconSize)
             .frame(width: size, height: size)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())

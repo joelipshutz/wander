@@ -207,6 +207,10 @@ extension PlaceCandidate {
         )
     }
 
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(for: categoryAssignment, name: name)
+    }
+
     func recategorized(as category: String) -> PlaceCandidate {
         recategorized(
             as: WanderPlaceCategory.assignment(
@@ -1085,6 +1089,46 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable {
     let photos: [SharedVisitPhotoSnapshot]
 
     var id: String { participantID }
+
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: PlaceCategorySource.legacy.rawValue,
+            confidence: nil,
+            rawProviderType: category
+        )
+    }
+
+    var restaurantCuisine: String? {
+        guard let answer = attributeAnswers.first(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }) else {
+            return nil
+        }
+
+        switch answer.value {
+        case .string(let value):
+            return value
+        case .array(let values):
+            for value in values {
+                if case .string(let string) = value {
+                    return string
+                }
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(
+            for: categoryAssignment,
+            cuisine: restaurantCuisine,
+            name: placeName
+        )
+    }
 
     var candidate: PlaceCandidate {
         PlaceCandidate(

@@ -9,6 +9,7 @@ enum CategoryTaxonomyMockupPage: String, CaseIterable {
     case subcategories
     case cuisine
     case labels
+    case emojiGallery
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> CategoryTaxonomyMockupPage? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderCategoryTaxonomyMockup") else {
@@ -44,6 +45,8 @@ struct CategoryTaxonomyMockupRoot: View {
                 CategoryTaxonomyCuisinePickerMockup()
             case .labels:
                 CategoryTaxonomyLabelsMockup()
+            case .emojiGallery:
+                CategoryEmojiGalleryMockup()
             }
         }
         .preferredColorScheme(.light)
@@ -390,6 +393,100 @@ private struct CategoryTaxonomyLabelsMockup: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private struct CategoryEmojiGalleryItem: Identifiable {
+    let id: String
+    let name: String
+    let category: String
+    let subcategory: String?
+    let cuisine: String?
+
+    init(
+        _ name: String,
+        category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil
+    ) {
+        id = "\(name)-\(subcategory ?? cuisine ?? category)"
+        self.name = name
+        self.category = category
+        self.subcategory = subcategory
+        self.cuisine = cuisine
+    }
+}
+
+private struct CategoryEmojiGalleryMockup: View {
+    private let healthAndBeauty = [
+        CategoryEmojiGalleryItem("Saint John's Hospital", category: WanderPlaceCategory.wellnessFitness, subcategory: "Hospital"),
+        CategoryEmojiGalleryItem("Santa Monica Eye Care", category: WanderPlaceCategory.wellnessFitness, subcategory: "Optometrist"),
+        CategoryEmojiGalleryItem("Ocean Park Dental", category: WanderPlaceCategory.wellnessFitness, subcategory: "Dentist"),
+        CategoryEmojiGalleryItem("Main Street Pharmacy", category: WanderPlaceCategory.wellnessFitness, subcategory: "Pharmacy"),
+        CategoryEmojiGalleryItem("Gloss Nail Salon", category: WanderPlaceCategory.wellnessFitness, subcategory: "Nail salon"),
+        CategoryEmojiGalleryItem("Proper Hair", category: WanderPlaceCategory.wellnessFitness, subcategory: "Hair salon"),
+        CategoryEmojiGalleryItem("Iron Fitness", category: WanderPlaceCategory.wellnessFitness, subcategory: "Gym"),
+        CategoryEmojiGalleryItem("Love Yoga", category: WanderPlaceCategory.wellnessFitness, subcategory: "Yoga studio")
+    ]
+
+    private let coffeeAndFood = [
+        CategoryEmojiGalleryItem("Wild Leaven Bakery", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery"),
+        CategoryEmojiGalleryItem("One Cedar Coffee", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop"),
+        CategoryEmojiGalleryItem("Chado Tea Room", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Tea house"),
+        CategoryEmojiGalleryItem("Jitlada", category: WanderPlaceCategory.restaurantsFood, subcategory: "Restaurant", cuisine: "Thai"),
+        CategoryEmojiGalleryItem("Marugame Udon", category: WanderPlaceCategory.restaurantsFood, subcategory: "Noodle restaurant", cuisine: "Japanese"),
+        CategoryEmojiGalleryItem("Guelaguetza", category: WanderPlaceCategory.restaurantsFood, subcategory: "Restaurant", cuisine: "Mexican")
+    ]
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(
+            title: "place icons",
+            subtitle: "Production category, subtype, and cuisine resolver"
+        ) {
+            gallerySection(title: "health, beauty, and fitness", items: healthAndBeauty)
+            gallerySection(title: "coffee, sweets, and cuisines", items: coffeeAndFood)
+        }
+    }
+
+    private func gallerySection(
+        title: String,
+        items: [CategoryEmojiGalleryItem]
+    ) -> some View {
+        MockupSection(title: title) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    Divider().background(WanderTheme.borderHairline.color)
+                }
+
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        Circle().fill(WanderTheme.terracottaTint.color)
+                        WanderCategoryEmoji(
+                            category: item.category,
+                            subcategory: item.subcategory,
+                            cuisine: item.cuisine,
+                            name: item.name,
+                            size: 20
+                        )
+                    }
+                    .frame(width: 42, height: 42)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(item.cuisine ?? item.subcategory ?? item.category)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 50)
+            }
+        }
     }
 }
 
