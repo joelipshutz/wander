@@ -55,6 +55,69 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(CountryCanonicalizer.canonicalName("Canada"), "Canada")
     }
 
+    func testCityInsightsDeduplicateCapitalizationVariants() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let month = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 1)))
+        let visitDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 8)))
+        let places = [
+            LocalPlace(
+                localID: "marina-lower-connector",
+                canonicalName: "Marina Cafe",
+                category: WanderPlaceCategory.coffeeTeaSweets,
+                locality: "Marina del Rey",
+                country: "US",
+                latitude: 33.98,
+                longitude: -118.45
+            ),
+            LocalPlace(
+                localID: "marina-title-connector",
+                canonicalName: "Marina Park",
+                category: WanderPlaceCategory.thingsToDo,
+                locality: "Marina Del Rey",
+                country: "United States",
+                latitude: 33.97,
+                longitude: -118.44
+            )
+        ]
+        let userPlaces = places.map { place in
+            LocalUserPlace(
+                localID: "up-\(place.localID)",
+                userID: "owner",
+                placeID: place.id,
+                status: .been,
+                visibility: .followers,
+                sourceType: "manual"
+            )
+        }
+        let visits = userPlaces.enumerated().map { index, userPlace in
+            LocalPlaceVisit(
+                localID: "visit-\(index)",
+                userPlaceID: userPlace.id,
+                visitedAt: visitDate
+            )
+        }
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: "owner",
+            userPlaces: userPlaces,
+            visits: visits,
+            places: places,
+            month: month,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(insights.monthCityCount, 1)
+        XCTAssertEqual(insights.mapCityCount, 1)
+        XCTAssertEqual(insights.citySummaries.count, 1)
+        XCTAssertEqual(insights.citySummaries.first?.title, "Marina del Rey")
+        XCTAssertEqual(insights.citySummaries.first?.count, 2)
+        XCTAssertEqual(
+            insights.citySummaries.first?.placeIDs,
+            ["marina-lower-connector", "marina-title-connector"]
+        )
+    }
+
     func testTimezoneBoundaryUsesInjectedCalendar() throws {
         var losAngeles = Calendar(identifier: .gregorian)
         losAngeles.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))

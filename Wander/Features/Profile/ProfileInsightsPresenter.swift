@@ -13,7 +13,7 @@ struct ProfileInsights: Equatable {
     let countrySummaries: [ProfileSummaryItem]
 
     var mapCityCount: Int {
-        Set(mapPoints.compactMap(\.city).filter { !$0.isEmpty }).count
+        Set(mapPoints.compactMap { CityCanonicalizer.comparisonKey($0.city) }).count
     }
 }
 
@@ -35,6 +35,65 @@ struct ProfileSummaryItem: Identifiable, Equatable {
     var percentage: Int {
         guard total > 0 else { return 0 }
         return Int((Double(count) / Double(total) * 100).rounded())
+    }
+}
+
+enum CityCanonicalizer {
+    private static let lowercaseConnectors: Set<String> = [
+        "da", "das", "de", "del", "di", "do", "dos", "du", "la", "las", "le", "los", "of", "van", "von"
+    ]
+
+    static func comparisonKey(_ value: String?) -> String? {
+        guard let cleaned = cleaned(value) else { return nil }
+        return cleaned
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
+    }
+
+    static func preferredName(_ values: [String]) -> String? {
+        let cleanedValues = values.compactMap { cleaned($0) }
+        guard !cleanedValues.isEmpty else { return nil }
+        let counts = Dictionary(grouping: cleanedValues, by: { $0 }).mapValues(\.count)
+        return counts.keys.sorted { lhs, rhs in
+            let lhsCount = counts[lhs, default: 0]
+            let rhsCount = counts[rhs, default: 0]
+            if lhsCount != rhsCount { return lhsCount > rhsCount }
+
+            let lhsScore = casingScore(lhs)
+            let rhsScore = casingScore(rhs)
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+
+            let comparison = lhs.localizedCaseInsensitiveCompare(rhs)
+            if comparison != .orderedSame { return comparison == .orderedAscending }
+            return lhs < rhs
+        }.first
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        let collapsed = value?
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let collapsed, !collapsed.isEmpty else { return nil }
+        return collapsed
+    }
+
+    private static func casingScore(_ value: String) -> Int {
+        let letters = value.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+        let hasUppercase = letters.contains { CharacterSet.uppercaseLetters.contains($0) }
+        let hasLowercase = letters.contains { CharacterSet.lowercaseLetters.contains($0) }
+        var score = hasUppercase && hasLowercase ? 2 : -2
+
+        if value.first?.isUppercase == true {
+            score += 1
+        }
+        for (index, word) in value.split(separator: " ").enumerated() where index > 0 {
+            let normalized = word.lowercased()
+            if lowercaseConnectors.contains(normalized), String(word) == normalized {
+                score += 2
+            }
+        }
+        return score
     }
 }
 
@@ -78,7 +137,7 @@ enum ProfileInsightsPresenter {
             guard let place = placeByID[userPlace.placeID] else { return nil }
             return resolvedCategory(userPlace: userPlace, place: place)
         })
-        let distinctMonthCities = Set(monthPlaces.compactMap { normalized($0.locality) })
+        let distinctMonthCities = Set(monthPlaces.compactMap { CityCanonicalizer.comparisonKey($0.locality) })
 
         let uniqueBeen = uniqueUserPlaces(activeBeen)
         let beenPlaces = uniqueBeen.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
@@ -112,11 +171,10 @@ enum ProfileInsightsPresenter {
                 title: { WanderPlaceCategory.broadCategory(for: $0) },
                 total: beenPlaces.count
             ),
-            citySummaries: summaries(
+            citySummaries: citySummaries(
                 values: beenPlaces.compactMap { item in
                     normalized(item.1.locality).map { ($0, item.1.id) }
                 },
-                title: { $0 },
                 total: beenPlaces.count
             ),
             countrySummaries: summaries(
@@ -177,6 +235,31 @@ enum ProfileInsightsPresenter {
             ProfileSummaryItem(
                 id: key,
                 title: title(key),
+                count: group.count,
+                total: total,
+                placeIDs: Array(Set(group.map(\.placeID))).sorted()
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private static func citySummaries(
+        values: [(value: String, placeID: String)],
+        total: Int
+    ) -> [ProfileSummaryItem] {
+        let keyedValues = values.compactMap { entry -> (key: String, value: String, placeID: String)? in
+            guard let key = CityCanonicalizer.comparisonKey(entry.value) else { return nil }
+            return (key, entry.value, entry.placeID)
+        }
+        let groups = Dictionary(grouping: keyedValues, by: \.key)
+        return groups.compactMap { key, group in
+            guard let title = CityCanonicalizer.preferredName(group.map(\.value)) else { return nil }
+            return ProfileSummaryItem(
+                id: key,
+                title: title,
                 count: group.count,
                 total: total,
                 placeIDs: Array(Set(group.map(\.placeID))).sorted()

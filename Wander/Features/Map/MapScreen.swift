@@ -2829,6 +2829,25 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
+    static func importCandidate(
+        _ candidate: PlaceCandidate,
+        sourceType: AddSourceType,
+        status: PlaceStatus,
+        defaultVisibility: PlaceVisibility
+    ) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate,
+            mode: .add(sourceType),
+            initialStatus: status,
+            initialVisibility: defaultVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil
+        )
+    }
+
     static func addVisiblePlace(
         _ visiblePlace: VisiblePlace,
         defaultVisibility: PlaceVisibility,

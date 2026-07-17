@@ -12030,3 +12030,249 @@ Release completion, 2026-07-14 23:09 PDT:
 - Added final merge, hosted validation, archive, upload, TestFlight, and tester-note evidence to Linear REC-92 and moved it from `In Review` to `Done` only after TestFlight approval.
 - Shipped validation: 343 tests with 0 failures, a generic arm64/x86_64 iOS Simulator build, hosted Shared Visits pgTAP with 73/73 assertions passing in rollback, linked hosted Supabase smoke, verified hosted function security metadata/grants, and a signed Release archive/upload from exact `main`.
 - Known/deferred: no known tester-blocking issues. Docker was unavailable for local Supabase pgTAP, so that path was not called a pass; the hosted SQL regression suite and linked smoke covered the production database path. No tester-data reset, auth, privacy, or additional hosted mutation occurred during release packaging.
+
+## 2026-07-14 22:57 PDT - Codex - REC-97 Multi-Source Place Import Planning
+
+Agent: Codex using `ios-design-review` and `plan-eng-review`
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: design the owner-Profile import section and the complete product/engineering flow for importing places from Google Maps lists, Instagram Reels, TikTok, and text or notes before production implementation begins.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from exact latest `origin/main` at `a3f828d8d`. The root checkout is on `codex/rec-88-visit-friends-mockup` with unrelated `.pnpm-store/` content; it will remain untouched.
+- Created high-priority Linear issue `REC-97`, assigned it to Ryan, and moved it to `In Progress`. An existing `JOE-3` search result is Linear's generic workspace-import onboarding issue on the Joe team and is not a rec.me product duplicate.
+- The worktree is clean. Existing worktrees include Profile, invitation, release, performance, and research work, but no active REC-97 branch. Profile presentation and `docs/agent-log.md` remain high-conflict surfaces, so this planning pass will inspect them without product-code edits.
+- Expected planning scope is the current owner Profile/Visit Invitations placement, Add link/photo/text extraction, draft and persistence contracts, backend schema/RLS/job boundaries, official platform capability research, the supplied visual reference, design/engineering review artifacts, a durable plan under `docs/plans/`, and this log. No production code, migration, build-number, signing, or hosted-data change is authorized yet.
+- The requested complete solution is expected to cross more than eight files and introduce more than two service boundaries. Per the engineering review complexity gate, the planning pass must produce an explicit phased scope decision before architecture is locked or implementation begins.
+
+Initial audit checkpoint, 2026-07-14 23:18 PDT:
+
+- The current owner Profile renders `ProfileSharedVisitInboxRow` directly between identity and Been/Wanna in `ProfileOwnerHome`. REC-97 can place one owner-only import section immediately after that row without disturbing member profiles, calendar, or map behavior.
+- rec.me already has the correct single-item extraction spine: `LocalSourceArtifact`, `LocalExtractionJob`, repository-backed enqueue/process/result RPCs, an Edge Function worker, confidence-gated candidate confirmation, and unresolved local drafts. The current worker resolves coordinate-backed Google/Apple Maps URLs and coordinate metadata; image backend OCR and social extraction remain honest failure states.
+- The existing model is one source artifact to one extraction job and has no batch, item-review, bulk-default, or commit ledger. Reusing `UnresolvedDraft` as a 300-place import would flatten progress and errors, publish hundreds of local changes, and make partial retry/dedupe unsafe. A persistent import batch/review concept is therefore a real missing domain boundary, not cosmetic UI scope.
+- Official platform research confirms Google Maps supports shared list links and a Google Takeout Saved export, TikTok provides public-video oEmbed and authorized access only to the user's own public videos, and Apple's file importer plus Share Extension/App Group patterns cover file and share-sheet capture. Meta's official Instagram API targets professional-account-owned media, while public Instagram posts/Reels are embeddable only when public and embedding is enabled; private/saved-account library sync is not an available product contract. REC-97 should accept user-provided public URLs and files, not promise provider-account bookmark sync or scraping.
+- The paired iPhone 15 Pro is available, but there is no running `gstack-ios-qa-daemon`, cached QA session, DebugBridge, StateServer, or snapshot accessor in this repository. The iOS design review can use source/reference plus deterministic simulator evidence; adding debug instrumentation solely for this planning review is out of scope and physical-device interaction remains a later acceptance gate.
+
+Product design approval checkpoint, 2026-07-15 00:16 PDT:
+
+- Completed the interactive `/office-hours` product framing required by `plan-eng-review`. Ryan selected all four source adapters for the first complete release and corrected the architecture decision to the durable option: one owner-private Unified Import Inbox backed by batch manifests, not an extension of the current shallow unresolved-draft list.
+- The approved design keeps every extracted candidate private until explicit promotion, applies Been/Wanna, visibility, list, and tag defaults in bulk with item-level exceptions, never fabricates historical visit dates, and treats unsupported/private social URLs as visible rescue states rather than scraping or silent failure.
+- The approved design artifact is `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-97-place-imports-design-20260714-233505.md`. It specifies `import_batches`/`import_items`, durable resumable processing, batch/existing-save dedupe, Share Extension/App Group envelopes, bounded raw-artifact retention, idempotent promotion, provider constraints, success criteria, and the redacted golden-fixture corpus required before implementation.
+- The independent office-hours reviewer subagent was unavailable, so the design was presented as unreviewed and Ryan explicitly approved it. No implementation, migration, entitlement, hosted mutation, build-number change, or release action has occurred.
+- Engineering complexity is confirmed: Profile UI, Share Extension/App Group capture, local persistence, repository contracts, Supabase schema/RLS/RPCs/storage, worker/provider adapters, promotion, analytics, and acceptance fixtures span more than eight files and more than two service boundaries. The engineering review will preserve the complete four-source product promise while deciding how to partition delivery into reviewable PRs.
+
+Engineering review architecture checkpoint, 2026-07-15 00:25 PDT:
+
+- Ryan rejected the scope reduction and kept Google Maps, Instagram, TikTok, Text/Notes, and Share Extension capture in the complete feature. Implementation will be partitioned into stacked, reviewable PRs behind a disabled `import_places_v1` capability flag; the review will not relitigate or silently reduce that source promise.
+- Ryan selected server-first candidate resolution. The extraction worker will use Apple's official Maps Server API for name/area/coordinate place search so a large batch does not depend on an uninterrupted foreground app session; iOS remains responsible for ambiguity review and manual correction.
+- Ryan selected a new item-level import commit RPC. It must atomically recheck `(user_id, place_id)`, return `already_saved` rather than invoking the destructive `save_own_place` upsert path on an existing save, record a stable operation result, and preserve every existing personal field during review/commit races.
+- Product interaction was refined after approval: Profile shows a persistent tappable `Importing N of M` progress button while processing and changes it to `Review Import` when candidates are reviewable. The review page renders the complete batch lazily; each candidate has Been/Wanna actions, and choosing one launches the existing regular save flow. Only completing that flow promotes the single item; cancellation returns to the same list position with no save.
+- Updated the approved external design artifact in place to remove bulk metadata defaults as the primary interaction and make the regular save flow the sole metadata editor. No repository implementation or hosted change has begun.
+
+Planning completion checkpoint, 2026-07-15 01:34 PDT:
+
+- Completed every interactive `plan-eng-review` section. Scope stays complete across all four sources and Share Extension capture, partitioned into six stacked PRs behind disabled `import_places_v1`. Architecture decisions are server-first Apple Maps resolution, a Vault-backed Supabase Cron worker, owner-private raw storage with seven-day deletion, and a non-destructive item-level import commit RPC.
+- Code-quality decisions are one extracted regular save-flow component shared by Add and Import, a dedicated `ImportStore` rather than extending the 5,881-line global store, and modular source adapters behind one normalized manifest contract and one import-worker orchestrator.
+- Test/performance decisions are redacted golden fixtures plus scheduled live provider smoke, a new `WanderUITests` target, constrained structured AI hint extraction with evidence-grounded evals, cursor-paginated review pages, and bounded foreground summary polling. The AI layer may extract name/area evidence only; Apple Maps remains canonical and model storage is disabled.
+- Ryan refined the UX contract: Profile shows one persistent tappable `Importing N of M` action while processing, which opens batch progress and changes to `Review Import` when reviewable. The review page shows the entire logical import as a continuous paginated list; each Been/Wanna action launches the exact regular save flow and returns to the same row after save or cancellation.
+- Added the implementation plan at `docs/plans/2026-07-15-rec-97-place-imports.md`, including data/state diagrams, RLS/RPC posture, provider/worker contracts, Share Extension/App Group handoff, failure modes, full test coverage map, stacked PR strategy, worktree lanes, distribution gates, and actionable tasks. The plan ends with a clean GSTACK review report: 4 architecture, 3 code-quality, 3 test, and 2 performance findings resolved; zero unplanned critical gaps.
+- Wrote downstream artifacts: `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-97-place-imports-eng-review-test-plan-20260715-012954.md`, `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/tasks-eng-review-20260715-012954.jsonl`, and `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-15.md`.
+- The iOS review used the supplied visual reference plus current source/design tokens because the paired iPhone lacks a running QA daemon/DebugBridge and no REC-97 UI exists yet. It scored the proposed Profile/review experience 8.5/10; implementation acceptance requires simulator evidence on current/smaller phones plus physical Files, Share Extension, VoiceOver, backgrounding, and 300-item scroll/progress checks.
+- Updated two stale `TODOS.md` entries so the prior Share Extension and richer-provider deferrals are explicitly superseded by REC-97 while preserving their historical rationale. No product code, schema migration, Xcode project generation, hosted mutation, build number, TestFlight release, or Slack message is part of this planning branch.
+
+Planning handoff, 2026-07-15 01:46 PDT:
+
+- Rebased the isolated branch onto latest `origin/main`, resolving the append-only agent-log overlap by preserving the completed build 76 release record before the REC-97 entries. Final planning commit before handoff: `cb22c53d1434142cfb56a6070e572a57493ad7db` (`docs: plan REC-97 place imports`).
+- Pushed `codex/rec-97-place-imports` and opened ready PR #109 against `main`: https://github.com/joelipshutz/wander/pull/109. The PR contains four documentation files only: the implementation plan, durable decisions, superseded TODO notes, and this coordination log.
+- Linked PR #109 on Linear REC-97, posted the planning/review validation summary, and moved the issue from `In Progress` to `In Review`. Implementation has not started; the six stacked implementation PRs and their ordering are defined in the plan.
+- Validation: `git diff origin/main...HEAD --check` passed; the final GSTACK review record reports 12 findings resolved, zero unresolved findings, and zero critical gaps. No `xcodebuild` build/test was run because this branch changes no app, test, project, package, migration, or runtime source. No hosted backend, tester data, build number, TestFlight release, or Slack channel was changed.
+- Next step: review/merge PR #109, then begin stack 1 from latest `main` using the plan's contract-first task order. Physical iPhone Files/Share Extension/VoiceOver/backgrounding and 300-item progress/scroll validation remain mandatory implementation acceptance gates, not planning evidence.
+
+## 2026-07-15 08:45 PDT - Codex - REC-97 Implementation Resume
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: continue on the same approved REC-97 branch, implement and wire a testable multi-source import vertical slice, validate it with the iOS build/tests, and leave an Xcode-ready branch for Ryan.
+
+Starting status:
+
+- User explicitly requested implementation on the existing planning branch and PR #109 rather than waiting for the planning-only PR to merge or creating the six planned stacked branches. REC-97 was moved from `In Review` back to `In Progress` before product-code edits.
+- Fetched `origin`; `origin/main` has no commits beyond this branch's base and the worktree is clean at `1db19a9d6`. The root checkout and all sibling worktrees remain untouched.
+- Expected implementation scope includes the import domain/persistence boundary, source-specific capture views, Profile tiles and progress/review routing, file/text/link parsing, candidate resolution/dedupe, the existing regular save flow handoff, tests, XcodeGen project generation if needed, and this append-only log. Backend migration/worker work will only be included if it can be validated without weakening the approved security/RLS contract.
+- High-conflict surfaces likely include Profile presentation, `project.yml`, `WanderLocalStore`, and this log. No current log entry reports another agent editing REC-97 files; changes will remain isolated in this worktree and preserve unrelated user work.
+
+Implementation and validation checkpoint, 2026-07-15 09:34 PDT:
+
+- Implemented a testable owner-Profile import vertical slice on the existing REC-97 branch. The four adaptive source tiles appear directly after Visit Invitations and open source-specific capture for Google Maps, Instagram Reels, TikTok, and text/notes. Profile exposes durable `Importing N of M`, `Review Import`, and `Import Inbox` states.
+- Added a dedicated Codable import domain and `PlaceImportStore` with protected Application Support persistence, restart recovery, resumable sequential processing, batch switching, 50-row lazy review pagination, retry/cancel/dismiss/manual rescue, candidate selection, existing-save dedupe, and saved-item progress. A 300-row quoted Google Takeout CSV fixture parses and deduplicates successfully.
+- Added CSV, nested JSON, plain-text, Markdown, and RTF ingestion. ZIP selection gives explicit Files unzip guidance. Google place links resolve through the existing link resolver; large Google lists use Takeout CSV/JSON. TikTok uses the official public oEmbed title when available; Instagram and unsupported/private social metadata remain honest manual-rescue states rather than scraping or fabricated matches.
+- Reused the exact existing `MapPlaceSaveFlowSheet` for each row's Been/Wanna action, including visibility, rating, questions, tags, lists, notes, photos, local persistence, remote sync, and signed-out gate behavior. Completing the save marks that import row saved; cancelling returns to the review list without promotion.
+- Manual simulator tracing on iPhone 17 Pro verified text import, progress/review, candidate rows, and Been opening the regular save flow. The trace exposed an autocorrected wrong-name MapKit result; device resolution now auto-selects only an exact normalized name match and every actionable row offers review/search/dismiss recovery. Smaller-phone QA on iPhone 17e confirmed the four tiles fit, wrap cleanly, and retain the approved hierarchy; evidence: `/private/tmp/rec97-17e-profile.png`.
+- Final edge review fixed pasted text silently losing to a previously selected file, duplicate reconciliation missing candidates that resolved after first render, and resolver cancellation racing a dismissed row back to failed. Regression coverage includes parser scale/dedupe, persistence/relaunch/resume, review state transitions, provider and coordinate dedupe, name-match safety, and in-flight cancellation.
+- Final validation passed 354 tests with 0 failures: `/private/tmp/DerivedData-rec97/Logs/Test/Test-Wander-2026.07.15_09-33-10--0700.xcresult`. The generic iOS Simulator build passed after the final fixes; `/private/tmp/DerivedData-rec97-generic/Build/Products/Debug-iphonesimulator/Wander.app/Wander.debug.dylib` contains both `arm64` and `x86_64`.
+- This is deliberately the first device-local functional slice for Xcode testing, not the complete hosted REC-97 architecture. It does not yet include account-scoped/server-synced import persistence, Supabase schema/RLS/RPCs, the server worker/Cron/Vault path, Share Extension/App Group capture, bounded raw-artifact storage, provider live-smoke fixtures, or the non-destructive hosted import-commit RPC. Until account scoping lands, use one test account per install for import-inbox QA. No migration, hosted data, build number, TestFlight release, or Slack message was changed.
+
+Implementation handoff, 2026-07-15 09:38 PDT:
+
+- Committed the functional vertical slice as `20649c3a1517051a59be6d528277c7071e74898f` (`feat: add REC-97 place import vertical slice`) and pushed `codex/rec-97-place-imports` to origin. The exact Xcode worktree is `/private/tmp/recme-rec97-place-imports`; open `Wander.xcodeproj`, run the `Wander` scheme, then test from owner Profile below Visit Invitations.
+- Updated PR #109 to `REC-97: Add testable place import vertical slice`, replaced its planning-only body with implementation/validation/gap details, and converted it to Draft while Ryan tests this slice: https://github.com/joelipshutz/wander/pull/109.
+- Added the same branch, commit, validation, and remaining production-scope handoff to Linear REC-97. The issue intentionally remains `In Progress` because account-scoped hosted persistence, Supabase contracts, worker processing, Share Extension capture, and the race-safe commit RPC remain incomplete.
+- Final verified evidence remains 354 tests with 0 failures, a generic arm64/x86_64 simulator build, iPhone 17 Pro functional tracing, and iPhone 17e layout QA. Known limitation for this handoff: the import inbox is device-local and not yet account-scoped, so test with one account per install. No signing, build-number, TestFlight, Slack, migration, or hosted-data action occurred.
+
+## 2026-07-15 12:31 PDT - Codex - REC-97 Import Resolution Follow-up
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: investigate and fix the physical-device failures reported after the first Xcode handoff: a 45-place public Google Maps bakery list becoming one ambiguous item with eight nearby candidates, Instagram/TikTok links failing to infer a named restaurant, candidate review lacking direct Been/Wanna actions, and Review Import showing only the newest source batch instead of the unified unresolved inbox.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `aae93b58c`. The root checkout's unrelated `.pnpm-store/` remains untouched. No current agent-log entry reports overlapping work in the REC-97 import files.
+- Reviewed Ryan's 12:23 and 12:28 screenshots. The first shows one candidate picker capped at eight unrelated/nearby MapKit results for the list URL; the second shows the per-batch TikTok header and a manual-rescue state. These are reproducible consequences of the current resolver and inbox boundaries, not user-entry errors.
+- Investigation scope is `PlaceImportParser`, `PlaceImportStore` and source adapters, `MapKitPlaceResolver`/existing extraction services, `ProfileImportViews`/`ProfileScreen`, focused import tests and fixtures, generated project membership only if new source files are required, and this log. Any hosted schema/RPC/worker change must preserve the existing RLS/security policy and add hosted regression coverage; no hosted mutation will occur before its contract is reviewed and testable.
+
+Implementation and validation checkpoint, 2026-07-15 13:28 PDT:
+
+- Root cause confirmed: a public Google shared-list URL entered the single-place `resolveLink` path, whose viewport coordinate fallback intentionally returns at most eight nearby MapKit candidates. The code never enumerated the list. Social imports passed one complete TikTok caption into MapKit as if it were a venue name, while Instagram returned no metadata at all. Review was scoped to the newest batch, and ambiguous candidate rows had no direct Been/Wanna actions.
+- Added a bounded public Google shared-list adapter. It follows the short link, identifies the shared-list ID/preload endpoint, requests up to 1,000 entries, strips the XSSI prefix, and emits one durable seed per unique named place with address, coordinate, and provider ID evidence. A list-shaped failure remains an explicit retry state and can no longer fall back to one arbitrary viewport pin. Existing resolver-v1 Google/social failures are requeued once and stale eight-result candidates are cleared.
+- Added public social metadata adapters and deterministic evidence extraction. TikTok uses its public oEmbed caption/title and cover URL; Instagram reads public Open Graph title/caption/cover metadata. Natural Language named entities, explicit location phrases, handles/hashtags, and on-device Vision text recognition over the public cover frame generate bounded place hints before canonical MapKit matching. Private, deleted, authenticated, or metadata-free content is not bypassed or fabricated and remains an automatic-retry/help state.
+- Replaced the exact-name shortcut with ranked matching over normalized/core names, address-token overlap, and source coordinates. A unique or clearly leading branch can auto-resolve; same-name chain branches without location evidence stay ambiguous instead of silently choosing the first result. MapKit remains canonical and the normal save flow populates place metadata.
+- Review Import now defaults to one all-source unresolved inbox across every batch. Saved and duplicate history remains available through filters but no longer inflates a new batch's progress. Candidate cards expose 44-point Been/Wanna quick actions; each selects that exact candidate and opens the existing full save flow rather than auto-saving.
+- Regression coverage includes a 45-entry Google list payload and store expansion, public-list endpoint routing, resolver migration, all-batch aggregation, saved-history progress isolation, TikTok oEmbed, Instagram metadata and apostrophes, Mendocino Farms caption-handle resolution, cover-frame OCR fallback, restaurant suffixes, chain branch coordinate/address ranking, and ambiguous same-name chains.
+- Final full simulator suite passed 368 tests with 0 failures on the installed iPhone 17 / iOS 26.5 runtime: `DerivedData/Logs/Test/Test-Wander-2026.07.15_13-29-55--0700.xcresult`. The documented iPhone 16 Plus / iOS 18.6 destination is not installed on this Xcode version and was recorded as unavailable rather than counted as a pass. The final generic iOS Simulator build also passed.
+- Live read-only smoke validation followed a public Google shared-list URL and observed 136 named entries out of 136 payload entries through the same bulk endpoint shape, proving the production response is not capped at eight. No raw public list contents were logged or committed.
+- This remains the explicitly device-local REC-97 Xcode slice. The approved production follow-up still requires account-scoped Supabase import batches/items, private artifact retention, worker/Cron/Vault processing, constrained server-side hint extraction, Apple Maps Server API resolution, Share Extension/App Group capture, and the non-destructive import commit RPC. No hosted schema/function/data, tester data, build number, TestFlight release, or Slack channel changed in this follow-up.
+
+Follow-up handoff, 2026-07-15 13:37 PDT:
+
+- Committed and pushed the validated resolver/inbox follow-up as `382a70d7b45c6dd6a9dd81ffd610010f6ac53e99` (`fix: resolve bulk and social place imports`) on `codex/rec-97-place-imports`.
+- Updated draft PR #109 with the root causes, user-visible fixes, 368-test/generic-build validation, live 136-entry Google list smoke, installed-simulator caveat, and unchanged hosted-production boundary: https://github.com/joelipshutz/wander/pull/109#issuecomment-4985051396.
+- Added the same implementation, validation, and remaining-production-scope handoff to Linear REC-97. The issue remains `In Progress` and PR #109 remains Draft while Ryan tests this device-local slice and the approved hosted stack remains incomplete.
+- Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch for physical-device retesting. Existing resolver-v1 Google/social failures should requeue automatically when Profile appears; a fresh import also exercises the new paths.
+
+## 2026-07-16 10:27 PDT - Codex - REC-97 Import Review Device Feedback
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: address Ryan's physical-device feedback across multi-venue social imports, Google-list candidate quality, import review states/copy/photos, duplicate behavior, and the Profile calendar presentation.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `e9f6b0146`. The root checkout and sibling worktrees remain untouched, and no current agent-log entry reports overlapping REC-97 edits.
+- Reviewed the five July 16 screenshots. They show Google source seeds with correct venue names being visually and behaviorally replaced by weaker MapKit postal-code, street-address, or neighborhood candidates; a one-candidate ambiguous state surfacing as `Review 1 matches`; retained saved history/counters; and restaurant-specific calendar decoration.
+- Expected files are `PlaceImportModels`, `PlaceImportStore`, candidate/social resolver services, `ProfileImportViews`, `ProfileScreen`, focused import/presentation tests, and this log. The existing place-photo repository will remain the sole remote photo boundary. No hosted schema, tester data, build number, TestFlight, or Slack action is in scope for this feedback pass.
+
+Implementation checkpoint, 2026-07-16 11:02 PDT:
+
+- Root causes confirmed: Google Takeout seeds already contained the correct venue identity, address, coordinates, and provider id, but the resolver let a weaker MapKit postal-code/street/neighborhood result become the visible and saveable candidate; social resolution returned after the first confident hint; and any non-selected candidate array, including one weak result, was represented as ambiguous, which produced `Review 1 matches`.
+- Google-list resolution now preserves the imported Google venue as canonical and uses MapKit only to enrich category/business metadata. Existing resolver-v2 Google/social rows automatically requeue under resolver v3, so the bad persisted titles are repaired without reimporting. A single weak MapKit result now becomes `needsHelp`; only two or more plausible candidates open the match chooser.
+- Social post resolution now evaluates all extracted caption/title/handle/cover-OCR hints, deduplicates canonical candidates, and expands one Instagram or TikTok URL into multiple review items when multiple venues resolve. Every expanded item retains the original link/provenance.
+- Import Review now hides saved rows immediately, removes the saved counter/filter and duplicate `needs review` filter, labels completion as `Imports done` with a green check badge, uses `Import Review` in Profile/navigation, adds lazy remote place-photo thumbnails through `WanderBackend.placePhoto`, and changes the Google picker copy to `Choose Google Maps file`.
+- Profile calendar copy and restaurant-specific fork/knife decoration were removed; visit dates use the existing solid terracotta fill and retain their multi-visit count badge.
+- Validation: focused import/resolver/social tests passed 21/21; the complete `WanderTests` suite passed 370/370 with zero failures on iPhone 17 / iOS 26.5; `git diff --check` passed; and a fresh unsigned generic iOS Simulator build succeeded. The built `Wander.debug.dylib` contains both arm64 and x86_64 simulator architectures.
+- Visual QA used a synthetic, non-user import snapshot on iPhone 17 Pro and iPhone 17e / iOS 26.5. Both widths rendered `Import Review`, the `Imports done` check state, three remaining filters, source-photo slots, Been/Wanna actions for a single canonical match, `Review 2 matches` only for a genuine ambiguity, and the rescue state without overlap or clipped controls. Evidence is in `/private/tmp/rec97-import-review-iphone17pro.png` and `/private/tmp/rec97-import-review-iphone17e.png`; the fixture touched no hosted or tester data.
+- No Supabase migration/RPC, hosted extraction deployment, tester-data rewrite, build-number change, TestFlight upload, or Slack announcement was performed in this pass.
+
+Feedback-pass handoff, 2026-07-16 11:17 PDT:
+
+- Committed and pushed the implementation as `4ec65d6a6` (`fix: harden REC-97 import review`) to `origin/codex/rec-97-place-imports`.
+- Updated draft PR #109 with root causes, behavior answers, the 21-focused/370-full test results, generic build result, and two-size visual QA: https://github.com/joelipshutz/wander/pull/109#issuecomment-4995187199. The GitHub app integration returned a write-permission 403, so the authenticated `gh pr comment` fallback posted the update successfully.
+- Added the same implementation and validation handoff to Linear REC-97 in comment `0fa19931-2c72-4f47-aa7f-b2936e24aab5`. REC-97 remains `In Progress` and PR #109 remains Draft while Ryan tests; no merge or release was requested.
+- Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch. Suggested physical-device checks: re-open an older affected Google import to confirm resolver-v3 repair, import one multi-venue public Reel/TikTok, verify remote thumbnails on an authenticated account, save one item and confirm it disappears, and verify an already-saved place appears under Duplicates.
+
+## 2026-07-16 11:51 PDT - Codex - REC-97 Import Review Map Follow-up
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: address Ryan's second physical-device review pass: make imported-place photos open a map, add an interactive multi-pin map to ambiguous candidate selection, remove redundant source pills, show complete place names, add confirmed clear-all behavior, rename the header's existing count to duplicates, and case-insensitively deduplicate Profile map cities.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `73492eedb`. The root checkout and sibling worktrees remain untouched, and the latest agent log contains no overlapping REC-97 work.
+- Reviewed Ryan's 11:32 and 11:35 screenshots. The redundant blue `MAPS` source capsule is consuming the width needed by imported place names, while the photo thumbnail already carries required Google Maps attribution. The ambiguous eight-candidate row has coordinates available but exposes only the list chooser today.
+- Expected files are `ProfileImportViews`, `PlaceImportStore`, `ProfileInsightsPresenter`, focused import/profile presenter tests, and this log. No hosted schema/RPC/data, build number, TestFlight release, or Slack action is in scope for this follow-up.
+
+Implementation and validation checkpoint, 2026-07-16 14:18 PDT:
+
+- Imported-place thumbnails now open an interactive native map centered on the resolved place. Ambiguous candidate review now opens with a fitted, interactive map containing numbered pins; tapping a pin selects the same numbered candidate shown in the list below.
+- Removed the redundant blue provider capsule from import cards while retaining Google attribution on provider photos. Venue names use one consistent 16-point weight, wrap without a line limit, and receive layout priority so the complete name remains visible.
+- Added `Clear Imports` to the Import Review navigation bar with a destructive confirmation alert reading `Are you sure you want to clear the import list?`. `PlaceImportStore.clearAll()` cancels active tasks, clears every batch/item, and persists the empty inbox. The summary metric now says `duplicates` rather than `existing`.
+- Profile city insights now group case- and diacritic-insensitively and preserve a preferred human-readable casing, so values such as `Marina del Rey` and `Marina Del Rey` produce one city row, count, and route containing both place IDs.
+- Focused regression validation passed 17/17 tests. The complete iPhone 17 / iOS 26.5 suite passed 372/372 with zero failures: `/private/tmp/DerivedData-rec97-map-followup/Logs/Test/Test-Wander-2026.07.16_12-04-02--0700.xcresult`. A fresh generic iOS Simulator build passed for arm64 and x86_64 at `/private/tmp/DerivedData-rec97-map-followup-generic/Build/Products/Debug-iphonesimulator/Wander.app`; `git diff --check` also passes.
+- Installed the exact generic build with a synthetic eight-candidate/long-name snapshot on iPhone 17 Pro and confirmed the owner Profile/import entry point launches. Automated macOS click/scroll control then timed out at the host permission boundary, so no claim is made for a completed automated pin-tap screenshot pass; the new map surfaces are compile-checked and the state/store behavior is regression-tested, with final physical interaction left for Ryan's Xcode pass.
+- No hosted schema/function/data, migration, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred. Commit/push, PR/Linear handoff, and opening the exact Xcode worktree follow this checkpoint.
+
+Follow-up handoff, 2026-07-16 14:22 PDT:
+
+- Committed the tested product and regression changes as `060ec2b9b` (`fix: refine REC-97 import review maps`) for draft PR #109. The issue remains `In Progress` and the PR remains Draft because the approved hosted/account-scoped REC-97 architecture is still separate unfinished scope.
+- Final Xcode test path: open `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj`, run the `Wander` scheme, then open owner Profile > Import Review. Validate a resolved photo map, an ambiguous multi-pin map, the clear-all warning, long names, duplicate copy, and capitalization-deduped city rows.
+
+## 2026-07-16 15:51 PDT - Codex - REC-97 Social Accuracy and Dense Import Review
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: restore Google place photos on import cards, investigate and prevent the reported TikTok false-positive expansion for One Cedar, and redesign Import Review into a denser selection list with bulk Wanna/Been actions plus purpose-built duplicate and failed states.
+
+Starting status:
+
+- Fetched `origin`; the isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `1e5a6a851`. The root checkout and sibling worktrees remain untouched, and no current agent-log entry reports overlapping REC-97 edits.
+- Reviewed Ryan's attached reference and report. The unresolved tab should preserve the existing completion summary, counts, and three filters, then use compact photo/name/location/category rows, explicit Wanna/Been selection, bulk marking, and one floating commit action. Duplicate and failed tabs need diagnostic/recovery rows rather than the save-selection treatment.
+- Investigation scope is the place-photo repository boundary, social metadata/hint extraction and candidate ranking, import models/store, `ProfileImportViews`, focused resolver/store/UI contract tests, and this log. The implementation will use existing backend/provider metadata boundaries; no client-side OpenAI or Google secret will be introduced, and no hosted schema/data, build number, TestFlight, merge, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-16 17:01 PDT:
+
+- The TikTok false positives were caused by social metadata extraction treating every caption/OCR phrase as an independent venue. Generic fragments such as `coffee`, `local coffee shop`, and `TikTok Coffee` then produced valid but unrelated MapKit businesses. Social hints now require a distinctive venue token before resolution; `One Cedar` remains eligible, while the reported generic phrases are rejected. Legitimate multi-venue posts still expand when each venue has a distinctive name.
+- Resolver version 4 migrates previously persisted unsaved social expansions back to one queued source-link job per batch/source URL and clears stale generic hints. Opening Profile therefore repairs old affected TikTok/Instagram imports without requiring the user to clear and re-add them.
+- Restored authenticated Google place photos on Import Review rows through the existing place-photo repository. Metadata and image requests are coalesced for recycled SwiftUI rows; successful image data is retained in a bounded 120-entry/48 MB in-memory cache so a large Google list does not repeatedly spend provider requests or grow memory without limit. The existing provider attribution remains on the image, and tapping the thumbnail still opens the place map.
+- Replaced the fat card stack with a compact review list: 52-point photo, complete wrapping venue name, location plus canonical place type, circular `Wanna`/`Been` selectors, `Mark all`, and one floating `Save` action. Save selections enter the existing full save flow sequentially and disappear after completion. The `Duplicates` and `Failed` tabs use dedicated status/recovery rows and never show bulk selection or the floating save action.
+- Regression coverage now rejects the One Cedar/generic-coffee metadata shape, verifies resolver-v4 collapse/reprocessing, and proves repeated photo metadata/image requests hit the repository once. The final complete simulator suite passed 375/375 tests with zero failures: `/private/tmp/DerivedData-rec97-social-final/Logs/Test/Test-Wander-2026.07.16_16-47-24--0700.xcresult`. A fresh generic iOS Simulator build also passed for arm64 and x86_64, and `git diff --check` is clean.
+- Visual QA used synthetic, non-user fixtures on iPhone 17 Pro and iPhone 17e / iOS 26.5. The unresolved selection, selected/floating-save, duplicate, and failed states fit both widths, long names wrap fully, and the bottom action does not cover list rows or the tab bar. Evidence: `/private/tmp/rec97-dense-import-review-iphone17pro.png`, `/private/tmp/rec97-dense-import-review-selected-iphone17pro.png`, `/private/tmp/rec97-dense-import-review-iphone17e.png`, `/private/tmp/rec97-dense-import-review-failed-iphone17e.png`, and `/private/tmp/rec97-dense-import-review-duplicates-iphone17e.png`.
+- No Supabase migration/RPC, hosted extraction deployment, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred. Draft PR #109 and Linear REC-97 remain the durable tracking surfaces; the issue remains `In Progress` because the separately approved hosted/account-scoped import architecture is not part of this device-local feedback pass.
+
+Feedback-pass handoff, 2026-07-16 17:08 PDT:
+
+- Committed and pushed the validated implementation as `f239d677c` (`fix: improve REC-97 social import review`) to `origin/codex/rec-97-place-imports`.
+- Updated draft PR #109 with the root cause, implementation details, and 375-test/two-architecture/dual-size visual validation: https://github.com/joelipshutz/wander/pull/109#issuecomment-4997635103. Added the matching handoff to Linear REC-97 in comment `3e0a725b-797b-407d-83aa-d7d7801d3fcc` and kept the issue `In Progress`.
+- Opened `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj` in Xcode on the exact pushed branch. Physical-device checks: open an older affected TikTok import and confirm resolver-v4 requeues it; import the reported One Cedar post and confirm generic coffee businesses are absent; verify authenticated Google thumbnails persist while scrolling/reopening; exercise single and Mark-all Wanna/Been selections; and confirm Duplicate/Failed tabs never show the floating Save action.
+
+## 2026-07-16 17:18 PDT - Codex - REC-97 Landing And Explicit TestFlight Release
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress` entering the merge gate)
+PR: https://github.com/joelipshutz/wander/pull/109
+
+Goal: review the complete device-local REC-97 place-import vertical slice against latest `main`, squash-merge it when the landing gate is clean, then explicitly package latest `main` as the next TestFlight build and publish tester-facing status.
+
+Starting status:
+
+- Fetched `origin`; the isolated branch is clean, exactly tracks `origin/codex/rec-97-place-imports` at `4c19c96ec`, contains latest `origin/main`, and PR #109 is mergeable with `CLEAN` merge state. It remains Draft only because Ryan was completing physical-device testing; Ryan's explicit merge-and-TestFlight request authorizes clearing that hold after review.
+- Latest completed TestFlight is build 76. The main-branch release log records archive `/private/tmp/Wander-0.1-build76.xcarchive`, successful API-key upload without build-number drift, App Store Connect state `VALID`, public `Wander Alpha` attachment, external approval, and the required `#testflight-feedback` announcement. No prior explicit release is pending.
+- Current `main` declares marketing version `0.1`, build `76`; this explicit release will increment exactly once after the implementation PR lands. The release batch currently consists of PR #109's owner-Profile import tiles, durable local import inbox, Google/text/social parsing and resolution, dense review/save UX, map/photo/duplicate handling, and regression fixes. The approved account-scoped hosted import architecture remains deferred and REC-97 should not be marked `Done` merely because this device-local slice reaches TestFlight.
+- Expected pre-merge work is review evidence, Linear/PR status, and this append-only log. Expected post-merge release work is a fresh latest-main worktree, build 77 bump in `project.yml`, XcodeGen output, full validation, signed archive/upload/helper processing, TestFlight Slack note, and final durable handoff. The root checkout and unrelated worktrees remain untouched.
+
+Pre-landing review:
+
+- Reviewed the full `origin/main...HEAD` diff and REC-97 plan against the repository landing checklist. No blocking code, data, security, concurrency, or UI findings remain. There are no Supabase migrations or RPC changes in this slice.
+- The import store is main-actor isolated, processing tasks are cancellable, and local snapshots use atomic JSON writes plus `completeUntilFirstUserAuthentication` file protection. URL-backed importers constrain Google list parsing to Google hosts and use public Instagram/TikTok metadata paths.
+- The known device-local, one-test-account-per-install limitation is declared in PR #109 and remains tracked under REC-97 together with the hosted account-scoped worker and Share Extension work. This is an intentional alpha boundary, not a reason to close the broader issue.
+- Validation remains green: 375 tests with zero failures, generic iOS Simulator build for arm64 and x86_64, and visual QA on iPhone 17 Pro and iPhone 17e across unresolved, selected, duplicate, and failed states. The optional gstack JSON review-log helper could not persist because `bun` is unavailable, so this durable repository log is the review record.
