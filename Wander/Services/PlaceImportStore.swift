@@ -409,21 +409,7 @@ final class PlaceImportStore: ObservableObject {
         do {
             let snapshot = try persistence.load()
             batches = snapshot.batches
-            items = snapshot.items.map { item in
-                var resumed = item
-                if item.state == .resolving {
-                    resumed.state = .queued
-                }
-                if Self.shouldUpgradeResolution(for: item) {
-                    resumed.state = .queued
-                    resumed.candidates = []
-                    resumed.selectedCandidateID = nil
-                    resumed.helpMessage = nil
-                    resumed.duplicateUserPlaceID = nil
-                    resumed.resolverVersion = PlaceImportItem.currentResolverVersion
-                }
-                return resumed
-            }
+            items = Self.upgradedLoadedItems(snapshot.items)
             persistenceError = nil
         } catch {
             batches = []
@@ -431,6 +417,43 @@ final class PlaceImportStore: ObservableObject {
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
+    }
+
+    private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> [PlaceImportItem] {
+        var seenSocialSources = Set<String>()
+
+        return loadedItems.compactMap { item in
+            guard shouldUpgradeResolution(for: item) else {
+                var resumed = item
+                if item.state == .resolving {
+                    resumed.state = .queued
+                }
+                return resumed
+            }
+
+            var upgraded = item
+            if [.instagram, .tiktok].contains(item.source),
+               let sourceURLString = item.seed.sourceURLString {
+                let sourceKey = "\(item.batchID)|\(sourceURLString)"
+                guard seenSocialSources.insert(sourceKey).inserted else { return nil }
+                upgraded.seed = PlaceImportSeed(
+                    id: item.seed.id,
+                    rawText: sourceURLString,
+                    nameHint: nil,
+                    areaHint: nil,
+                    sourceURLString: sourceURLString,
+                    sourceLine: item.seed.sourceLine
+                )
+            }
+
+            upgraded.state = .queued
+            upgraded.candidates = []
+            upgraded.selectedCandidateID = nil
+            upgraded.helpMessage = nil
+            upgraded.duplicateUserPlaceID = nil
+            upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
+            return upgraded
+        }
     }
 
     var primaryBatch: PlaceImportBatch? {

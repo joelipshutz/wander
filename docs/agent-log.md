@@ -12221,3 +12221,28 @@ Follow-up handoff, 2026-07-16 14:22 PDT:
 
 - Committed the tested product and regression changes as `060ec2b9b` (`fix: refine REC-97 import review maps`) for draft PR #109. The issue remains `In Progress` and the PR remains Draft because the approved hosted/account-scoped REC-97 architecture is still separate unfinished scope.
 - Final Xcode test path: open `/private/tmp/recme-rec97-place-imports/Wander.xcodeproj`, run the `Wander` scheme, then open owner Profile > Import Review. Validate a resolved photo map, an ambiguous multi-pin map, the clear-all warning, long names, duplicate copy, and capitalization-deduped city rows.
+
+## 2026-07-16 15:51 PDT - Codex - REC-97 Social Accuracy and Dense Import Review
+
+Agent: Codex
+Branch: `codex/rec-97-place-imports`
+Worktree: `/private/tmp/recme-rec97-place-imports`
+Linear: `REC-97` (`In Progress`)
+
+Goal: restore Google place photos on import cards, investigate and prevent the reported TikTok false-positive expansion for One Cedar, and redesign Import Review into a denser selection list with bulk Wanna/Been actions plus purpose-built duplicate and failed states.
+
+Starting status:
+
+- Fetched `origin`; the isolated worktree is clean and exactly tracks `origin/codex/rec-97-place-imports` at `1e5a6a851`. The root checkout and sibling worktrees remain untouched, and no current agent-log entry reports overlapping REC-97 edits.
+- Reviewed Ryan's attached reference and report. The unresolved tab should preserve the existing completion summary, counts, and three filters, then use compact photo/name/location/category rows, explicit Wanna/Been selection, bulk marking, and one floating commit action. Duplicate and failed tabs need diagnostic/recovery rows rather than the save-selection treatment.
+- Investigation scope is the place-photo repository boundary, social metadata/hint extraction and candidate ranking, import models/store, `ProfileImportViews`, focused resolver/store/UI contract tests, and this log. The implementation will use existing backend/provider metadata boundaries; no client-side OpenAI or Google secret will be introduced, and no hosted schema/data, build number, TestFlight, merge, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-16 17:01 PDT:
+
+- The TikTok false positives were caused by social metadata extraction treating every caption/OCR phrase as an independent venue. Generic fragments such as `coffee`, `local coffee shop`, and `TikTok Coffee` then produced valid but unrelated MapKit businesses. Social hints now require a distinctive venue token before resolution; `One Cedar` remains eligible, while the reported generic phrases are rejected. Legitimate multi-venue posts still expand when each venue has a distinctive name.
+- Resolver version 4 migrates previously persisted unsaved social expansions back to one queued source-link job per batch/source URL and clears stale generic hints. Opening Profile therefore repairs old affected TikTok/Instagram imports without requiring the user to clear and re-add them.
+- Restored authenticated Google place photos on Import Review rows through the existing place-photo repository. Metadata and image requests are coalesced for recycled SwiftUI rows; successful image data is retained in a bounded 120-entry/48 MB in-memory cache so a large Google list does not repeatedly spend provider requests or grow memory without limit. The existing provider attribution remains on the image, and tapping the thumbnail still opens the place map.
+- Replaced the fat card stack with a compact review list: 52-point photo, complete wrapping venue name, location plus canonical place type, circular `Wanna`/`Been` selectors, `Mark all`, and one floating `Save` action. Save selections enter the existing full save flow sequentially and disappear after completion. The `Duplicates` and `Failed` tabs use dedicated status/recovery rows and never show bulk selection or the floating save action.
+- Regression coverage now rejects the One Cedar/generic-coffee metadata shape, verifies resolver-v4 collapse/reprocessing, and proves repeated photo metadata/image requests hit the repository once. The final complete simulator suite passed 375/375 tests with zero failures: `/private/tmp/DerivedData-rec97-social-final/Logs/Test/Test-Wander-2026.07.16_16-47-24--0700.xcresult`. A fresh generic iOS Simulator build also passed for arm64 and x86_64, and `git diff --check` is clean.
+- Visual QA used synthetic, non-user fixtures on iPhone 17 Pro and iPhone 17e / iOS 26.5. The unresolved selection, selected/floating-save, duplicate, and failed states fit both widths, long names wrap fully, and the bottom action does not cover list rows or the tab bar. Evidence: `/private/tmp/rec97-dense-import-review-iphone17pro.png`, `/private/tmp/rec97-dense-import-review-selected-iphone17pro.png`, `/private/tmp/rec97-dense-import-review-iphone17e.png`, `/private/tmp/rec97-dense-import-review-failed-iphone17e.png`, and `/private/tmp/rec97-dense-import-review-duplicates-iphone17e.png`.
+- No Supabase migration/RPC, hosted extraction deployment, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred. Draft PR #109 and Linear REC-97 remain the durable tracking surfaces; the issue remains `In Progress` because the separately approved hosted/account-scoped import architecture is not part of this device-local feedback pass.

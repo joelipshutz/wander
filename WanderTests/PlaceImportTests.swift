@@ -338,6 +338,73 @@ final class PlaceImportStoreTests: XCTestCase {
         })
     }
 
+    func testSocialResolverRejectsGenericCoffeeHintsAroundOneNamedVenue() async throws {
+        let oneCedar = placeImportCandidate(name: "One Cedar")
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "one cedar": [oneCedar],
+                "local coffee shop": [placeImportCandidate(name: "Local Coffee + Shop")],
+                "coffee": [placeImportCandidate(name: "TikTok Coffee")]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "This coffee shop is called One Cedar",
+                    caption: "This coffee shop is called One Cedar. #localcoffeeshop #tiktokcoffee",
+                    authorName: "Creator",
+                    thumbnailURL: nil
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let seed = PlaceImportSeed(
+            rawText: "https://www.tiktok.com/@creator/video/one-cedar",
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: "https://www.tiktok.com/@creator/video/one-cedar",
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .tiktok)
+
+        XCTAssertEqual(resolution, .candidates([oneCedar], selectedCandidateID: oneCedar.id))
+    }
+
+    func testResolverUpgradeCollapsesExpandedSocialChildrenBackToOneSourceJob() {
+        let batch = PlaceImportBatch(id: "social-batch", source: .tiktok, sourceName: nil, totalCount: 2)
+        let sourceURL = "https://www.tiktok.com/@creator/video/one-cedar"
+        let items = ["TikTok Coffee", "Local Coffee + Shop"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "old-\(index)",
+                batchID: batch.id,
+                source: .tiktok,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Los Angeles",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: PlaceImportItem.currentResolverVersion - 1
+            )
+        }
+
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: items)
+            ),
+            resolver: SuspendedPlaceImportResolver()
+        )
+
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.state, .queued)
+        XCTAssertNil(store.items.first?.seed.nameHint)
+        XCTAssertEqual(store.items.first?.seed.sourceURLString, sourceURL)
+    }
+
     func testSummaryAggregatesUnresolvedItemsAcrossEveryImportBatch() async throws {
         let store = PlaceImportStore(
             persistence: InMemoryPlaceImportPersistence(),

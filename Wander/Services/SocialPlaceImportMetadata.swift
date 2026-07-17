@@ -359,7 +359,8 @@ enum SocialPlaceHintExtractor {
         guard let hint,
               hint.name.count >= 3,
               hint.name.count <= 80,
-              !isGenericSocialTerm(hint.name)
+              !isGenericSocialTerm(hint.name),
+              hasDistinctiveVenueToken(hint.name)
         else { return }
         let key = normalized(hint.name) + "|" + normalized(hint.area ?? "")
         guard !output.contains(where: {
@@ -432,10 +433,30 @@ enum SocialPlaceHintExtractor {
             || key.hasPrefix("tiktok")
     }
 
+    private static func hasDistinctiveVenueToken(_ value: String) -> Bool {
+        let folded = value.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+        let tokens = folded
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        return tokens.contains { token in
+            token.count >= 2 && !genericVenueTokens.contains(token)
+        }
+    }
+
     private static let genericTerms: Set<String> = [
         "food", "foodie", "foodtok", "foodtiktok", "restaurant", "restaurants",
         "reels", "reel", "viral", "fyp", "foryou", "foryoupage", "explore",
-        "lafood", "lafoodie", "losangeles", "california", "travel", "creator"
+        "lafood", "lafoodie", "losangeles", "california", "travel", "creator",
+        "coffee", "coffeeshop", "cafe", "localcoffee", "localcoffeeshop"
+    ]
+
+    private static let genericVenueTokens: Set<String> = [
+        "a", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
+        "for", "in", "instagram", "local", "new", "of", "place", "restaurant",
+        "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
     ]
 
     private static func normalized(_ value: String) -> String {

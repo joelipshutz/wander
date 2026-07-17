@@ -98,7 +98,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 3
+    static let currentResolverVersion = 4
 
     let id: String
     let batchID: String

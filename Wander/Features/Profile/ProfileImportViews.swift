@@ -399,6 +399,10 @@ struct PlaceImportInboxScreen: View {
     @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
     @State private var showsClearConfirmation = false
+    @State private var stagedStatuses: [String: PlaceStatus] = [:]
+    @State private var bulkSaveQueue: [PlaceImportQuickSaveIntent] = []
+    @State private var isBulkSaveRunning = false
+    @State private var didSaveCurrentBulkItem = false
 
     var body: some View {
         Group {
@@ -415,6 +419,21 @@ struct PlaceImportInboxScreen: View {
                             .listRowBackground(Color.clear)
                     }
 
+                    if selectedFilter == .unresolved, !readyItems.isEmpty {
+                        Section {
+                            markAllRow
+                                .listRowInsets(
+                                    EdgeInsets(
+                                        top: WanderTheme.spacing1,
+                                        leading: WanderTheme.spacing4,
+                                        bottom: WanderTheme.spacing1,
+                                        trailing: WanderTheme.spacing4
+                                    )
+                                )
+                                .listRowBackground(WanderTheme.surfaceBone.color)
+                        }
+                    }
+
                     if filteredItems.isEmpty {
                         ContentUnavailableView(
                             selectedFilter == .unresolved ? "All caught up" : "No matching imports",
@@ -428,16 +447,7 @@ struct PlaceImportInboxScreen: View {
                         .listRowBackground(Color.clear)
                     } else {
                         ForEach(Array(filteredItems.prefix(visibleLimit))) { item in
-                            PlaceImportReviewRow(
-                                item: item,
-                                loadsRemotePhoto: auth.isSignedIn,
-                                beenAction: { beginSave(item, status: .been) },
-                                wannaAction: { beginSave(item, status: .wannaGo) },
-                                candidateAction: { candidatePickerItem = item },
-                                rescueAction: { rescueItem = item },
-                                retryAction: { importStore.retry(itemID: item.id) },
-                                dismissAction: { importStore.dismiss(itemID: item.id) }
-                            )
+                            reviewRow(for: item)
                             .listRowInsets(
                                 EdgeInsets(
                                     top: WanderTheme.spacing1,
@@ -446,8 +456,9 @@ struct PlaceImportInboxScreen: View {
                                     trailing: WanderTheme.spacing4
                                 )
                             )
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.visible)
+                            .listRowSeparatorTint(WanderTheme.borderHairline.color)
+                            .listRowBackground(WanderTheme.surfaceBone.color)
                             .onAppear {
                                 loadNextPageIfNeeded(itemID: item.id)
                             }
@@ -457,6 +468,11 @@ struct PlaceImportInboxScreen: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(WanderTheme.canvasWarm.color)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsBulkSaveButton {
+                        bulkSaveButton
+                    }
+                }
             } else {
                 ContentUnavailableView(
                     "Import Review",
@@ -486,11 +502,14 @@ struct PlaceImportInboxScreen: View {
                 importStore.clearAll()
                 selectedFilter = .unresolved
                 visibleLimit = 50
+                stagedStatuses = [:]
+                bulkSaveQueue = []
+                isBulkSaveRunning = false
             }
         } message: {
             Text("Are you sure you want to clear the import list?")
         }
-        .sheet(item: $saveRoute) { route in
+        .sheet(item: $saveRoute, onDismiss: saveSheetDidDismiss) { route in
             MapPlaceSaveFlowSheet(context: route.context) { submission in
                 await save(submission, itemID: route.itemID)
             } onRemove: { _ in
@@ -542,13 +561,25 @@ struct PlaceImportInboxScreen: View {
         switch selectedFilter {
         case .unresolved:
             inboxItems.filter {
-                [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
+                [.queued, .resolving, .ready, .ambiguous, .needsHelp].contains($0.state)
             }
         case .duplicates:
             inboxItems.filter { $0.state == .duplicate }
         case .failed:
             inboxItems.filter { $0.state == .failed }
         }
+    }
+
+    private var readyItems: [PlaceImportItem] {
+        inboxItems.filter { $0.state == .ready && $0.selectedCandidate != nil }
+    }
+
+    private var selectedReadyItems: [PlaceImportItem] {
+        readyItems.filter { stagedStatuses[$0.id] != nil }
+    }
+
+    private var showsBulkSaveButton: Bool {
+        selectedFilter == .unresolved && !selectedReadyItems.isEmpty
     }
 
     private var filterStrip: some View {
@@ -571,7 +602,7 @@ struct PlaceImportInboxScreen: View {
     private var inboxSummary: some View {
         let summary = importStore.summary
         let unresolvedCount = inboxItems.filter {
-            [.queued, .resolving, .ready, .ambiguous, .needsHelp, .failed].contains($0.state)
+            [.queued, .resolving, .ready, .ambiguous, .needsHelp].contains($0.state)
         }.count
         let sources = Set(inboxItems.map(\.source))
 
@@ -633,6 +664,119 @@ struct PlaceImportInboxScreen: View {
         .padding(.vertical, WanderTheme.spacing2)
     }
 
+    @ViewBuilder
+    private func reviewRow(for item: PlaceImportItem) -> some View {
+        switch selectedFilter {
+        case .unresolved:
+            PlaceImportUnresolvedRow(
+                item: item,
+                selectedStatus: stagedStatuses[item.id],
+                loadsRemotePhoto: auth.isSignedIn,
+                statusAction: { toggleStatus($0, for: item) },
+                candidateAction: { candidatePickerItem = item },
+                rescueAction: { rescueItem = item },
+                retryAction: { importStore.retry(itemID: item.id) },
+                dismissAction: {
+                    stagedStatuses[item.id] = nil
+                    importStore.dismiss(itemID: item.id)
+                }
+            )
+        case .duplicates:
+            PlaceImportDuplicateRow(
+                item: item,
+                loadsRemotePhoto: auth.isSignedIn,
+                dismissAction: { importStore.dismiss(itemID: item.id) }
+            )
+        case .failed:
+            PlaceImportFailedRow(
+                item: item,
+                loadsRemotePhoto: auth.isSignedIn,
+                retryAction: { importStore.retry(itemID: item.id) },
+                rescueAction: { rescueItem = item },
+                dismissAction: { importStore.dismiss(itemID: item.id) }
+            )
+        }
+    }
+
+    private var markAllRow: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Text("Mark all")
+                .font(.system(size: 14, weight: .black))
+
+            Spacer(minLength: WanderTheme.spacing2)
+
+            VStack(spacing: 2) {
+                Text("Wanna")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                importSelectionButton(
+                    status: .wannaGo,
+                    isSelected: readyItems.allSatisfy { stagedStatuses[$0.id] == .wannaGo },
+                    action: { markAll(as: .wannaGo) }
+                )
+            }
+
+            VStack(spacing: 2) {
+                Text("Been")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                importSelectionButton(
+                    status: .been,
+                    isSelected: readyItems.allSatisfy { stagedStatuses[$0.id] == .been },
+                    action: { markAll(as: .been) }
+                )
+            }
+        }
+    }
+
+    private var bulkSaveButton: some View {
+        Button(action: startBulkSave) {
+            HStack(spacing: WanderTheme.spacing2) {
+                if isBulkSaveRunning {
+                    ProgressView()
+                        .tint(WanderTheme.surfaceRaised.color)
+                }
+                Text("Save")
+                    .font(.system(size: 17, weight: .black))
+                Text("\(selectedReadyItems.count)")
+                    .font(.system(size: 12, weight: .black))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .foregroundStyle(WanderTheme.surfaceRaised.color)
+            .background(WanderTheme.textInk.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        }
+        .buttonStyle(.plain)
+        .disabled(isBulkSaveRunning)
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing2)
+        .background(WanderTheme.canvasWarm.color.opacity(0.96))
+        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 10, y: -2)
+        .accessibilityLabel("Save \(selectedReadyItems.count) selected imports")
+    }
+
+    private func importSelectionButton(
+        status: PlaceStatus,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: status == .been ? "checkmark" : "bookmark")
+                .font(.system(size: 16, weight: .bold))
+                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                .background(isSelected ? status.importColor : WanderTheme.surfaceRaised.color)
+                .foregroundStyle(isSelected ? Color.white : status.importColor)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(status.importColor.opacity(0.28), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(status == .been ? "Mark all Been" : "Mark all Wanna")
+    }
+
     private func importMetric(_ value: Int, _ label: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(value)")
@@ -673,6 +817,59 @@ struct PlaceImportInboxScreen: View {
         saveRoute = PlaceImportSaveRoute(itemID: item.id, status: status, context: context)
     }
 
+    private func toggleStatus(_ status: PlaceStatus, for item: PlaceImportItem) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            if stagedStatuses[item.id] == status {
+                stagedStatuses[item.id] = nil
+            } else {
+                stagedStatuses[item.id] = status
+            }
+        }
+    }
+
+    private func markAll(as status: PlaceStatus) {
+        let alreadySelected = readyItems.allSatisfy { stagedStatuses[$0.id] == status }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            for item in readyItems {
+                stagedStatuses[item.id] = alreadySelected ? nil : status
+            }
+        }
+    }
+
+    private func startBulkSave() {
+        guard !isBulkSaveRunning else { return }
+        bulkSaveQueue = selectedReadyItems.compactMap { item in
+            stagedStatuses[item.id].map { PlaceImportQuickSaveIntent(itemID: item.id, status: $0) }
+        }
+        guard !bulkSaveQueue.isEmpty else { return }
+        isBulkSaveRunning = true
+        beginNextBulkSave()
+    }
+
+    private func beginNextBulkSave() {
+        guard isBulkSaveRunning else { return }
+        while !bulkSaveQueue.isEmpty {
+            let intent = bulkSaveQueue.removeFirst()
+            guard let item = importStore.item(id: intent.itemID), item.state == .ready else { continue }
+            didSaveCurrentBulkItem = false
+            beginSave(item, status: intent.status)
+            return
+        }
+        isBulkSaveRunning = false
+    }
+
+    private func saveSheetDidDismiss() {
+        guard isBulkSaveRunning else { return }
+        guard didSaveCurrentBulkItem else {
+            bulkSaveQueue = []
+            isBulkSaveRunning = false
+            return
+        }
+        DispatchQueue.main.async {
+            beginNextBulkSave()
+        }
+    }
+
     private func beginPendingQuickSave() {
         guard let intent = pendingQuickSave else { return }
         pendingQuickSave = nil
@@ -702,6 +899,10 @@ struct PlaceImportInboxScreen: View {
             backend: remoteBackend
         )
         importStore.markSaved(itemID: itemID, userPlaceID: result.userPlaceID)
+        stagedStatuses[itemID] = nil
+        if isBulkSaveRunning {
+            didSaveCurrentBulkItem = true
+        }
         if !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
         }
@@ -720,6 +921,7 @@ struct PlaceImportInboxScreen: View {
 private struct PlaceImportPhotoThumb: View {
     let item: PlaceImportItem
     let loadsRemotePhoto: Bool
+    var size: CGFloat = 52
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
     @State private var presentedMapLocation: PlaceImportMapLocation?
@@ -771,18 +973,18 @@ private struct PlaceImportPhotoThumb: View {
                 if photo.isGooglePlacesPhoto {
                     VStack {
                         Spacer()
-                        Text("Google Maps")
-                            .font(.system(size: 8, weight: .regular))
+                        Text("Google")
+                            .font(.system(size: 7, weight: .regular))
                             .foregroundStyle(Color.white)
                             .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 15)
+                            .frame(maxWidth: .infinity, minHeight: 12)
                             .background(Color.black.opacity(0.68))
                     }
                     .allowsHitTesting(false)
                 }
             }
         }
-        .frame(width: 64, height: 64)
+        .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
     }
 
@@ -806,187 +1008,280 @@ private struct PlaceImportPhotoThumb: View {
     }
 }
 
-private struct PlaceImportReviewRow: View {
+private struct PlaceImportUnresolvedRow: View {
     let item: PlaceImportItem
+    let selectedStatus: PlaceStatus?
     let loadsRemotePhoto: Bool
-    let beenAction: () -> Void
-    let wannaAction: () -> Void
+    let statusAction: (PlaceStatus) -> Void
     let candidateAction: () -> Void
     let rescueAction: () -> Void
     let retryAction: () -> Void
     let dismissAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
+        HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+            PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
-                    if let area = item.displayArea {
-                        Text(area)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(2)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.displayName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
 
-                if ![.queued, .resolving, .saved, .dismissed].contains(item.state) {
-                    Menu {
-                        if item.candidates.count > 1 {
-                            Button(
-                                "Review matches",
-                                systemImage: "map",
-                                action: candidateAction
-                            )
-                        }
-                        Button(
-                            "Search for a different place",
-                            systemImage: "magnifyingglass",
-                            action: rescueAction
-                        )
-                        if item.state == .failed {
-                            Button("Retry", systemImage: "arrow.clockwise", action: retryAction)
-                        }
-                        Button("Dismiss", systemImage: "xmark", role: .destructive, action: dismissAction)
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    }
-                    .accessibilityLabel("Import item actions")
+                Text(item.reviewMetadata)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                unresolvedAction
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if item.state == .ready {
+                HStack(spacing: 6) {
+                    PlaceImportStatusSelector(
+                        status: .wannaGo,
+                        isSelected: selectedStatus == .wannaGo,
+                        action: { statusAction(.wannaGo) }
+                    )
+                    PlaceImportStatusSelector(
+                        status: .been,
+                        isSelected: selectedStatus == .been,
+                        action: { statusAction(.been) }
+                    )
                 }
             }
 
-            rowActions
+            importItemMenu(
+                item: item,
+                candidateAction: candidateAction,
+                rescueAction: rescueAction,
+                retryAction: retryAction,
+                dismissAction: dismissAction
+            )
         }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .stroke(rowBorderColor.opacity(0.36), lineWidth: 1)
-        )
+        .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
     }
 
-    @ViewBuilder
-    private var rowActions: some View {
+    @ViewBuilder private var unresolvedAction: some View {
         switch item.state {
         case .queued, .resolving:
             HStack(spacing: WanderTheme.spacing2) {
-                ProgressView()
-                Text(item.state == .queued ? "Waiting to match" : "Matching with Apple Maps")
-                    .font(.system(size: 13, weight: .bold))
+                ProgressView().controlSize(.small)
+                Text(item.state == .queued ? "Waiting to match" : "Matching place")
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
-            .frame(minHeight: WanderTheme.tapMinimum)
         case .ready:
-            HStack(spacing: WanderTheme.spacing2) {
-                importStatusButton("Been", systemImage: "checkmark.circle.fill", color: WanderTheme.stateSuccess.color, action: beenAction)
-                importStatusButton("Wanna", systemImage: "bookmark.fill", color: WanderTheme.stateWarning.color, action: wannaAction)
-            }
-        case .ambiguous:
-            importCommandButton("Review \(item.candidates.count) matches", systemImage: "map.fill", color: WanderTheme.stateInfo.color, action: candidateAction)
-        case .needsHelp:
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                if let helpMessage = item.helpMessage {
-                    Text(helpMessage)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-                if item.seed.nameHint != nil {
-                    importCommandButton(
-                        "Search for the correct place",
-                        systemImage: "magnifyingglass",
-                        color: WanderTheme.terracotta.color,
-                        action: rescueAction
-                    )
-                } else {
-                    importCommandButton(
-                        item.source == .googleMaps ? "Retry Google Maps import" : "Retry automatic match",
-                        systemImage: "arrow.clockwise",
-                        color: WanderTheme.terracotta.color,
-                        action: retryAction
-                    )
-                }
-            }
-        case .duplicate:
-            Label("Already saved", systemImage: "checkmark.seal.fill")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.stateInfo.color)
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-        case .saved:
-            Label("Saved to your places", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.stateSuccess.color)
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-        case .failed:
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text(item.helpMessage ?? "This item could not be matched.")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.stateError.color)
-                importCommandButton("Retry", systemImage: "arrow.clockwise", color: WanderTheme.stateError.color, action: retryAction)
-            }
-        case .dismissed:
             EmptyView()
-        }
-    }
-
-    private func importStatusButton(
-        _ title: String,
-        systemImage: String,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 14, weight: .black))
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(color.opacity(0.13))
-                .foregroundStyle(color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .stroke(color.opacity(0.32), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func importCommandButton(
-        _ title: String,
-        systemImage: String,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 14, weight: .black))
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                .background(color.opacity(0.12))
-                .foregroundStyle(color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var rowBorderColor: Color {
-        switch item.state {
-        case .failed: WanderTheme.stateError.color
-        case .needsHelp, .ambiguous: WanderTheme.stateWarning.color
-        case .saved: WanderTheme.stateSuccess.color
-        case .duplicate: WanderTheme.stateInfo.color
-        default: WanderTheme.borderHairline.color
+        case .ambiguous:
+            PlaceImportInlineAction(
+                title: "Review \(item.candidates.count) matches",
+                systemImage: "map.fill",
+                color: WanderTheme.stateInfo.color,
+                action: candidateAction
+            )
+        case .needsHelp:
+            PlaceImportInlineAction(
+                title: item.seed.nameHint == nil ? "Retry automatic match" : "Search for the place",
+                systemImage: item.seed.nameHint == nil ? "arrow.clockwise" : "magnifyingglass",
+                color: WanderTheme.terracotta.color,
+                action: item.seed.nameHint == nil ? retryAction : rescueAction
+            )
+        case .duplicate, .saved, .failed, .dismissed:
+            EmptyView()
         }
     }
 }
 
+private struct PlaceImportDuplicateRow: View {
+    let item: PlaceImportItem
+    let loadsRemotePhoto: Bool
+    let dismissAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.displayName)
+                    .font(.system(size: 15, weight: .bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(item.reviewMetadata)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                Label("Already in your places", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateInfo.color)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Menu {
+                Button(
+                    "Remove from import review",
+                    systemImage: "xmark",
+                    role: .destructive,
+                    action: dismissAction
+                )
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .accessibilityLabel("Duplicate import actions")
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private struct PlaceImportFailedRow: View {
+    let item: PlaceImportItem
+    let loadsRemotePhoto: Bool
+    let retryAction: () -> Void
+    let rescueAction: () -> Void
+    let dismissAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.displayName)
+                    .font(.system(size: 15, weight: .bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(item.helpMessage ?? "This import could not be processed.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: retryAction) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 16, weight: .bold))
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .background(WanderTheme.stateError.color.opacity(0.1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Retry import")
+
+            Menu {
+                Button("Search for the place", systemImage: "magnifyingglass", action: rescueAction)
+                Button(
+                    "Remove from import review",
+                    systemImage: "xmark",
+                    role: .destructive,
+                    action: dismissAction
+                )
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .accessibilityLabel("Failed import actions")
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private struct PlaceImportStatusSelector: View {
+    let status: PlaceStatus
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: status == .been ? "checkmark" : "bookmark")
+                .font(.system(size: 16, weight: .bold))
+                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                .background(isSelected ? status.importColor : WanderTheme.surfaceRaised.color)
+                .foregroundStyle(isSelected ? Color.white : status.importColor)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(status.importColor.opacity(0.28), lineWidth: 1))
+                .shadow(color: status.importColor.opacity(0.14), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(status == .been ? "Been" : "Wanna")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct PlaceImportInlineAction: View {
+    let title: String
+    let systemImage: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private func importItemMenu(
+    item: PlaceImportItem,
+    candidateAction: @escaping () -> Void,
+    rescueAction: @escaping () -> Void,
+    retryAction: @escaping () -> Void,
+    dismissAction: @escaping () -> Void
+) -> some View {
+    Menu {
+        if item.candidates.count > 1 {
+            Button("Review matches", systemImage: "map", action: candidateAction)
+        }
+        Button("Search for a different place", systemImage: "magnifyingglass", action: rescueAction)
+        if [.queued, .resolving, .needsHelp].contains(item.state) {
+            Button("Retry automatic match", systemImage: "arrow.clockwise", action: retryAction)
+        }
+        Button(
+            "Remove from import review",
+            systemImage: "xmark",
+            role: .destructive,
+            action: dismissAction
+        )
+    } label: {
+        Image(systemName: "ellipsis")
+            .font(.system(size: 15, weight: .bold))
+            .frame(width: 32, height: WanderTheme.tapMinimum)
+    }
+    .accessibilityLabel("Import item actions")
+}
+
+private extension PlaceStatus {
+    var importColor: Color {
+        self == .been ? WanderTheme.stateSuccess.color : WanderTheme.stateWarning.color
+    }
+}
+
 private extension PlaceImportItem {
+    var reviewMetadata: String {
+        let candidate = selectedCandidate ?? candidates.first
+        let type = candidate.map {
+            WanderPlaceCategory.display(for: $0.categoryAssignment).compactTitle
+        }
+        var seen = Set<String>()
+        let parts = [displayArea, type].compactMap { value -> String? in
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let key = trimmed.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+            guard seen.insert(key).inserted else { return nil }
+            return trimmed
+        }
+        return parts.isEmpty ? "Place" : parts.joined(separator: " · ")
+    }
+
     var reviewPhotoRequest: PlacePhotoRequest? {
         let candidate = selectedCandidate ?? candidates.first
         let name: String

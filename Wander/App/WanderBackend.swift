@@ -18,6 +18,15 @@ final class WanderBackend: ObservableObject {
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
+    private var placePhotoCache: [String: PlacePhoto] = [:]
+    private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
+    private let placePhotoImageCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.countLimit = 120
+        cache.totalCostLimit = 48 * 1_024 * 1_024
+        return cache
+    }()
+    private var placePhotoImageTasks: [String: Task<Data, Error>] = [:]
 
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
@@ -126,7 +135,27 @@ final class WanderBackend: ObservableObject {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
-        return try await placePhotoRepository.photo(for: request)
+        let key = request.lookupKey
+        if let cached = placePhotoCache[key] {
+            return cached
+        }
+        if let existingTask = placePhotoTasks[key] {
+            return try await existingTask.value
+        }
+
+        let task = Task { @MainActor in
+            try await placePhotoRepository.photo(for: request)
+        }
+        placePhotoTasks[key] = task
+        do {
+            let photo = try await task.value
+            placePhotoTasks[key] = nil
+            placePhotoCache[key] = photo
+            return photo
+        } catch {
+            placePhotoTasks[key] = nil
+            throw error
+        }
     }
 
     func visibleUserPlacePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -140,7 +169,31 @@ final class WanderBackend: ObservableObject {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
-        return try await placePhotoRepository.imageData(for: photo)
+        let key = photo.cacheKey
+        if let cached = placePhotoImageCache.object(forKey: key as NSString) {
+            return cached as Data
+        }
+        if let existingTask = placePhotoImageTasks[key] {
+            return try await existingTask.value
+        }
+
+        let task = Task { @MainActor in
+            try await placePhotoRepository.imageData(for: photo)
+        }
+        placePhotoImageTasks[key] = task
+        do {
+            let data = try await task.value
+            placePhotoImageTasks[key] = nil
+            placePhotoImageCache.setObject(
+                data as NSData,
+                forKey: key as NSString,
+                cost: data.count
+            )
+            return data
+        } catch {
+            placePhotoImageTasks[key] = nil
+            throw error
+        }
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
