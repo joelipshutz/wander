@@ -12326,3 +12326,10 @@ Implementation and validation checkpoint, 2026-07-17 16:27 PDT:
 - Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e. Evidence: `/private/tmp/rec100-profile-17pro.png` and `/private/tmp/rec100-profile-17e.png`; baseline evidence with the blank header block is `/private/tmp/rec100-baseline-profile-17pro.png`. The post-fix Profile has no blank beige navigation block at either width.
 - Final diff is limited to the seven affected SwiftUI feature files, `NavigationContractTests`, and this append-only log; `git diff --check` is clean. Latest `origin/main` remains `062f16f74`, the branch base, so no integration update is required before publishing.
 - Next: commit and push the validated branch, open a ready PR to `main`, move REC-100 to `In Review`, and attach the PR plus validation evidence. No TestFlight build or Slack announcement was requested.
+
+Publishing handoff, 2026-07-17 16:29 PDT:
+
+- Committed the validated implementation locally as `892672f91` (`fix: improve content contrast and profile header`) on `codex/rec-100-contrast-profile-header`.
+- The GitHub push was blocked by the managed environment's external-code-export review because explicit user approval to publish this private-repository diff has not yet been recorded. No workaround was attempted; the branch remains local and one commit ahead of `origin/main`.
+- REC-100 remains `In Progress` because no remote branch or PR exists yet. Exact restart after Ryan approves the external push: push `codex/rec-100-contrast-profile-header`, open a ready PR to `main`, add the PR and validation evidence to Linear, then move REC-100 to `In Review`.
+- No TestFlight build number, archive, upload, hosted data, merge, or Slack announcement occurred.
