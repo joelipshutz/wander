@@ -12276,3 +12276,15 @@ Pre-landing review:
 - The import store is main-actor isolated, processing tasks are cancellable, and local snapshots use atomic JSON writes plus `completeUntilFirstUserAuthentication` file protection. URL-backed importers constrain Google list parsing to Google hosts and use public Instagram/TikTok metadata paths.
 - The known device-local, one-test-account-per-install limitation is declared in PR #109 and remains tracked under REC-97 together with the hosted account-scoped worker and Share Extension work. This is an intentional alpha boundary, not a reason to close the broader issue.
 - Validation remains green: 375 tests with zero failures, generic iOS Simulator build for arm64 and x86_64, and visual QA on iPhone 17 Pro and iPhone 17e across unresolved, selected, duplicate, and failed states. The optional gstack JSON review-log helper could not persist because `bun` is unavailable, so this durable repository log is the review record.
+
+Landing and release checkpoint, 2026-07-16 17:30 PDT:
+
+- PR #109 was marked ready and squash-merged into `main` as `824f24d56` (`REC-97: Add testable place import vertical slice (#109)`). The `gh pr merge` command reported only a local worktree checkout conflict because another worktree already owns the local `main` branch; GitHub verification confirms the PR state is `MERGED` and `origin/main` contains the squash commit.
+- Created isolated release worktree `/private/tmp/recme-build77-release` on `codex/testflight-build-77` from exact merged `origin/main`. Incrementing `CURRENT_PROJECT_VERSION` from 76 to 77 exactly once for this explicit TestFlight release; XcodeGen output, full tests, generic build, signed archive, upload, TestFlight attachment, Slack, and final status remain pending.
+
+Build-77 validation checkpoint, 2026-07-16 17:39 PDT:
+
+- Updated `CURRENT_PROJECT_VERSION` to 77 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj` with XcodeGen. The release diff contains only those version artifacts plus this append-only log.
+- Full iPhone 17 / iOS 26.5 suite passed: 375 tests, zero failures. Result bundle: `/private/tmp/DerivedData-build77/Logs/Test/Test-Wander-2026.07.16_17-29-42--0700.xcresult`.
+- Generic iOS Simulator build passed for both arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`. No app-code warnings or failures block release; the only emitted metadata warning reports no AppIntents dependency, which is expected for this app.
+- Next: commit and land the release bump through a short-lived PR, then archive and upload exact latest `main` as `/private/tmp/Wander-0.1-build77.xcarchive` with Xcode-managed build-number mutation disabled.
