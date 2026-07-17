@@ -27,6 +27,8 @@ export type GooglePlace = {
   displayName?: { text?: string };
   formattedAddress?: string;
   location?: { latitude?: number; longitude?: number };
+  primaryType?: string;
+  types?: string[];
   photos?: GooglePhoto[];
 };
 

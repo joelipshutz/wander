@@ -71,6 +71,8 @@ async function handleRequest(request: Request): Promise<Response> {
   return Response.json({
     provider: "google_places",
     provider_place_id: place.id,
+    provider_primary_type: cleanString(place.primaryType),
+    provider_types: cleanStrings(place.types),
     photo_url: media.photoUri,
     width: finiteInteger(photo.widthPx),
     height: finiteInteger(photo.heightPx),
@@ -89,7 +91,7 @@ async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<Goo
         `${googlePlacesBaseURL}/places/${encodeURIComponent(input.sourceProviderPlaceID)}`,
         {
           method: "GET",
-          headers: googleHeaders(apiKey, "id,displayName,formattedAddress,location,photos"),
+          headers: googleHeaders(apiKey, "id,displayName,formattedAddress,location,primaryType,types,photos"),
         },
       );
       if (representativePhoto(directPlace)) return directPlace;
@@ -118,7 +120,10 @@ async function resolvePlace(input: PlacePhotoInput, apiKey: string): Promise<Goo
     `${googlePlacesBaseURL}/places:searchText`,
     {
       method: "POST",
-      headers: googleHeaders(apiKey, "places.id,places.displayName,places.formattedAddress,places.location,places.photos"),
+      headers: googleHeaders(
+        apiKey,
+        "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.photos",
+      ),
       body: JSON.stringify(searchBody),
     },
   );
@@ -233,6 +238,14 @@ function cleanString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function cleanStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(cleanString)
+    .filter((item): item is string => item !== null)
+    .slice(0, 32);
 }
 
 function absoluteGoogleURL(value: unknown): string | null {

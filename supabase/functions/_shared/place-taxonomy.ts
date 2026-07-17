@@ -35,7 +35,7 @@ const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "bars_nightlife",
     patterns: [
-      /\b(bar|nightlife|cocktail|pub|sports\s+bar|wine\s+bar|gastropub|bar\s+and\s+grill|dance\s+hall|club|disco|lounge|hookah|beer\s+garden|jazz\s+club|brewery|brewpub|winery|vineyard|nightclub|karaoke|live\s+music|comedy\s+club|casino)\b/,
+      /\b(bar|nightlife|cocktail|pub|sports\s+bar|wine\s+bar|gastropub|bar\s+and\s+grill|dance\s+hall|club|disco|lounge|hookah|beer\s+garden|jazz\s+club|brewery|brewpub|distillery|winery|vineyard|nightclub|karaoke|live\s+music|comedy\s+club|casino)\b/,
     ],
   },
   {
@@ -71,7 +71,7 @@ const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "services_errands",
     patterns: [
-      /\b(service|bank|atm|accounting|insurance|real\s+estate|lawyer|consultant|florist|catering|child\s+care|laundry|tailor|courier|shipping|storage|moving|electrician|plumber|locksmith|contractor|pet\s+care|salon|barber|nail\s+salon|tattoo)\b/,
+      /\b(service|bank|atm|accounting|insurance|real\s+estate|lawyer|consultant|florist|catering|child\s+care|laundry|tailor|courier|shipping|storage|moving|electrician|plumber|locksmith|contractor|pet\s+care|beauty|salon|barber|nail\s+salon|tattoo)\b/,
     ],
   },
   {

@@ -235,6 +235,14 @@ private struct PlaceProfilePreviewCard: View {
             if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
                 photo = resolvedPhoto
             }
+            if resolvedPhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: resolvedPhoto.providerPrimaryType,
+                    types: resolvedPhoto.providerTypes ?? [],
+                    backend: backend
+                )
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -404,6 +412,14 @@ private struct PlaceProfileFullView: View {
             guard resolutionKey == photoResolutionKey else { return }
             if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
                 photo = resolvedPhoto
+            }
+            if resolvedPhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: resolvedPhoto.providerPrimaryType,
+                    types: resolvedPhoto.providerTypes ?? [],
+                    backend: backend
+                )
             }
         } catch is CancellationError {
             return

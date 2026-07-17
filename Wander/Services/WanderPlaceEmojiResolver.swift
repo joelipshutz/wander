@@ -30,9 +30,7 @@ enum WanderPlaceEmojiResolver {
             )
         }
 
-        guard let categoryRules = subcategoryRules[primary] else {
-            return fallback
-        }
+        let categoryRules = subcategoryRules[primary] ?? []
         let rules = universalSpecificRules + categoryRules
 
         let metadata = orderedMetadata(for: assignment)
@@ -300,8 +298,9 @@ enum WanderPlaceEmojiResolver {
         ],
         WanderPlaceCategory.barsNightlife: [
             Rule(emoji: "🎱", terms: ["billiards", "pool hall"]),
-            Rule(emoji: "🏈", terms: ["sports bar"]),
+            Rule(emoji: "🍻", terms: ["sports bar"]),
             Rule(emoji: "🍷", terms: ["wine bar", "winery", "vineyard"]),
+            Rule(emoji: "🥃", terms: ["distillery"]),
             Rule(emoji: "🍺", terms: ["brewery", "brewpub", "beer garden", "gastropub"]),
             Rule(emoji: "🍻", terms: ["irish pub", "pub"]),
             Rule(emoji: "🪩", terms: ["dance hall", "club", "disco", "nightclub"]),
@@ -336,6 +335,9 @@ enum WanderPlaceEmojiResolver {
             Rule(emoji: "🛖", terms: ["cabin", "cottage"]),
             Rule(emoji: "⚓️", terms: ["marina"]),
             Rule(emoji: "🎣", terms: ["fishing pier", "fishing pond", "fishing charter"]),
+            Rule(emoji: "🎣", terms: ["fishing"]),
+            Rule(emoji: "🛶", terms: ["kayaking"]),
+            Rule(emoji: "🏄", terms: ["surfing"]),
             Rule(emoji: "🎿", terms: ["ski resort"]),
             Rule(emoji: "🚴", terms: ["cycling park"]),
             Rule(emoji: "🛹", terms: ["skate park"]),
@@ -355,6 +357,8 @@ enum WanderPlaceEmojiResolver {
                 "cultural landmark", "cultural center", "performing arts theater", "theater", "opera house"
             ]),
             Rule(emoji: "🎶", terms: ["concert hall", "philharmonic hall"]),
+            Rule(emoji: "🎵", terms: ["music venue"]),
+            Rule(emoji: "🎪", terms: ["fairground"]),
             Rule(emoji: "🎟️", terms: ["amphitheater", "auditorium", "event venue", "convention center"]),
             Rule(emoji: "🎬", terms: ["movie theater", "cinema"]),
             Rule(emoji: "🔭", terms: ["planetarium", "observation deck"]),
@@ -382,7 +386,6 @@ enum WanderPlaceEmojiResolver {
         ],
         WanderPlaceCategory.shopping: [
             Rule(emoji: "🏪", terms: ["convenience store"]),
-            Rule(emoji: "🧺", terms: ["farmers market", "flea market", "market"]),
             Rule(emoji: "🍚", terms: ["asian grocery"]),
             Rule(emoji: "🥩", terms: ["butcher"]),
             Rule(emoji: "🥬", terms: ["health food store"]),
@@ -390,6 +393,7 @@ enum WanderPlaceEmojiResolver {
             Rule(emoji: "🛒", terms: [
                 "discount supermarket", "grocery store", "supermarket", "hypermarket", "food store"
             ]),
+            Rule(emoji: "🧺", terms: ["farmers market", "flea market", "market"]),
             Rule(emoji: "📚", terms: ["book store", "bookstore"]),
             Rule(emoji: "🎨", terms: ["art supply store", "craft store"]),
             Rule(emoji: "🎁", terms: ["gift shop"]),
@@ -442,6 +446,8 @@ enum WanderPlaceEmojiResolver {
             Rule(emoji: "🏀", terms: ["basketball court"]),
             Rule(emoji: "🏓", terms: ["pickleball court"]),
             Rule(emoji: "🏟️", terms: ["athletic field", "sports complex"]),
+            Rule(emoji: "⚾️", terms: ["baseball"]),
+            Rule(emoji: "🏟️", terms: ["stadium"]),
             Rule(emoji: "🏅", terms: ["sports club", "sports coaching", "sports school"]),
             Rule(emoji: "💪", terms: ["fitness center", "gym", "fitness", "pilates", "training"])
         ],
@@ -484,6 +490,7 @@ enum WanderPlaceEmojiResolver {
             Rule(emoji: "✈️", terms: ["aircraft rental"]),
             Rule(emoji: "📡", terms: ["telecommunications"]),
             Rule(emoji: "💆", terms: ["skin care clinic"]),
+            Rule(emoji: "🪞", terms: ["beauty service"]),
             Rule(emoji: "☀️", terms: ["tanning studio"]),
             Rule(emoji: "💇", terms: ["hair salon", "beauty salon"]),
             Rule(emoji: "💈", terms: ["barber"]),

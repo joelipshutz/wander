@@ -23,11 +23,25 @@ struct PlaceCategoryAssignment: Equatable, Codable {
         confidence: Double? = nil,
         rawProviderType: String? = nil
     ) {
-        let normalizedPrimary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
+        let normalizedSource = PlaceCategorySource(rawValue: source) ?? .unknown
+        let requestedPrimary = WanderPlaceCategory.normalizedPrimaryCategory(primaryCategory)
+        let providerAssignment = normalizedSource == .user
+            ? nil
+            : WanderPlaceCategory.providerCategoryAssignment(for: rawProviderType)
+        let normalizedPrimary = requestedPrimary == WanderPlaceCategory.fallbackPlace
+            ? providerAssignment?.primaryCategory ?? requestedPrimary
+            : requestedPrimary
+        let inferredSubcategory = subcategory ?? providerAssignment?.subcategory
+
         self.primaryCategory = normalizedPrimary
-        self.subcategory = WanderPlaceCategory.canonicalSubcategory(subcategory, primaryCategory: normalizedPrimary)
-            ?? WanderPlaceCategory.defaultSubcategory(forRawCategory: primaryCategory, normalizedPrimary: normalizedPrimary)
-        self.source = PlaceCategorySource(rawValue: source)?.rawValue ?? PlaceCategorySource.unknown.rawValue
+        self.subcategory = WanderPlaceCategory.canonicalSubcategory(
+            inferredSubcategory,
+            primaryCategory: normalizedPrimary
+        ) ?? WanderPlaceCategory.defaultSubcategory(
+            forRawCategory: rawProviderType ?? primaryCategory,
+            normalizedPrimary: normalizedPrimary
+        )
+        self.source = normalizedSource.rawValue
         self.confidence = confidence.map { max(0, min(1, $0)) }
         self.rawProviderType = WanderPlaceCategory.normalizedProviderType(rawProviderType)
     }
@@ -744,6 +758,12 @@ struct PlaceCategorySubcategoryGroup: Equatable {
 }
 
 enum WanderPlaceCategory {
+    private struct ProviderCategoryMetadata {
+        let canonicalType: String
+        let primaryCategory: String
+        let subcategory: String
+    }
+
     static let restaurantsFood = "restaurants_food"
     static let coffeeTeaSweets = "coffee_tea_sweets"
     static let barsNightlife = "bars_nightlife"
@@ -836,14 +856,14 @@ enum WanderPlaceCategory {
             aliases: [
             "bars_nightlife", "bars nightlife", "bars and nightlife", "bar", "bars", "nightlife",
             "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "lounge", "club", "disco",
-            "brewery", "brewpub", "winery", "vineyard", "nightclub", "karaoke", "live music", "comedy club",
+            "brewery", "brewpub", "distillery", "winery", "vineyard", "nightclub", "karaoke", "live music", "comedy club",
             "casino"
         ],
             subcategories: [
-            "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Gastropub",
-            "Bar & grill", "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Beer garden", "Jazz club",
-            "Hi-fi lounge", "Brewery", "Brewpub", "Winery", "Vineyard", "Nightclub", "Karaoke", "Live music",
-            "Comedy club", "Casino"
+                "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Gastropub",
+                "Bar & grill", "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Beer garden", "Jazz club",
+                "Hi-fi lounge", "Brewery", "Brewpub", "Winery", "Vineyard", "Nightclub", "Karaoke", "Live music",
+                "Comedy club", "Casino", "Distillery"
         ],
             isEditable: true
         ),
@@ -970,7 +990,7 @@ enum WanderPlaceCategory {
             "services_errands", "services errands", "services and errands", "services", "service", "bank", "atm",
             "accounting", "insurance", "real estate", "lawyer", "consultant", "florist", "catering", "child care",
             "laundry", "tailor", "courier", "shipping", "storage", "moving", "electrician", "plumber", "locksmith",
-            "contractor", "pet care", "pet boarding", "salon", "barber", "nail salon", "tattoo"
+            "contractor", "pet care", "pet boarding", "beauty", "beauty service", "salon", "barber", "nail salon", "tattoo"
         ],
             subcategories: [
             "Bank", "ATM", "Accounting", "Insurance", "Real estate", "Lawyer", "Consultant",
@@ -979,7 +999,7 @@ enum WanderPlaceCategory {
             "Moving", "Electrician", "Plumber", "Locksmith", "Painter", "Roofing contractor", "General contractor",
             "Pet care", "Pet boarding", "Funeral home", "Cemetery", "Astrologer", "Psychic", "Tour agency",
             "Travel agency", "Tourist information", "Chauffeur", "Aircraft rental", "Telecommunications",
-            "Skin care clinic", "Tanning studio", "Hair salon", "Barber", "Nail salon", "Makeup artist",
+            "Beauty service", "Skin care clinic", "Tanning studio", "Hair salon", "Barber", "Nail salon", "Makeup artist",
             "Body art", "Tattoo/piercing"
         ],
             isEditable: true
@@ -1098,6 +1118,88 @@ enum WanderPlaceCategory {
 
     static let allowedCategories = taxonomy.map(\.id)
     static let editableCategories = taxonomy.filter(\.isEditable).map(\.id)
+    static var supportedMapKitProviderTypes: [String] {
+        mapKitProviderCategories.keys.sorted().map { "mkpoicategory\($0)" }
+    }
+
+    // MapKit persists these as lowercased raw strings (for example,
+    // "mkpoicategoryfitnesscenter"), which removes the original word boundary.
+    // Keep an explicit compatibility table instead of guessing from substrings.
+    private static let mapKitProviderCategories: [String: ProviderCategoryMetadata] = [
+        "animalservice": ProviderCategoryMetadata(canonicalType: "animal service", primaryCategory: servicesErrands, subcategory: "Pet care"),
+        "airport": ProviderCategoryMetadata(canonicalType: "airport", primaryCategory: travelTransit, subcategory: "Airport"),
+        "amusementpark": ProviderCategoryMetadata(canonicalType: "amusement park", primaryCategory: thingsToDo, subcategory: "Amusement park"),
+        "aquarium": ProviderCategoryMetadata(canonicalType: "aquarium", primaryCategory: thingsToDo, subcategory: "Aquarium"),
+        "atm": ProviderCategoryMetadata(canonicalType: "atm", primaryCategory: servicesErrands, subcategory: "ATM"),
+        "automotiverepair": ProviderCategoryMetadata(canonicalType: "automotive repair", primaryCategory: travelTransit, subcategory: "Car repair"),
+        "bakery": ProviderCategoryMetadata(canonicalType: "bakery", primaryCategory: coffeeTeaSweets, subcategory: "Bakery"),
+        "bank": ProviderCategoryMetadata(canonicalType: "bank", primaryCategory: servicesErrands, subcategory: "Bank"),
+        "baseball": ProviderCategoryMetadata(canonicalType: "baseball", primaryCategory: wellnessFitness, subcategory: "Athletic field"),
+        "basketball": ProviderCategoryMetadata(canonicalType: "basketball", primaryCategory: wellnessFitness, subcategory: "Basketball court"),
+        "beach": ProviderCategoryMetadata(canonicalType: "beach", primaryCategory: outdoorsNature, subcategory: "Beach"),
+        "beauty": ProviderCategoryMetadata(canonicalType: "beauty service", primaryCategory: servicesErrands, subcategory: "Beauty service"),
+        "bowling": ProviderCategoryMetadata(canonicalType: "bowling", primaryCategory: thingsToDo, subcategory: "Bowling"),
+        "brewery": ProviderCategoryMetadata(canonicalType: "brewery", primaryCategory: barsNightlife, subcategory: "Brewery"),
+        "cafe": ProviderCategoryMetadata(canonicalType: "cafe", primaryCategory: coffeeTeaSweets, subcategory: "Cafe"),
+        "campground": ProviderCategoryMetadata(canonicalType: "campground", primaryCategory: outdoorsNature, subcategory: "Campground"),
+        "carrental": ProviderCategoryMetadata(canonicalType: "car rental", primaryCategory: travelTransit, subcategory: "Car rental"),
+        "castle": ProviderCategoryMetadata(canonicalType: "castle", primaryCategory: thingsToDo, subcategory: "Castle"),
+        "conventioncenter": ProviderCategoryMetadata(canonicalType: "convention center", primaryCategory: thingsToDo, subcategory: "Convention center"),
+        "distillery": ProviderCategoryMetadata(canonicalType: "distillery", primaryCategory: barsNightlife, subcategory: "Distillery"),
+        "evcharger": ProviderCategoryMetadata(canonicalType: "ev charger", primaryCategory: travelTransit, subcategory: "EV charging"),
+        "fairground": ProviderCategoryMetadata(canonicalType: "fairground", primaryCategory: thingsToDo, subcategory: "Amusement park"),
+        "firestation": ProviderCategoryMetadata(canonicalType: "fire station", primaryCategory: civicFaith, subcategory: "Fire station"),
+        "fishing": ProviderCategoryMetadata(canonicalType: "fishing", primaryCategory: outdoorsNature, subcategory: "Fishing pier"),
+        "fitnesscenter": ProviderCategoryMetadata(canonicalType: "fitness center", primaryCategory: wellnessFitness, subcategory: "Fitness center"),
+        "foodmarket": ProviderCategoryMetadata(canonicalType: "grocery store", primaryCategory: shopping, subcategory: "Grocery store"),
+        "fortress": ProviderCategoryMetadata(canonicalType: "fortress", primaryCategory: thingsToDo, subcategory: "Castle"),
+        "gasstation": ProviderCategoryMetadata(canonicalType: "gas station", primaryCategory: travelTransit, subcategory: "Gas station"),
+        "golf": ProviderCategoryMetadata(canonicalType: "golf", primaryCategory: wellnessFitness, subcategory: "Golf course"),
+        "gokart": ProviderCategoryMetadata(canonicalType: "go kart", primaryCategory: thingsToDo, subcategory: "Go-karting"),
+        "hiking": ProviderCategoryMetadata(canonicalType: "hiking", primaryCategory: outdoorsNature, subcategory: "Hiking area"),
+        "hospital": ProviderCategoryMetadata(canonicalType: "hospital", primaryCategory: wellnessFitness, subcategory: "Hospital"),
+        "hotel": ProviderCategoryMetadata(canonicalType: "hotel", primaryCategory: stays, subcategory: "Hotel"),
+        "kayaking": ProviderCategoryMetadata(canonicalType: "kayaking", primaryCategory: outdoorsNature, subcategory: "Adventure sports"),
+        "landmark": ProviderCategoryMetadata(canonicalType: "landmark", primaryCategory: thingsToDo, subcategory: "Landmark"),
+        "laundry": ProviderCategoryMetadata(canonicalType: "laundry", primaryCategory: servicesErrands, subcategory: "Laundry"),
+        "library": ProviderCategoryMetadata(canonicalType: "library", primaryCategory: workEducation, subcategory: "Library"),
+        "mailbox": ProviderCategoryMetadata(canonicalType: "mailbox", primaryCategory: civicFaith, subcategory: "Post office"),
+        "marina": ProviderCategoryMetadata(canonicalType: "marina", primaryCategory: outdoorsNature, subcategory: "Marina"),
+        "minigolf": ProviderCategoryMetadata(canonicalType: "mini golf", primaryCategory: thingsToDo, subcategory: "Mini golf"),
+        "movietheater": ProviderCategoryMetadata(canonicalType: "movie theater", primaryCategory: thingsToDo, subcategory: "Movie theater"),
+        "museum": ProviderCategoryMetadata(canonicalType: "museum", primaryCategory: thingsToDo, subcategory: "Museum"),
+        "musicvenue": ProviderCategoryMetadata(canonicalType: "music venue", primaryCategory: thingsToDo, subcategory: "Concert hall"),
+        "nationalmonument": ProviderCategoryMetadata(canonicalType: "national monument", primaryCategory: thingsToDo, subcategory: "Monument"),
+        "nationalpark": ProviderCategoryMetadata(canonicalType: "national park", primaryCategory: outdoorsNature, subcategory: "National park"),
+        "nightlife": ProviderCategoryMetadata(canonicalType: "nightlife", primaryCategory: barsNightlife, subcategory: "Bar"),
+        "park": ProviderCategoryMetadata(canonicalType: "park", primaryCategory: outdoorsNature, subcategory: "Park"),
+        "parking": ProviderCategoryMetadata(canonicalType: "parking", primaryCategory: travelTransit, subcategory: "Parking"),
+        "pharmacy": ProviderCategoryMetadata(canonicalType: "pharmacy", primaryCategory: wellnessFitness, subcategory: "Pharmacy"),
+        "planetarium": ProviderCategoryMetadata(canonicalType: "planetarium", primaryCategory: thingsToDo, subcategory: "Planetarium"),
+        "police": ProviderCategoryMetadata(canonicalType: "police", primaryCategory: civicFaith, subcategory: "Police"),
+        "postoffice": ProviderCategoryMetadata(canonicalType: "post office", primaryCategory: civicFaith, subcategory: "Post office"),
+        "publictransport": ProviderCategoryMetadata(canonicalType: "public transport", primaryCategory: travelTransit, subcategory: "Transit station"),
+        "restaurant": ProviderCategoryMetadata(canonicalType: "restaurant", primaryCategory: restaurantsFood, subcategory: "Restaurant"),
+        "restroom": ProviderCategoryMetadata(canonicalType: "restroom", primaryCategory: facilitiesOther, subcategory: "Restroom"),
+        "rockclimbing": ProviderCategoryMetadata(canonicalType: "rock climbing", primaryCategory: outdoorsNature, subcategory: "Adventure sports"),
+        "rvpark": ProviderCategoryMetadata(canonicalType: "rv park", primaryCategory: outdoorsNature, subcategory: "RV park"),
+        "school": ProviderCategoryMetadata(canonicalType: "school", primaryCategory: workEducation, subcategory: "School"),
+        "skatepark": ProviderCategoryMetadata(canonicalType: "skate park", primaryCategory: outdoorsNature, subcategory: "Skate park"),
+        "skating": ProviderCategoryMetadata(canonicalType: "skating", primaryCategory: wellnessFitness, subcategory: "Ice skating rink"),
+        "skiing": ProviderCategoryMetadata(canonicalType: "skiing", primaryCategory: outdoorsNature, subcategory: "Ski resort"),
+        "soccer": ProviderCategoryMetadata(canonicalType: "soccer", primaryCategory: wellnessFitness, subcategory: "Soccer field"),
+        "spa": ProviderCategoryMetadata(canonicalType: "spa", primaryCategory: wellnessFitness, subcategory: "Spa"),
+        "stadium": ProviderCategoryMetadata(canonicalType: "stadium", primaryCategory: wellnessFitness, subcategory: "Sports complex"),
+        "store": ProviderCategoryMetadata(canonicalType: "store", primaryCategory: shopping, subcategory: "Store"),
+        "surfing": ProviderCategoryMetadata(canonicalType: "surfing", primaryCategory: outdoorsNature, subcategory: "Adventure sports"),
+        "swimming": ProviderCategoryMetadata(canonicalType: "swimming", primaryCategory: wellnessFitness, subcategory: "Swimming pool"),
+        "tennis": ProviderCategoryMetadata(canonicalType: "tennis", primaryCategory: wellnessFitness, subcategory: "Tennis court"),
+        "theater": ProviderCategoryMetadata(canonicalType: "theater", primaryCategory: thingsToDo, subcategory: "Theater"),
+        "university": ProviderCategoryMetadata(canonicalType: "university", primaryCategory: workEducation, subcategory: "University"),
+        "volleyball": ProviderCategoryMetadata(canonicalType: "volleyball", primaryCategory: wellnessFitness, subcategory: "Volleyball court"),
+        "winery": ProviderCategoryMetadata(canonicalType: "winery", primaryCategory: barsNightlife, subcategory: "Winery"),
+        "zoo": ProviderCategoryMetadata(canonicalType: "zoo", primaryCategory: thingsToDo, subcategory: "Zoo")
+    ]
 
     private static let legacyDefaultSubcategories: [String: String] = [
         "coffee": "Coffee shop",
@@ -1429,38 +1531,7 @@ enum WanderPlaceCategory {
         if let nameCategory = primaryFromName(name, pointCategory: pointCategory) {
             return nameCategory
         }
-
-        if #available(iOS 18.0, *) {
-            switch pointCategory {
-            case .animalService:
-                return servicesErrands
-            case .hiking:
-                return outdoorsNature
-            case .rockClimbing, .skatePark, .skiing, .surfing:
-                return outdoorsNature
-            case .skating, .swimming:
-                return wellnessFitness
-            default:
-                break
-            }
-        }
-
-        switch pointCategory {
-        case .cafe, .bakery:
-            return coffeeTeaSweets
-        case .restaurant, .foodMarket:
-            return restaurantsFood
-        case .brewery, .winery, .nightlife:
-            return barsNightlife
-        case .park, .nationalPark:
-            return outdoorsNature
-        case .hospital:
-            return wellnessFitness
-        case .fitnessCenter:
-            return wellnessFitness
-        default:
-            return nil
-        }
+        return providerCategoryAssignment(for: pointCategory?.rawValue)?.primaryCategory
     }
 
     static func assignment(
@@ -1469,9 +1540,11 @@ enum WanderPlaceCategory {
         confidence: Double? = nil,
         rawProviderType: String? = nil
     ) -> PlaceCategoryAssignment {
+        let providerAssignment = providerCategoryAssignment(for: rawProviderType ?? rawCategory)
         let raw = normalizedSubcategory(rawProviderType) ?? normalizedSubcategory(rawCategory)
-        let primary = primaryCategory(for: rawCategory)
-        let subcategory = subcategory(forRawValue: raw ?? rawCategory, primaryCategory: primary)
+        let primary = providerAssignment?.primaryCategory ?? primaryCategory(for: rawCategory)
+        let subcategory = providerAssignment?.subcategory
+            ?? subcategory(forRawValue: raw ?? rawCategory, primaryCategory: primary)
 
         return PlaceCategoryAssignment(
             primaryCategory: primary,
@@ -1561,6 +1634,9 @@ enum WanderPlaceCategory {
     }
 
     static func primaryCategory(for category: String) -> String {
+        if let providerCategory = providerCategoryAssignment(for: category) {
+            return providerCategory.primaryCategory
+        }
         let normalized = normalizedCategoryText(category)
         guard !normalized.isEmpty else { return fallbackPlace }
         if let legacyPrimary = legacyPrimaryCategories[normalized] {
@@ -1602,6 +1678,10 @@ enum WanderPlaceCategory {
     }
 
     static func canonicalSubcategory(_ value: String?, primaryCategory: String) -> String? {
+        if let providerCategory = providerCategoryAssignment(for: value),
+           providerCategory.primaryCategory == normalizedPrimaryCategory(primaryCategory) {
+            return providerCategory.subcategory
+        }
         guard let normalized = normalizedSubcategory(value) else { return nil }
         let key = normalizedCategoryText(normalized)
         let primary = normalizedPrimaryCategory(primaryCategory)
@@ -1682,12 +1762,60 @@ enum WanderPlaceCategory {
         let normalized = normalizedCategoryText(rawValue)
         guard !normalized.isEmpty else { return nil }
         let withoutCuisineSuffix = normalized.replacingOccurrences(of: " cuisine", with: "")
+        let padded = " \(normalized) "
 
         return normalizedRestaurantCuisineOptions.first { cuisine in
             normalized == cuisine.normalized
-                || normalized.contains(cuisine.normalized)
+                || padded.contains(" \(cuisine.normalized) ")
                 || withoutCuisineSuffix == cuisine.normalized
         }?.name
+    }
+
+    static func preferredProviderType(
+        primaryType: String?,
+        types: [String],
+        matchingPrimaryCategory primaryCategory: String
+    ) -> String? {
+        let requiredPrimary = normalizedPrimaryCategory(primaryCategory)
+        var seen = Set<String>()
+        let candidates = ([primaryType] + types.map(Optional.some))
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert(normalizedCategoryText($0)).inserted }
+
+        return candidates.enumerated().max { lhs, rhs in
+            providerTypeSpecificity(
+                lhs.element,
+                preferred: lhs.offset == 0,
+                matchingPrimaryCategory: requiredPrimary
+            ) < providerTypeSpecificity(
+                rhs.element,
+                preferred: rhs.offset == 0,
+                matchingPrimaryCategory: requiredPrimary
+            )
+        }.flatMap { candidate in
+            providerTypeSpecificity(
+                candidate.element,
+                preferred: candidate.offset == 0,
+                matchingPrimaryCategory: requiredPrimary
+            ) >= 0 ? candidate.element : nil
+        }
+    }
+
+    static func isMoreSpecificProviderType(
+        _ candidate: String,
+        than existing: String?,
+        matchingPrimaryCategory primaryCategory: String
+    ) -> Bool {
+        providerTypeSpecificity(
+            candidate,
+            preferred: false,
+            matchingPrimaryCategory: primaryCategory
+        ) > providerTypeSpecificity(
+            existing,
+            preferred: false,
+            matchingPrimaryCategory: primaryCategory
+        )
     }
 
     static func emoji(
@@ -1735,6 +1863,10 @@ enum WanderPlaceCategory {
             return nil
         }
 
+        if let providerCategory = providerCategoryAssignment(for: rawCategory),
+           providerCategory.primaryCategory == primary {
+            return providerCategory.subcategory
+        }
         let normalized = normalizedCategoryText(rawCategory)
         return legacyDefaultSubcategories[normalized] ?? defaultSubcategory(for: primary)
     }
@@ -1751,9 +1883,9 @@ enum WanderPlaceCategory {
 
     static func normalizedCategoryText(_ value: String?) -> String {
         guard let value else { return "" }
-        return value
+        let canonicalValue = mapKitProviderMetadata(for: value)?.canonicalType ?? value
+        return canonicalValue
             .lowercased()
-            .replacingOccurrences(of: "mkpoicategory", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "&", with: " and ")
             .replacingOccurrences(of: "-", with: " ")
@@ -1769,6 +1901,10 @@ enum WanderPlaceCategory {
             return nil
         }
 
+        if let providerCategory = providerCategoryAssignment(for: rawValue),
+           providerCategory.primaryCategory == primaryCategory {
+            return providerCategory.subcategory
+        }
         let normalized = normalizedCategoryText(rawValue)
         guard !normalized.isEmpty else {
             return defaultSubcategory(for: primaryCategory)
@@ -1849,7 +1985,9 @@ enum WanderPlaceCategory {
             return wellnessFitness
         }
 
-        if containsAny(normalizedName, ["nail salon", "nails", "manicure", "pedicure", "hair salon", "barbershop", "barber shop", "tattoo"]) {
+        if containsAny(normalizedName, [
+            "nail salon", "nails", "manicure", "pedicure", "hair salon", "barbershop", "barber shop", "barber", "tattoo"
+        ]) {
             return servicesErrands
         }
 
@@ -1863,8 +2001,73 @@ enum WanderPlaceCategory {
 
     private static func containsAny(_ normalizedName: String, _ needles: [String]) -> Bool {
         needles.contains { needle in
-            normalizedName.contains(normalizedCategoryText(needle))
+            let normalizedNeedle = normalizedCategoryText(needle)
+            return !normalizedNeedle.isEmpty && " \(normalizedName) ".contains(" \(normalizedNeedle) ")
         }
+    }
+
+    private static func providerTypeSpecificity(
+        _ value: String?,
+        preferred: Bool,
+        matchingPrimaryCategory primaryCategory: String
+    ) -> Int {
+        guard let value else { return -1 }
+        let normalized = normalizedCategoryText(value)
+        guard !normalized.isEmpty else { return -1 }
+
+        let assignment = assignment(
+            forRawCategory: value,
+            source: PlaceCategorySource.provider.rawValue,
+            rawProviderType: value
+        )
+        let requiredPrimary = normalizedPrimaryCategory(primaryCategory)
+        guard assignment.primaryCategory != fallbackPlace,
+              requiredPrimary == fallbackPlace || assignment.primaryCategory == requiredPrimary
+        else {
+            return -1
+        }
+
+        let ignoredGenericTypes: Set<String> = [
+            "establishment", "point of interest", "premise", "geocode", "political"
+        ]
+        guard !ignoredGenericTypes.contains(normalized) else { return -1 }
+
+        let lowInformationTypes: Set<String> = [
+            "place", "food", "restaurant", "bar", "cafe", "store", "service"
+        ]
+        var score = lowInformationTypes.contains(normalized) ? 10 : 30
+        if cuisineGuess(forRawValue: value) != nil {
+            score += 200
+        }
+        if let subcategory = assignment.subcategory,
+           normalizedCategoryText(subcategory) != normalizedCategoryText(defaultSubcategory(for: assignment.primaryCategory)) {
+            score += 80
+        }
+        if preferred {
+            score += 5
+        }
+        return score
+    }
+
+    static func providerCategoryAssignment(
+        for value: String?
+    ) -> (primaryCategory: String, subcategory: String)? {
+        guard let metadata = mapKitProviderMetadata(for: value) else { return nil }
+        return (metadata.primaryCategory, metadata.subcategory)
+    }
+
+    private static func mapKitProviderMetadata(for value: String?) -> ProviderCategoryMetadata? {
+        guard let key = providerTypeKey(value) else { return nil }
+        return mapKitProviderCategories[key]
+    }
+
+    private static func providerTypeKey(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let key = value
+            .lowercased()
+            .replacingOccurrences(of: "mkpoicategory", with: "")
+            .filter { $0.isLetter || $0.isNumber }
+        return key.isEmpty ? nil : key
     }
 
     private static func normalizedSearchText(_ value: String?) -> String? {

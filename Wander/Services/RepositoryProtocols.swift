@@ -778,6 +778,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
 struct PlacePhoto: Decodable, Equatable {
     let provider: String
     let providerPlaceID: String
+    let providerPrimaryType: String?
+    let providerTypes: [String]?
     let photoURLString: String
     let width: Int?
     let height: Int?
@@ -790,9 +792,45 @@ struct PlacePhoto: Decodable, Equatable {
     let storagePath: String?
     let localAssetRef: String?
 
+    init(
+        provider: String,
+        providerPlaceID: String,
+        providerPrimaryType: String? = nil,
+        providerTypes: [String]? = nil,
+        photoURLString: String,
+        width: Int?,
+        height: Int?,
+        authorName: String?,
+        authorProfileURLString: String?,
+        authorAvatarURLString: String?,
+        sourcePhotoURLString: String?,
+        flagContentURLString: String?,
+        storageBucket: String?,
+        storagePath: String?,
+        localAssetRef: String?
+    ) {
+        self.provider = provider
+        self.providerPlaceID = providerPlaceID
+        self.providerPrimaryType = providerPrimaryType
+        self.providerTypes = providerTypes
+        self.photoURLString = photoURLString
+        self.width = width
+        self.height = height
+        self.authorName = authorName
+        self.authorProfileURLString = authorProfileURLString
+        self.authorAvatarURLString = authorAvatarURLString
+        self.sourcePhotoURLString = sourcePhotoURLString
+        self.flagContentURLString = flagContentURLString
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
+        self.localAssetRef = localAssetRef
+    }
+
     enum CodingKeys: String, CodingKey {
         case provider
         case providerPlaceID = "provider_place_id"
+        case providerPrimaryType = "provider_primary_type"
+        case providerTypes = "provider_types"
         case photoURLString = "photo_url"
         case width
         case height

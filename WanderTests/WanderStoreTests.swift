@@ -3091,6 +3091,65 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.attributes(for: "up_remote_maru").map(\.questionKey), ["coffee_tags"])
     }
 
+    func testProviderPhotoMetadataEnrichesAndResyncsAStoredRestaurantCuisine() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_ugo",
+                syncState: .synced,
+                placeID: "place_remote_ugo"
+            )
+        )
+        let backend = WanderBackend(userPlaceRepository: userPlaceRepository)
+        let initialResult = await store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_ugo",
+                name: "Ugo",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.86,
+                rawProviderType: "mkpoicategoryrestaurant",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.86
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .currentLocation,
+            backend: backend
+        )
+        let saved = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == initialResult.userPlaceID }
+        )
+
+        let changed = await store.applyProviderCategoryEnrichment(
+            placeID: saved.place.id,
+            primaryType: "restaurant",
+            types: ["food", "italian_restaurant", "point_of_interest"],
+            backend: backend
+        )
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(saved.place.rawProviderType, "italian_restaurant")
+        XCTAssertEqual(saved.categoryEmoji, "🍝")
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 2)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.last?.place.rawProviderType, "italian_restaurant")
+
+        let rejected = await store.applyProviderCategoryEnrichment(
+            placeID: saved.place.id,
+            primaryType: "gym",
+            types: ["fitness_center", "sporting_goods_store"],
+            backend: backend
+        )
+        XCTAssertFalse(rejected)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 2)
+        XCTAssertEqual(saved.place.rawProviderType, "italian_restaurant")
+    }
+
     func testSyncPendingVisitsSyncsParentThenExplicitVisit() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

@@ -31,6 +31,7 @@ private enum OwnPlaceSyncTrigger: String {
     case directSave = "direct_save"
     case failedRetry = "failed_retry"
     case signedInBackfill = "signed_in_backfill"
+    case providerEnrichment = "provider_enrichment"
 }
 
 private enum OwnPlaceSyncOutcome {
@@ -1981,6 +1982,95 @@ final class WanderStore: ObservableObject {
                 return lhs.id < rhs.id
             }
             .first
+    }
+
+    @discardableResult
+    func applyProviderCategoryEnrichment(
+        placeID: String,
+        primaryType: String?,
+        types: [String],
+        backend: WanderBackend?
+    ) async -> Bool {
+        var candidatePlaces = places.filter {
+            $0.id == placeID || $0.localID == placeID || $0.serverID == placeID
+        }
+        candidatePlaces.append(contentsOf: remoteVisiblePlaceCache.compactMap { visiblePlace in
+            let place = visiblePlace.place
+            return place.id == placeID || place.localID == placeID || place.serverID == placeID
+                ? place
+                : nil
+        })
+
+        var seen = Set<ObjectIdentifier>()
+        candidatePlaces = candidatePlaces.filter { seen.insert(ObjectIdentifier($0)).inserted }
+        guard !candidatePlaces.isEmpty else { return false }
+
+        var changedPlaceIDs = Set<String>()
+        for place in candidatePlaces {
+            guard place.categorySource != PlaceCategorySource.user.rawValue else { continue }
+
+            let existingAssignment = place.categoryAssignment
+            guard let providerType = WanderPlaceCategory.preferredProviderType(
+                primaryType: primaryType,
+                types: types,
+                matchingPrimaryCategory: existingAssignment.primaryCategory
+            ),
+            WanderPlaceCategory.isMoreSpecificProviderType(
+                providerType,
+                than: existingAssignment.rawProviderType,
+                matchingPrimaryCategory: existingAssignment.primaryCategory
+            )
+            else {
+                continue
+            }
+
+            let enrichedAssignment = WanderPlaceCategory.assignment(
+                forRawCategory: providerType,
+                source: PlaceCategorySource.provider.rawValue,
+                confidence: 0.98,
+                rawProviderType: providerType
+            )
+            guard existingAssignment.primaryCategory == WanderPlaceCategory.fallbackPlace
+                    || enrichedAssignment.primaryCategory == existingAssignment.primaryCategory
+            else {
+                continue
+            }
+
+            place.category = enrichedAssignment.legacyCategory
+            place.primaryCategory = enrichedAssignment.primaryCategory
+            place.subcategory = enrichedAssignment.subcategory
+            place.categorySource = enrichedAssignment.source
+            place.categoryConfidence = enrichedAssignment.confidence
+            place.rawProviderType = enrichedAssignment.rawProviderType
+            place.updatedAt = .now
+            place.localUpdatedAt = .now
+            changedPlaceIDs.formUnion([place.id, place.localID])
+            if let serverID = place.serverID {
+                changedPlaceIDs.insert(serverID)
+            }
+        }
+
+        guard !changedPlaceIDs.isEmpty else { return false }
+        objectWillChange.send()
+        persist()
+
+        guard let backend else { return true }
+        let ownUserPlaceIDs = userPlaces
+            .filter {
+                $0.userID == currentUser.id
+                    && $0.deletedAt == nil
+                    && changedPlaceIDs.contains($0.placeID)
+            }
+            .map(\.id)
+
+        for userPlaceID in ownUserPlaceIDs {
+            _ = await retryOwnPlaceSync(
+                userPlaceID: userPlaceID,
+                backend: backend,
+                trigger: .providerEnrichment
+            )
+        }
+        return true
     }
 
     @discardableResult

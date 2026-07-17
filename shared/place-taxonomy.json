@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "categories": [
     {
       "id": "restaurants_food",
@@ -263,6 +263,7 @@
         "disco",
         "brewery",
         "brewpub",
+        "distillery",
         "winery",
         "vineyard",
         "nightclub",
@@ -297,7 +298,8 @@
         "Karaoke",
         "Live music",
         "Comedy club",
-        "Casino"
+        "Casino",
+        "Distillery"
       ]
     },
     {
@@ -729,6 +731,8 @@
         "contractor",
         "pet care",
         "pet boarding",
+        "beauty",
+        "beauty service",
         "salon",
         "barber",
         "nail salon",
@@ -775,6 +779,7 @@
         "Chauffeur",
         "Aircraft rental",
         "Telecommunications",
+        "Beauty service",
         "Skin care clinic",
         "Tanning studio",
         "Hair salon",

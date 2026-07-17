@@ -109,6 +109,127 @@ final class WanderPlaceCategoryTests: XCTestCase {
         )
     }
 
+    func testReportedVenueEmojiRegressionsUseEvidenceWithoutGuessing() {
+        let westsideBarber = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.fallbackPlace,
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.86,
+            rawProviderType: "mkpoicategorybeauty"
+        )
+        XCTAssertEqual(westsideBarber.primaryCategory, WanderPlaceCategory.servicesErrands)
+        XCTAssertEqual(westsideBarber.subcategory, "Beauty service")
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: westsideBarber, name: "Westside Barber Co"),
+            "💈"
+        )
+
+        let cocoBeach = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.barsNightlife,
+            subcategory: "Sports bar",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "place"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: cocoBeach, name: "Coco Beach Bar & Grill"),
+            "🍻"
+        )
+
+        let broadUgo = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.86,
+            rawProviderType: "mkpoicategoryrestaurant"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(for: broadUgo, name: "Ugo"),
+            "🍽️",
+            "An opaque venue name must not fabricate a cuisine"
+        )
+
+        let enrichedUgo = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.96,
+            rawProviderType: "italian_restaurant"
+        )
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: enrichedUgo, name: "Ugo"), "🍝")
+
+        XCTAssertEqual(
+            WanderPlaceCategory.preferredProviderType(
+                primaryType: "restaurant",
+                types: ["food", "italian_restaurant", "point_of_interest"],
+                matchingPrimaryCategory: WanderPlaceCategory.restaurantsFood
+            ),
+            "italian_restaurant"
+        )
+        XCTAssertNil(
+            WanderPlaceCategory.preferredProviderType(
+                primaryType: "sporting_goods_store",
+                types: ["store", "point_of_interest"],
+                matchingPrimaryCategory: WanderPlaceCategory.restaurantsFood
+            ),
+            "Provider enrichment must not cross the stored broad-category boundary"
+        )
+    }
+
+    func testPersistedMapKitRawTypesRecoverCanonicalCategoriesAndSubcategories() {
+        let cases: [(rawType: String, primary: String, subcategory: String, emoji: String)] = [
+            ("mkpoicategorybeauty", WanderPlaceCategory.servicesErrands, "Beauty service", "🪞"),
+            ("mkpoicategoryfitnesscenter", WanderPlaceCategory.wellnessFitness, "Fitness center", "💪"),
+            ("mkpoicategoryfoodmarket", WanderPlaceCategory.shopping, "Grocery store", "🛒"),
+            ("mkpoicategoryrestaurant", WanderPlaceCategory.restaurantsFood, "Restaurant", "🍽️"),
+            ("mkpoicategorycafe", WanderPlaceCategory.coffeeTeaSweets, "Cafe", "☕️"),
+            ("mkpoicategorybakery", WanderPlaceCategory.coffeeTeaSweets, "Bakery", "🥐"),
+            ("mkpoicategorybrewery", WanderPlaceCategory.barsNightlife, "Brewery", "🍺"),
+            ("mkpoicategorynightlife", WanderPlaceCategory.barsNightlife, "Bar", "🍸"),
+            ("mkpoicategoryautomotiverepair", WanderPlaceCategory.travelTransit, "Car repair", "🔧"),
+            ("mkpoicategorydistillery", WanderPlaceCategory.barsNightlife, "Distillery", "🥃"),
+            ("mkpoicategorymusicvenue", WanderPlaceCategory.thingsToDo, "Concert hall", "🎵"),
+            ("mkpoicategorypublictransport", WanderPlaceCategory.travelTransit, "Transit station", "🚉")
+        ]
+
+        for value in cases {
+            let assignment = WanderPlaceCategory.assignment(
+                forRawCategory: value.rawType,
+                source: PlaceCategorySource.provider.rawValue,
+                confidence: 0.86,
+                rawProviderType: value.rawType
+            )
+            XCTAssertEqual(assignment.primaryCategory, value.primary, value.rawType)
+            XCTAssertEqual(assignment.subcategory, value.subcategory, value.rawType)
+            XCTAssertEqual(WanderPlaceCategory.emoji(for: assignment), value.emoji, value.rawType)
+        }
+    }
+
+    func testEverySupportedMapKitProviderTypeAvoidsFallbackPlaceAndPin() {
+        XCTAssertEqual(
+            WanderPlaceCategory.supportedMapKitProviderTypes.count,
+            73,
+            "Keep this in sync with every constant in the current MKPointOfInterestCategory SDK header"
+        )
+
+        for rawType in WanderPlaceCategory.supportedMapKitProviderTypes {
+            let assignment = WanderPlaceCategory.assignment(
+                forRawCategory: rawType,
+                source: PlaceCategorySource.provider.rawValue,
+                confidence: 0.86,
+                rawProviderType: rawType
+            )
+            XCTAssertNotEqual(assignment.primaryCategory, WanderPlaceCategory.fallbackPlace, rawType)
+            XCTAssertNotNil(assignment.subcategory, rawType)
+            XCTAssertNotEqual(WanderPlaceCategory.emoji(for: assignment), "📍", rawType)
+        }
+    }
+
+    func testCuisineDetectionRequiresWholeTerms() {
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "italian_restaurant"), "Italian")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "south american cuisine"), "South American")
+        XCTAssertNil(WanderPlaceCategory.cuisineGuess(forRawValue: "Indianapolis restaurant"))
+    }
+
     func testUserEditedSubcategoryWinsOverProviderAndNameHints() {
         let assignment = PlaceCategoryAssignment(
             primaryCategory: WanderPlaceCategory.wellnessFitness,
@@ -409,7 +530,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 5)
+        XCTAssertEqual(shared.version, 6)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
