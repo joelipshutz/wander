@@ -12390,3 +12390,10 @@ Emoji integrity implementation and validation, 2026-07-17 13:40 PDT:
 - Deno validation passed: shared taxonomy 2/2, Google place selection 9/9, and type checks for both `place-photo` and `extraction-worker`. `jq empty`, `git diff --check`, a generic arm64/x86_64 simulator build, and a signed arm64 device build all passed. Signed app: `/private/tmp/DerivedData-rec98-integrity-device/Build/Products/Debug-iphoneos/Wander.app`, version `0.1` build `77`.
 - Deployed the additive `place-photo` response fields and matching shared-taxonomy aliases to Supabase project `rugmtlgufrhlxwfkumhw`; no schema, RPC, RLS, user-data, or secret changes occurred. An unauthenticated hosted probe correctly returned `401 missing_authorization`.
 - Installed and launched the exact signed build on Ryan's paired iPhone 15 Pro, then opened `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj` for manual testing. No merge, build-number bump, TestFlight upload, tester-data rewrite, or Slack announcement occurred.
+
+Emoji integrity handoff, 2026-07-17 13:46 PDT:
+
+- Committed and pushed the complete integrity implementation as `128d97b58` (`fix: harden place emoji classification`) to `origin/codex/rec-98-category-emojis`.
+- Ready, mergeable PR #112 now includes the proved root causes, 388-test validation, 73-type SDK audit, backend deployment status, and device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5007328549.
+- Added the matching Linear handoff in comment `dddc3f97-cec4-4c71-bb11-517f76b82387` and moved REC-98 from `In Progress` to `In Review`.
+- Xcode remains open on `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj`; the exact signed app-code build from `128d97b58` remains installed and launched on Ryan's iPhone 15 Pro. No merge, TestFlight release, build bump, or Slack update was requested or performed.
