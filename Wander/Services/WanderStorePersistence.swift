@@ -1,11 +1,23 @@
 import Foundation
+import UIKit
 
 struct WanderStorePersistence {
     let load: () -> WanderStoreSnapshot?
     let save: (WanderStoreSnapshot) -> Void
+    let flush: () -> Void
+
+    init(
+        load: @escaping () -> WanderStoreSnapshot?,
+        save: @escaping (WanderStoreSnapshot) -> Void,
+        flush: @escaping () -> Void = {}
+    ) {
+        self.load = load
+        self.save = save
+        self.flush = flush
+    }
 
     @MainActor
-    static let live = file(
+    static let live = coalescingFile(
         url: FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Wander", isDirectory: true)
@@ -35,6 +47,124 @@ struct WanderStorePersistence {
                 }
             }
         )
+    }
+
+    static func coalescingFile(url: URL) -> WanderStorePersistence {
+        coalescing(
+            load: {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(WanderStoreSnapshot.self, from: data)
+            },
+            write: { snapshot in
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    let data = try JSONEncoder().encode(snapshot)
+                    try data.write(to: url, options: [.atomic])
+                } catch {
+                    #if DEBUG
+                    print("Wander local persistence failed: \(error)")
+                    #endif
+                }
+            },
+            flushOnAppLifecycle: true
+        )
+    }
+
+    static func coalescing(
+        load: @escaping () -> WanderStoreSnapshot?,
+        write: @escaping (WanderStoreSnapshot) -> Void,
+        flushOnAppLifecycle: Bool = false
+    ) -> WanderStorePersistence {
+        let writer = CoalescingWanderStoreSnapshotWriter(
+            write: write,
+            flushOnAppLifecycle: flushOnAppLifecycle
+        )
+        return WanderStorePersistence(
+            load: {
+                writer.flush()
+                return load()
+            },
+            save: writer.save,
+            flush: writer.flush
+        )
+    }
+}
+
+private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "com.grayline.wander.persistence", qos: .utility)
+    private let lock = NSLock()
+    private let write: (WanderStoreSnapshot) -> Void
+    private var pendingSnapshot: WanderStoreSnapshot?
+    private var isDrainScheduled = false
+    private var lifecycleObservers: [NSObjectProtocol] = []
+
+    init(
+        write: @escaping (WanderStoreSnapshot) -> Void,
+        flushOnAppLifecycle: Bool
+    ) {
+        self.write = write
+
+        guard flushOnAppLifecycle else { return }
+        let notificationCenter = NotificationCenter.default
+        lifecycleObservers = [
+            notificationCenter.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                self?.flush()
+            },
+            notificationCenter.addObserver(
+                forName: UIApplication.willTerminateNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                self?.flush()
+            }
+        ]
+    }
+
+    deinit {
+        lifecycleObservers.forEach { observer in
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func save(_ snapshot: WanderStoreSnapshot) {
+        lock.lock()
+        pendingSnapshot = snapshot
+        guard !isDrainScheduled else {
+            lock.unlock()
+            return
+        }
+        isDrainScheduled = true
+        lock.unlock()
+
+        queue.async { [self] in
+            drain()
+        }
+    }
+
+    func flush() {
+        queue.sync {}
+    }
+
+    private func drain() {
+        while true {
+            lock.lock()
+            guard let snapshot = pendingSnapshot else {
+                isDrainScheduled = false
+                lock.unlock()
+                return
+            }
+            pendingSnapshot = nil
+            lock.unlock()
+
+            write(snapshot)
+        }
     }
 }
 

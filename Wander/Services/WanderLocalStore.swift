@@ -94,27 +94,51 @@ final class WanderStore: ObservableObject {
     )?
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
-    @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = []
-    @Published private(set) var lastRemoteError: String?
-    @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
-    @Published var defaultVisibility: PlaceVisibility {
+    @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = [] {
         didSet {
+            visiblePlacesCache.removeAll(keepingCapacity: true)
+        }
+    }
+    private(set) var lastRemoteError: String? = nil {
+        willSet {
+            guard newValue != lastRemoteError else { return }
+            objectWillChange.send()
+        }
+    }
+    @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
+    var defaultVisibility: PlaceVisibility {
+        willSet {
+            guard newValue != defaultVisibility else { return }
+            objectWillChange.send()
+        }
+        didSet {
+            guard oldValue != defaultVisibility else { return }
             currentUser.defaultVisibilityRaw = defaultVisibility.rawValue
             currentUser.updatedAt = .now
             currentUser.localUpdatedAt = .now
             persist()
         }
     }
-    @Published var isPrivateProfile: Bool {
+    var isPrivateProfile: Bool {
+        willSet {
+            guard newValue != isPrivateProfile else { return }
+            objectWillChange.send()
+        }
         didSet {
+            guard oldValue != isPrivateProfile else { return }
             currentUser.isPrivateProfile = isPrivateProfile
             currentUser.updatedAt = .now
             currentUser.localUpdatedAt = .now
             persist()
         }
     }
-    @Published var autoSaveListAddsToWant: Bool {
+    var autoSaveListAddsToWant: Bool {
+        willSet {
+            guard newValue != autoSaveListAddsToWant else { return }
+            objectWillChange.send()
+        }
         didSet {
+            guard oldValue != autoSaveListAddsToWant else { return }
             persist()
         }
     }
@@ -128,6 +152,10 @@ final class WanderStore: ObservableObject {
     private let persistence: WanderStorePersistence?
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
+    private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
+    #if DEBUG
+    private(set) var visiblePlaceProjectionBuildCount = 0
+    #endif
     private var discoverParseCache: [String: DiscoverFilters] = [:]
     private(set) var providerCategoryEnrichmentAttemptedAtByKey: [String: Date] = [:]
     private static let defaultRemoteViewport = MapViewport(
@@ -217,6 +245,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        visiblePlacesCache.removeAll(keepingCapacity: true)
         guard let persistence else { return }
 
         if persistenceDeferralDepth > 0 {
@@ -1654,15 +1683,40 @@ final class WanderStore: ObservableObject {
     }
 
     func visiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
-        mergeVisiblePlaces(localVisiblePlaces(filters: filters) + remoteVisiblePlaces(filters: filters))
+        if let cached = visiblePlacesCache.first(where: { $0.filters == filters }) {
+            return cached.places
+        }
+
+        #if DEBUG
+        visiblePlaceProjectionBuildCount += 1
+        #endif
+        let projected = mergeVisiblePlaces(
+            localVisiblePlaces(filters: filters) + remoteVisiblePlaces(filters: filters)
+        )
+        if visiblePlacesCache.count >= 16 {
+            visiblePlacesCache.removeFirst()
+        }
+        visiblePlacesCache.append((filters: filters, places: projected))
+        return projected
     }
 
     private func localVisiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
         let attributesByUserPlaceID = Dictionary(grouping: placeAttributes, by: \.userPlaceID)
+        let placesByID = places.reduce(into: [String: LocalPlace]()) { result, place in
+            if result[place.id] == nil {
+                result[place.id] = place
+            }
+        }
+        let profilesByID = profiles.reduce(into: [String: LocalProfile]()) { result, profile in
+            if result[profile.id] == nil {
+                result[profile.id] = profile
+            }
+        }
+        let normalizedCategories = filters.normalizedCategories
         return userPlaces.compactMap { userPlace -> VisiblePlace? in
             guard userPlace.deletedAt == nil,
-                  let place = places.first(where: { $0.id == userPlace.placeID }),
-                  let owner = profiles.first(where: { $0.id == userPlace.userID })
+                  let place = placesByID[userPlace.placeID],
+                  let owner = profilesByID[userPlace.userID]
             else { return nil }
 
             let relationship = relationship(to: owner.id)
@@ -1687,7 +1741,6 @@ final class WanderStore: ObservableObject {
                 attributes: visibleAttributes
             )
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
-            let normalizedCategories = filters.normalizedCategories
             guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return nil }
             guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
 
@@ -4194,6 +4247,8 @@ final class WanderStore: ObservableObject {
 
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
+        guard previousCurrentUser.id != session.userID else { return }
+
         if let previousUserID = previousCurrentUser.serverID, previousUserID != session.userID {
             providerCategoryEnrichmentAttemptedAtByKey = [:]
             cancelSharedVisitInboxTask()
@@ -4206,12 +4261,9 @@ final class WanderStore: ObservableObject {
             sharedVisitInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
         }
-        let isSameUser = previousCurrentUser.id == session.userID
         let sessionHandle = normalizedSessionHandle(from: session)
-        let handle = isSameUser ? previousCurrentUser.handle : sessionHandle
-        let displayName = isSameUser
-            ? previousCurrentUser.displayName
-            : normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
+        let handle = sessionHandle
+        let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile
@@ -4229,12 +4281,13 @@ final class WanderStore: ObservableObject {
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
-        currentUser = profile
-        profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
-        profiles.insert(profile, at: 0)
-        claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
-        defaultVisibility = preferredVisibility
-        isPrivateProfile = preferredPrivateProfile
+        withDeferredPersistence {
+            currentUser = profile
+            profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
+            profiles.insert(profile, at: 0)
+            claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
+            persist()
+        }
     }
 
     private func claimGuestRowsIfNeeded(from previousProfile: LocalProfile, to signedInProfile: LocalProfile) {
@@ -4300,11 +4353,14 @@ final class WanderStore: ObservableObject {
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
-        currentUser = profile
-        profiles.removeAll { $0.localID == localID }
-        profiles.insert(profile, at: 0)
-        defaultVisibility = preferredVisibility
-        isPrivateProfile = preferredPrivateProfile
+        withDeferredPersistence {
+            currentUser = profile
+            profiles.removeAll { $0.localID == localID }
+            profiles.insert(profile, at: 0)
+            defaultVisibility = preferredVisibility
+            isPrivateProfile = preferredPrivateProfile
+            persist()
+        }
     }
 
     private func cancelSharedVisitInboxTask() {
@@ -5283,52 +5339,58 @@ final class WanderStore: ObservableObject {
     }
 
     private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {
-        objectWillChange.send()
+        withDeferredPersistence {
+            objectWillChange.send()
 
-        let now = Date()
-        let currentLocalID = currentUser.localID
-        let currentProfileID = remoteProfile.id
-        let becamePrivate = !isPrivateProfile && remoteProfile.isPrivateProfile
+            let now = Date()
+            let currentLocalID = currentUser.localID
+            let currentProfileID = remoteProfile.id
+            let becamePrivate = !isPrivateProfile && remoteProfile.isPrivateProfile
 
-        currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
-        currentUser.handle = remoteProfile.handle
-        currentUser.searchHandle = remoteProfile.handle.lowercased()
-        currentUser.displayName = remoteProfile.displayName
-        currentUser.avatarURL = currentProfileAvatarURL(
-            incoming: remoteProfile.avatarURL,
-            existing: currentUser.avatarURL
-        )
-        currentUser.bio = remoteProfile.bio
-        currentUser.homeArea = remoteProfile.homeArea
-        currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
-        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
-        currentUser.createdAt = remoteProfile.createdAt
-        currentUser.syncStateRaw = SyncState.synced.rawValue
-        currentUser.serverUpdatedAt = now
-        currentUser.updatedAt = now
+            currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
+            currentUser.handle = remoteProfile.handle
+            currentUser.searchHandle = remoteProfile.handle.lowercased()
+            currentUser.displayName = remoteProfile.displayName
+            currentUser.avatarURL = currentProfileAvatarURL(
+                incoming: remoteProfile.avatarURL,
+                existing: currentUser.avatarURL
+            )
+            currentUser.bio = remoteProfile.bio
+            currentUser.homeArea = remoteProfile.homeArea
+            currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
+            currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+            currentUser.createdAt = remoteProfile.createdAt
+            currentUser.syncStateRaw = SyncState.synced.rawValue
+            currentUser.serverUpdatedAt = now
+            currentUser.updatedAt = now
 
-        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
-            profile.serverID = currentUser.serverID
-            profile.handle = currentUser.handle
-            profile.searchHandle = currentUser.searchHandle
-            profile.displayName = currentUser.displayName
-            profile.avatarURL = currentUser.avatarURL
-            profile.bio = currentUser.bio
-            profile.homeArea = currentUser.homeArea
-            profile.isPrivateProfile = currentUser.isPrivateProfile
-            profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
-            profile.createdAt = currentUser.createdAt
-            profile.syncStateRaw = SyncState.synced.rawValue
-            profile.serverUpdatedAt = now
-            profile.updatedAt = now
+            for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+                profile.serverID = currentUser.serverID
+                profile.handle = currentUser.handle
+                profile.searchHandle = currentUser.searchHandle
+                profile.displayName = currentUser.displayName
+                profile.avatarURL = currentUser.avatarURL
+                profile.bio = currentUser.bio
+                profile.homeArea = currentUser.homeArea
+                profile.isPrivateProfile = currentUser.isPrivateProfile
+                profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
+                profile.createdAt = currentUser.createdAt
+                profile.syncStateRaw = SyncState.synced.rawValue
+                profile.serverUpdatedAt = now
+                profile.updatedAt = now
+            }
+
+            if defaultVisibility != remoteProfile.defaultVisibility {
+                defaultVisibility = remoteProfile.defaultVisibility
+            }
+            if isPrivateProfile != remoteProfile.isPrivateProfile {
+                isPrivateProfile = remoteProfile.isPrivateProfile
+            }
+            if becamePrivate {
+                makeCurrentUserContentPrivate()
+            }
+            persist()
         }
-
-        defaultVisibility = remoteProfile.defaultVisibility
-        isPrivateProfile = remoteProfile.isPrivateProfile
-        if becamePrivate {
-            makeCurrentUserContentPrivate()
-        }
-        persist()
     }
 
     private func upsertRemoteAttributes(from visiblePlaces: [VisiblePlace]) {

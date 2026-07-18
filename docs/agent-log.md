@@ -12544,3 +12544,37 @@ Release completion, 2026-07-17 20:00 PDT:
 - Linear `REC-98` and `REC-100` are both `Done`. The managed external-disclosure policy rejected new comments containing the private release metadata, so no workaround was attempted; the issues retain their linked implementation/release PR attachments and prior validation history.
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
+
+## 2026-07-17 20:46 PDT - Codex - REC-101 App-Wide Performance
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-101-app-performance`
+Worktree: `/private/tmp/recme-rec101-app-performance`
+Linear: `REC-101` (`In Progress`)
+
+Goal: reproduce, profile, root-cause, and fix the severe app-wide lag Ryan reports across typing, scrolling, and general interaction on the current build.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact latest `origin/main` commit `02b812fc8` because the root checkout is 22 commits behind, remains on unrelated `codex/rec-88-visit-friends-mockup`, and contains an untracked `.pnpm-store/`. Neither the root checkout nor that untracked directory will be touched.
+- Created urgent Bug `REC-101`, assigned it to Ryan, moved it directly to `In Progress`, and related it to completed performance issues `REC-85` and `REC-91`.
+- Prior physical-device profiling for REC-85 found 133-350 ms SwiftUI hitches from repeated main-actor full-store persistence and coarse store invalidation; REC-91 separately isolated a 2.6-second Discover ticker. Both fixes shipped in build 72. This investigation will test for regression and for remaining shared hot paths through current TestFlight build 78.
+- No latest `origin/main` agent-log entry reports overlapping REC-101 work. Read-only parallel audits may inspect shared store/persistence/sync code, SwiftUI observation and render paths, and the build-72-to-build-78 regression range. No runtime file will be edited until a root-cause hypothesis is confirmed with reproduction/profile evidence.
+- Likely files, pending evidence, are the app/root observation boundary, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, representative feature screens and focused tests. `project.yml`, build number, TestFlight release, hosted schema/data, and tester-facing Slack are not in scope unless separately requested.
+
+Investigation and implementation checkpoint, 2026-07-18 15:55 PDT:
+
+- The connected physical iPhone is currently offline, so fresh interaction sampling used the iPhone 17 Pro / iOS 26.5 simulator. Simulator SwiftUI/Hitches instruments are unsupported; a 15-second process sample confirmed the one-place demo fixture is idle between actions rather than producing a simulator-only busy loop.
+- Current build-78 source and prior physical-device evidence converge on the same scale-sensitive path: the REC-98 physical run reached 100% CPU and froze in `ListsScreen.activeLists -> VisiblePlace.categoryEmoji`, while current main's resolver-only benchmark took 1.153 seconds and an exact repeated-`VisiblePlace` redraw regression took 2.567 seconds for 2,000 reads before the fix.
+- Root causes confirmed: repeated category assignment/cuisine JSON decoding/emoji resolution during SwiftUI body evaluation; repeated O(n²) visible-place projection across globally invalidated tab roots; and full-store pretty/sorted JSON encoding plus atomic file I/O synchronously on the main actor across roughly 89 persistence call sites.
+- Implemented a bounded, lock-protected category-presentation memo keyed by every mutable classification/cuisine/name input; a bounded per-filter visible-place projection cache with dictionary-backed place/profile joins; live-only serialized/coalescing background persistence with compact JSON, flush-before-load ordering, and background/termination flush barriers; and no-op suppression for equal settings, remote errors, and repeated same-user auth application. Synchronous `file(url:)` remains unchanged for immediate-relaunch test semantics.
+- The exact repeated-render regression now passes in 0.020 seconds versus the 2.567-second failing baseline (about 128x faster). Focused mutation-invalidation, projection-reuse, persistence-ordering/off-main, and same-user-auth regressions are being run before the complete test/build and simulator dogfood gates.
+
+Validation and pre-PR review checkpoint, 2026-07-18 16:12 PDT:
+
+- The final repeated-`VisiblePlace` category-render regression passes in 0.012 seconds for 2,000 reads versus the 2.567-second pre-fix failure, about 214x faster. The focused final gate passed 7/7 with zero failures at `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_16-07-37--0700.xcresult`.
+- The exact final source passed the complete iPhone 17 Pro / iOS 26.5 suite, 410/410 with zero failures: `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_16-08-21--0700.xcresult`.
+- A fresh generic iOS Simulator build passed at `/private/tmp/DerivedData-rec101-build/Build/Products/Debug-iphonesimulator/Wander.app`; its executable contains both `arm64` and `x86_64` and remains app version `0.1` build `78`.
+- Reinstalled the exact final tested binary and exercised Map and Discover typing, Discover result scrolling, Lists/detail rendering, and Profile navigation on the simulator without the freeze or interaction stall. This deterministic fixture is smaller than Ryan's real account, so a fresh physical-device Instruments confirmation remains required when `Ry’s iPhone` is back online; prior build-78 physical evidence plus the failing/passing scale regression establish the fixed hot path in the meantime.
+- Independent pre-PR review found and resolved two correctness issues before handoff: equal-value guards had removed sign-out's implicit persistence/cache invalidation, and dictionary-backed projection initially used last-match rather than the former first-match semantics for duplicate effective IDs. Dedicated sign-out and duplicate-ID regressions now pass. The remaining non-blocking coverage gap is direct notification-level exercise of the UIKit background/termination observers; coalescing, off-main writes, latest-snapshot ordering, and the underlying flush barrier are covered.
+- `git diff --check` is clean, exact latest `origin/main` `02b812fc8` remains the branch base, and the final scope is five files. No TestFlight build number, archive, upload, hosted data, merge, or tester-facing Slack announcement occurred.

@@ -92,12 +92,144 @@ struct DiscoverFilterSchema: Codable, Equatable {
     ]
 }
 
+private struct VisiblePlaceCategoryPresentationKey: Hashable {
+    let placePrimaryCategory: String
+    let placeSubcategory: String?
+    let placeCategorySource: String
+    let placeCategoryConfidence: Double?
+    let placeRawProviderType: String?
+    let placeName: String
+    let userCategoryOverride: String?
+    let userSubcategoryOverride: String?
+    let userCategoryOverrideSource: String?
+    let userCategoryOverrideConfidence: Double?
+    let cuisineValueJSON: String?
+}
+
+private struct VisiblePlaceCategoryPresentation {
+    let assignment: PlaceCategoryAssignment
+    let display: PlaceCategoryDisplay
+    let restaurantCuisine: String?
+    let emoji: String
+}
+
+private final class BoundedMemoizationCache<Key: Hashable, Value>: @unchecked Sendable {
+    private let capacity: Int
+    private let lock = NSLock()
+    private var values: [Key: Value] = [:]
+    private var insertionOrder: [Key] = []
+
+    init(capacity: Int) {
+        self.capacity = max(1, capacity)
+    }
+
+    func value(for key: Key, create: () -> Value) -> Value {
+        lock.lock()
+        if let value = values[key] {
+            lock.unlock()
+            return value
+        }
+        lock.unlock()
+
+        let value = create()
+
+        lock.lock()
+        defer { lock.unlock() }
+        if let existingValue = values[key] {
+            return existingValue
+        }
+
+        if values.count >= capacity, let oldestKey = insertionOrder.first {
+            values.removeValue(forKey: oldestKey)
+            insertionOrder.removeFirst()
+        }
+        values[key] = value
+        insertionOrder.append(key)
+        return value
+    }
+}
+
+private enum VisiblePlaceCategoryPresentationResolver {
+    private static let cache = BoundedMemoizationCache<
+        VisiblePlaceCategoryPresentationKey,
+        VisiblePlaceCategoryPresentation
+    >(capacity: 2_048)
+
+    static func presentation(
+        place: LocalPlace,
+        userPlace: LocalUserPlace,
+        attributes: [LocalPlaceAttribute]
+    ) -> VisiblePlaceCategoryPresentation {
+        let cuisineValueJSON = attributes.first {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }?.valueJSON
+        let key = VisiblePlaceCategoryPresentationKey(
+            placePrimaryCategory: place.primaryCategory,
+            placeSubcategory: place.subcategory,
+            placeCategorySource: place.categorySource,
+            placeCategoryConfidence: place.categoryConfidence,
+            placeRawProviderType: place.rawProviderType,
+            placeName: place.canonicalName,
+            userCategoryOverride: userPlace.categoryOverride,
+            userSubcategoryOverride: userPlace.subcategoryOverride,
+            userCategoryOverrideSource: userPlace.categoryOverrideSource,
+            userCategoryOverrideConfidence: userPlace.categoryOverrideConfidence,
+            cuisineValueJSON: cuisineValueJSON
+        )
+
+        return cache.value(for: key) {
+            let assignment: PlaceCategoryAssignment
+            if let override = userPlace.categoryOverride {
+                assignment = PlaceCategoryAssignment(
+                    primaryCategory: override,
+                    subcategory: userPlace.subcategoryOverride,
+                    source: userPlace.categoryOverrideSource ?? PlaceCategorySource.user.rawValue,
+                    confidence: userPlace.categoryOverrideConfidence,
+                    rawProviderType: place.rawProviderType
+                )
+            } else {
+                assignment = place.categoryAssignment
+            }
+
+            let restaurantCuisine = decodedRestaurantCuisine(from: cuisineValueJSON)
+            return VisiblePlaceCategoryPresentation(
+                assignment: assignment,
+                display: WanderPlaceCategory.display(for: assignment),
+                restaurantCuisine: restaurantCuisine,
+                emoji: WanderPlaceCategory.emoji(
+                    for: assignment,
+                    cuisine: restaurantCuisine,
+                    name: place.canonicalName
+                )
+            )
+        }
+    }
+
+    private static func decodedRestaurantCuisine(from valueJSON: String?) -> String? {
+        guard let valueJSON, let data = valueJSON.data(using: .utf8) else {
+            return nil
+        }
+        if let value = try? JSONDecoder().decode(String.self, from: data) {
+            return value
+        }
+        return (try? JSONDecoder().decode([String].self, from: data))?.first
+    }
+}
+
 struct VisiblePlace: Identifiable {
     let id: String
     let place: LocalPlace
     let userPlace: LocalUserPlace
     let owner: LocalProfile
     var attributes: [LocalPlaceAttribute] = []
+
+    private var categoryPresentation: VisiblePlaceCategoryPresentation {
+        VisiblePlaceCategoryPresentationResolver.presentation(
+            place: place,
+            userPlace: userPlace,
+            attributes: attributes
+        )
+    }
 
     var recommendedScore: Double? {
         if let score = userPlace.recommendedScore, userPlace.recommendedCount > 0 {
@@ -117,17 +249,7 @@ struct VisiblePlace: Identifiable {
     }
 
     var categoryAssignment: PlaceCategoryAssignment {
-        if let override = userPlace.categoryOverride {
-            return PlaceCategoryAssignment(
-                primaryCategory: override,
-                subcategory: userPlace.subcategoryOverride,
-                source: userPlace.categoryOverrideSource ?? PlaceCategorySource.user.rawValue,
-                confidence: userPlace.categoryOverrideConfidence,
-                rawProviderType: place.rawProviderType
-            )
-        }
-
-        return place.categoryAssignment
+        categoryPresentation.assignment
     }
 
     var effectiveCategory: String {
@@ -139,31 +261,15 @@ struct VisiblePlace: Identifiable {
     }
 
     var effectiveCategoryDisplay: PlaceCategoryDisplay {
-        WanderPlaceCategory.display(for: categoryAssignment)
+        categoryPresentation.display
     }
 
     var restaurantCuisine: String? {
-        guard let attribute = attributes.first(where: {
-            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
-        }),
-        let data = attribute.valueJSON.data(using: .utf8)
-        else {
-            return nil
-        }
-
-        if let value = try? JSONDecoder().decode(String.self, from: data) {
-            return value
-        }
-
-        return (try? JSONDecoder().decode([String].self, from: data))?.first
+        categoryPresentation.restaurantCuisine
     }
 
     var categoryEmoji: String {
-        WanderPlaceCategory.emoji(
-            for: categoryAssignment,
-            cuisine: restaurantCuisine,
-            name: place.canonicalName
-        )
+        categoryPresentation.emoji
     }
 }
 
