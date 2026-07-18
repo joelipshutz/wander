@@ -12380,3 +12380,19 @@ Publishing handoff, 2026-07-17 17:35 PDT:
 - Committed the validated mockup and test harness as `8512068a5` (`feat: add REC-99 social pin mockups`), pushed `codex/rec-99-social-pin-mockups`, and opened draft PR #114: https://github.com/joelipshutz/wander/pull/114.
 - Attached PR #114 to REC-99 and added the scenario, option tradeoffs, recommendation, and validation evidence in Linear comment `b7c7775a-ec1b-4695-be25-21e7b9301786`. The issue remains `In Progress` because the production direction is intentionally awaiting Ryan's selection.
 - No TestFlight build number, archive, upload, hosted data mutation, merge, or tester-facing Slack announcement occurred.
+
+Approved production scope, 2026-07-17 19:15 PDT:
+
+- Ryan selected option A, the split halo, and explicitly narrowed implementation to that pin treatment only. Remove the prior DEBUG comparison/full-map concept routes and do not ship any selected-card, map layout, filter, copy, or other mockup changes.
+- The isolated worktree is clean and latest `origin/main` remains `2b2f19a9b`, the branch base. No overlapping REC-99 work is present in the agent log or worktree list.
+- Expected final product files are limited to the existing production pin aggregation/rendering in `Wander/Features/Map/MapScreen.swift` and focused coverage in `WanderTests/MapHitTestingTests.swift`; `docs/agent-log.md` remains the required coordination exception. The prior mockup route/source/test/project additions will be removed so they do not remain in the PR.
+- REC-99 stays `In Progress` while implementation and validation run. No backend/schema, selected-place card, map layout, project build number, TestFlight release, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-17 19:34 PDT:
+
+- Removed the complete DEBUG-only comparison/full-map mockup route, source, generated project membership, and resolver coverage. The final diff against `origin/main` contains only the production pin renderer/aggregation in `Wander/Features/Map/MapScreen.swift`, focused tests in `WanderTests/MapHitTestingTests.swift`, and this required append-only log.
+- A mixed social cohort now renders one split sky halo: the Been half is solid and the Wanna half is dotted. Ryan/current-user history keeps the existing single personal Been-precedence ring, single-status social halos remain unchanged, and any number of social Been saves plus at least one social Wanna still exposes both statuses.
+- No selected-place card, attribution copy, map layout, search row, filter, fixture, backend/schema, accessibility copy, build number, or other UI behavior changed.
+- Focused `MapPinOutlineBuilderTests` passed 6/6 with zero failures at `/private/tmp/DerivedData-rec99-implementation/Logs/Test/Test-Wander-2026.07.17_19-24-47--0700.xcresult`. The complete iPhone 17 Pro / iOS 26.5 suite passed 381/381 with zero failures at `/private/tmp/DerivedData-rec99-implementation/Logs/Test/Test-Wander-2026.07.17_19-31-09--0700.xcresult`. A final generic iOS Simulator build passed for arm64 and x86_64.
+- Production visual QA passed on iPhone 17 Pro and the smaller iPhone 17e: `/private/tmp/rec99-split-halo-production-17pro.png` and `/private/tmp/rec99-split-halo-production-17e.png`. To expose the exact Ryan Been + Joe Been + Maya Wanna topology, one existing demo fixture status was changed only long enough to compile the screenshot artifact, then immediately restored before the full suite and final build; `git diff --exit-code -- Wander/Services/WanderFixtures.swift` is clean.
+- `git diff --check` is clean. Next: commit and push the narrowly scoped implementation, update draft PR #114 into a ready implementation PR, add the validation evidence to REC-99, and move the issue to `In Review`. No TestFlight release or tester-facing Slack announcement was requested.
