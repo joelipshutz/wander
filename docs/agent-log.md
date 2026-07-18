@@ -12333,3 +12333,10 @@ Publishing handoff, 2026-07-17 16:29 PDT:
 - The GitHub push was blocked by the managed environment's external-code-export review because explicit user approval to publish this private-repository diff has not yet been recorded. No workaround was attempted; the branch remains local and one commit ahead of `origin/main`.
 - REC-100 remains `In Progress` because no remote branch or PR exists yet. Exact restart after Ryan approves the external push: push `codex/rec-100-contrast-profile-header`, open a ready PR to `main`, add the PR and validation evidence to Linear, then move REC-100 to `In Review`.
 - No TestFlight build number, archive, upload, hosted data, merge, or Slack announcement occurred.
+
+Landing and combined release follow-up, 2026-07-17 17:06 PDT:
+
+- Ryan explicitly approved publishing and squash-merging REC-100, then creating a TestFlight build. He also called out the concurrent REC-98 release request and asked that the two changes not conflict.
+- REC-98 PR #112 is open and merge-clean at remote head `bd591eea4`, but its active worktree has an uncommitted immediate map-emoji refresh regression/fix in progress. The REC-98 task was asked to finish and push that fix without independently bumping, archiving, or uploading a build.
+- Latest completed TestFlight is build 77 and `origin/main` still declares `CURRENT_PROJECT_VERSION: 77`; no unfinished build bump exists. The safe release plan is one build 78 created only after the final REC-98 head and REC-100 both squash-merge into latest `main`.
+- This worktree remains clean apart from this append-only coordination entry and is two local commits ahead of exact `origin/main` `062f16f74`. Next: commit this approval/coordination record, push REC-100, open a ready PR, run the latest-main review gate, and wait for the final REC-98 head before sequencing both merges and the single combined release.
