@@ -22,7 +22,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
+            if let addLauncherMockupPage = AddLauncherMockupPage.resolved() {
+                AddLauncherMockupRoot(page: addLauncherMockupPage)
+            } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
                 ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
