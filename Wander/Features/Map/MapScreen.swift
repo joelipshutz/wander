@@ -2146,15 +2146,10 @@ private struct MapTypeaheadRow: View {
     @ViewBuilder
     private var savedOutlineLayer: some View {
         ForEach(Array(savedOutlines.indices), id: \.self) { index in
-            Circle()
-                .stroke(
-                    savedOutlines[index].color,
-                    style: StrokeStyle(
-                        lineWidth: savedOutlines.count > 1 ? 2.2 : 3,
-                        lineCap: .round,
-                        dash: savedOutlines[index].dashPattern
-                    )
-                )
+            MapPinOutlineStroke(
+                outline: savedOutlines[index],
+                lineWidth: savedOutlines.count > 1 ? 2.2 : 3
+            )
                 .padding(typeaheadOutlinePadding(for: index))
         }
     }
@@ -2430,7 +2425,7 @@ private struct WanderMapPin: View {
     }
 }
 
-private struct MapPinOutlineStroke: View {
+struct MapPinOutlineStroke: View {
     let outline: MapPinOutline
     let lineWidth: CGFloat
 
@@ -2567,6 +2562,33 @@ enum MapPinOutlineBuilder {
             outline(for: .social, in: states)
         ]
         .compactMap { $0 }
+    }
+
+    static func outlineCatalog(
+        for visiblePlaces: [VisiblePlace],
+        currentUserID: String
+    ) -> [String: [MapPinOutline]] {
+        var catalog: [String: [MapPinOutline]] = [:]
+
+        for group in VisiblePlaceGrouping.groups(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        ) {
+            let outlines = outlines(
+                for: group.places.map { visiblePlace in
+                    MapPinSaveState(
+                        ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                        status: visiblePlace.userPlace.status
+                    )
+                }
+            )
+
+            for visiblePlace in group.places {
+                catalog[visiblePlace.id] = outlines
+            }
+        }
+
+        return catalog
     }
 
     private static func outline(

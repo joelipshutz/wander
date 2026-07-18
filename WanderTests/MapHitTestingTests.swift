@@ -200,6 +200,54 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 }
 
 final class VisiblePlaceGroupingTests: XCTestCase {
+    func testOutlineCatalogCarriesRyanJoeMayaTopologyToEveryGroupedSaveID() throws {
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let joe = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let maya = profile(id: "user_maya", handle: "maya", displayName: "Maya")
+        let ryanBeen = visiblePlace(
+            owner: ryan,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05004,
+            longitude: -118.25003,
+            providerID: "mapkit_mutsu_ryan",
+            status: .been,
+            ratingScore: 5
+        )
+        let joeBeen = visiblePlace(
+            owner: joe,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05022,
+            longitude: -118.25018,
+            providerID: "mapkit_mutsu_joe",
+            status: .been,
+            ratingScore: 4
+        )
+        let mayaWanna = visiblePlace(
+            owner: maya,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05037,
+            longitude: -118.25031,
+            providerID: "mapkit_mutsu_maya",
+            status: .wannaGo
+        )
+
+        let catalog = MapPinOutlineBuilder.outlineCatalog(
+            for: [joeBeen, mayaWanna, ryanBeen],
+            currentUserID: ryan.id
+        )
+        let outlines = try XCTUnwrap(catalog[joeBeen.id])
+
+        XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
+        XCTAssertEqual(outlines.map(\.status), [.been, .been])
+        XCTAssertNil(outlines[0].secondaryStatus)
+        XCTAssertEqual(outlines[1].secondaryStatus, .wannaGo)
+        XCTAssertEqual(catalog[ryanBeen.id], outlines)
+        XCTAssertEqual(catalog[mayaWanna.id], outlines)
+    }
+
     func testGroupsSameNamedNearbyPlaceAcrossDifferentProviderIDsAndStatuses() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

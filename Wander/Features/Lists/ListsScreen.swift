@@ -900,7 +900,10 @@ private struct ListDetailScreen: View {
         .accessibilityLabel("Open map preview for \(displayList.name)")
     }
 
+    @ViewBuilder
     private var placeRows: some View {
+        let outlineCatalog = savedPlaceOutlineCatalog
+
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("places")
                 .font(.system(size: 18, weight: .black))
@@ -917,6 +920,10 @@ private struct ListDetailScreen: View {
                 ForEach(visiblePlaces) { place in
                     ListPlaceRow(
                         place: place,
+                        outlines: savedPlaceOutlines(
+                            for: place,
+                            outlineCatalog: outlineCatalog
+                        ),
                         canRemove: canManageList,
                         onOpen: {
                             selectedPlace = place
@@ -936,13 +943,18 @@ private struct ListDetailScreen: View {
             ListSuggestionsSection(
                 suggestions: suggestions,
                 isLoading: isLoadingSuggestions,
+                outlineCatalog: savedPlaceOutlineCatalog,
+                currentUserID: store.currentUser.id,
                 onAdd: { suggestion in
                     Task {
                         await addSuggestion(suggestion)
                     }
                 },
                 onOpen: { suggestion in
-                    selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                    selectedPlace = ListPlaceMock(
+                        visiblePlace: suggestion.visiblePlace,
+                        currentUserID: store.currentUser.id
+                    )
                 }
             )
         }
@@ -961,6 +973,13 @@ private struct ListDetailScreen: View {
 
     private var displayList: PlaceListMock {
         sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
+    }
+
+    private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
+        MapPinOutlineBuilder.outlineCatalog(
+            for: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
     }
 
     private var listOwnerProfile: LocalProfile? {
@@ -1059,6 +1078,8 @@ private struct ListDetailScreen: View {
 private struct ListSuggestionsSection: View {
     let suggestions: [ListPlaceSuggestion]
     let isLoading: Bool
+    let outlineCatalog: [String: [MapPinOutline]]
+    let currentUserID: String
     let onAdd: (ListPlaceSuggestion) -> Void
     let onOpen: (ListPlaceSuggestion) -> Void
 
@@ -1087,6 +1108,12 @@ private struct ListSuggestionsSection: View {
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
+                            outlines: savedPlaceOutlines(
+                                for: suggestion.visiblePlace,
+                                outlineCatalog: outlineCatalog,
+                                currentUserID: currentUserID
+                            ),
+                            currentUserID: currentUserID,
                             onOpen: {
                                 onOpen(suggestion)
                             },
@@ -1178,6 +1205,8 @@ private struct ListAddPlacesScreen: View {
 
     @ViewBuilder
     private var suggestionsContent: some View {
+        let outlineCatalog = savedPlaceOutlineCatalog
+
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
                 .font(.system(size: 18, weight: .black))
@@ -1198,8 +1227,17 @@ private struct ListAddPlacesScreen: View {
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
+                            outlines: savedPlaceOutlines(
+                                for: suggestion.visiblePlace,
+                                outlineCatalog: outlineCatalog,
+                                currentUserID: store.currentUser.id
+                            ),
+                            currentUserID: store.currentUser.id,
                             onOpen: {
-                                selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                                selectedPlace = ListPlaceMock(
+                                    visiblePlace: suggestion.visiblePlace,
+                                    currentUserID: store.currentUser.id
+                                )
                             },
                             onAdd: {
                                 Task {
@@ -1253,6 +1291,13 @@ private struct ListAddPlacesScreen: View {
 
     private var addableSuggestions: [ListPlaceSuggestion] {
         suggestions.filter { !store.hasPlace($0.visiblePlace, in: list) }
+    }
+
+    private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
+        MapPinOutlineBuilder.outlineCatalog(
+            for: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
     }
 
     private var addableSearchCandidates: [PlaceCandidate] {
@@ -1430,23 +1475,29 @@ private struct ListPlaceSearchField: View {
 private struct ListVisiblePlaceAddRow: View {
     let visiblePlace: VisiblePlace
     let supportingText: String
+    let outlines: [MapPinOutline]
+    let currentUserID: String
     let onOpen: () -> Void
     let onAdd: () -> Void
 
     private var place: ListPlaceMock {
-        ListPlaceMock(visiblePlace: visiblePlace)
+        ListPlaceMock(
+            visiblePlace: visiblePlace,
+            currentUserID: currentUserID
+        )
     }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             Button(action: onOpen) {
                 HStack(spacing: WanderTheme.spacing3) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                            .fill(place.tint)
-                        WanderCategoryEmoji(emoji: place.emoji, size: 18)
-                    }
-                    .frame(width: 48, height: 48)
+                    ListSavedPlaceIcon(
+                        emoji: place.emoji,
+                        outlines: outlines,
+                        frameSize: 48,
+                        diameter: 38,
+                        emojiSize: 16
+                    )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name)
@@ -1624,8 +1675,41 @@ private struct ListMapPreview: View {
     }
 }
 
+private struct ListSavedPlaceIcon: View {
+    let emoji: String
+    let outlines: [MapPinOutline]
+    let frameSize: CGFloat
+    let diameter: CGFloat
+    let emojiSize: CGFloat
+
+    var body: some View {
+        WanderCategoryEmoji(emoji: emoji, size: emojiSize)
+            .frame(width: diameter, height: diameter)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(Circle())
+            .overlay(outlineLayer)
+            .frame(width: frameSize, height: frameSize)
+    }
+
+    private var outlineLayer: some View {
+        ForEach(Array(outlines.indices), id: \.self) { index in
+            MapPinOutlineStroke(
+                outline: outlines[index],
+                lineWidth: outlines.count > 1 ? 2.5 : 3
+            )
+            .padding(outlinePadding(for: index))
+        }
+    }
+
+    private func outlinePadding(for index: Int) -> CGFloat {
+        guard outlines.count > 1 else { return 0 }
+        return index == 0 ? 0 : -5
+    }
+}
+
 private struct ListPlaceRow: View {
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
     var canRemove: Bool = true
     let onOpen: () -> Void
     let onRemove: () -> Void
@@ -1634,13 +1718,13 @@ private struct ListPlaceRow: View {
         HStack(spacing: WanderTheme.spacing3) {
             Button(action: onOpen) {
                 HStack(spacing: WanderTheme.spacing3) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                            .fill(place.tint)
-
-                        WanderCategoryEmoji(emoji: place.emoji, size: 20)
-                    }
-                    .frame(width: 56, height: 56)
+                    ListSavedPlaceIcon(
+                        emoji: place.emoji,
+                        outlines: outlines,
+                        frameSize: 56,
+                        diameter: 40,
+                        emojiSize: 17
+                    )
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(place.name)
@@ -2058,6 +2142,7 @@ private struct PrivateProfileCollaborationUnavailable: View {
 }
 
 private struct ListMapFullScreen: View {
+    @EnvironmentObject private var store: WanderStore
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     @State private var position: MapCameraPosition
@@ -2071,6 +2156,8 @@ private struct ListMapFullScreen: View {
     }
 
     var body: some View {
+        let outlineCatalog = savedPlaceOutlineCatalog
+
         NavigationStack {
             ZStack(alignment: .bottom) {
                 Map(position: $position) {
@@ -2079,7 +2166,14 @@ private struct ListMapFullScreen: View {
                             Button {
                                 selectedPlace = place
                             } label: {
-                                ListMapMarker(place: place, isSelected: selectedPlace?.id == place.id)
+                                ListMapMarker(
+                                    place: place,
+                                    outlines: savedPlaceOutlines(
+                                        for: place,
+                                        outlineCatalog: outlineCatalog
+                                    ),
+                                    isSelected: selectedPlace?.id == place.id
+                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -2137,7 +2231,10 @@ private struct ListMapFullScreen: View {
                     ) {}
                     .zIndex(20)
                 } else {
-                    ListMapPlaceRail(list: list) { place in
+                    ListMapPlaceRail(
+                        list: list,
+                        outlineCatalog: outlineCatalog
+                    ) { place in
                         profilePlace = place
                     }
                     .zIndex(10)
@@ -2161,6 +2258,13 @@ private struct ListMapFullScreen: View {
         )
     }
 
+    private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
+        MapPinOutlineBuilder.outlineCatalog(
+            for: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
+    }
+
     @ViewBuilder
     private var profilePlaceDestination: some View {
         if let profilePlace {
@@ -2173,17 +2277,17 @@ private struct ListMapFullScreen: View {
 
 private struct ListMapMarker: View {
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
     let isSelected: Bool
 
     var body: some View {
-        WanderCategoryEmoji(emoji: place.emoji, size: isSelected ? 17 : 16)
-            .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(place.status == .wannaGo ? WanderTheme.pinSocial.color : WanderTheme.pinYou.color, style: StrokeStyle(lineWidth: isSelected ? 4 : 3, dash: place.status == .wannaGo ? [5, 4] : []))
-            )
+        ListSavedPlaceIcon(
+            emoji: place.emoji,
+            outlines: outlines,
+            frameSize: isSelected ? 44 : 40,
+            diameter: isSelected ? 44 : 40,
+            emojiSize: isSelected ? 17 : 16
+        )
             .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: isSelected ? 9 : 6, x: 0, y: 2)
             .scaleEffect(isSelected ? 1.08 : 1)
             .accessibilityLabel("\(place.name) on list map")
@@ -2192,6 +2296,7 @@ private struct ListMapMarker: View {
 
 private struct ListMapPlaceRail: View {
     let list: PlaceListMock
+    let outlineCatalog: [String: [MapPinOutline]]
     let onSelect: (ListPlaceMock) -> Void
 
     var body: some View {
@@ -2207,7 +2312,13 @@ private struct ListMapPlaceRail: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WanderTheme.spacing3) {
                     ForEach(list.places) { place in
-                        ListMapPlaceTile(place: place) {
+                        ListMapPlaceTile(
+                            place: place,
+                            outlines: savedPlaceOutlines(
+                                for: place,
+                                outlineCatalog: outlineCatalog
+                            )
+                        ) {
                             onSelect(place)
                         }
                     }
@@ -2226,17 +2337,19 @@ private struct ListMapPlaceRail: View {
 
 private struct ListMapPlaceTile: View {
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .fill(place.tint)
-                    WanderCategoryEmoji(emoji: place.emoji, size: 22)
-                }
-                .frame(width: 62, height: 62)
+                ListSavedPlaceIcon(
+                    emoji: place.emoji,
+                    outlines: outlines,
+                    frameSize: 62,
+                    diameter: 42,
+                    emojiSize: 18
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(place.name)
@@ -2796,7 +2909,12 @@ private extension PlaceListMock {
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = visiblePlaces.map(ListPlaceMock.init(visiblePlace:))
+        self.places = visiblePlaces.map {
+            ListPlaceMock(
+                visiblePlace: $0,
+                currentUserID: store.currentUser.id
+            )
+        }
         self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
@@ -2816,6 +2934,7 @@ private struct ListPlaceMock: Identifiable {
     let latitude: Double
     let longitude: Double
     let status: PlaceStatus
+    let saveOwnership: MapPinSaveOwnership
     let note: String?
     let placeID: String?
     let visiblePlaceID: String?
@@ -2831,6 +2950,7 @@ private struct ListPlaceMock: Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         status: PlaceStatus = .wannaGo,
+        saveOwnership: MapPinSaveOwnership = .currentUser,
         note: String? = nil,
         placeID: String? = nil,
         visiblePlaceID: String? = nil
@@ -2845,6 +2965,7 @@ private struct ListPlaceMock: Identifiable {
         self.latitude = latitude ?? 34.075 + (84 - pinPosition.y) * 0.00042
         self.longitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
         self.status = status
+        self.saveOwnership = saveOwnership
         self.note = note
         self.placeID = placeID
         self.visiblePlaceID = visiblePlaceID
@@ -2858,7 +2979,7 @@ private struct ListPlaceMock: Identifiable {
         "\(name.normalizedListLookupKey)|\(category.normalizedListLookupKey)"
     }
 
-    init(visiblePlace: VisiblePlace) {
+    init(visiblePlace: VisiblePlace, currentUserID: String) {
         let place = visiblePlace.place
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
@@ -2879,6 +3000,7 @@ private struct ListPlaceMock: Identifiable {
             latitude: place.latitude,
             longitude: place.longitude,
             status: visiblePlace.userPlace.status,
+            saveOwnership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
             note: visiblePlace.userPlace.note,
             placeID: place.id,
             visiblePlaceID: visiblePlace.id
@@ -2907,6 +3029,44 @@ private struct ListPlaceMock: Identifiable {
             y: CGFloat(46 + (seed / 5) % 88)
         )
     }
+}
+
+private func savedPlaceOutlines(
+    for visiblePlace: VisiblePlace,
+    outlineCatalog: [String: [MapPinOutline]],
+    currentUserID: String
+) -> [MapPinOutline] {
+    if let outlines = outlineCatalog[visiblePlace.id] {
+        return outlines
+    }
+
+    return MapPinOutlineBuilder.outlines(
+        for: [
+            MapPinSaveState(
+                ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                status: visiblePlace.userPlace.status
+            )
+        ]
+    )
+}
+
+private func savedPlaceOutlines(
+    for place: ListPlaceMock,
+    outlineCatalog: [String: [MapPinOutline]]
+) -> [MapPinOutline] {
+    if let visiblePlaceID = place.visiblePlaceID,
+       let outlines = outlineCatalog[visiblePlaceID] {
+        return outlines
+    }
+
+    return MapPinOutlineBuilder.outlines(
+        for: [
+            MapPinSaveState(
+                ownership: place.saveOwnership,
+                status: place.status
+            )
+        ]
+    )
 }
 
 private struct ListCollaboratorMock: Identifiable {
