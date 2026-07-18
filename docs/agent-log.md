@@ -12374,3 +12374,9 @@ Implementation and validation checkpoint, 2026-07-17 17:32 PDT:
 - Generic unsigned iOS Simulator build passed for arm64 and x86_64. Focused `NavigationContractTests` passed 35/35. The complete iPhone 17 Pro / iOS 26.5 suite passed 380/380 with zero failures at `/private/tmp/DerivedData-rec99-mockups/Logs/Test/Test-Wander-2026.07.17_17-29-54--0700.xcresult`.
 - Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e. Evidence: `/private/tmp/rec99-social-pins-comparison-17pro.png`, `/private/tmp/rec99-social-pins-comparison-17e.png`, `/private/tmp/rec99-social-pins-split-halo-17pro.png`, and `/private/tmp/rec99-social-pins-split-halo-17e.png`. All concepts remain legible at the actual 40-point map size; A best preserves the existing pin grammar and category-glyph clarity, while B reads like notification badges and C becomes a heavy bullseye.
 - `git diff --check` is clean and latest `origin/main` remains the branch base at `2b2f19a9b`. Next: publish this design exploration as a draft PR, attach it to REC-99, and keep the issue `In Progress` until Ryan selects a direction. No production behavior, hosted data, build number, TestFlight release, or Slack announcement changed.
+
+Publishing handoff, 2026-07-17 17:35 PDT:
+
+- Committed the validated mockup and test harness as `8512068a5` (`feat: add REC-99 social pin mockups`), pushed `codex/rec-99-social-pin-mockups`, and opened draft PR #114: https://github.com/joelipshutz/wander/pull/114.
+- Attached PR #114 to REC-99 and added the scenario, option tradeoffs, recommendation, and validation evidence in Linear comment `b7c7775a-ec1b-4695-be25-21e7b9301786`. The issue remains `In Progress` because the production direction is intentionally awaiting Ryan's selection.
+- No TestFlight build number, archive, upload, hosted data mutation, merge, or tester-facing Slack announcement occurred.
