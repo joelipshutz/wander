@@ -12479,3 +12479,10 @@ Implementation and validation checkpoint, 2026-07-17 17:49 PDT:
 - Visual QA passed on iPhone 17 Pro and smaller iPhone 16e. Evidence: `/tmp/rec90-visuals/activity-empty-iphone-17-pro.png` and `/tmp/rec90-visuals/activity-empty-iphone-16e.png`. Both preserve visible tabs, readable copy, 44pt CTA, and unclipped bottom navigation. The populated People direction remains the approved pre-code horizontal-card mock under `preview/discover-redesign/`, with production behavior covered by repository/store/source contracts.
 - Durable decisions were recorded in `docs/decisions.md`; the narrowed product contract and gstack engineering review live in `docs/specs/2026-07-13-rec-90-discover-redesign-product-spec.md` and `docs/reviews/2026-07-17-rec-90-null-states-plan-eng-review.md`.
 - No build-number bump, TestFlight archive/upload, merge, tester Slack note, or fake production seed occurred. Next: publish the validated branch to existing draft PR #97, mark it ready, attach validation to REC-90, and move the issue to In Review.
+
+Publishing handoff, 2026-07-17 17:54 PDT:
+
+- Committed the validated implementation as `aabd5aceb` (`feat: add Discover network-building null states`) and pushed `codex/rec-90-discover-plan`.
+- Updated existing PR #97 to **feat: add Discover network-building null states**, marked it ready for review, and confirmed it is merge-clean against latest `origin/main`: https://github.com/joelipshutz/wander/pull/97.
+- Moved Linear REC-90 to `In Review`, attached PR #97, and added the implementation, hosted migration, pgTAP, XCTest/build, visual-QA, and deferred-scope evidence. Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` is in `review` with the same handoff.
+- This is a PR handoff only. The branch is not merged and no TestFlight release was requested or performed.
