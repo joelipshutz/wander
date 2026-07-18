@@ -16,6 +16,18 @@ Build the first REC-90 slice as one network-acquisition loop:
 
 This is narrower than the earlier full Discover direction. Search-answer work, place recovery, city shelves, contacts, recommendation dismissals, and place-derived ranking remain deferred.
 
+## 2026-07-18 Feedback Delta
+
+Joe explicitly reversed the no-synthetic-hosted-profile constraint for the alpha populated state. The implementation delta is bounded:
+
+- Rename the existing followed-account list from **Following** to **People**, while retaining **People worth following** as the proactive recommendation shelf.
+- Reduce recommendation cards from a 264pt to 238pt minimum height, shrink avatars from 58pt to 52pt, and cap bios at two lines. The 44pt Follow target and current response/failure behavior stay unchanged.
+- Use an operational, idempotent SQL script rather than a migration. It deletes only 16 audited Codex/backend-smoke profile ids after matching their expected handles, removes the now-orphaned smoke place, and upserts six fictional profiles with 24 Been reviews of existing places.
+- Do not create synthetic follow edges, change the recommendation RPC, alter RLS, or expose protected place content before follow. Existing public-profile fallback ranking makes the new accounts eligible as `Suggested by rec.me`.
+- Validate with a rollback dry run, hosted postconditions, authenticated recommendation-RPC smoke test, focused/full XCTest, build, and populated visual QA.
+
+This section supersedes the historical fictional-production-profile exclusions below; all other review constraints remain in force.
+
 ## Scope Challenge
 
 The original plan combined a Discover redesign, people recommendations, search semantics, recovery candidates, city discovery, and new privacy/consent fields. That was too large for one trustworthy release.

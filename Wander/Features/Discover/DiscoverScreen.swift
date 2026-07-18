@@ -384,7 +384,7 @@ struct DiscoverScreen: View {
             peopleRecommendationsSection
         }
 
-        friendsSection
+        peopleSection
     }
 
     private var peopleValueNote: some View {
@@ -473,10 +473,10 @@ struct DiscoverScreen: View {
         }
     }
 
-    private var friendsSection: some View {
+    private var peopleSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                SectionTitle("Following")
+                SectionTitle("People")
                 Spacer()
                 Text("\(friendProfiles.count)")
                     .font(.system(size: 12, weight: .black))
@@ -981,7 +981,7 @@ private struct PeopleRecommendationCard: View {
                     WanderAvatar(
                         initials: String(profile.displayName.prefix(1)),
                         avatarURL: profile.avatarURL,
-                        size: 58,
+                        size: 52,
                         color: WanderTheme.pinSocial.color
                     )
 
@@ -1009,8 +1009,8 @@ private struct PeopleRecommendationCard: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .frame(minHeight: 46, alignment: .top)
+                .lineLimit(2)
+                .frame(minHeight: 32, alignment: .top)
 
             Spacer(minLength: 0)
 
@@ -1042,7 +1042,7 @@ private struct PeopleRecommendationCard: View {
         }
         .padding(WanderTheme.spacing3)
         .frame(width: 172)
-        .frame(minHeight: 264)
+        .frame(minHeight: 238)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {

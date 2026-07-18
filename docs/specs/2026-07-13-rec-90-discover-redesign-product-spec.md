@@ -7,6 +7,16 @@ Linear: `REC-90`
 Status: APPROVED
 Mode: Startup
 
+## Approved Populated-State Feedback — 2026-07-18
+
+Joe approved the overall direction and added a hosted alpha-data exception for the populated People experience. This section supersedes the earlier prohibition on synthetic hosted profiles:
+
+- People has two explicitly named sections: **People worth following** for public accounts the viewer does not follow and **People** for accounts the viewer already follows.
+- Recommendation cards keep their horizontal form and 44pt Follow action but use a 52pt avatar, two-line bio, and 238pt minimum height so the shelf feels faster and less bulky.
+- Remove only the 16 exact Codex/backend-smoke profile ids verified in the linked project and delete their orphaned smoke place. Real Joe, Ryan, demo, and tester rows are preserved.
+- Seed six fictional public demo profiles with distinct names, handles, bios, and home areas. Each receives four realistic Been reviews of existing hosted places. The seed creates no fake follow relationships or social-proof reasons.
+- The cleanup/seed is an idempotent operational SQL script, not a migration. It validates exact smoke id/handle pairs and all referenced place ids before mutating data, and verifies zero Codex/smoke profiles plus six people and 24 reviews before commit.
+
 ## Approved First Build Slice — 2026-07-17
 
 Joe narrowed the first implementation to the Discover null/default states. This section supersedes incompatible Slice 1 implementation language below; the broader document remains the design record for later REC-90 work.
@@ -23,7 +33,7 @@ Ship now:
 
 Defer:
 
-- place recovery, city shelves, Contacts, recommendation dismissals, curated/fake production profiles, consent/recommendable fields, place-activity ranking, search-answer redesign, and search parser fixes.
+- place recovery, city shelves, Contacts, recommendation dismissals, a general curation/admin system, consent/recommendable fields, place-activity ranking, search-answer redesign, and search parser fixes.
 
 The exact engineering contract and test plan are in `docs/reviews/2026-07-17-rec-90-null-states-plan-eng-review.md`.
 
@@ -525,7 +535,7 @@ Analytics must remain non-PII: internal IDs, coarse source categories, counts, s
 
 The approved design and engineering plan will land through a documentation PR to `main`. No binary is produced by this planning assignment.
 
-An eventual implementation should ship through the existing feature-branch and PR workflow. After code, database, and visual QA pass, a TestFlight build is created only when Joe or Ryan explicitly requests release. Fictional fixtures remain in local/test targets; any hosted staging seeds must be isolated from production.
+An eventual implementation should ship through the existing feature-branch and PR workflow. After code, database, and visual QA pass, a TestFlight build is created only when Joe or Ryan explicitly requests release. The six approved hosted alpha demo profiles are managed through `scripts/seed-discover-demo-people.sql`; other fictional fixtures remain in local/test targets and must not reach hosted production accidentally.
 
 ## Dependencies
 

@@ -12486,3 +12486,37 @@ Publishing handoff, 2026-07-17 17:54 PDT:
 - Updated existing PR #97 to **feat: add Discover network-building null states**, marked it ready for review, and confirmed it is merge-clean against latest `origin/main`: https://github.com/joelipshutz/wander/pull/97.
 - Moved Linear REC-90 to `In Review`, attached PR #97, and added the implementation, hosted migration, pgTAP, XCTest/build, visual-QA, and deferred-scope evidence. Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` is in `review` with the same handoff.
 - This is a PR handoff only. The branch is not merged and no TestFlight release was requested or performed.
+
+## 2026-07-18 13:57 PDT - Codex - REC-90 Populated People Feedback Pass
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and `recme-linear-log-triage`
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/97
+
+Goal: apply Joe's approval feedback to the populated People experience: remove Codex/backend smoke identities, seed a small realistic synthetic social graph with place reviews, separate a general People section from People worth following, and reduce card height.
+
+Starting status and coordination:
+
+- Continued in the existing clean isolated REC-90 worktree at pushed head `8c0567c`; no competing Discover implementation branch is being created.
+- Reopened REC-90 from In Review to In Progress and recorded the feedback. Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` is not running.
+- This explicitly reverses the earlier REC-90 no-fake-production-profiles constraint. Before any hosted mutation, this pass will enumerate exact profile ids, handles, dependent saves/reviews/follows, and auth relationships so real Joe/Ryan/demo/tester rows are preserved.
+- Expected files are the REC-90 spec/review or decisions record, existing Discover SwiftUI and focused tests, a reviewed idempotent seed/cleanup mechanism if the schema supports synthetic profiles safely, and this append-only log. No schema/RPC security change, build-number bump, TestFlight release, merge, or Slack action is implied.
+
+Hosted data and implementation checkpoint, 2026-07-18 14:18 PDT:
+
+- Audited the linked project before mutation. Exactly 16 profile rows matched verified Codex/backend-smoke ids; together they owned one `Codex Smoke Coffee` place/save, zero follows, blocks, attributes, lists, shared visits, or other user-owned rows. The real Joe, Ryan, existing rec.me demo, and remaining tester profile ids were explicitly excluded.
+- Added `scripts/seed-discover-demo-people.sql` as an operational script rather than a migration. It validates every targeted smoke id/handle pair and all 18 referenced existing place ids before deleting or seeding, uses idempotent profile and user/place upserts, creates no follow edges, and enforces postconditions before commit.
+- A rollback-only hosted dry run completed without error. The committed apply then removed all 16 verified Codex/smoke profiles and the orphaned smoke place, and upserted Maya Chen, Elena Torres, Marcus Reed, Priya Shah, Theo Brooks, and Samira Patel with four realistic Been reviews each.
+- Independent post-apply verification returned: zero Codex/smoke profiles, six demo profiles, 24 active reviews, 24 derived visit rows, zero smoke-place rows, and all four preserved real/demo tester profiles. An authenticated Joe-view call to `discover_profile_recommendations(20)` returned all six demo profiles at ranks 2–7 with `suggested` reasons.
+- Discover now names the existing-follow list **People** while retaining **People worth following** for recommendations. Recommendation cards use a 52pt avatar, two-line bio, and 238pt minimum height instead of 58pt/three lines/264pt; the 44pt Follow target is unchanged. Added a focused presentation contract and recorded the feedback delta in the product spec, engineering review, and durable decisions.
+- The focused XCTest is running on iPhone 16 Plus / iOS 18.6 after the sandboxed simulator lookup failed as expected and was rerun with approved simulator access. Full suite, build, populated visual QA, publishing, and Linear handoff remain pending.
+
+Validation and publishing checkpoint, 2026-07-18 14:34 PDT:
+
+- Focused `NavigationContractTests/testDiscoverColdStartKeepsTabsAndBuildsThePeopleNetwork` passed 1/1. The first verbose run was stopped after its output stream orphaned the build process; the quiet rerun completed with a valid result bundle. After tightening the test to scope the size/line/height assertions specifically to `PeopleRecommendationCard`, the final focused rerun also passed 1/1 at `/private/tmp/DerivedData-rec90-people-full/Logs/Test/Test-Wander-2026.07.18_15-34-39--0700.xcresult`.
+- A first cached full-suite attempt failed before executing tests because CoreSimulator lost the temporary `WanderTests.xctest` install bundle. A clean DerivedData rerun passed all 385/385 tests with zero failures on iPhone 16 Plus / iOS 18.6: `/private/tmp/DerivedData-rec90-people-full/Logs/Test/Test-Wander-2026.07.18_14-21-56--0700.xcresult`.
+- The generic iOS Simulator build completed with exit code 0. No schema migration, project-generation change, build-number bump, archive, upload, merge, or Slack announcement occurred.
+- Computer-use visual QA exercised the actual Discover People surface on iPhone 16 Plus and the smaller iPhone 16e. Screenshots are `/private/tmp/rec90-people-16plus.png` and `/private/tmp/rec90-people-16e.png`; both show the **People** heading/count/list, readable copy, stable safe areas, and no clipping at either width. The local QA session was signed out, so hosted recommendation cards were not rendered in these screenshots; their compact 52pt/two-line/238pt source contract is covered by the focused test and the authenticated hosted RPC/data verification.
+- `git diff --check` is clean. Mission Control remained unavailable on a second update attempt because `localhost:4000` is still down. Next: final diff review, commit/push this feedback pass to PR #97, add the complete data/test/visual evidence to REC-90, and move it back to In Review.
