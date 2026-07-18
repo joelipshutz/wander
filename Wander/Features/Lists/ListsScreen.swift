@@ -2557,7 +2557,6 @@ private struct ListEditorSheet: View {
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
         .disabled(store.isPrivateProfile)
-        .opacity(store.isPrivateProfile ? 0.56 : 1)
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -2686,22 +2685,30 @@ private struct FacePileView: View {
     var body: some View {
         HStack(spacing: -8) {
             ForEach(collaborators.prefix(3)) { collaborator in
-                Button {
-                    onSelect?(profileID(for: collaborator))
-                } label: {
-                    WanderAvatar(
-                        initials: collaborator.initials,
-                        avatarURL: avatarURL(for: collaborator),
-                        size: size,
-                        color: collaborator.color
-                    )
+                if let onSelect {
+                    Button {
+                        onSelect(profileID(for: collaborator))
+                    } label: {
+                        collaboratorAvatar(collaborator)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(collaborator.name)'s profile")
+                } else {
+                    collaboratorAvatar(collaborator)
+                        .accessibilityLabel(collaborator.name)
                 }
-                .buttonStyle(.plain)
-                .disabled(onSelect == nil)
-                .accessibilityLabel("Open \(collaborator.name)'s profile")
             }
         }
         .frame(minWidth: collaborators.isEmpty ? 0 : size + CGFloat(max(0, min(collaborators.count, 3) - 1)) * (size - 8), alignment: .leading)
+    }
+
+    private func collaboratorAvatar(_ collaborator: ListCollaboratorMock) -> some View {
+        WanderAvatar(
+            initials: collaborator.initials,
+            avatarURL: avatarURL(for: collaborator),
+            size: size,
+            color: collaborator.color
+        )
     }
 
     private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {

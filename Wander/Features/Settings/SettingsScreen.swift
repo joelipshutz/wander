@@ -165,7 +165,6 @@ struct SettingsScreen: View {
                 }
             )
             .disabled(store.isPrivateProfile)
-            .opacity(store.isPrivateProfile ? 0.56 : 1)
         }
         .onAppear {
             if !store.isPrivateProfile {
@@ -437,7 +436,6 @@ struct NotificationSettingsSheet: View {
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .opacity(notificationsEnabled ? 1 : 0.45)
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -815,37 +813,45 @@ private struct SettingsRow: View {
     var action: (() -> Void)?
 
     var body: some View {
-        Button {
-            action?()
-        } label: {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(width: 38, height: 38)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+        Group {
+            if let action {
+                Button(action: action) {
+                    rowContent
                 }
-                Spacer()
-                if action != nil {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(WanderTheme.textFaint.color)
-                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+                    .accessibilityElement(children: .combine)
             }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
         .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title.lowercased().replacingOccurrences(of: " ", with: "."))")
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(width: 38, height: 38)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if action != nil {
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
+        }
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
