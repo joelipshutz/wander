@@ -12503,3 +12503,10 @@ REC-98 final review and release-gate handoff, 2026-07-17 19:27 PDT:
 - The exact final source state passed the complete iPhone 17 Pro / iOS 26.5 suite, 405/405 with zero failures: `/private/tmp/DerivedData-rec98-review-full/Logs/Test/Test-Wander-2026.07.17_19-19-56--0700.xcresult`.
 - A fresh generic iOS Simulator build passed. `/private/tmp/DerivedData-rec98-review-build/Build/Products/Debug-iphonesimulator/Wander.app/Wander` contains both `arm64` and `x86_64`; `git diff --check` is clean and exact REC-100 `origin/main` remains an ancestor.
 - Scope is frozen for the combined build 78 gate. Next: commit and push this final head to PR #112, confirm it is merge-ready, update REC-98 to `In Review`, and hand the exact SHA to the coordinating release task. This task will not merge, bump, archive, upload, or post Slack independently.
+
+REC-98 publishing handoff, 2026-07-17 19:31 PDT:
+
+- Committed the final implementation and review fixes as `2d2023864` (`fix: harden immediate place classification refresh`) and pushed `codex/rec-98-category-emojis`.
+- PR #112 is open, ready, `MERGEABLE/CLEAN`, based on exact REC-100 main `2b2f19a9b`, with no reported checks or inline review comments: https://github.com/joelipshutz/wander/pull/112#issuecomment-5009497181.
+- Moved Linear REC-98 to `In Review`, attached the final PR handoff, and added validation comment `c464278a-9491-4089-8858-ecb5e1d9cc47`.
+- Sent the exact release-gate result to the coordinating REC-100/build-78 task. It now owns the squash merge and the single combined TestFlight release; no merge, build bump, archive, upload, or Slack post occurred in this task.
