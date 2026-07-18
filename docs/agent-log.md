@@ -12510,3 +12510,26 @@ REC-98 publishing handoff, 2026-07-17 19:31 PDT:
 - PR #112 is open, ready, `MERGEABLE/CLEAN`, based on exact REC-100 main `2b2f19a9b`, with no reported checks or inline review comments: https://github.com/joelipshutz/wander/pull/112#issuecomment-5009497181.
 - Moved Linear REC-98 to `In Review`, attached the final PR handoff, and added validation comment `c464278a-9491-4089-8858-ecb5e1d9cc47`.
 - Sent the exact release-gate result to the coordinating REC-100/build-78 task. It now owns the squash merge and the single combined TestFlight release; no merge, build bump, archive, upload, or Slack post occurred in this task.
+
+## 2026-07-17 19:35 PDT - Codex - Combined REC-98 + REC-100 TestFlight Build 78
+
+Agent: Codex
+Branch: `codex/testflight-build-78`
+Worktree: `/private/tmp/recme-build78-release`
+Linear: `REC-98`, `REC-100` (`In Review`)
+
+Goal: package the already validated REC-98 category-classification fixes and REC-100 contrast/Profile-header fixes into one TestFlight release from latest `main`, with exactly one build-number increment.
+
+Release start and coordination:
+
+- Squash-merged REC-100 PR #113 as `2b2f19a9b` and REC-98 PR #112 as `654ea77a7`. The REC-98 merge commit has the REC-100 merge as its direct parent, so exact `origin/main` now contains both scopes in the intended order.
+- Confirmed `origin/main` still declares `CURRENT_PROJECT_VERSION: 77`; no competing build-78 branch, archive, upload, or App Store Connect release was created by either implementation task.
+- Created this clean isolated worktree from exact combined `origin/main` `654ea77a7`. The root checkout and unrelated active worktrees remain untouched.
+- Expected release files are `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this append-only log. Next: increment once to build 78, regenerate the project, run the full simulator test/build gates, review and land the release PR, then archive/upload exact latest `main` and complete TestFlight, Linear, and Slack release bookkeeping.
+
+Build-78 validation checkpoint, 2026-07-17 19:45 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` once from 77 to 78 in `project.yml` and regenerated `Wander.xcodeproj/project.pbxproj` with XcodeGen. Marketing version remains `0.1`; generated project changes are limited to the two expected build-version values.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 405/405 with zero failures: `/private/tmp/DerivedData-build78-test/Logs/Test/Test-Wander-2026.07.17_19-36-53--0700.xcresult`.
+- A fresh generic iOS Simulator build passed after rerunning with the required CoreSimulator/package access. The resulting app reports `0.1 (78)`, and its executable contains both `arm64` and `x86_64`.
+- `git diff --check` is clean. The release diff remains limited to `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. Next: commit/push, open and review a ready release PR, squash-merge it, then archive and upload exact post-merge `main`.
