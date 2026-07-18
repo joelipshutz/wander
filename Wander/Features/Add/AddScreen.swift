@@ -11,19 +11,13 @@ struct AddScreen: View {
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
-    @State private var selectedStatus: PlaceStatus = .been
-    @State private var selectedVisibility: PlaceVisibility = .followers
-    @State private var selectedRatingScore = PlaceRating.defaultScore
     @State private var selectedSource: AddSourceType = .manual
-    @State private var note = ""
     @State private var manualName = ""
     @State private var manualArea = ""
     @State private var manualCategory = "coffee"
     @State private var linkInput = ""
     @State private var quickAddQuery = ""
     @State private var isShowingInlineCandidateResults = false
-    @State private var selectedAnswers: [String: Set<String>] = [:]
-    @State private var savedResult: SaveResult?
     @State private var draft: UnresolvedDraft?
     @State private var isResolvingCandidates = false
     @State private var resolutionMessage: String?
@@ -31,6 +25,7 @@ struct AddScreen: View {
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var saveToast: SaveSyncFeedback?
+    @State private var addSaveFlow: MapPlaceSaveContext?
 
     init(resetToken: UUID = UUID()) {
         self.resetToken = resetToken
@@ -38,37 +33,6 @@ struct AddScreen: View {
 
     private var selectedCandidate: PlaceCandidate? {
         candidates.first { $0.id == selectedCandidateID } ?? candidates.first
-    }
-
-    private var saveVisibility: PlaceVisibility {
-        store.isPrivateProfile ? .selfOnly : selectedVisibility
-    }
-
-    private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
-        Binding(
-            get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
-            set: { newVisibility in
-                selectedVisibility = store.isPrivateProfile ? .selfOnly : newVisibility
-            }
-        )
-    }
-
-    private var currentQuestionBlocks: [AddQuestionBlock] {
-        if let selectedCandidate {
-            return AddQuestionTemplates.blocks(
-                primaryCategory: selectedCandidate.primaryCategory,
-                subcategory: selectedCandidate.subcategory,
-                cuisine: WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.rawProviderType)
-                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.subcategory)
-                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.category),
-                status: selectedStatus
-            )
-        }
-
-        return AddQuestionTemplates.blocks(
-            category: manualCategory,
-            status: selectedStatus
-        )
     }
 
     var body: some View {
@@ -88,10 +52,6 @@ struct AddScreen: View {
                         photoForm
                     case .confirm:
                         confirmPlace
-                    case .details:
-                        detailsForm
-                    case .saved:
-                        savedView
                     case .draft:
                         draftView
                     }
@@ -121,10 +81,14 @@ struct AddScreen: View {
             .onChange(of: resetToken) { _, _ in
                 reset()
             }
-            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
-                if isPrivateProfile {
-                    selectedVisibility = .selfOnly
+            .sheet(item: $addSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveSharedSubmission(submission)
+                } onRemove: { _ in
+                    false
                 }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -379,142 +343,10 @@ struct AddScreen: View {
                 }
             }
 
-            PickerBlock(title: "save as") {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ChoicePill(title: "been", isSelected: selectedStatus == .been) { selectedStatus = .been }
-                    ChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) { selectedStatus = .wannaGo }
-                }
-            }
-
-            WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
-                prepareDetails()
+            WanderPrimaryButton(title: "continue", systemImage: "arrow.right") {
+                openSharedSaveFlow()
             }
         }
-    }
-
-    private var detailsForm: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            if let selectedCandidate {
-                HStack {
-                    CategoryIcon(category: selectedCandidate.category)
-                    VStack(alignment: .leading) {
-                        Text(selectedCandidate.name)
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text(selectedStatus.displayTitle)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-                    Spacer()
-                }
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-
-            if selectedStatus == .been {
-                ratingSection
-            }
-
-            ForEach(currentQuestionBlocks) { block in
-                QuestionBlock(title: block.title, tag: block.tag) {
-                    SelectableQuestionOptions(
-                        block: block,
-                        selectedValues: selectedAnswers[block.key] ?? Set(block.defaultValues)
-                    ) { option in
-                        toggleAnswer(option, in: block)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("a note for future you")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("best table, what to order, who told you...", text: $note, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .lineLimit(3, reservesSpace: true)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            }
-
-            PlaceVisibilityStealthToggle(
-                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
-                visibility: selectedVisibilityForStealthToggle,
-                helperCopy: { visibility in
-                    store.isPrivateProfile
-                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
-                        : visibility.stealthModeHelperCopy
-                }
-            )
-            .disabled(store.isPrivateProfile)
-
-            WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
-                Task {
-                    await saveSelectedCandidate()
-                }
-            }
-        }
-    }
-
-    private var ratingSection: some View {
-        QuestionBlock(title: "rating", tag: "required") {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("how was it?")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                PlaceRatingSlider(score: $selectedRatingScore)
-            }
-        }
-    }
-
-    private var savedView: some View {
-        VStack(spacing: WanderTheme.spacing4) {
-            Image(systemName: selectedStatus == .been ? "mappin.circle.fill" : "mappin.circle")
-                .font(.system(size: 64, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .accessibilityHidden(true)
-
-            VStack(spacing: WanderTheme.spacing2) {
-                Text("it's on your map")
-                    .font(.system(size: 26, weight: .black))
-                Text(selectedVisibility.isStealthModeEnabled ? "saved as \(selectedStatus.displayTitle) in stealth mode." : "saved as \(selectedStatus.displayTitle).")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .multilineTextAlignment(.center)
-            }
-
-            if let savedResult {
-                VStack(spacing: WanderTheme.spacing2) {
-                    Text(syncStatusTitle(for: savedResult.syncState))
-                        .font(.system(size: 13, weight: .bold))
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing2)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
-
-                    if savedResult.syncState == .pendingCreate && !auth.isSignedIn {
-                        Button {
-                            auth.presentGate(for: .syncPlace)
-                        } label: {
-                            Text("sign in to sync")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            WanderPrimaryButton(title: "add another place", systemImage: "plus") {
-                reset()
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, WanderTheme.spacing8)
     }
 
     private var draftView: some View {
@@ -542,19 +374,13 @@ struct AddScreen: View {
         step = .source
         candidates = []
         selectedCandidateID = nil
-        selectedStatus = .been
-        selectedVisibility = store.effectiveDefaultVisibility
-        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
-        note = ""
         manualName = ""
         manualArea = ""
         manualCategory = "coffee"
         linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
-        selectedAnswers = [:]
-        savedResult = nil
         draft = nil
         resolutionMessage = nil
         isResolvingCandidates = false
@@ -562,25 +388,20 @@ struct AddScreen: View {
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         saveToast = nil
+        addSaveFlow = nil
     }
 
     private func resetAfterSave() {
         step = .source
         candidates = []
         selectedCandidateID = nil
-        selectedStatus = .been
-        selectedVisibility = store.effectiveDefaultVisibility
-        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
-        note = ""
         manualName = ""
         manualArea = ""
         manualCategory = "coffee"
         linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
-        selectedAnswers = [:]
-        savedResult = nil
         draft = nil
         resolutionMessage = nil
         isResolvingCandidates = false
@@ -624,94 +445,38 @@ struct AddScreen: View {
             } else {
                 step = .source
             }
-        case .details:
-            step = isShowingInlineCandidateResults ? .source : .confirm
         case .draft:
             step = .source
-        case .source, .saved:
+        case .source:
             break
         }
     }
 
-    private func prepareDetails() {
-        let blocks = currentQuestionBlocks
-        var nextAnswers = selectedAnswers
+    private func openSharedSaveFlow() {
+        guard let selectedCandidate else { return }
 
-        for block in blocks {
-            var values = nextAnswers[block.key] ?? []
-            if values.isEmpty {
-                values = Set(block.defaultValues)
-            } else if block.kind == .multiTag {
-                values.formUnion(block.defaultValues)
-            }
-            nextAnswers[block.key] = values
-        }
-
-        selectedAnswers = nextAnswers
-        step = .details
-    }
-
-    private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
-        var values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-
-        switch block.kind {
-        case .singleChoice:
-            values = [option]
-        case .multiTag:
-            if values.contains(option) {
-                values.remove(option)
-            } else {
-                values.insert(option)
-            }
-        }
-
-        selectedAnswers[block.key] = values
-    }
-
-    private func attributeDrafts() -> [PlaceAttributeDraft] {
-        currentQuestionBlocks.compactMap { block in
-            let values = orderedSelections(for: block)
-            guard !values.isEmpty else { return nil }
-
-            switch block.kind {
-            case .singleChoice:
-                return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValue: values[0])
-            case .multiTag:
-                return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValues: values)
-            }
-        }
+        addSaveFlow = MapPlaceSaveContext.addCandidate(
+            selectedCandidate,
+            sourceType: selectedSource,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            initialPhotoAttachments: pendingVisitPhotoAttachments
+        )
     }
 
     @MainActor
-    private func saveSelectedCandidate() async {
-        guard let selectedCandidate else { return }
-
-        savedResult = await store.saveCandidate(
-            selectedCandidate,
-            status: selectedStatus,
-            visibility: saveVisibility,
-            note: note.isEmpty ? nil : note,
-            sourceType: selectedSource,
-            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
-            attributes: attributeDrafts(),
+    private func saveSharedSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        guard let result = await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
             backend: auth.isSignedIn ? backend : nil
-        )
-
-        if selectedStatus == .been,
-           let savedResult {
-            await persistVisitPhotoAttachments(
-                pendingVisitPhotoAttachments,
-                to: store.visits(for: savedResult.userPlaceID).first,
-                store: store,
-                backend: auth.isSignedIn ? backend : nil
-            )
-        }
+        ) else { return nil }
 
         if !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
         }
-        showSaveToast(for: savedResult)
+        showSaveToast(for: result)
         resetAfterSave()
+        return result
     }
 
     @MainActor
@@ -725,7 +490,6 @@ struct AddScreen: View {
         do {
             candidates = try await store.currentLocationCandidates()
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -754,7 +518,6 @@ struct AddScreen: View {
                 category: manualCategory
             )
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -779,7 +542,6 @@ struct AddScreen: View {
         do {
             candidates = try await store.linkCandidates(linkInput)
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -830,7 +592,6 @@ struct AddScreen: View {
     private func clearInlineCandidateResults() {
         candidates = []
         selectedCandidateID = nil
-        selectedAnswers = [:]
         resolutionMessage = nil
         isShowingInlineCandidateResults = false
     }
@@ -934,7 +695,6 @@ struct AddScreen: View {
             manualArea = ""
             candidates = resolution.candidates
             selectedCandidateID = resolution.candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             resolutionMessage = resolution.message
             step = .confirm
             return true
@@ -988,7 +748,6 @@ struct AddScreen: View {
         selectedSource = source
         candidates = resolvedCandidates
         selectedCandidateID = resolvedCandidates.first?.id
-        selectedVisibility = store.effectiveDefaultVisibility
         resolutionMessage = nil
         step = .confirm
         return true
@@ -1003,33 +762,6 @@ struct AddScreen: View {
         return "Could not find matching places. Try a more specific name or add a nearby area."
     }
 
-    private func syncStatusTitle(for syncState: SyncState) -> String {
-        switch syncState {
-        case .synced:
-            "synced"
-        case .failed:
-            "sync failed"
-        case .pendingCreate, .pendingUpdate, .pendingDelete:
-            "sync queued"
-        case .localOnly:
-            "saved here"
-        case .serverDenied:
-            "needs review"
-        case .tombstoned:
-            "removed"
-        }
-    }
-
-    private func orderedSelections(for block: AddQuestionBlock) -> [String] {
-        let values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-        let optionSelections = block.options.filter { values.contains($0) }
-        let customSelections = values
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-        return optionSelections + customSelections
-    }
 }
 
 private extension CGImagePropertyOrientation {
@@ -1081,8 +813,6 @@ private enum AddStep {
     case manual
     case photo
     case confirm
-    case details
-    case saved
     case draft
 
     var subtitle: String {
@@ -1091,18 +821,16 @@ private enum AddStep {
         case .link: "Paste the link; we'll look for the place."
         case .manual: "Name is enough; area helps."
         case .photo: "Choose a photo; we'll look for a place."
-        case .confirm: "Pick the place and status."
-        case .details: "optional taps for future you."
-        case .saved: "it is ready on your map."
+        case .confirm: "Pick the right place, then save it."
         case .draft: "we could not find enough place info yet."
         }
     }
 
     var canGoBack: Bool {
         switch self {
-        case .link, .manual, .photo, .confirm, .details, .draft:
+        case .link, .manual, .photo, .confirm, .draft:
             true
-        case .source, .saved:
+        case .source:
             false
         }
     }
@@ -1320,258 +1048,6 @@ private struct LabeledField: View {
                 .padding(WanderTheme.spacing3)
                 .background(WanderTheme.surfaceRaised.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        }
-    }
-}
-
-private struct PickerBlock<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-            content
-        }
-    }
-}
-
-private struct ChoicePill: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
-                .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct QuestionBlock<Content: View>: View {
-    let title: String
-    let tag: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                Spacer()
-                Text(tag)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-            content
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-}
-
-private struct SelectableQuestionOptions: View {
-    let block: AddQuestionBlock
-    let selectedValues: Set<String>
-    let onSelect: (String) -> Void
-    @State private var isAddingCustomTag = false
-    @State private var customTagText = ""
-    @FocusState private var isCustomTagFocused: Bool
-
-    var body: some View {
-        WrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(displayOptions, id: \.self) { option in
-                Button {
-                    onSelect(option)
-                } label: {
-                    WanderChip(title: option, isSelected: selectedValues.contains(option))
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .buttonStyle(.plain)
-            }
-
-            if block.kind == .multiTag {
-                customTagControl
-            }
-        }
-    }
-
-    private var displayOptions: [String] {
-        let customOptions = selectedValues
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-
-        return block.options + customOptions
-    }
-
-    @ViewBuilder
-    private var customTagControl: some View {
-        if isAddingCustomTag {
-            HStack(spacing: WanderTheme.spacing1) {
-                TextField("tag", text: $customTagText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .frame(width: 86)
-                    .submitLabel(.done)
-                    .focused($isCustomTagFocused)
-                    .onSubmit(addCustomTag)
-
-                Button(action: addCustomTag) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Save custom tag")
-            }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            .fixedSize(horizontal: true, vertical: false)
-            .onAppear {
-                isCustomTagFocused = true
-            }
-        } else {
-            Button {
-                isAddingCustomTag = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .black))
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Add custom tag")
-        }
-    }
-
-    private func addCustomTag() {
-        let tag = customTagText
-            .lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !tag.isEmpty else {
-            isAddingCustomTag = false
-            customTagText = ""
-            return
-        }
-
-        if let existing = displayOptions.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
-            if !selectedValues.contains(existing) {
-                onSelect(existing)
-            }
-        } else {
-            onSelect(tag)
-        }
-
-        customTagText = ""
-        isAddingCustomTag = false
-    }
-}
-
-private struct WrappingChipLayout: Layout {
-    var horizontalSpacing: CGFloat
-    var verticalSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = rows(for: subviews, maxWidth: proposal.width ?? .greatestFiniteMagnitude)
-        return CGSize(width: proposal.width ?? rows.width, height: rows.height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = rows(for: subviews, maxWidth: bounds.width)
-        var y = bounds.minY
-
-        for row in rows.items {
-            var x = bounds.minX
-            for item in row.items {
-                subviews[item.index].place(
-                    at: CGPoint(x: x, y: y),
-                    proposal: ProposedViewSize(width: item.size.width, height: item.size.height)
-                )
-                x += item.size.width + horizontalSpacing
-            }
-            y += row.height + verticalSpacing
-        }
-    }
-
-    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> ChipRows {
-        var rows: [ChipRow] = []
-        var currentItems: [ChipItem] = []
-        var currentWidth: CGFloat = 0
-        var currentHeight: CGFloat = 0
-        let effectiveMaxWidth = max(1, maxWidth)
-
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let nextWidth = currentItems.isEmpty ? size.width : currentWidth + horizontalSpacing + size.width
-
-            if nextWidth > effectiveMaxWidth, !currentItems.isEmpty {
-                rows.append(ChipRow(items: currentItems, width: currentWidth, height: currentHeight))
-                currentItems = [ChipItem(index: index, size: size)]
-                currentWidth = size.width
-                currentHeight = size.height
-            } else {
-                currentItems.append(ChipItem(index: index, size: size))
-                currentWidth = nextWidth
-                currentHeight = max(currentHeight, size.height)
-            }
-        }
-
-        if !currentItems.isEmpty {
-            rows.append(ChipRow(items: currentItems, width: currentWidth, height: currentHeight))
-        }
-
-        return ChipRows(items: rows, horizontalSpacing: horizontalSpacing, verticalSpacing: verticalSpacing)
-    }
-
-    private struct ChipItem {
-        let index: Int
-        let size: CGSize
-    }
-
-    private struct ChipRow {
-        let items: [ChipItem]
-        let width: CGFloat
-        let height: CGFloat
-    }
-
-    private struct ChipRows {
-        let items: [ChipRow]
-        let horizontalSpacing: CGFloat
-        let verticalSpacing: CGFloat
-
-        var width: CGFloat {
-            items.map(\.width).max() ?? 0
-        }
-
-        var height: CGFloat {
-            guard !items.isEmpty else { return 0 }
-            return items.reduce(0) { $0 + $1.height } + verticalSpacing * CGFloat(max(0, items.count - 1))
         }
     }
 }

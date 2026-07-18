@@ -1075,23 +1075,12 @@ struct MapScreen: View {
                 return nil
             }
 
-            let result = await store.saveCandidate(
-                submission.candidate,
-                status: submission.status,
-                visibility: submission.visibility,
-                note: submission.note,
-                sourceType: sourceType,
-                ratingScore: submission.ratingScore,
-                attributes: submission.attributes,
-                backend: auth.isSignedIn ? backend : nil
-            )
-            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
-            await persistVisitPhotoAttachments(
-                submission.photoAttachments,
-                to: targetVisit,
+            guard let result = await persistNewPlaceSaveSubmission(
+                submission,
                 store: store,
                 backend: visitBackend
-            )
+            ) else { return nil }
+            let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
             selectSavedResult(result)
@@ -2667,6 +2656,7 @@ struct MapPlaceSaveContext: Identifiable {
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
+    let initialPhotoAttachments: [MapPlaceSavePhotoAttachment]
 
     var isEditing: Bool {
         switch mode {
@@ -2675,6 +2665,13 @@ struct MapPlaceSaveContext: Identifiable {
         case .add, .addVisit, .sharedVisit:
             return false
         }
+    }
+
+    var isNewPlaceAdd: Bool {
+        if case .add = mode {
+            return true
+        }
+        return false
     }
 
     var startsOnDetails: Bool {
@@ -2819,7 +2816,8 @@ struct MapPlaceSaveContext: Identifiable {
     static func addCandidate(
         _ candidate: PlaceCandidate,
         sourceType: AddSourceType,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
@@ -2830,7 +2828,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: "",
             initialAnswers: [:],
             initialPersonalLabels: [],
-            initialCuisine: nil
+            initialCuisine: nil,
+            initialPhotoAttachments: initialPhotoAttachments
         )
     }
 
@@ -2849,7 +2848,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: "",
             initialAnswers: [:],
             initialPersonalLabels: [],
-            initialCuisine: nil
+            initialCuisine: nil,
+            initialPhotoAttachments: []
         )
     }
 
@@ -2867,7 +2867,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
-            initialCuisine: initialCuisine(from: attributes)
+            initialCuisine: initialCuisine(from: attributes),
+            initialPhotoAttachments: []
         )
     }
 
@@ -2888,7 +2889,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: note,
             initialAnswers: initialAnswers(from: defaultAttributes),
             initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
-            initialCuisine: initialCuisine(from: defaultAttributes)
+            initialCuisine: initialCuisine(from: defaultAttributes),
+            initialPhotoAttachments: []
         )
     }
 
@@ -2905,7 +2907,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: invitation.note ?? "",
             initialAnswers: initialAnswers(from: invitation.attributeDrafts),
             initialPersonalLabels: initialPersonalLabels(from: invitation.attributeDrafts),
-            initialCuisine: initialCuisine(from: invitation.attributeDrafts)
+            initialCuisine: initialCuisine(from: invitation.attributeDrafts),
+            initialPhotoAttachments: []
         )
     }
 
@@ -2923,7 +2926,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: visit.note ?? "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
-            initialCuisine: initialCuisine(from: attributes)
+            initialCuisine: initialCuisine(from: attributes),
+            initialPhotoAttachments: []
         )
     }
 
@@ -2940,7 +2944,8 @@ struct MapPlaceSaveContext: Identifiable {
             initialNote: visiblePlace.userPlace.note ?? "",
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
-            initialCuisine: initialCuisine(from: attributes)
+            initialCuisine: initialCuisine(from: attributes),
+            initialPhotoAttachments: []
         )
     }
 
@@ -3168,6 +3173,36 @@ func createExplicitVisitIfNeeded(
 }
 
 @MainActor
+func persistNewPlaceSaveSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> SaveResult? {
+    guard case .add(let sourceType) = submission.context.mode else {
+        return nil
+    }
+
+    let result = await store.saveCandidate(
+        submission.candidate,
+        status: submission.status,
+        visibility: submission.visibility,
+        note: submission.note,
+        sourceType: sourceType,
+        ratingScore: submission.ratingScore,
+        attributes: submission.attributes,
+        backend: backend
+    )
+    let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+    await persistVisitPhotoAttachments(
+        submission.photoAttachments,
+        to: targetVisit,
+        store: store,
+        backend: backend
+    )
+    return result
+}
+
+@MainActor
 func persistScopedVisitOrWantSubmission(
     _ submission: MapPlaceSaveSubmission,
     store: WanderStore,
@@ -3246,6 +3281,25 @@ private enum MapPlaceSaveStep {
     case details
 }
 
+enum MapPlaceSaveDetailsPolicy {
+    static func usesCompactWannaGoLayout(
+        context: MapPlaceSaveContext,
+        status: PlaceStatus
+    ) -> Bool {
+        context.isNewPlaceAdd && status == .wannaGo
+    }
+
+    static func suggestedSelections(
+        for block: AddQuestionBlock,
+        context: MapPlaceSaveContext,
+        status: PlaceStatus
+    ) -> Set<String> {
+        usesCompactWannaGoLayout(context: context, status: status)
+            ? []
+            : Set(block.defaultValues)
+    }
+}
+
 private enum PlaceTypePickerMode {
     case category
     case subcategory
@@ -3281,6 +3335,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var sharedVisitInviteesError: String?
     @State private var didLoadSharedVisitPhotos = false
     @State private var errorMessage: String?
+    @State private var isShowingOptionalDetails = false
 
     init(
         context: MapPlaceSaveContext,
@@ -3299,6 +3354,7 @@ struct MapPlaceSaveFlowSheet: View {
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
         _note = State(initialValue: context.initialNote)
+        _visitPhotoAttachments = State(initialValue: context.initialPhotoAttachments)
     }
 
     private var questionBlocks: [AddQuestionBlock] {
@@ -3506,65 +3562,33 @@ struct MapPlaceSaveFlowSheet: View {
             candidateCard
             placeTypeSection
 
-            if context.allowsStatusSelection {
-                saveAsSection
-            }
-
-            if selectedStatus == .been {
-                ratingSection
-            }
-
-            if canInviteFriends {
-                SharedVisitInviteSection(
-                    selectedUserIDs: $selectedInviteeUserIDs,
-                    isLoading: isLoadingSharedVisitInvitees,
-                    errorMessage: sharedVisitInviteesError,
-                    onRetry: context.editedVisit == nil ? nil : {
-                        didLoadSharedVisitInvitees = false
-                        Task { await loadSharedVisitInviteesIfNeeded() }
-                    }
-                )
-            }
-
-            ForEach(questionBlocks) { block in
-                MapSaveQuestionBlock(title: block.title, tag: block.tag) {
-                    MapSaveQuestionOptions(
-                        block: block,
-                        selectedValues: selectedAnswers[block.key] ?? Set(block.defaultValues)
-                    ) { option in
-                        toggleAnswer(option, in: block)
-                    }
+            if usesCompactWannaGoDetails {
+                noteSection
+                optionalDetailsDisclosure
+            } else {
+                if context.allowsStatusSelection {
+                    saveAsSection
                 }
-            }
 
-            MapSaveQuestionBlock(title: personalLabelBlock.title, tag: personalLabelBlock.tag) {
-                MapSaveQuestionOptions(
-                    block: personalLabelBlock,
-                    selectedValues: personalLabels
-                ) { option in
-                    togglePersonalLabel(option)
+                if selectedStatus == .been {
+                    ratingSection
                 }
-            }
 
-            if context.allowsPhotoAttachments {
-                MapSaveVisitPhotoSection(
-                    canAddPhotos: selectedStatus == .been,
-                    photos: $visitPhotoAttachments
-                )
-            }
+                if canInviteFriends {
+                    sharedVisitInviteSection
+                }
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("a note for future you")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("best table, what to order, who told you...", text: $note, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .lineLimit(3, reservesSpace: true)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                questionAndLabelSections
+
+                if context.allowsPhotoAttachments {
+                    MapSaveVisitPhotoSection(
+                        canAddPhotos: selectedStatus == .been,
+                        photos: $visitPhotoAttachments
+                    )
+                }
+
+                noteSection
+                visibilitySection
             }
 
             if let errorMessage {
@@ -3577,17 +3601,6 @@ struct MapPlaceSaveFlowSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
-            PlaceVisibilityStealthToggle(
-                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
-                visibility: selectedVisibilityForStealthToggle,
-                helperCopy: { visibility in
-                    store.isPrivateProfile
-                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
-                        : visibility.stealthModeHelperCopy
-                }
-            )
-            .disabled(store.isPrivateProfile)
-
             WanderPrimaryButton(
                 title: isSaving ? "saving..." : context.saveTitle,
                 systemImage: "checkmark",
@@ -3598,6 +3611,126 @@ struct MapPlaceSaveFlowSheet: View {
 
             if context.showsRemoveControl {
                 removeSaveSection
+            }
+        }
+    }
+
+    private var usesCompactWannaGoDetails: Bool {
+        MapPlaceSaveDetailsPolicy.usesCompactWannaGoLayout(
+            context: context,
+            status: selectedStatus
+        )
+    }
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("a note for future you")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            TextField("why you saved it, who told you...", text: $note, axis: .vertical)
+                .textFieldStyle(.plain)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .tint(WanderTheme.terracotta.color)
+                .lineLimit(3, reservesSpace: true)
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+    }
+
+    @ViewBuilder
+    private var questionAndLabelSections: some View {
+        ForEach(questionBlocks) { block in
+            MapSaveQuestionBlock(title: block.title, tag: block.tag) {
+                MapSaveQuestionOptions(
+                    block: block,
+                    selectedValues: selections(for: block)
+                ) { option in
+                    toggleAnswer(option, in: block)
+                }
+            }
+        }
+
+        MapSaveQuestionBlock(title: personalLabelBlock.title, tag: personalLabelBlock.tag) {
+            MapSaveQuestionOptions(
+                block: personalLabelBlock,
+                selectedValues: personalLabels
+            ) { option in
+                togglePersonalLabel(option)
+            }
+        }
+    }
+
+    private var sharedVisitInviteSection: some View {
+        SharedVisitInviteSection(
+            selectedUserIDs: $selectedInviteeUserIDs,
+            isLoading: isLoadingSharedVisitInvitees,
+            errorMessage: sharedVisitInviteesError,
+            onRetry: context.editedVisit == nil ? nil : {
+                didLoadSharedVisitInvitees = false
+                Task { await loadSharedVisitInviteesIfNeeded() }
+            }
+        )
+    }
+
+    private var visibilitySection: some View {
+        PlaceVisibilityStealthToggle(
+            title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
+            visibility: selectedVisibilityForStealthToggle,
+            helperCopy: { visibility in
+                store.isPrivateProfile
+                    ? "Locked on by Private Profile. This place stays hidden while your profile is private."
+                    : visibility.stealthModeHelperCopy
+            }
+        )
+        .disabled(store.isPrivateProfile)
+    }
+
+    private var optionalDetailsDisclosure: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    isShowingOptionalDetails.toggle()
+                }
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text("more options")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("status, tags, labels & privacy")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                }
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.vertical, WanderTheme.spacing2)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
+            .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
+            .accessibilityHint("Optional. Save without opening this section.")
+
+            if isShowingOptionalDetails {
+                if context.allowsStatusSelection {
+                    saveAsSection
+                }
+                questionAndLabelSections
+                visibilitySection
             }
         }
     }
@@ -3778,17 +3911,27 @@ struct MapPlaceSaveFlowSheet: View {
         var nextAnswers = selectedAnswers
 
         for block in questionBlocks {
-            var values = nextAnswers[block.key] ?? []
+            var values = nextAnswers[block.key] ?? MapPlaceSaveDetailsPolicy.suggestedSelections(
+                for: block,
+                context: context,
+                status: selectedStatus
+            )
             if values.isEmpty {
-                values = Set(block.defaultValues)
-            } else if block.kind == .multiTag {
+                values = MapPlaceSaveDetailsPolicy.suggestedSelections(
+                    for: block,
+                    context: context,
+                    status: selectedStatus
+                )
+            } else if block.kind == .multiTag, !usesCompactWannaGoDetails {
                 values.formUnion(block.defaultValues)
             }
             nextAnswers[block.key] = values
         }
 
         selectedAnswers = nextAnswers
-        personalLabels.formUnion(personalLabelBlock.defaultValues)
+        if !usesCompactWannaGoDetails {
+            personalLabels.formUnion(personalLabelBlock.defaultValues)
+        }
     }
 
     private func handlePlaceTypeSelection() {
@@ -3800,7 +3943,7 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
-        var values = selectedAnswers[block.key] ?? Set(block.defaultValues)
+        var values = selections(for: block)
 
         switch block.kind {
         case .singleChoice:
@@ -3814,6 +3957,14 @@ struct MapPlaceSaveFlowSheet: View {
         }
 
         selectedAnswers[block.key] = values
+    }
+
+    private func selections(for block: AddQuestionBlock) -> Set<String> {
+        selectedAnswers[block.key] ?? MapPlaceSaveDetailsPolicy.suggestedSelections(
+            for: block,
+            context: context,
+            status: selectedStatus
+        )
     }
 
     private func togglePersonalLabel(_ option: String) {
@@ -3874,7 +4025,7 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
-        let values = selectedAnswers[block.key] ?? Set(block.defaultValues)
+        let values = selections(for: block)
         let optionSelections = block.options.filter { values.contains($0) }
         let customSelections = values
             .filter { value in
