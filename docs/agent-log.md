@@ -12348,3 +12348,29 @@ Pre-landing review checkpoint, 2026-07-17 17:11 PDT:
 - The optional gstack initialization/telemetry path was not run because the managed environment rejected its out-of-repo writes/possible telemetry; the checklist review was completed locally and recorded here instead. The advisory slop scanner was unavailable because `bun` is not installed.
 - Independent review reproduced one release-order finding: REC-98 and REC-100 append `docs/agent-log.md` from the same base, so the second branch must integrate latest `main` and preserve both log histories. Their current overlapping Swift source changes auto-merge cleanly. REC-100 will land first; the active REC-98 owner will then integrate latest `main`, resolve the append-only log conflict, rerun its focused/full/build gate, and provide a final merge-ready head.
 - Merge remains intentionally separate from release: no build 78 bump starts until both PRs are squash-merged into latest `main`.
+
+## 2026-07-17 17:11 PDT - Codex - REC-99 Mixed Social Pin Mockups
+
+Agent: Codex
+Branch: `codex/rec-99-social-pin-mockups`
+Worktree: `/private/tmp/recme-rec99-social-pin-mockups`
+Linear: `REC-99` (`In Progress`)
+
+Goal: turn Ryan's exact mixed-state concern into native SwiftUI comparison mockups: Ryan/current user has Been, Joe/social has Been, and Maya/social has Wanna. Explore three treatments that preserve both social signals and recommend a production direction without changing live map behavior.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and starts from exact `origin/main` at `2b2f19a9b`. Ryan's root checkout remains on `codex/rec-88-visit-friends-mockup` with an unrelated untracked `.pnpm-store/`, so it will not be edited.
+- Read the latest agent log, `DESIGN.md`, the existing DEBUG-only mockup routes, the live pin aggregation path, and REC-99. Linear moved from `Backlog` to `In Progress`.
+- The backend and iOS repository already preserve Ryan, Joe, and Maya as separate visible save rows. The loss happens in `MapPinOutlineBuilder`, where any social Been currently collapses the social cohort to Been. The mockup pass will not change that production path.
+- The gstack design-shotgun image renderer is unavailable locally. Its distinct-variant comparison method will be applied directly in native SwiftUI so the concepts can be evaluated at the app's real 40-point pin scale and on two simulator widths.
+- Expected files: `Wander/App/WanderApp.swift`, a new DEBUG-only `Wander/Features/Map/SocialPinConceptMockups.swift`, `WanderTests/NavigationContractTests.swift`, generated `Wander.xcodeproj/project.pbxproj`, and this log. No `MapScreen.swift`, schema/RPC, hosted data, build number, TestFlight, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-17 17:32 PDT:
+
+- Added a deterministic DEBUG-only SwiftUI comparison board plus full-map detail routes for three treatments: A) a split solid/dotted social halo, B) solid/dotted social status pips, and C) three concentric ownership/state lanes. The board also renders today's behavior, where Joe's social Been collapses the shared sky ring to solid and hides Maya's Wanna.
+- Recommend A, the split halo: the inner solid terracotta ring remains Ryan/current-user Been, while equal solid and dotted sky arcs communicate that both social Been and social Wanna are present. The arcs encode presence, not counts or proportions. The selected-place card carries exact attribution with `You + Joe have been here` and `Maya wants to go`, and the mock pin exposes the same facts in its accessibility label.
+- Kept the production aggregation path and `MapScreen.swift` untouched. `WanderApp` only intercepts the new `-WanderSocialPinMockup` launch flag in DEBUG builds; normal launch behavior is unchanged. Added resolver coverage for all four deterministic pages and missing/invalid arguments, then regenerated the Xcode project through XcodeGen.
+- Generic unsigned iOS Simulator build passed for arm64 and x86_64. Focused `NavigationContractTests` passed 35/35. The complete iPhone 17 Pro / iOS 26.5 suite passed 380/380 with zero failures at `/private/tmp/DerivedData-rec99-mockups/Logs/Test/Test-Wander-2026.07.17_17-29-54--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e. Evidence: `/private/tmp/rec99-social-pins-comparison-17pro.png`, `/private/tmp/rec99-social-pins-comparison-17e.png`, `/private/tmp/rec99-social-pins-split-halo-17pro.png`, and `/private/tmp/rec99-social-pins-split-halo-17e.png`. All concepts remain legible at the actual 40-point map size; A best preserves the existing pin grammar and category-glyph clarity, while B reads like notification badges and C becomes a heavy bullseye.
+- `git diff --check` is clean and latest `origin/main` remains the branch base at `2b2f19a9b`. Next: publish this design exploration as a draft PR, attach it to REC-99, and keep the issue `In Progress` until Ryan selects a direction. No production behavior, hosted data, build number, TestFlight release, or Slack announcement changed.

@@ -403,6 +403,31 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testSocialPinMockupLaunchArgumentResolvesEveryConcept() {
+        for page in SocialPinMockupPage.allCases {
+            XCTAssertEqual(
+                SocialPinMockupPage.resolved(
+                    from: ["Wander", "-WanderSocialPinMockup", page.rawValue]
+                ),
+                page
+            )
+        }
+    }
+
+    func testSocialPinMockupLaunchArgumentFallsBackWithoutAValidPage() {
+        XCTAssertNil(SocialPinMockupPage.resolved(from: ["Wander"]))
+        XCTAssertEqual(
+            SocialPinMockupPage.resolved(from: ["Wander", "-WanderSocialPinMockup"]),
+            .comparison
+        )
+        XCTAssertEqual(
+            SocialPinMockupPage.resolved(
+                from: ["Wander", "-WanderSocialPinMockup", "not-a-page"]
+            ),
+            .comparison
+        )
+    }
+
     @MainActor
     func testMapScreenCanResolvePlaceProfileLaunchArgumentsForVisualQA() {
         XCTAssertEqual(
