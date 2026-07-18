@@ -12544,3 +12544,27 @@ Release completion, 2026-07-17 20:00 PDT:
 - Linear `REC-98` and `REC-100` are both `Done`. The managed external-disclosure policy rejected new comments containing the private release metadata, so no workaround was attempted; the issues retain their linked implementation/release PR attachments and prior validation history.
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
+
+## 2026-07-18 13:51 PDT - Codex - REC-17 Add-vs-Map Save-Flow Diagnosis
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`Todo`)
+
+Goal: diagnose whether saving a place from the Add tab actually uses a different flow or persistence path from saving through the Map. This pass is read-only diagnosis plus coordination notes; Joe explicitly deferred implementation and the broader "super snappy" Add experience to a separate design review.
+
+Starting status and coordination:
+
+- Recreated the previously cleaned temporary worktree, fetched origin, and fast-forwarded the branch by 25 commits to exact current `origin/main` `02b812f`.
+- The worktree is clean. Other active worktrees are the root REC-60 notification branch and `/private/tmp/recme-rec90-discover-plan`; this pass will not edit their likely overlap surfaces.
+- REC-17 was reopened from Canceled to Todo with the renewed Add-tab save-flow report and acceptance context. Mission Control task creation was attempted earlier, but `localhost:4000` was not running.
+- Expected source inspection is `Wander/Features/Add/AddScreen.swift`, `Wander/Features/Map/MapScreen.swift`, root navigation/presentation wiring, and the shared store save APIs. No app source, test, project, schema, hosted data, build number, TestFlight, merge, or Slack change is in scope.
+
+Implementation restart, 2026-07-18 16:03 PDT:
+
+- Joe asked to continue REC-17 in a new isolated Add-flow worktree and specified the first speed-focused hierarchy: a Wanna Go save should keep category/place type and the note in the primary path, while every other optional field is skippable and collapsed by default behind an expandable caret/disclosure control.
+- Reused the already-created isolated worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; it is based on exact current `origin/main` `02b812fc8`. The only starting modification is this task-owned append-only diagnosis log. Root REC-60 and performance-audit worktrees are clean, and no current overlapping source edits were found.
+- Diagnosis confirms the Add tab is in fact different: `AddScreen` owns a parallel details form and calls `store.saveCandidate` directly, while Map presents `MapPlaceSaveFlowSheet` and submits `MapPlaceSaveSubmission` through its save orchestration. REC-17 is now `In Progress` with this evidence and the new design direction attached.
+- Mission Control task creation was retried and again failed because `localhost:4000` is not running. This is recorded but does not block the repo-required Linear workflow.
+- Expected implementation files are `Wander/Features/Add/AddScreen.swift`, the shared save surface and persistence boundary in `Wander/Features/Map/MapScreen.swift`, focused tests in `WanderTests/`, and this log. `MapScreen.swift` is high-conflict, but current worktree inspection found no overlapping uncommitted edits; changes will stay narrowly inside the shared save-flow types and view.
