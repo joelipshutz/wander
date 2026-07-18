@@ -1619,6 +1619,109 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved.userPlace.recommendedCount, 1)
     }
 
+    func testCurrentUserVisiblePlaceCarriesSavedCuisineAttributes() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_menya_visible_attributes",
+                name: "Menya Tigre",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.98,
+                rawProviderType: "sushi_restaurant",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.98
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Sushi"
+                )
+            ]
+        )
+
+        let visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.restaurantCuisine, "Sushi")
+        XCTAssertEqual(visiblePlace.categoryEmoji, "🍣")
+    }
+
+    func testEditingVisitCuisinePromotesClassificationToMapImmediately() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_menya_edit_cuisine",
+                name: "Menya Tigre",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.98,
+                rawProviderType: "sushi_restaurant",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.98
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Sushi"
+                )
+            ]
+        )
+        let savedUserPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }?.userPlace
+        )
+        savedUserPlace.serverID = "up_menya_edit_cuisine"
+        savedUserPlace.syncStateRaw = SyncState.synced.rawValue
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+
+        _ = try XCTUnwrap(
+            store.updateVisit(
+                visitID: visit.id,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                        valueType: "restaurant_cuisine",
+                        stringValue: "Japanese"
+                    )
+                ]
+            )
+        )
+
+        let visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }
+        )
+        let cuisineAttribute = try XCTUnwrap(
+            store.attributes(for: result.userPlaceID).first {
+                $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+            }
+        )
+
+        XCTAssertEqual(cuisineAttribute.valueJSON, "\"Japanese\"")
+        XCTAssertEqual(cuisineAttribute.syncState, .pendingUpdate)
+        XCTAssertEqual(visiblePlace.restaurantCuisine, "Japanese")
+        XCTAssertEqual(visiblePlace.categoryEmoji, "🇯🇵")
+        XCTAssertEqual(visiblePlace.userPlace.syncState, .pendingUpdate)
+    }
+
     func testVisitAttributeAnswerDraftsRoundTripForDefaults() {
         let drafts = [
             PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"]),

@@ -12422,3 +12422,17 @@ Provider-specificity handoff, 2026-07-17 16:31 PDT:
 - Updated ready PR #112 with root causes, systemic behavior, validation, deployment status, and the physical-device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5008505653.
 - Added matching Linear evidence in comment `806799af-1f5b-4768-bdd2-0c231dc621e1` and moved REC-98 from `In Progress` to `In Review`.
 - The branch is ready for Xcode testing. No merge, build-number bump, TestFlight upload, or Slack announcement was requested or performed.
+
+Immediate map-emoji refresh and release follow-up, 2026-07-17 17:01 PDT:
+
+- Ryan reported that changing Menya Tigre's cuisine from Sushi to Japanese persisted the edit but left the map annotation on the old sushi emoji. He explicitly requested the fix, a squash merge to `main`, and a new TestFlight build.
+- Reopened REC-98 as `In Progress` in Linear comment `8dc3d0bd-5066-4a92-b780-189bd7762c8a`. Continuing in the clean isolated worktree `/private/tmp/recme-rec98-category-emojis` on `codex/rec-98-category-emojis` at `bd591eea4`; the root checkout and unrelated worktrees remain untouched.
+- Investigation will trace the cuisine edit mutation, local persistence, `VisiblePlace` projection, map annotation identity, and SwiftUI/MapKit invalidation before changing code. Expected files are the relevant save/edit store path, Map display adapter if required, focused store/map tests, and this log.
+- Release scope is explicit: after regression and full validation, review and squash-merge PR #112, bump `CURRENT_PROJECT_VERSION` once on latest `main`, regenerate XcodeGen output, archive/upload with build-number mutation disabled, run the TestFlight helper, update Linear, and post the required `#testflight-feedback` release note.
+
+Immediate map-emoji refresh checkpoint, 2026-07-17 17:20 PDT:
+
+- Root cause was two related projection/persistence gaps, not the emoji resolver: `localVisiblePlaces` omitted saved attributes when constructing `VisiblePlace`, so the map fell back to stale provider type `sushi_restaurant`; `updateVisit` persisted the edited cuisine only inside the visit answer JSON, leaving the canonical user-place `restaurant_cuisine` unchanged.
+- Added focused regressions for both gaps. The pre-fix run failed both tests; after the store change, the focused simulator run passed 2/2 in `/private/tmp/DerivedData-rec98-immediate-green/Logs/Test/Test-Wander-2026.07.17_17-15-32--0700.xcresult`.
+- The fix now includes saved attributes in every local map-visible projection and promotes an explicit visit cuisine edit to the canonical place attribute, marking both the attribute and an already-synced parent user place `pendingUpdate`. The existing visit sync path already retries the parent user-place sync first, so the edit persists remotely before the visit upsert.
+- Release coordination changed after implementation began: REC-100 was squash-merged to `origin/main` as `2b2f19a9b`, and its active release task will sequence both PRs into one build 78. This task will integrate latest `main`, preserve both append-only logs, validate and push PR #112, but will not merge, bump, archive, upload, or post Slack independently.

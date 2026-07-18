@@ -1673,7 +1673,13 @@ final class WanderStore: ObservableObject {
                 isBlocked: blocked
             ) else { return nil }
 
-            let visiblePlace = VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+            let visiblePlace = VisiblePlace(
+                id: userPlace.id,
+                place: place,
+                userPlace: userPlace,
+                owner: owner,
+                attributes: attributes(for: userPlace.id)
+            )
             guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
             let normalizedCategories = filters.normalizedCategories
             guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return nil }
@@ -2205,6 +2211,65 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
+    private func updatePlaceClassificationAttributes(
+        from drafts: [PlaceAttributeDraft],
+        for userPlace: LocalUserPlace,
+        at date: Date
+    ) -> Bool {
+        guard let cuisine = drafts.last(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }) else {
+            return false
+        }
+
+        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+        let existingCuisineAttributes = placeAttributes.filter {
+            userPlaceIDs.contains($0.userPlaceID)
+                && $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }
+        let shouldPersistCuisine = cuisine.valueJSON != "null"
+
+        if shouldPersistCuisine,
+           existingCuisineAttributes.count == 1,
+           let existing = existingCuisineAttributes.first,
+           existing.valueType == cuisine.valueType,
+           existing.valueJSON == cuisine.valueJSON {
+            return false
+        }
+        if !shouldPersistCuisine, existingCuisineAttributes.isEmpty {
+            return false
+        }
+
+        placeAttributes.removeAll {
+            userPlaceIDs.contains($0.userPlaceID)
+                && $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }
+
+        let pendingState: SyncState = userPlace.serverID == nil ? .pendingCreate : .pendingUpdate
+        if shouldPersistCuisine {
+            placeAttributes.append(
+                LocalPlaceAttribute(
+                    localID: "local_attr_\(slug(userPlace.localID))_\(slug(cuisine.questionKey))",
+                    userPlaceID: userPlace.id,
+                    questionKey: cuisine.questionKey,
+                    valueType: cuisine.valueType,
+                    valueJSON: cuisine.valueJSON,
+                    syncState: pendingState,
+                    localUpdatedAt: date,
+                    createdAt: date,
+                    updatedAt: date
+                )
+            )
+        }
+
+        userPlace.updatedAt = date
+        userPlace.localUpdatedAt = date
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = pendingState.rawValue
+        return true
+    }
+
+    @discardableResult
     func createVisit(
         userPlaceID: String,
         visitedAt: Date = .now,
@@ -2240,6 +2305,7 @@ final class WanderStore: ObservableObject {
         if let visibility {
             userPlace.visibilityRaw = visibilityForSave(visibility).rawValue
         }
+        updatePlaceClassificationAttributes(from: attributes, for: userPlace, at: now)
         userPlace.updatedAt = now
         userPlace.localUpdatedAt = now
         userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
@@ -2281,6 +2347,9 @@ final class WanderStore: ObservableObject {
         if let attributes {
             visit.attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
             visit.setDerivedTags(VisitAttributeAnswers.tags(from: attributes))
+            if let userPlace = currentUserPlace(matching: visit.userPlaceID) {
+                updatePlaceClassificationAttributes(from: attributes, for: userPlace, at: now)
+            }
         }
         visit.updatedAt = now
         visit.localUpdatedAt = now
