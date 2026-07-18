@@ -12739,3 +12739,9 @@ REC-90 integrated validation, 2026-07-18 15:54 PDT:
 - The exact integrated source passed the complete iPhone 16 Plus / iOS 18.6 suite, 412/412 with zero failures: `/private/tmp/DerivedData-rec90-people-integrated/Logs/Test/Test-Wander-2026.07.18_15-48-34--0700.xcresult`.
 - A first generic build rerun failed only while generating dSYM because task-owned DerivedData caches had filled `/private/tmp`. Removed the two obsolete REC-90 caches created by this task (3.6 GB), retained the integrated test evidence, and reran the same generic iOS Simulator build successfully with exit code 0.
 - Integrated diff and conflict-marker checks are clean. Next: commit/push the latest-main merge and confirm PR #97 is mergeable before switching to the separate Add-flow worktree.
+
+REC-90 final integrated handoff, 2026-07-18 15:57 PDT:
+
+- Committed the validated latest-main integration as merge commit `2199fc1` and pushed it to `codex/rec-90-discover-plan`.
+- GitHub now reports ready PR #97 `MERGEABLE` against exact base `02b812fc8`; Linear REC-90 remains `In Review` with the full hosted-data and validation evidence attached.
+- The REC-90 worktree is clean and handed off. Work now moves to the separate latest-main Add-flow worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; no Discover files will be edited from that task.
