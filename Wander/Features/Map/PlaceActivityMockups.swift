@@ -1286,9 +1286,10 @@ private struct ClassicCategoryIcon: View {
                 .fill(WanderTheme.terracottaTint.color)
                 .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 7))
 
-            Image(systemName: "fork.knife")
-                .font(.system(size: size * 0.36, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+            WanderCategoryEmoji(
+                category: WanderPlaceCategory.restaurantsFood,
+                size: size * 0.36
+            )
                 .frame(width: size, height: size)
 
             switch badge {

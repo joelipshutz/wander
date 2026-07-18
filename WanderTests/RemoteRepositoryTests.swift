@@ -1051,11 +1051,44 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["name"] as? String, "Woodcat Coffee")
         XCTAssertEqual(rpc.rawBodies[0]["source_provider"] as? String, "mapkit")
         XCTAssertEqual(rpc.rawBodies[0]["source_provider_place_id"] as? String, "mapkit-woodcat")
+        XCTAssertEqual(rpc.rawBodies[0]["requires_photo"] as? Bool, true)
         XCTAssertEqual(
             try XCTUnwrap(rpc.rawBodies[0]["latitude"] as? Double),
             34.0777,
             accuracy: 0.00001
         )
+    }
+
+    func testPlaceProviderMetadataRequestDoesNotRequireAProviderPhoto() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "provider": "google_places",
+          "provider_place_id": "ChIJugo",
+          "provider_primary_type": "italian_restaurant",
+          "provider_types": ["italian_restaurant", "restaurant", "food"],
+          "photo_url": ""
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let request = PlacePhotoRequest(
+            name: "Ugo",
+            address: "3865 Cardiff Ave, Culver City, CA",
+            latitude: 34.0223,
+            longitude: -118.3952,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-ugo",
+            requiresPhoto: false
+        )
+
+        let metadata = try await repository.photo(for: request)
+
+        XCTAssertEqual(metadata.providerPlaceID, "ChIJugo")
+        XCTAssertEqual(metadata.providerPrimaryType, "italian_restaurant")
+        XCTAssertEqual(metadata.providerTypes, ["italian_restaurant", "restaurant", "food"])
+        XCTAssertNil(metadata.photoURL)
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["requires_photo"] as? Bool, false)
     }
 
     func testPlacePhotoRepositoryFallsBackToFirstVisibleVisitPhotoAndAuthenticatedStorage() async throws {
@@ -1135,6 +1168,23 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             request.lookupKey,
             "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
+        )
+    }
+
+    func testProviderMetadataLookupKeyDoesNotCollideWithPhotoLookup() {
+        let request = PlacePhotoRequest(
+            name: "Ugo",
+            address: nil,
+            latitude: 34.0223,
+            longitude: -118.3952,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-ugo",
+            requiresPhoto: false
+        )
+
+        XCTAssertEqual(
+            request.lookupKey,
+            "mapkit|mapkit-ugo|ugo|34.02230,-118.39520|metadata-only"
         )
     }
 

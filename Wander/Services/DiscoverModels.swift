@@ -141,6 +141,30 @@ struct VisiblePlace: Identifiable {
     var effectiveCategoryDisplay: PlaceCategoryDisplay {
         WanderPlaceCategory.display(for: categoryAssignment)
     }
+
+    var restaurantCuisine: String? {
+        guard let attribute = attributes.first(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }),
+        let data = attribute.valueJSON.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        if let value = try? JSONDecoder().decode(String.self, from: data) {
+            return value
+        }
+
+        return (try? JSONDecoder().decode([String].self, from: data))?.first
+    }
+
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(
+            for: categoryAssignment,
+            cuisine: restaurantCuisine,
+            name: place.canonicalName
+        )
+    }
 }
 
 extension LocalPlace {

@@ -659,9 +659,7 @@ private struct ListPreviewMosaic: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                 .fill(place.tint)
 
-            Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.68))
+            WanderCategoryEmoji(emoji: place.emoji, size: 22)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -1446,9 +1444,7 @@ private struct ListVisiblePlaceAddRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 18, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(emoji: place.emoji, size: 18)
                     }
                     .frame(width: 48, height: 48)
 
@@ -1509,9 +1505,7 @@ private struct ListPlaceCandidateAddRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                         .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
-                    Image(systemName: WanderPlaceCategory.symbolName(for: candidate.primaryCategory))
-                        .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
                 }
                 .frame(width: 48, height: 48)
 
@@ -1644,9 +1638,7 @@ private struct ListPlaceRow: View {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
 
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 20, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(emoji: place.emoji, size: 20)
                     }
                     .frame(width: 56, height: 56)
 
@@ -2184,11 +2176,9 @@ private struct ListMapMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-            .font(.system(size: isSelected ? 17 : 16, weight: .black))
+        WanderCategoryEmoji(emoji: place.emoji, size: isSelected ? 17 : 16)
             .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
             .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -2244,9 +2234,7 @@ private struct ListMapPlaceTile: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .fill(place.tint)
-                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(emoji: place.emoji, size: 22)
                 }
                 .frame(width: 62, height: 62)
 
@@ -2821,6 +2809,7 @@ private struct ListPlaceMock: Identifiable {
     let id: String
     let name: String
     let category: String
+    let emoji: String
     let metadata: String
     let tint: Color
     let pinPosition: CGPoint
@@ -2835,6 +2824,7 @@ private struct ListPlaceMock: Identifiable {
         id: String,
         name: String,
         category: String,
+        emoji: String? = nil,
         metadata: String,
         tint: Color,
         pinPosition: CGPoint,
@@ -2848,6 +2838,7 @@ private struct ListPlaceMock: Identifiable {
         self.id = id
         self.name = name
         self.category = category
+        self.emoji = emoji ?? WanderPlaceCategory.emoji(for: category, name: name)
         self.metadata = metadata
         self.tint = tint
         self.pinPosition = pinPosition
@@ -2871,7 +2862,7 @@ private struct ListPlaceMock: Identifiable {
         let place = visiblePlace.place
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
-            place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             place.locality
         ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2880,9 +2871,10 @@ private struct ListPlaceMock: Identifiable {
         self.init(
             id: "saved-\(visiblePlace.id)",
             name: place.canonicalName,
-            category: place.category,
+            category: visiblePlace.effectiveCategory,
+            emoji: visiblePlace.categoryEmoji,
             metadata: metadataParts.joined(separator: " - "),
-            tint: Self.tint(for: place.category),
+            tint: Self.tint(for: visiblePlace.effectiveCategory),
             pinPosition: Self.previewPinPosition(for: place.id),
             latitude: place.latitude,
             longitude: place.longitude,
@@ -3019,6 +3011,7 @@ private extension PlaceSheetPlace {
         self.categorySource = assignment.source
         self.categoryConfidence = assignment.confidence
         self.rawProviderType = assignment.rawProviderType
+        self.cuisine = nil
         self.address = nil
         self.locality = "Los Angeles"
         self.region = "CA"

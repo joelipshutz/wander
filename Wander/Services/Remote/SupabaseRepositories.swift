@@ -1325,6 +1325,9 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
             throw CancellationError()
         } catch {
             let providerError = error
+            guard request.requiresPhoto else {
+                throw providerError
+            }
             do {
                 return try await visibleUserPhoto(for: request)
             } catch is CancellationError {

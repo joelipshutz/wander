@@ -9,6 +9,7 @@ enum CategoryTaxonomyMockupPage: String, CaseIterable {
     case subcategories
     case cuisine
     case labels
+    case emojiGallery
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> CategoryTaxonomyMockupPage? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderCategoryTaxonomyMockup") else {
@@ -44,6 +45,8 @@ struct CategoryTaxonomyMockupRoot: View {
                 CategoryTaxonomyCuisinePickerMockup()
             case .labels:
                 CategoryTaxonomyLabelsMockup()
+            case .emojiGallery:
+                CategoryEmojiGalleryMockup()
             }
         }
         .preferredColorScheme(.light)
@@ -62,7 +65,7 @@ private struct RemoveSaveEditMockup: View {
             placeHeader
 
             MockupSection(title: "place type") {
-                MockupDetailRow(title: "category", value: "Restaurants & Food", systemImage: "square.grid.2x2.fill")
+                MockupDetailRow(title: "category", value: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood)
                 Divider().background(WanderTheme.borderHairline.color)
                 MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
                 Divider().background(WanderTheme.borderHairline.color)
@@ -110,9 +113,7 @@ private struct RemoveSaveEditMockup: View {
         HStack(spacing: WanderTheme.spacing3) {
             ZStack {
                 Circle().fill(WanderTheme.terracottaTint.color)
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 21, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                WanderCategoryEmoji(category: WanderPlaceCategory.restaurantsFood, size: 21)
             }
             .frame(width: 52, height: 52)
 
@@ -159,27 +160,26 @@ private struct PrimaryCategoryMock: Identifiable {
     let id: String
     let title: String
     let detail: String
-    let symbol: String
     let color: Color
     let count: Int
 }
 
 private enum CategoryTaxonomyMockData {
     static let primaryCategories: [PrimaryCategoryMock] = [
-        PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, cuisines, quick bites", symbol: "fork.knife", color: WanderTheme.terracotta.color, count: 132),
-        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", symbol: "cup.and.saucer.fill", color: WanderTheme.categorySun.color, count: 25),
-        PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", symbol: "wineglass.fill", color: WanderTheme.terracottaDark.color, count: 26),
-        PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", symbol: "tree.fill", color: WanderTheme.categoryMoss.color, count: 41),
-        PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", symbol: "ticket.fill", color: WanderTheme.avatarSofia.color, count: 52),
-        PrimaryCategoryMock(id: "shopping", title: "Shopping", detail: "Stores, markets, supplies", symbol: "bag.fill", color: WanderTheme.terracottaDark.color, count: 46),
-        PrimaryCategoryMock(id: "wellness_fitness", title: "Wellness & Fitness", detail: "Health, beauty, fitness", symbol: "heart.fill", color: WanderTheme.stateSuccess.color, count: 38),
-        PrimaryCategoryMock(id: "stays", title: "Stays", detail: "Hotels, rentals, camping", symbol: "bed.double.fill", color: WanderTheme.textMuted.color, count: 18),
-        PrimaryCategoryMock(id: "services_errands", title: "Services & Errands", detail: "Errands, repairs, pet care", symbol: "scissors", color: WanderTheme.stateInfo.color, count: 48),
-        PrimaryCategoryMock(id: "travel_transit", title: "Travel & Transit", detail: "Airports, stations, parking", symbol: "tram.fill", color: WanderTheme.pinSocial.color, count: 38),
-        PrimaryCategoryMock(id: "work_education", title: "Work & Education", detail: "Offices, schools, libraries", symbol: "graduationcap.fill", color: WanderTheme.avatarAndrew.color, count: 17),
-        PrimaryCategoryMock(id: "civic_faith", title: "Civic & Faith", detail: "Government, worship, safety", symbol: "building.columns.fill", color: WanderTheme.borderStrong.color, count: 16),
-        PrimaryCategoryMock(id: "areas_addresses", title: "Areas & Addresses", detail: "Cities, addresses, regions", symbol: "map.fill", color: WanderTheme.stateWarning.color, count: 15),
-        PrimaryCategoryMock(id: "facilities_other", title: "Facilities & Other", detail: "Restrooms, facilities, unknown", symbol: "mappin", color: WanderTheme.textFaint.color, count: 7)
+        PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, cuisines, quick bites", color: WanderTheme.terracotta.color, count: 132),
+        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", color: WanderTheme.categorySun.color, count: 25),
+        PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", color: WanderTheme.terracottaDark.color, count: 26),
+        PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", color: WanderTheme.categoryMoss.color, count: 41),
+        PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", color: WanderTheme.avatarSofia.color, count: 52),
+        PrimaryCategoryMock(id: "shopping", title: "Shopping", detail: "Stores, markets, supplies", color: WanderTheme.terracottaDark.color, count: 46),
+        PrimaryCategoryMock(id: "wellness_fitness", title: "Wellness & Fitness", detail: "Health, beauty, fitness", color: WanderTheme.stateSuccess.color, count: 38),
+        PrimaryCategoryMock(id: "stays", title: "Stays", detail: "Hotels, rentals, camping", color: WanderTheme.textMuted.color, count: 18),
+        PrimaryCategoryMock(id: "services_errands", title: "Services & Errands", detail: "Errands, repairs, pet care", color: WanderTheme.stateInfo.color, count: 48),
+        PrimaryCategoryMock(id: "travel_transit", title: "Travel & Transit", detail: "Airports, stations, parking", color: WanderTheme.pinSocial.color, count: 38),
+        PrimaryCategoryMock(id: "work_education", title: "Work & Education", detail: "Offices, schools, libraries", color: WanderTheme.avatarAndrew.color, count: 17),
+        PrimaryCategoryMock(id: "civic_faith", title: "Civic & Faith", detail: "Government, worship, safety", color: WanderTheme.borderStrong.color, count: 16),
+        PrimaryCategoryMock(id: "areas_addresses", title: "Areas & Addresses", detail: "Cities, addresses, regions", color: WanderTheme.stateWarning.color, count: 15),
+        PrimaryCategoryMock(id: "facilities_other", title: "Facilities & Other", detail: "Restrooms, facilities, unknown", color: WanderTheme.textFaint.color, count: 7)
     ]
 
     static let foodDrinkGroups: [(title: String, values: [String])] = [
@@ -234,7 +234,7 @@ private struct CategoryTaxonomyEditMockup: View {
             placeHeader
 
             MockupSection(title: "place type") {
-                MockupDetailRow(title: "category", value: "Restaurants & Food", systemImage: "square.grid.2x2.fill")
+                MockupDetailRow(title: "category", value: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood)
                 Divider().background(WanderTheme.borderHairline.color)
                 MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
                 Divider().background(WanderTheme.borderHairline.color)
@@ -271,9 +271,7 @@ private struct CategoryTaxonomyEditMockup: View {
         HStack(spacing: WanderTheme.spacing3) {
             ZStack {
                 Circle().fill(WanderTheme.terracottaTint.color)
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 21, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                WanderCategoryEmoji(category: WanderPlaceCategory.restaurantsFood, size: 21)
             }
             .frame(width: 52, height: 52)
 
@@ -320,7 +318,7 @@ private struct CategoryTaxonomySubcategoryPickerMockup: View {
             MockupSearchField(text: "Search restaurants & food types")
 
             HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(title: "Restaurants & Food", systemImage: "fork.knife", isSelected: true)
+                CategoryPickerModePill(title: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood, isSelected: true)
                 CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
                 Spacer(minLength: 0)
             }
@@ -338,7 +336,7 @@ private struct CategoryTaxonomyCuisinePickerMockup: View {
             MockupSearchField(text: "Search cuisines")
 
             HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(title: "Restaurants & Food", systemImage: "fork.knife", isSelected: true)
+                CategoryPickerModePill(title: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood, isSelected: true)
                 CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
                 Spacer(minLength: 0)
             }
@@ -398,6 +396,100 @@ private struct CategoryTaxonomyLabelsMockup: View {
     }
 }
 
+private struct CategoryEmojiGalleryItem: Identifiable {
+    let id: String
+    let name: String
+    let category: String
+    let subcategory: String?
+    let cuisine: String?
+
+    init(
+        _ name: String,
+        category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil
+    ) {
+        id = "\(name)-\(subcategory ?? cuisine ?? category)"
+        self.name = name
+        self.category = category
+        self.subcategory = subcategory
+        self.cuisine = cuisine
+    }
+}
+
+private struct CategoryEmojiGalleryMockup: View {
+    private let healthAndBeauty = [
+        CategoryEmojiGalleryItem("Saint John's Hospital", category: WanderPlaceCategory.wellnessFitness, subcategory: "Hospital"),
+        CategoryEmojiGalleryItem("Santa Monica Eye Care", category: WanderPlaceCategory.wellnessFitness, subcategory: "Optometrist"),
+        CategoryEmojiGalleryItem("Ocean Park Dental", category: WanderPlaceCategory.wellnessFitness, subcategory: "Dentist"),
+        CategoryEmojiGalleryItem("Main Street Pharmacy", category: WanderPlaceCategory.wellnessFitness, subcategory: "Pharmacy"),
+        CategoryEmojiGalleryItem("Gloss Nail Salon", category: WanderPlaceCategory.wellnessFitness, subcategory: "Nail salon"),
+        CategoryEmojiGalleryItem("Proper Hair", category: WanderPlaceCategory.wellnessFitness, subcategory: "Hair salon"),
+        CategoryEmojiGalleryItem("Iron Fitness", category: WanderPlaceCategory.wellnessFitness, subcategory: "Gym"),
+        CategoryEmojiGalleryItem("Love Yoga", category: WanderPlaceCategory.wellnessFitness, subcategory: "Yoga studio")
+    ]
+
+    private let coffeeAndFood = [
+        CategoryEmojiGalleryItem("Wild Leaven Bakery", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Bakery"),
+        CategoryEmojiGalleryItem("One Cedar Coffee", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Coffee shop"),
+        CategoryEmojiGalleryItem("Chado Tea Room", category: WanderPlaceCategory.coffeeTeaSweets, subcategory: "Tea house"),
+        CategoryEmojiGalleryItem("Jitlada", category: WanderPlaceCategory.restaurantsFood, subcategory: "Restaurant", cuisine: "Thai"),
+        CategoryEmojiGalleryItem("Marugame Udon", category: WanderPlaceCategory.restaurantsFood, subcategory: "Noodle restaurant", cuisine: "Japanese"),
+        CategoryEmojiGalleryItem("Guelaguetza", category: WanderPlaceCategory.restaurantsFood, subcategory: "Restaurant", cuisine: "Mexican")
+    ]
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(
+            title: "place icons",
+            subtitle: "Production category, subtype, and cuisine resolver"
+        ) {
+            gallerySection(title: "health, beauty, and fitness", items: healthAndBeauty)
+            gallerySection(title: "coffee, sweets, and cuisines", items: coffeeAndFood)
+        }
+    }
+
+    private func gallerySection(
+        title: String,
+        items: [CategoryEmojiGalleryItem]
+    ) -> some View {
+        MockupSection(title: title) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    Divider().background(WanderTheme.borderHairline.color)
+                }
+
+                HStack(spacing: WanderTheme.spacing3) {
+                    ZStack {
+                        Circle().fill(WanderTheme.terracottaTint.color)
+                        WanderCategoryEmoji(
+                            category: item.category,
+                            subcategory: item.subcategory,
+                            cuisine: item.cuisine,
+                            name: item.name,
+                            size: 20
+                        )
+                    }
+                    .frame(width: 42, height: 42)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text(item.cuisine ?? item.subcategory ?? item.category)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 50)
+            }
+        }
+    }
+}
+
 private struct CategoryTaxonomyMockupScreen<Content: View>: View {
     let title: String
     let subtitle: String
@@ -454,16 +546,37 @@ private struct MockupSection<Content: View>: View {
 private struct MockupDetailRow: View {
     let title: String
     let value: String
-    let systemImage: String
+    let systemImage: String?
+    let category: String?
+
+    init(title: String, value: String, systemImage: String) {
+        self.title = title
+        self.value = value
+        self.systemImage = systemImage
+        category = nil
+    }
+
+    init(title: String, value: String, category: String) {
+        self.title = title
+        self.value = value
+        systemImage = nil
+        self.category = category
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .black))
-                .frame(width: 28, height: 28)
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .background(WanderTheme.terracottaTint.color)
-                .clipShape(Circle())
+            Group {
+                if let category {
+                    WanderCategoryEmoji(category: category, size: 16)
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .background(WanderTheme.terracottaTint.color)
+            .clipShape(Circle())
 
             Text(title)
                 .font(.system(size: 14, weight: .bold))
@@ -572,9 +685,7 @@ private struct PrimaryCategoryTile: View {
             HStack {
                 ZStack {
                     Circle().fill(category.color.opacity(0.16))
-                    Image(systemName: category.symbol)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(category.color)
+                    WanderCategoryEmoji(category: category.id, size: 16)
                 }
                 .frame(width: 36, height: 36)
                 Spacer()

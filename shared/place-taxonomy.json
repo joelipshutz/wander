@@ -1,12 +1,12 @@
 {
-  "version": 3,
+  "version": 6,
   "categories": [
     {
       "id": "restaurants_food",
       "group": "Restaurants & Food",
       "detail": "Restaurants, cuisines, quick bites",
       "default_subcategory": "Restaurant",
-      "symbol": "fork.knife",
+      "emoji": "🍽️",
       "editable": true,
       "aliases": [
         "restaurants_food",
@@ -184,7 +184,7 @@
       "group": "Coffee, Tea, & Sweets",
       "detail": "Coffee, tea, bakeries",
       "default_subcategory": "Coffee shop",
-      "symbol": "cup.and.saucer.fill",
+      "emoji": "☕️",
       "editable": true,
       "aliases": [
         "coffee_tea_sweets",
@@ -244,7 +244,7 @@
       "group": "Bars & Nightlife",
       "detail": "Bars, lounges, clubs",
       "default_subcategory": "Bar",
-      "symbol": "wineglass.fill",
+      "emoji": "🍸",
       "editable": true,
       "aliases": [
         "bars_nightlife",
@@ -263,6 +263,7 @@
         "disco",
         "brewery",
         "brewpub",
+        "distillery",
         "winery",
         "vineyard",
         "nightclub",
@@ -297,7 +298,8 @@
         "Karaoke",
         "Live music",
         "Comedy club",
-        "Casino"
+        "Casino",
+        "Distillery"
       ]
     },
     {
@@ -305,7 +307,7 @@
       "group": "Outdoors & Nature",
       "detail": "Parks, trails, water",
       "default_subcategory": "Park",
-      "symbol": "tree.fill",
+      "emoji": "🌲",
       "editable": true,
       "aliases": [
         "outdoors_nature",
@@ -382,7 +384,7 @@
       "group": "Things To Do",
       "detail": "Attractions, arts, venues",
       "default_subcategory": "Tourist attraction",
-      "symbol": "ticket.fill",
+      "emoji": "🎟️",
       "editable": true,
       "aliases": [
         "things_to_do",
@@ -472,7 +474,7 @@
       "group": "Shopping",
       "detail": "Stores, markets, supplies",
       "default_subcategory": "Store",
-      "symbol": "bag.fill",
+      "emoji": "🛍️",
       "editable": true,
       "aliases": [
         "shopping",
@@ -551,7 +553,7 @@
       "group": "Wellness & Fitness",
       "detail": "Health, beauty, fitness",
       "default_subcategory": "Gym",
-      "symbol": "heart.fill",
+      "emoji": "💪",
       "editable": true,
       "aliases": [
         "wellness_fitness",
@@ -581,7 +583,17 @@
         "sauna",
         "therapy",
         "veterinary care",
-        "veterinarian"
+        "veterinarian",
+        "urgent care",
+        "optometrist",
+        "ophthalmologist",
+        "eye doctor",
+        "eye care center",
+        "vision center",
+        "physical therapy",
+        "dermatologist",
+        "pediatrician",
+        "podiatrist"
       ],
       "subcategories": [
         "Gym",
@@ -610,7 +622,13 @@
         "Chiropractor",
         "Dentist",
         "Dental clinic",
+        "Optometrist",
+        "Ophthalmologist",
+        "Eye care center",
         "Doctor",
+        "Dermatologist",
+        "Pediatrician",
+        "Urgent care",
         "Medical clinic",
         "Medical center",
         "Hospital",
@@ -618,7 +636,9 @@
         "Pharmacy",
         "Drugstore",
         "Physiotherapist",
+        "Physical therapy",
         "Foot care",
+        "Podiatrist",
         "Veterinary care",
         "Mental health/therapy",
         "Retreat"
@@ -629,7 +649,7 @@
       "group": "Stays",
       "detail": "Hotels, rentals, camping",
       "default_subcategory": "Hotel",
-      "symbol": "bed.double.fill",
+      "emoji": "🛏️",
       "editable": true,
       "aliases": [
         "stays",
@@ -681,7 +701,7 @@
       "group": "Services & Errands",
       "detail": "Errands, repairs, pet care",
       "default_subcategory": "Consultant",
-      "symbol": "scissors",
+      "emoji": "🧰",
       "editable": true,
       "aliases": [
         "services_errands",
@@ -711,6 +731,8 @@
         "contractor",
         "pet care",
         "pet boarding",
+        "beauty",
+        "beauty service",
         "salon",
         "barber",
         "nail salon",
@@ -757,6 +779,7 @@
         "Chauffeur",
         "Aircraft rental",
         "Telecommunications",
+        "Beauty service",
         "Skin care clinic",
         "Tanning studio",
         "Hair salon",
@@ -772,7 +795,7 @@
       "group": "Travel & Transit",
       "detail": "Airports, stations, parking",
       "default_subcategory": "Transit stop",
-      "symbol": "tram.fill",
+      "emoji": "🚆",
       "editable": true,
       "aliases": [
         "travel_transit",
@@ -848,7 +871,7 @@
       "group": "Work & Education",
       "detail": "Offices, schools, libraries",
       "default_subcategory": "Co-working space",
-      "symbol": "graduationcap.fill",
+      "emoji": "🎓",
       "editable": true,
       "aliases": [
         "work_education",
@@ -902,7 +925,7 @@
       "group": "Civic & Faith",
       "detail": "Government, worship, safety",
       "default_subcategory": "Government office",
-      "symbol": "building.columns.fill",
+      "emoji": "🏛️",
       "editable": true,
       "aliases": [
         "civic_faith",
@@ -955,7 +978,7 @@
       "group": "Areas & Addresses",
       "detail": "Cities, addresses, regions",
       "default_subcategory": "Address",
-      "symbol": "map.fill",
+      "emoji": "🗺️",
       "editable": true,
       "aliases": [
         "areas_addresses",
@@ -1004,7 +1027,7 @@
       "group": "Facilities & Other",
       "detail": "Restrooms, facilities, unknown",
       "default_subcategory": "Point of interest",
-      "symbol": "mappin",
+      "emoji": "📍",
       "editable": true,
       "aliases": [
         "facilities_other",
@@ -1039,7 +1062,7 @@
       "group": "Place",
       "detail": "Internal fallback for weak provider data",
       "default_subcategory": null,
-      "symbol": "mappin",
+      "emoji": "📍",
       "editable": false,
       "aliases": [
         "place"
