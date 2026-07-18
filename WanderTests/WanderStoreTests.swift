@@ -1658,8 +1658,11 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testEditingVisitCuisinePromotesClassificationToMapImmediately() throws {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
-        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        store.apply(authState: .signedIn(session))
         let result = store.saveCandidate(
             PlaceCandidate(
                 id: "mapkit_menya_edit_cuisine",
@@ -1720,6 +1723,137 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Japanese")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🇯🇵")
         XCTAssertEqual(visiblePlace.userPlace.syncState, .pendingUpdate)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        relaunchedStore.apply(authState: .signedIn(session))
+        let restoredVisiblePlace = try XCTUnwrap(
+            relaunchedStore.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }
+        )
+
+        XCTAssertEqual(restoredVisiblePlace.restaurantCuisine, "Japanese")
+        XCTAssertEqual(restoredVisiblePlace.categoryEmoji, "🇯🇵")
+    }
+
+    func testEditingVisitWithoutCuisineClearsCanonicalClassification() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_clear_visit_cuisine",
+                name: "Generic Restaurant",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.98,
+                rawProviderType: "restaurant",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.98
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Sushi"
+                )
+            ]
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+
+        _ = try XCTUnwrap(
+            store.updateVisit(
+                visitID: visit.id,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: "restaurant_tags",
+                        valueType: "multi_tag",
+                        stringValues: ["date night"]
+                    )
+                ]
+            )
+        )
+
+        let visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }
+        )
+
+        XCTAssertNil(
+            store.attributes(for: result.userPlaceID).first {
+                $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+            }
+        )
+        XCTAssertNil(visiblePlace.restaurantCuisine)
+        XCTAssertEqual(visiblePlace.categoryEmoji, "🍽️")
+    }
+
+    func testEditVisitSubmissionPersistsCategoryAndRefreshesMapImmediately() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_edit_visit_category",
+                name: "Category Edit",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.98,
+                rawProviderType: "restaurant",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.98
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        let originalVisiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        let context = MapPlaceSaveContext.editVisit(visit, visiblePlace: originalVisiblePlace)
+        let coffeeAssignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Coffee shop",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "restaurant"
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: context.candidate.recategorized(as: coffeeAssignment),
+            status: .been,
+            visibility: .followers,
+            ratingScore: visit.ratingScore,
+            note: visit.note,
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false
+        )
+
+        let (saveResult, updatedVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: nil
+        )
+        let updatedVisiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }
+        )
+
+        XCTAssertEqual(saveResult?.userPlaceID, result.userPlaceID)
+        XCTAssertEqual(updatedVisit?.id, visit.id)
+        XCTAssertEqual(updatedVisiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(updatedVisiblePlace.effectiveSubcategory, "Coffee shop")
+        XCTAssertEqual(updatedVisiblePlace.categoryEmoji, "☕️")
+        XCTAssertEqual(updatedVisiblePlace.userPlace.categoryOverrideSource, PlaceCategorySource.user.rawValue)
+        XCTAssertEqual(updatedVisiblePlace.userPlace.syncState, .pendingCreate)
     }
 
     func testVisitAttributeAnswerDraftsRoundTripForDefaults() {
@@ -3329,6 +3463,68 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(photoRepository.requests.count, 1)
     }
 
+    func testProviderRefreshCooldownSurvivesRelaunchAfterUnusableResponse() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(session))
+        _ = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mk_provider_cooldown",
+                name: "Provider Cooldown",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                categorySource: PlaceCategorySource.provider.rawValue,
+                categoryConfidence: 0.86,
+                rawProviderType: "restaurant",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.86
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .currentLocation
+        )
+        let unresolvedPhoto = PlacePhoto(
+            provider: "none",
+            providerPlaceID: "",
+            providerPrimaryType: nil,
+            providerTypes: nil,
+            photoURLString: "",
+            width: nil,
+            height: nil,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let firstPhotoRepository = FakePlacePhotoRepository(photo: unresolvedPhoto)
+
+        let firstChangeCount = await firstStore.refreshOwnPlaceProviderCategories(
+            backend: WanderBackend(placePhotoRepository: firstPhotoRepository)
+        )
+        XCTAssertEqual(firstChangeCount, 0)
+        XCTAssertEqual(firstPhotoRepository.requests.count, 1)
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        relaunchedStore.apply(authState: .signedIn(session))
+        let secondPhotoRepository = FakePlacePhotoRepository(photo: unresolvedPhoto)
+
+        let repeatedChangeCount = await relaunchedStore.refreshOwnPlaceProviderCategories(
+            backend: WanderBackend(placePhotoRepository: secondPhotoRepository)
+        )
+
+        XCTAssertEqual(repeatedChangeCount, 0)
+        XCTAssertTrue(secondPhotoRepository.requests.isEmpty)
+    }
+
     func testProviderPrimaryTypeCanCorrectGenericRestaurantToBakery() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
@@ -3474,6 +3670,54 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visitRepository.upsertedVisitDrafts[0].note, "second visit")
         XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.backfilledFromUserPlace }?.serverID, "visit_backfill_remote")
         XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.id == explicitVisit?.id || $0.localID == explicitVisit?.localID }?.syncState, .synced)
+    }
+
+    func testSyncVisitStopsWhenParentPlaceSyncFails() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            error: WanderRemoteError.invalidResponse("network down")
+        )
+        let visitRepository = FakeVisitRepository()
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_visit_parent_failure",
+                name: "Parent Failure Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let explicitVisit = try XCTUnwrap(
+            store.createVisit(userPlaceID: result.userPlaceID, note: "second visit", ratingScore: 5)
+        )
+
+        let didSync = await store.syncVisit(visitID: explicitVisit.id, backend: backend)
+
+        XCTAssertFalse(didSync)
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
+        XCTAssertTrue(visitRepository.visitRequests.isEmpty)
+        XCTAssertTrue(visitRepository.upsertedVisitDrafts.isEmpty)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first { $0.userPlace.localID == result.userPlaceID }?.userPlace.syncState,
+            .failed
+        )
+        XCTAssertEqual(
+            store.visits(for: result.userPlaceID).first {
+                $0.id == explicitVisit.id || $0.localID == explicitVisit.localID
+            }?.syncState,
+            .pendingCreate
+        )
     }
 
     func testVisitPhotoUploadCreatesMetadataBeforeUploadAndMarksUploaded() async {

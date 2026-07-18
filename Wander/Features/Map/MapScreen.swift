@@ -165,25 +165,29 @@ struct MapScreen: View {
     }
 
     var body: some View {
+        let annotationGroups = visiblePlaceGroups
         NavigationStack {
             ZStack(alignment: .bottom) {
                 MapReader { proxy in
                     Map(position: $position, selection: $selectedMapFeature) {
                         UserAnnotation()
 
-                        ForEach(mapAnnotationPlaces) { visiblePlace in
+                        ForEach(annotationGroups) { group in
                             Annotation(
-                                visiblePlace.place.canonicalName,
-                                coordinate: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude)
+                                group.primary.place.canonicalName,
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: group.primary.place.latitude,
+                                    longitude: group.primary.place.longitude
+                                )
                             ) {
                                 Button {
-                                    selectVisiblePlaceFromMapTap(visiblePlace)
+                                    selectVisiblePlaceFromMapTap(group.primary)
                                 } label: {
                                     MapPlaceMarker(
-                                        visiblePlace: visiblePlace,
-                                        saves: saveSummaries(for: visiblePlace),
+                                        visiblePlace: group.primary,
+                                        saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: isSelectedMapRepresentative(visiblePlace)
+                                        isSelected: isSelectedMapRepresentative(group.primary)
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -705,24 +709,21 @@ struct MapScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        var seen = Set<String>()
-        let summaries = store.visiblePlaces()
-            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
-            .filter { visiblePlace in
-                guard !seen.contains(visiblePlace.userPlace.id) else { return false }
-                seen.insert(visiblePlace.userPlace.id)
-                return true
-            }
-            .map { visiblePlace in
-                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
-            }
+        guard let group = VisiblePlaceGrouping.matchingGroup(
+            for: selectedPlace,
+            in: visiblePlaces,
+            currentUserID: store.currentUser.id
+        ) else {
+            return [
+                PlaceSaveSummary(visiblePlace: selectedPlace, attributes: selectedPlace.attributes)
+            ]
+        }
+        return saveSummaries(for: group)
+    }
 
-        return summaries.sorted { lhs, rhs in
-            if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
-            if rhs.visiblePlace.owner.id == store.currentUser.id { return false }
-            if lhs.visiblePlace.id == selectedPlace.id { return true }
-            if rhs.visiblePlace.id == selectedPlace.id { return false }
-            return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+    private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
+        group.places.map { visiblePlace in
+            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: visiblePlace.attributes)
         }
     }
 
@@ -3191,6 +3192,7 @@ func persistScopedVisitOrWantSubmission(
             note: submission.note,
             ratingScore: submission.ratingScore,
             attributes: submission.attributes,
+            categoryCandidate: submission.candidate,
             visibility: submission.visibility,
             replacesNote: true,
             replacesRating: true
