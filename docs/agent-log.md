@@ -12601,3 +12601,10 @@ Build-78 validation checkpoint, 2026-07-17 19:45 PDT:
 - The complete iPhone 17 Pro / iOS 26.5 suite passed 405/405 with zero failures: `/private/tmp/DerivedData-build78-test/Logs/Test/Test-Wander-2026.07.17_19-36-53--0700.xcresult`.
 - A fresh generic iOS Simulator build passed after rerunning with the required CoreSimulator/package access. The resulting app reports `0.1 (78)`, and its executable contains both `arm64` and `x86_64`.
 - `git diff --check` is clean. The release diff remains limited to `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. Next: commit/push, open and review a ready release PR, squash-merge it, then archive and upload exact post-merge `main`.
+
+REC-99 build-78 latest-main integration completion, 2026-07-17 19:55 PDT:
+
+- `origin/main` advanced once more to `d2b650a47` with the separate build-78 release metadata. Integrated that exact head as merge commit `3365d2603`; its only conflict was the expected append-only agent-log tail, and both REC-99 and build-78 histories were preserved.
+- The split-halo Swift source and tests did not conflict or change. On the exact latest-main-integrated branch, the complete iPhone 17 Pro / iOS 26.5 suite passed 408/408 with zero failures at `/private/tmp/DerivedData-rec99-final/Logs/Test/Test-Wander-2026.07.17_19-49-18--0700.xcresult`.
+- The final generic iOS Simulator build passed for arm64 and x86_64 from `/private/tmp/DerivedData-rec99-final`. `git diff --check` is clean, latest `origin/main` is an ancestor, and the PR diff remains exactly `MapScreen.swift`, `MapHitTestingTests.swift`, and this required log.
+- Next: commit and push this final integration record, then reconfirm PR #114 remains ready and merge-clean. REC-99 stays `In Review`; no new TestFlight, Slack, backend, fixture, card, copy, layout, search, filter, or other UI action belongs to this task.
