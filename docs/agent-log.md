@@ -12614,3 +12614,11 @@ REC-99 final review-ready handoff, 2026-07-17 19:56 PDT:
 - Pushed the exact latest-main-integrated and fully validated head through `b860d3533`. PR #114 is ready, `MERGEABLE/CLEAN`, based on `d2b650a47`, and reports only the two intended source/test files plus this required log: https://github.com/joelipshutz/wander/pull/114.
 - REC-99 remains correctly in `In Review` with final evidence in comment `20fdcc97-1f0b-47bf-a557-cba3f7f9985e`. There are no known implementation issues or deferred changes inside the approved split-halo scope.
 - Handoff is complete. The next authorized action is review/merge; this task did not merge or initiate another release.
+
+REC-99 Lists and Quick Search scope expansion, 2026-07-17 20:38 PDT:
+
+- Ryan explicitly expanded the approved split-halo treatment to the saved-place icons shown in Lists and Quick Search results. No list/search layout, behavior, copy, selected-place card, fixture, backend/schema, or unrelated mockup change is authorized.
+- Resuming the existing clean isolated worktree `/private/tmp/recme-rec99-social-pin-mockups` on `codex/rec-99-social-pin-mockups`; the root checkout and unrelated worktrees remain untouched. Existing PR #114 stays the delivery vehicle.
+- Fetched `origin`. Latest `origin/main` is `02b812fc8`, one append-only build-78 completion-log commit ahead of this branch; it will be integrated before final validation with both histories preserved.
+- Moved Linear REC-99 from `In Review` back to `In Progress` and recorded the scope expansion in comment `dbe14ed8-1572-4390-9c6b-475b067b3562`.
+- Expected product scope is the current saved-place icon rendering in `Wander/Features/Lists/ListsScreen.swift` and the Quick Search result path in `Wander/Features/Map/MapScreen.swift`, plus the narrowest shared halo extraction if required, focused tests, and this log. Exact files will be locked after the read-only render-path audit.
