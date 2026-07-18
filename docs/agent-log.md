@@ -12299,3 +12299,52 @@ Release completion, 2026-07-16 17:57 PDT:
 - Final validation: 375 tests with zero failures at `/private/tmp/DerivedData-build77/Logs/Test/Test-Wander-2026.07.16_17-29-42--0700.xcresult`; generic iOS Simulator build passed for arm64 and x86_64; signed archive/export/upload passed from exact `main`.
 - Linear REC-97 briefly auto-closed when PR #109 merged. Restored it to `In Progress` and added release evidence in comment `c7a1c467-15e7-4b18-a451-91f4d670c0e2` because the broader approved issue still tracks hosted account-scoped persistence/jobs, provider extraction architecture, and the Share Extension. The device-local alpha slice is live, but those deferred requirements remain real work.
 - Known tester limitation: the import inbox is device-local and not account-scoped or synced; use one test account per install for import-inbox testing. No tester-data reset, hosted schema mutation, marketing-version change, or broad `#all-recme` announcement occurred.
+
+## 2026-07-17 15:34 PDT - Codex - REC-100 Contrast And Profile Header Fixes
+
+Agent: Codex
+Branch: `codex/rec-100-contrast-profile-header`
+Worktree: `/private/tmp/recme-rec100-design-fixes`
+Linear: `REC-100` (`In Progress`)
+
+Goal: strengthen accidentally translucent user-readable text across the app, beginning with place-profile activity attribution, and remove the clipped beige block at the top of the owner Profile so it renders as one continuous full-screen surface.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact `origin/main` commit `062f16f74`. The root checkout remains on active REC-88 work with an unrelated untracked `.pnpm-store/`; neither is touched.
+- Created high-priority Bug `REC-100`, assigned it to Ryan, and moved it directly to `In Progress`. The issue records both supplied physical-device screenshots and acceptance criteria.
+- No latest agent-log entry reports overlapping REC-100 work. Read-only parallel audits are tracing semantic text opacity, Profile safe-area composition, and existing regression/visual validation hooks before implementation.
+- Expected files are `Wander/Features/Map/PlaceProfileMapSurface.swift`, `Wander/Features/Profile/ProfileScreen.swift` and/or the shared owner Profile shell, focused theme/layout tests under `WanderTests/`, and this log. `project.yml`, Supabase schema/RPCs, build number, TestFlight release, and tester-facing Slack are out of scope.
+
+Implementation and validation checkpoint, 2026-07-17 16:27 PDT:
+
+- The washed-out place activity identity was not a translucent theme token: the current user's avatar, name, and metadata were inside a disabled `Button`, so SwiftUI dimmed the complete label. `PlaceActivityCard` now renders the current user's identity as static content and keeps other people's identities as tappable profile links. Accessibility inspection confirms the current row is exposed as static `Your save` content while friend rows remain profile buttons.
+- Audited other semantic dimming paths rather than changing the app's intentional, fully opaque color tokens. Removed explicit opacity stacked on already-disabled Private Profile and notification controls, and changed actionless settings rows plus noninteractive face piles/shared-visit avatars from disabled buttons into static content. This preserves unavailable interaction while keeping readable labels solid.
+- The clipped beige Profile block was the otherwise-empty `NavigationStack` bar above a custom in-content heading. The shared `ProfileOwnerHome` now hides that root navigation bar, so owner and member Profile surfaces begin directly below the status safe area. A pushed `Been` destination was then exercised on iPhone 17e and still exposes its native Back button and `Been` navigation title.
+- Added navigation/source contracts for the hidden root Profile bar, static own-place attribution, and removal of the identified stacked-opacity patterns. No design token, backend contract, project generation, build number, hosted data, or release behavior changed.
+- Focused `NavigationContractTests` plus `ThemeTokenTests` passed 34/34 with zero failures. The complete iPhone 17 Pro / iOS 26.5 suite passed 378/378 with zero failures at `/private/tmp/DerivedData-rec100/Logs/Test/Test-Wander-2026.07.17_15-48-58--0700.xcresult`; a fresh generic iOS Simulator build also passed.
+- Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e. Evidence: `/private/tmp/rec100-profile-17pro.png` and `/private/tmp/rec100-profile-17e.png`; baseline evidence with the blank header block is `/private/tmp/rec100-baseline-profile-17pro.png`. The post-fix Profile has no blank beige navigation block at either width.
+- Final diff is limited to the seven affected SwiftUI feature files, `NavigationContractTests`, and this append-only log; `git diff --check` is clean. Latest `origin/main` remains `062f16f74`, the branch base, so no integration update is required before publishing.
+- Next: commit and push the validated branch, open a ready PR to `main`, move REC-100 to `In Review`, and attach the PR plus validation evidence. No TestFlight build or Slack announcement was requested.
+
+Publishing handoff, 2026-07-17 16:29 PDT:
+
+- Committed the validated implementation locally as `892672f91` (`fix: improve content contrast and profile header`) on `codex/rec-100-contrast-profile-header`.
+- The GitHub push was blocked by the managed environment's external-code-export review because explicit user approval to publish this private-repository diff has not yet been recorded. No workaround was attempted; the branch remains local and one commit ahead of `origin/main`.
+- REC-100 remains `In Progress` because no remote branch or PR exists yet. Exact restart after Ryan approves the external push: push `codex/rec-100-contrast-profile-header`, open a ready PR to `main`, add the PR and validation evidence to Linear, then move REC-100 to `In Review`.
+- No TestFlight build number, archive, upload, hosted data, merge, or Slack announcement occurred.
+
+Landing and combined release follow-up, 2026-07-17 17:06 PDT:
+
+- Ryan explicitly approved publishing and squash-merging REC-100, then creating a TestFlight build. He also called out the concurrent REC-98 release request and asked that the two changes not conflict.
+- REC-98 PR #112 is open and merge-clean at remote head `bd591eea4`, but its active worktree has an uncommitted immediate map-emoji refresh regression/fix in progress. The REC-98 task was asked to finish and push that fix without independently bumping, archiving, or uploading a build.
+- Latest completed TestFlight is build 77 and `origin/main` still declares `CURRENT_PROJECT_VERSION: 77`; no unfinished build bump exists. The safe release plan is one build 78 created only after the final REC-98 head and REC-100 both squash-merge into latest `main`.
+- This worktree remains clean apart from this append-only coordination entry and is two local commits ahead of exact `origin/main` `062f16f74`. Next: commit this approval/coordination record, push REC-100, open a ready PR, run the latest-main review gate, and wait for the final REC-98 head before sequencing both merges and the single combined release.
+
+Pre-landing review checkpoint, 2026-07-17 17:11 PDT:
+
+- Pushed `codex/rec-100-contrast-profile-header` and opened ready PR #113: https://github.com/joelipshutz/wander/pull/113. Linear REC-100 is `In Review` and carries the PR attachment.
+- Reviewed the complete latest-main diff against the repository UI/design rules and gstack review checklist. Scope is clean, the intended accessibility/navigation semantics are preserved, and no correctness, security, concurrency, performance, dead-code, or test-gap finding blocks merge. PR #113 is `MERGEABLE/CLEAN`, has no failing checks, and has no Greptile or human review comments.
+- The optional gstack initialization/telemetry path was not run because the managed environment rejected its out-of-repo writes/possible telemetry; the checklist review was completed locally and recorded here instead. The advisory slop scanner was unavailable because `bun` is not installed.
+- Independent review reproduced one release-order finding: REC-98 and REC-100 append `docs/agent-log.md` from the same base, so the second branch must integrate latest `main` and preserve both log histories. Their current overlapping Swift source changes auto-merge cleanly. REC-100 will land first; the active REC-98 owner will then integrate latest `main`, resolve the append-only log conflict, rerun its focused/full/build gate, and provide a final merge-ready head.
+- Merge remains intentionally separate from release: no build 78 bump starts until both PRs are squash-merged into latest `main`.

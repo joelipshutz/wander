@@ -227,15 +227,17 @@ struct SharedVisitCompanionLabel: View {
                         if companion.userID == currentUserID {
                             companionAvatar(companion)
                                 .accessibilityLabel("You")
-                        } else {
+                        } else if let onSelect {
                             Button {
-                                onSelect?(companion.userID)
+                                onSelect(companion.userID)
                             } label: {
                                 companionAvatar(companion)
                             }
                             .buttonStyle(.plain)
-                            .disabled(onSelect == nil)
                             .accessibilityLabel("Open \(companion.displayName)'s profile")
+                        } else {
+                            companionAvatar(companion)
+                                .accessibilityLabel(companion.displayName)
                         }
                     }
                 }
