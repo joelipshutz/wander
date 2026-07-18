@@ -355,8 +355,20 @@ struct WanderRootView: View {
                 return
             }
             await store.refreshSharedVisitInbox(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let enrichedPlaceCount = await store.refreshOwnPlaceProviderCategories(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let enrichmentSyncCount = enrichedPlaceCount > 0
+                ? await store.syncUnsyncedOwnPlaces(backend: backend)
+                : 0
             #if DEBUG
-            WanderDebugLog.sync.debug("signed-in maintenance finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public) photo_count=\(uploadedPhotoCount, privacy: .public) invite_count=\(sentInviteCount, privacy: .public)")
+            WanderDebugLog.sync.debug("signed-in maintenance finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public) photo_count=\(uploadedPhotoCount, privacy: .public) invite_count=\(sentInviteCount, privacy: .public) enriched_place_count=\(enrichedPlaceCount, privacy: .public) enrichment_sync_count=\(enrichmentSyncCount, privacy: .public)")
             #endif
             finishSignedInMaintenance(runID: runID)
         }

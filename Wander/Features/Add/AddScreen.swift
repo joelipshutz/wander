@@ -1580,15 +1580,9 @@ private struct CategoryIcon: View {
     let category: String
 
     var body: some View {
-        Image(systemName: imageName)
-            .font(.system(size: 18, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
+        WanderCategoryEmoji(category: category, size: 18)
             .frame(width: 40, height: 40)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())
-    }
-
-    private var imageName: String {
-        WanderPlaceCategory.symbolName(for: category)
     }
 }

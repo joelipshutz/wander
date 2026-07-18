@@ -207,6 +207,10 @@ extension PlaceCandidate {
         )
     }
 
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(for: categoryAssignment, name: name)
+    }
+
     func recategorized(as category: String) -> PlaceCandidate {
         recategorized(
             as: WanderPlaceCategory.assignment(
@@ -719,6 +723,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
     let longitude: Double?
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
+    let requiresPhoto: Bool
 
     init(
         placeID: String? = nil,
@@ -727,7 +732,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
         latitude: Double?,
         longitude: Double?,
         sourceProvider: String?,
-        sourceProviderPlaceID: String?
+        sourceProviderPlaceID: String?,
+        requiresPhoto: Bool = true
     ) {
         self.placeID = placeID
         self.name = name
@@ -736,6 +742,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
         self.longitude = longitude
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.requiresPhoto = requiresPhoto
     }
 
     enum CodingKeys: String, CodingKey {
@@ -746,16 +753,20 @@ struct PlacePhotoRequest: Encodable, Equatable {
         case longitude
         case sourceProvider = "source_provider"
         case sourceProviderPlaceID = "source_provider_place_id"
+        case requiresPhoto = "requires_photo"
     }
 
     var lookupKey: String {
         let coordinate = [latitude, longitude]
             .compactMap { $0.map { String(format: "%.5f", $0) } }
             .joined(separator: ",")
-        return [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+        var components = [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
-            .joined(separator: "|")
+        if !requiresPhoto {
+            components.append("metadata-only")
+        }
+        return components.joined(separator: "|")
     }
 
     var skipsGooglePlacesLookup: Bool {
@@ -774,6 +785,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
 struct PlacePhoto: Decodable, Equatable {
     let provider: String
     let providerPlaceID: String
+    let providerPrimaryType: String?
+    let providerTypes: [String]?
     let photoURLString: String
     let width: Int?
     let height: Int?
@@ -786,9 +799,45 @@ struct PlacePhoto: Decodable, Equatable {
     let storagePath: String?
     let localAssetRef: String?
 
+    init(
+        provider: String,
+        providerPlaceID: String,
+        providerPrimaryType: String? = nil,
+        providerTypes: [String]? = nil,
+        photoURLString: String,
+        width: Int?,
+        height: Int?,
+        authorName: String?,
+        authorProfileURLString: String?,
+        authorAvatarURLString: String?,
+        sourcePhotoURLString: String?,
+        flagContentURLString: String?,
+        storageBucket: String?,
+        storagePath: String?,
+        localAssetRef: String?
+    ) {
+        self.provider = provider
+        self.providerPlaceID = providerPlaceID
+        self.providerPrimaryType = providerPrimaryType
+        self.providerTypes = providerTypes
+        self.photoURLString = photoURLString
+        self.width = width
+        self.height = height
+        self.authorName = authorName
+        self.authorProfileURLString = authorProfileURLString
+        self.authorAvatarURLString = authorAvatarURLString
+        self.sourcePhotoURLString = sourcePhotoURLString
+        self.flagContentURLString = flagContentURLString
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
+        self.localAssetRef = localAssetRef
+    }
+
     enum CodingKeys: String, CodingKey {
         case provider
         case providerPlaceID = "provider_place_id"
+        case providerPrimaryType = "provider_primary_type"
+        case providerTypes = "provider_types"
         case photoURLString = "photo_url"
         case width
         case height
@@ -1085,6 +1134,46 @@ struct SharedVisitInvitation: Identifiable, Codable, Equatable {
     let photos: [SharedVisitPhotoSnapshot]
 
     var id: String { participantID }
+
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: PlaceCategorySource.legacy.rawValue,
+            confidence: nil,
+            rawProviderType: category
+        )
+    }
+
+    var restaurantCuisine: String? {
+        guard let answer = attributeAnswers.first(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }) else {
+            return nil
+        }
+
+        switch answer.value {
+        case .string(let value):
+            return value
+        case .array(let values):
+            for value in values {
+                if case .string(let string) = value {
+                    return string
+                }
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(
+            for: categoryAssignment,
+            cuisine: restaurantCuisine,
+            name: placeName
+        )
+    }
 
     var candidate: PlaceCandidate {
         PlaceCandidate(

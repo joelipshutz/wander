@@ -60,6 +60,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let unresolvedDrafts: [UnresolvedDraftRecord]
     let sourceArtifacts: [SourceArtifactRecord]
     let extractionJobs: [ExtractionJobRecord]
+    let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]?
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
@@ -87,6 +88,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         unresolvedDrafts = store.unresolvedDrafts.map(UnresolvedDraftRecord.init)
         sourceArtifacts = store.sourceArtifacts.map(SourceArtifactRecord.init)
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
+        providerCategoryEnrichmentAttemptedAtByKey = store.providerCategoryEnrichmentAttemptedAtByKey
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
@@ -121,6 +123,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             unresolvedDrafts: shouldResetSavedPlaces ? [] : unresolvedDrafts.map { $0.model() },
             sourceArtifacts: shouldResetSavedPlaces ? [] : sourceArtifacts.map { $0.model() },
             extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
+            providerCategoryEnrichmentAttemptedAtByKey: providerCategoryEnrichmentAttemptedAtByKey ?? [:],
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
@@ -149,6 +152,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let unresolvedDrafts: [UnresolvedDraft]
         let sourceArtifacts: [LocalSourceArtifact]
         let extractionJobs: [LocalExtractionJob]
+        let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool

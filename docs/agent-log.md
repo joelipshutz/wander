@@ -12300,6 +12300,143 @@ Release completion, 2026-07-16 17:57 PDT:
 - Linear REC-97 briefly auto-closed when PR #109 merged. Restored it to `In Progress` and added release evidence in comment `c7a1c467-15e7-4b18-a451-91f4d670c0e2` because the broader approved issue still tracks hosted account-scoped persistence/jobs, provider extraction architecture, and the Share Extension. The device-local alpha slice is live, but those deferred requirements remain real work.
 - Known tester limitation: the import inbox is device-local and not account-scoped or synced; use one test account per install for import-inbox testing. No tester-data reset, hosted schema mutation, marketing-version change, or broad `#all-recme` announcement occurred.
 
+## 2026-07-16 22:38 PDT - Codex - REC-98 Category Emojis
+
+Agent: Codex
+Branch: `codex/rec-98-category-emojis`
+Worktree: `/private/tmp/recme-rec98-category-emojis`
+Linear: `REC-98` (`In Progress`)
+
+Goal: replace category-specific SF Symbols with one canonical native Apple emoji mapping for all 14 editable map categories and reuse that mapping everywhere category iconography appears.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from exact latest `origin/main` at `062f16f74`. The root checkout is on unrelated REC-88 work and contains an untracked `.pnpm-store/`; both remain untouched.
+- REC-98 is assigned to Ryan and moved from `Todo` to `In Progress`. The issue explicitly delegates selection of the 14 emoji and requires the mapping to remain persistent across product surfaces.
+- The existing `WanderPlaceCategory.taxonomy` is the category source of truth and currently stores one SF Symbol per category. Direct category-symbol rendering appears across Map search/results/pins, Discover, Lists, Shared Visits, Profile, Add, and category pickers.
+- Implementation will add the emoji to the taxonomy, expose canonical string/assignment lookup helpers, introduce one shared SwiftUI category-emoji renderer, migrate category-only icon call sites, and add focused taxonomy/UI contract coverage. Unrelated command, status, navigation, and external-action SF Symbols remain unchanged.
+- Expected files are `Wander/Services/WanderPlaceCategory.swift`, one shared DesignSystem component, the category-rendering feature surfaces, focused tests under `WanderTests/`, and this log. No schema/RPC, hosted data, build number, TestFlight release, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-16 23:05 PDT:
+
+- Added the canonical 14-category mapping to both `WanderPlaceCategory.taxonomy` and version 4 of `shared/place-taxonomy.json`: Restaurants & Food `🍽️`, Coffee, Tea, & Sweets `☕️`, Bars & Nightlife `🍸`, Outdoors & Nature `🌲`, Things To Do `🎟️`, Shopping `🛍️`, Wellness & Fitness `💪`, Stays `🛏️`, Services & Errands `🧰`, Travel & Transit `🚆`, Work & Education `🎓`, Civic & Faith `🏛️`, Areas & Addresses `🗺️`, and Facilities & Other `📍`. The internal weak-data fallback also uses `📍`; category IDs and backend payload values are unchanged.
+- Removed the old taxonomy `symbolName` API and added one shared `WanderCategoryEmoji` renderer. Category icons now resolve through that component on Map pins and search results, place sheets, Add, Discover, Lists and list maps, Profile place rows, Shared Visit invitations, place-profile fallbacks, and category picker/handoff screens. Non-category command, navigation, status, cuisine, and calendar symbols remain SF Symbols.
+- Focused taxonomy coverage passed 13/13 tests. The complete iPhone 17 / iOS 26.5 suite passed 375/375 tests with zero failures: `/private/tmp/DerivedData-rec98-focused/Logs/Test/Test-Wander-2026.07.16_22-55-11--0700.xcresult`. Tests assert alias normalization, fallback behavior, exact Swift/shared-JSON parity, all 14 editable categories, and one unique emoji per editable category.
+- A generic iOS Simulator build passed for arm64 and x86_64 with `CODE_SIGNING_ALLOWED=NO`. XcodeGen regenerated cleanly without project-file churn; `jq empty`, `git diff --check`, and the obsolete category-symbol API scan are clean.
+- Visual QA passed on iPhone 17 Pro and compact iPhone 17e / iOS 26.5. The 14-category grid stays aligned and map emojis remain readable inside selection/status outlines. Evidence: `/private/tmp/rec98-category-emojis-iphone17pro.png`, `/private/tmp/rec98-category-emojis-iphone17e.png`, `/private/tmp/rec98-map-emojis-iphone17pro.png`, and `/private/tmp/rec98-map-emojis-iphone17e.png`.
+- No Supabase schema/RPC or hosted-data changes, tester-data rewrite, build-number change, TestFlight upload, merge, or Slack announcement occurred.
+
+Handoff, 2026-07-16 23:11 PDT:
+
+- Committed the complete REC-98 implementation as `af4d82e6d` (`feat: use category emojis across the app`) and pushed `codex/rec-98-category-emojis` to origin.
+- Opened ready PR #112 against `main`: https://github.com/joelipshutz/wander/pull/112. The PR records the 375-test pass, generic two-architecture simulator build, focused taxonomy coverage, and dual-size visual QA.
+- The branch is ready for Xcode/device testing. No merge, build-number bump, TestFlight upload, or tester-facing Slack announcement was requested or performed.
+
+Physical-device feedback pass, 2026-07-17 01:00 PDT:
+
+- Ryan reported that a hospital renders the broad Wellness & Fitness `💪` icon and asked for more nuanced icons across cuisines, coffee/bakery types, medical specialties, gyms, nail salons, and comparable place scenarios.
+- Root cause: `PlaceCategoryAssignment` already preserved `Hospital`, but `emoji(for assignment:)` ignored `subcategory` and `rawProviderType` and returned only the broad taxonomy emoji. Several UI adapters also reduced rich candidates/visible places back to the primary category before rendering.
+- REC-98 is back in `In Progress`; existing branch `codex/rec-98-category-emojis`, worktree `/private/tmp/recme-rec98-category-emojis`, and PR #112 remain the coordination surfaces. The worktree is clean, no other agent is editing it, and latest `origin/main` remains the branch base.
+- This pass will implement one deterministic specificity resolver using explicit cuisine, canonical subcategory, raw provider type, and only narrow name hints when provider metadata is generic. It will route every known restaurant cuisine to a food emoji or regional/country fallback, distinguish known taxonomy subtypes across all broad categories, preserve broad-category picker icons, and carry richer context through Map, Discover, Lists, Profile, place profile, and Shared Visit surfaces.
+- Expected files are `Wander/Services/WanderPlaceCategory.swift`, category display model adapters, `WanderCategoryEmoji`, affected feature call sites/mocks, focused tests, and this log. No category/backend IDs, Supabase schema/RPC, hosted data, build number, TestFlight, merge, or Slack action is in scope.
+
+Nuanced-emoji implementation and validation, 2026-07-17 01:53 PDT:
+
+- Added `WanderPlaceEmojiResolver` as the single deterministic renderer for place iconography. Resolution priority is a user-edited subtype, specific provider subtype, narrow place-name refinement when provider metadata is broad, then the original broad-category fallback. Personal-care and medical types also survive adjacent provider-bucket mismatches, so Hospital, Optometrist, Dentist, Pharmacy, Nail salon, Hair salon, Gym, and Yoga studio no longer collapse to one Wellness & Fitness icon.
+- Expanded the shared Swift/JSON wellness taxonomy with eye care, urgent care, dermatology, pediatrics, physical therapy, and podiatry types. The shared taxonomy is now version 5 and remains exact parity tested for aliases, subcategories, defaults, category IDs, and broad emojis.
+- Added subtype-specific mappings across every editable category. All 85 supported restaurant cuisines now resolve to a dish emoji or regional/country flag, while coffee shops, tea houses, bakeries, dessert types, medical specialties, beauty services, fitness types, retail, recreation, transit, education, faith, services, stays, and facilities retain distinct icons where the taxonomy has specific metadata.
+- Carried rich category context through Map search/results/pins/place sheets/save flow, Discover, Lists/list maps, Profile rows, place-profile fallbacks, and Shared Visit invitations. Saved restaurant cuisine attributes are decoded and used alongside canonical subtype/provider metadata and place name; broad category pickers intentionally retain their stable 14-category icons.
+- Regression coverage includes the reported hospital-versus-gym case, eye care, dental, pharmacy, nail/hair services across adjacent broad buckets, bakery/coffee/tea distinctions, user-edit precedence, rich candidate/saved-place adapters, all known subtype suggestions, and all 85 cuisines. The final iPhone 17 Pro / iOS 26.5 suite passed 381/381 tests with zero failures: `/private/tmp/DerivedData-rec98-nuanced/Logs/Test/Test-Wander-2026.07.17_01-49-18--0700.xcresult`.
+- A fresh generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`; `git diff --check` and `jq empty shared/place-taxonomy.json` are clean. XcodeGen added only the new resolver source reference to the generated project.
+- Debug-only visual comparison QA passed on iPhone 17 Pro and compact iPhone 17e / iOS 26.5 with no clipped or overlapping labels. The first pass exposed and the implementation corrected an adjacent-bucket nail/hair fallback before handoff. Final evidence: `/private/tmp/rec98-emoji-gallery-final-17-pro.png` and `/private/tmp/rec98-emoji-gallery-final-17e.png`.
+- No Supabase schema/RPC, hosted data, tester-data rewrite, build number, TestFlight upload, merge, or Slack announcement occurred. PR #112 and Linear REC-98 remain the handoff surfaces.
+
+Nuanced-emoji handoff, 2026-07-17 01:57 PDT:
+
+- Committed and pushed the complete feedback pass as `cc45f4720` (`fix: resolve nuanced place category emojis`) to `origin/codex/rec-98-category-emojis`.
+- Updated ready, merge-clean PR #112 with root cause, implementation scope, 381-test validation, dual-size visual evidence, and the physical-device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5001002883.
+- Moved Linear REC-98 to `In Review` and added matching validation/device guidance in comment `6eb8a048-fa99-4b4b-ab20-bf7eb08690c5`.
+- Xcode handoff target is `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj`. No merge, build-number bump, TestFlight upload, or Slack announcement was requested or performed.
+
+Physical-device performance regression, 2026-07-17 02:20 PDT:
+
+- Ryan reported that the REC-98 device build became severely laggy, froze, and crashed before he could test it. Reopened REC-98 as `In Progress` and stopped the affected Xcode run after collecting live evidence.
+- On an iPhone 15 Pro, Xcode showed 100% CPU, approximately 409.5 MB memory, and Very High energy impact. Pausing the process captured the main thread in `ListsScreen.activeLists` rebuilding `ListPlaceMock` values, then repeatedly entering `VisiblePlace.categoryEmoji`, `WanderPlaceEmojiResolver.cuisineEmoji`, `WanderPlaceCategory.cuisineGuess`, and the dynamically rebuilt restaurant-cuisine group catalog.
+- Root cause is confirmed in the new emoji branch: SwiftUI body evaluation multiplies a resolver path that repeatedly normalizes, sorts, filters, and allocates the full cuisine taxonomy for every visible place. Console output also showed overlapping profile and visible-place RPCs, but the sampled 100% CPU stack identifies the resolver as the immediate freeze source; network duplication will be rechecked after that hot loop is removed.
+- The isolated worktree remains clean at `7e3f1f085`, exactly tracking `origin/codex/rec-98-category-emojis`; root and unrelated worktrees remain untouched. Expected edits are `Wander/Services/WanderPlaceEmojiResolver.swift`, focused resolver tests in `WanderTests/WanderPlaceCategoryTests.swift`, and this append-only log.
+- Planned validation is a repeated-call performance regression check, focused and complete XCTest runs, generic simulator build, then a fresh physical-device run with Xcode CPU/memory gauges and another main-thread sample if any lag remains. No schema/RPC, hosted data, build number, TestFlight, merge, or Slack action is in scope.
+
+REC-98 performance fix checkpoint, 2026-07-17 02:44 PDT:
+
+- Cached the restaurant cuisine catalog and its normalized representations once in `WanderPlaceCategory`, and pre-normalized emoji rule terms and generic category details once in `WanderPlaceEmojiResolver`. The render path now normalizes each incoming value once instead of rebuilding and sorting the entire taxonomy for every place and every SwiftUI body evaluation.
+- Added `testEmojiResolutionHotPathStaysCheapAcrossRepeatedListRendering`; 2,000 varied restaurant resolutions complete in 0.953 seconds in the focused run. Focused `WanderPlaceCategoryTests` passed 20/20, the complete suite passed 382/382 in 8.063 seconds, `git diff --check` passed, and the generic iOS Simulator build passed for arm64 and x86_64.
+- A signed physical-device build succeeded at `/private/tmp/DerivedData-rec98-perf-device/Build/Products/Debug-iphoneos/Wander.app`, then installed and launched successfully on Ryan's paired iPhone. The fixed binary is ready for direct testing.
+- Final Xcode CPU/memory gauge comparison remains pending because the Mac locked after installation and CoreDevice/Xcode attachment became unavailable. Do not treat the resulting signal 9 from the earlier session as a fresh crash: that process was explicitly stopped after the 100% CPU sample. If lag remains after retesting the fixed binary, sample the main thread again and separately investigate the overlapping profile/visible-place RPC calls observed in the console.
+
+Emoji integrity feedback pass, 2026-07-17 12:54 PDT:
+
+- Ryan reported three incorrect physical-device results: Italian restaurant Ugo rendered the broad `🍽️` fallback, Coco Beach Bar & Grill rendered `🏈`, and Westside Barber Co rendered the generic `📍` fallback. He requested a systemic audit because incorrect semantic icons undermine app integrity.
+- Reopened Linear REC-98 as `In Progress`. Continuing in the clean isolated worktree `/private/tmp/recme-rec98-category-emojis` on `codex/rec-98-category-emojis` at pushed commit `039320cfe`; root and unrelated worktrees remain untouched.
+- Initial hypotheses to prove or reject: saved cuisine metadata is absent or not decoded for Ugo; the resolver's loose substring matching treats `bar` inside another provider/name token as a sports signal for Coco Beach; and Westside's provider subtype is either missing, bucketed outside Wellness, or discarded by a display-model adapter before emoji resolution.
+- This pass will trace the exact resolver input and precedence for all three examples, audit ambiguous substring terms and cross-category subtype handling across the complete taxonomy, add permanent regressions, rerun focused/full tests and builds, and install the corrected branch for device testing. Expected files are the shared resolver/category adapters, focused tests, and this append-only log. No schema/RPC, hosted-data mutation, build-number bump, TestFlight release, merge, or Slack action is in scope.
+
+Emoji integrity implementation and validation, 2026-07-17 13:40 PDT:
+
+- Pulled the physical-device local store and proved each reported path. Ugo had only broad `Restaurant` / `mkpoicategoryrestaurant` metadata and no saved cuisine, so `🍽️` was an honest low-information fallback. Coco had a user-authored `Sports bar` subtype, whose exact rule incorrectly chose `🏈`; it now resolves to `🍻`. Westside had persisted MapKit type `mkpoicategorybeauty`; lowercasing had erased the `Beauty` word boundary and the fallback `place` category returned before the resolver could use the venue's `barber` name.
+- Added an explicit compatibility table for all 73 `MKPointOfInterestCategory` constants in the installed iOS SDK. Persisted multiword values such as `FitnessCenter`, `FoodMarket`, `MusicVenue`, `PublicTransport`, and `AutomotiveRepair` now recover canonical broad categories and subcategories instead of relying on lossy substring guesses. Every current MapKit type has a regression asserting that it cannot collapse to fallback `place` or `📍`.
+- Kept weak evidence honest: opaque restaurant names do not fabricate cuisine. The existing authenticated Google Places photo request now also asks for `primaryType` and `types` in the same provider call. The app selects only a more-specific subtype inside the already stored broad category, persists it locally, and resyncs an owned save through the existing repository path. Thus provider evidence such as `italian_restaurant` upgrades Ugo to `🍝`, while unrelated types such as a gym or sporting-goods store are rejected.
+- Tightened name/cuisine matching to whole terms, so fragments such as `Indian` inside `Indianapolis` cannot create false classifications. Added explicit semantics for distilleries, beauty services, music venues, fairgrounds, fishing, kayaking, surfing, baseball, and stadiums, and corrected MapKit food markets to Shopping / Grocery store / `🛒`.
+- Full iPhone 17 Pro / iOS 26.5 suite passed 388 tests with zero failures: `/private/tmp/recme-rec98-category-emojis/DerivedData/Logs/Test/Test-Wander-2026.07.17_13-26-32--0700.xcresult`. A follow-up focused run passed the exact 73-type SDK count assertion: `/private/tmp/recme-rec98-category-emojis/DerivedData/Logs/Test/Test-Wander-2026.07.17_13-33-16--0700.xcresult`. The existing 2,000-resolution performance regression still passes in 1.164 seconds.
+- Deno validation passed: shared taxonomy 2/2, Google place selection 9/9, and type checks for both `place-photo` and `extraction-worker`. `jq empty`, `git diff --check`, a generic arm64/x86_64 simulator build, and a signed arm64 device build all passed. Signed app: `/private/tmp/DerivedData-rec98-integrity-device/Build/Products/Debug-iphoneos/Wander.app`, version `0.1` build `77`.
+- Deployed the additive `place-photo` response fields and matching shared-taxonomy aliases to Supabase project `rugmtlgufrhlxwfkumhw`; no schema, RPC, RLS, user-data, or secret changes occurred. An unauthenticated hosted probe correctly returned `401 missing_authorization`.
+- Installed and launched the exact signed build on Ryan's paired iPhone 15 Pro, then opened `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj` for manual testing. No merge, build-number bump, TestFlight upload, tester-data rewrite, or Slack announcement occurred.
+
+Emoji integrity handoff, 2026-07-17 13:46 PDT:
+
+- Committed and pushed the complete integrity implementation as `128d97b58` (`fix: harden place emoji classification`) to `origin/codex/rec-98-category-emojis`.
+- Ready, mergeable PR #112 now includes the proved root causes, 388-test validation, 73-type SDK audit, backend deployment status, and device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5007328549.
+- Added the matching Linear handoff in comment `dddc3f97-cec4-4c71-bb11-517f76b82387` and moved REC-98 from `In Progress` to `In Review`.
+- Xcode remains open on `/private/tmp/recme-rec98-category-emojis/Wander.xcodeproj`; the exact signed app-code build from `128d97b58` remains installed and launched on Ryan's iPhone 15 Pro. No merge, TestFlight release, build bump, or Slack update was requested or performed.
+
+Provider-specificity follow-up, 2026-07-17 14:02 PDT:
+
+- Ryan's next physical-device pass found more incorrect specificity: Menya Tigre remains generic instead of Japanese; Noun and Boulevard are coffee shops but still render as restaurants; Costco Wholesale remains a restaurant; Ugo did not upgrade; and Ghisallo needs mixed Italian bakery/restaurant handling.
+- Reopened REC-98 as `In Progress` and continued in the clean isolated worktree `/private/tmp/recme-rec98-category-emojis` on `codex/rec-98-category-emojis` at pushed head `bee9c6776`. The root checkout's unrelated REC-88 work and untracked `.pnpm-store/` remain untouched; no other worktree overlaps these files.
+- Pre-edit evidence from the prior device snapshot already proves this is not only an emoji-rule defect. Noun and Boulevard preserve `Coffee shop` subcategories while their broad category remains `restaurants_food`; Costco preserves `mkpoicategoryfoodmarket` while its broad category remains `restaurants_food`; Ugo and Menya preserve only generic Restaurant metadata. The current device snapshot and provider response path must be traced before a hypothesis is accepted.
+- Investigation scope is category normalization, provider enrichment timing/persistence, the narrow place-profile trigger, focused regression tests, and this log. No venue-name hardcodes, guessed cuisines, unrelated UI changes, schema/RPC/RLS changes, build bump, TestFlight release, merge, or Slack action are allowed.
+
+Provider-specificity implementation and validation, 2026-07-17 16:27 PDT:
+
+- Root causes were independent and data-driven: non-user assignments preserved stale broad categories even when their saved subtype/provider type was stronger; restaurant emoji resolution allowed a provider type such as `sushi_restaurant` to outrank an explicit saved cuisine; generic Japanese incorrectly implied sushi; and provider enrichment only ran through profile-photo rendering and rejected places without a usable photo.
+- Replaced broad-category preservation with ranked category evidence while keeping user edits authoritative. This immediately repairs saved Coffee shop metadata to Coffee, Tea, & Sweets and MapKit food markets to Shopping/Grocery. Corrective enrichment may cross only explicit adjacent category boundaries (food, wellness/services, and restaurant-to-food-market); an unrelated provider result such as sporting goods cannot rewrite a restaurant.
+- Explicit saved cuisine now outranks provider subtype, generic Japanese uses `🇯🇵`, and explicit Sushi keeps `🍣`. No venue-name exceptions were added. Ghisallo-style mixed venues follow the provider's primary role: bakery resolves to `🥐`; Italian restaurant resolves to `🍝`.
+- Added bounded, one-time metadata enrichment for the signed-in user's generic saved places at the end of background maintenance. It is removed from the profile critical path, requests at most 24 places sequentially, persists only validated changes, syncs changed saves in one batch, and refreshes visible places once per batch instead of after every save.
+- Extended the existing authenticated `place-photo` function with backward-compatible `requires_photo=false` metadata mode. Metadata lookup has a distinct cache key, does not fall back to visit photos, omits the Google photo field mask, and can return provider primary/type data even when no representative image exists. Deployed the validated function to Supabase project `rugmtlgufrhlxwfkumhw`; no schema, RPC, RLS, grant, or user-data changes occurred.
+- Regression coverage includes Noun, Boulevard, Costco-style food markets, Menya's Japanese-versus-sushi precedence, Ugo-style signed-in enrichment without opening Profile, Ghisallo-style bakery correction, user-edit precedence, no churn for already-specific places, metadata/photo cache separation, and metadata responses without photos.
+- Focused XCTest passed 74 tests with zero failures: `/private/tmp/DerivedData-rec98-provider-specificity/Logs/Test/Test-Wander-2026.07.17_16-13-28--0700.xcresult`. The full iPhone 17 Pro / iOS 26.5 suite passed 396 tests with zero failures: `/private/tmp/DerivedData-rec98-provider-specificity/Logs/Test/Test-Wander-2026.07.17_16-14-29--0700.xcresult`. Generic simulator build passed for arm64 and x86_64, signed arm64 device build passed, Deno place matching passed 10/10, Deno type-check passed, and `git diff --check` is clean.
+- Installed the exact signed app from `/private/tmp/DerivedData-rec98-integrity-device/Build/Products/Debug-iphoneos/Wander.app` on Ryan's paired iPhone 15 Pro. Automated relaunch remains blocked only because the phone is locked; CoreDevice reports `RequestDenied: Locked`. No merge, build-number bump, TestFlight release, tester-data rewrite, or Slack announcement occurred.
+
+Provider-specificity handoff, 2026-07-17 16:31 PDT:
+
+- Committed and pushed the complete provider reconciliation as `79d101319` (`fix: reconcile provider place categories`) to `origin/codex/rec-98-category-emojis`.
+- Updated ready PR #112 with root causes, systemic behavior, validation, deployment status, and the physical-device checklist: https://github.com/joelipshutz/wander/pull/112#issuecomment-5008505653.
+- Added matching Linear evidence in comment `806799af-1f5b-4768-bdd2-0c231dc621e1` and moved REC-98 from `In Progress` to `In Review`.
+- The branch is ready for Xcode testing. No merge, build-number bump, TestFlight upload, or Slack announcement was requested or performed.
+
+Immediate map-emoji refresh and release follow-up, 2026-07-17 17:01 PDT:
+
+- Ryan reported that changing Menya Tigre's cuisine from Sushi to Japanese persisted the edit but left the map annotation on the old sushi emoji. He explicitly requested the fix, a squash merge to `main`, and a new TestFlight build.
+- Reopened REC-98 as `In Progress` in Linear comment `8dc3d0bd-5066-4a92-b780-189bd7762c8a`. Continuing in the clean isolated worktree `/private/tmp/recme-rec98-category-emojis` on `codex/rec-98-category-emojis` at `bd591eea4`; the root checkout and unrelated worktrees remain untouched.
+- Investigation will trace the cuisine edit mutation, local persistence, `VisiblePlace` projection, map annotation identity, and SwiftUI/MapKit invalidation before changing code. Expected files are the relevant save/edit store path, Map display adapter if required, focused store/map tests, and this log.
+- Release scope is explicit: after regression and full validation, review and squash-merge PR #112, bump `CURRENT_PROJECT_VERSION` once on latest `main`, regenerate XcodeGen output, archive/upload with build-number mutation disabled, run the TestFlight helper, update Linear, and post the required `#testflight-feedback` release note.
+
+Immediate map-emoji refresh checkpoint, 2026-07-17 17:20 PDT:
+
+- Root cause was two related projection/persistence gaps, not the emoji resolver: `localVisiblePlaces` omitted saved attributes when constructing `VisiblePlace`, so the map fell back to stale provider type `sushi_restaurant`; `updateVisit` persisted the edited cuisine only inside the visit answer JSON, leaving the canonical user-place `restaurant_cuisine` unchanged.
+- Added focused regressions for both gaps. The pre-fix run failed both tests; after the store change, the focused simulator run passed 2/2 in `/private/tmp/DerivedData-rec98-immediate-green/Logs/Test/Test-Wander-2026.07.17_17-15-32--0700.xcresult`.
+- The fix now includes saved attributes in every local map-visible projection and promotes an explicit visit cuisine edit to the canonical place attribute, marking both the attribute and an already-synced parent user place `pendingUpdate`. The existing visit sync path already retries the parent user-place sync first, so the edit persists remotely before the visit upsert.
+- Release coordination changed after implementation began: REC-100 was squash-merged to `origin/main` as `2b2f19a9b`, and its active release task will sequence both PRs into one build 78. This task will integrate latest `main`, preserve both append-only logs, validate and push PR #112, but will not merge, bump, archive, upload, or post Slack independently.
+
 ## 2026-07-17 15:34 PDT - Codex - REC-100 Contrast And Profile Header Fixes
 
 Agent: Codex
@@ -12348,3 +12485,28 @@ Pre-landing review checkpoint, 2026-07-17 17:11 PDT:
 - The optional gstack initialization/telemetry path was not run because the managed environment rejected its out-of-repo writes/possible telemetry; the checklist review was completed locally and recorded here instead. The advisory slop scanner was unavailable because `bun` is not installed.
 - Independent review reproduced one release-order finding: REC-98 and REC-100 append `docs/agent-log.md` from the same base, so the second branch must integrate latest `main` and preserve both log histories. Their current overlapping Swift source changes auto-merge cleanly. REC-100 will land first; the active REC-98 owner will then integrate latest `main`, resolve the append-only log conflict, rerun its focused/full/build gate, and provide a final merge-ready head.
 - Merge remains intentionally separate from release: no build 78 bump starts until both PRs are squash-merged into latest `main`.
+
+REC-98 latest-main integration and validation, 2026-07-17 17:36 PDT:
+
+- Fetched and integrated exact `origin/main` `2b2f19a9b` (`REC-100: Improve content contrast and Profile header (#113)`) into `codex/rec-98-category-emojis` as merge commit `3643a214a`. The four overlapping Swift files (`AddScreen`, `ListsScreen`, `MapScreen`, and `SharedVisitComponents`) auto-merged; direct inspection confirms REC-100's static-content/contrast fixes and REC-98's rich category emoji rendering both remain intact.
+- The only merge conflict was the expected append-only `docs/agent-log.md` tail. Resolved it by retaining the complete REC-98 and REC-100 histories; no source conflict markers or unresolved paths remain.
+- Integrated REC-98 focused validation passed 76/76 with zero failures at `/private/tmp/DerivedData-rec98-integrated-focused/Logs/Test/Test-Wander-2026.07.17_17-24-00--0700.xcresult`. This includes all place-category and remote-repository tests plus six provider/immediate-refresh store regressions.
+- The complete integrated iPhone 17 Pro / iOS 26.5 suite passed 401/401 with zero failures at `/private/tmp/DerivedData-rec98-integrated-full/Logs/Test/Test-Wander-2026.07.17_17-28-54--0700.xcresult`.
+- A fresh generic iOS Simulator build passed. The resulting binary at `/private/tmp/DerivedData-rec98-integrated-build/Build/Products/Debug-iphonesimulator/Wander.app/Wander` contains both `arm64` and `x86_64`; `git diff --check` is clean and latest `origin/main` is an ancestor of the integrated head.
+- Next: complete independent pre-landing review, append final findings/handoff, commit and push the validated head to PR #112, confirm GitHub mergeability/checks, update REC-98 to `In Review`, and send the final SHA to the coordinated build-78 release task. No merge, build bump, archive, upload, or Slack release occurs here.
+
+REC-98 final review and release-gate handoff, 2026-07-17 19:27 PDT:
+
+- Independent pre-landing review found five correctness/performance risks in the immediate-refresh path: category edits from the scoped visit form discarded the edited candidate; removing cuisine could leave a stale canonical cuisine; visit sync could continue after its parent user-place sync failed; each map marker rebuilt visible-place and attribute summaries; and provider enrichment retried up to 24 generic places after every relaunch despite a shared quota.
+- Fixed the complete set without unrelated cleanup. Visit edits now persist explicit category/subcategory overrides and cuisine replacement or removal immediately; canonical attributes are projected into `VisiblePlace`; visit sync stops unless the parent sync succeeds; map annotations reuse one grouped visible-place snapshot and its attached attributes; and provider enrichment is capped at four attempts with a persisted seven-day cooldown, including unusable responses.
+- Added regressions for relaunch persistence of edited cuisine, clearing cuisine, broad category/subcategory edits, parent-before-visit sync failure, and provider cooldown persistence. The final focused gate passed 80/80 with zero failures, including the 2,000-resolution hot-path test in 1.109 seconds: `/private/tmp/DerivedData-rec98-review-focused/Logs/Test/Test-Wander-2026.07.17_19-18-27--0700.xcresult`.
+- The exact final source state passed the complete iPhone 17 Pro / iOS 26.5 suite, 405/405 with zero failures: `/private/tmp/DerivedData-rec98-review-full/Logs/Test/Test-Wander-2026.07.17_19-19-56--0700.xcresult`.
+- A fresh generic iOS Simulator build passed. `/private/tmp/DerivedData-rec98-review-build/Build/Products/Debug-iphonesimulator/Wander.app/Wander` contains both `arm64` and `x86_64`; `git diff --check` is clean and exact REC-100 `origin/main` remains an ancestor.
+- Scope is frozen for the combined build 78 gate. Next: commit and push this final head to PR #112, confirm it is merge-ready, update REC-98 to `In Review`, and hand the exact SHA to the coordinating release task. This task will not merge, bump, archive, upload, or post Slack independently.
+
+REC-98 publishing handoff, 2026-07-17 19:31 PDT:
+
+- Committed the final implementation and review fixes as `2d2023864` (`fix: harden immediate place classification refresh`) and pushed `codex/rec-98-category-emojis`.
+- PR #112 is open, ready, `MERGEABLE/CLEAN`, based on exact REC-100 main `2b2f19a9b`, with no reported checks or inline review comments: https://github.com/joelipshutz/wander/pull/112#issuecomment-5009497181.
+- Moved Linear REC-98 to `In Review`, attached the final PR handoff, and added validation comment `c464278a-9491-4089-8858-ecb5e1d9cc47`.
+- Sent the exact release-gate result to the coordinating REC-100/build-78 task. It now owns the squash merge and the single combined TestFlight release; no merge, build bump, archive, upload, or Slack post occurred in this task.

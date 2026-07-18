@@ -104,6 +104,51 @@ extension View {
     }
 }
 
+struct WanderCategoryEmoji: View {
+    private let emoji: String
+    let size: CGFloat
+
+    init(
+        category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
+        rawProviderType: String? = nil,
+        name: String? = nil,
+        size: CGFloat = 18
+    ) {
+        emoji = WanderPlaceCategory.emoji(
+            for: category,
+            subcategory: subcategory,
+            cuisine: cuisine,
+            rawProviderType: rawProviderType,
+            name: name
+        )
+        self.size = size
+    }
+
+    init(
+        assignment: PlaceCategoryAssignment,
+        cuisine: String? = nil,
+        name: String? = nil,
+        size: CGFloat = 18
+    ) {
+        emoji = WanderPlaceCategory.emoji(for: assignment, cuisine: cuisine, name: name)
+        self.size = size
+    }
+
+    init(emoji: String, size: CGFloat = 18) {
+        self.emoji = emoji
+        self.size = size
+    }
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: size))
+            .lineLimit(1)
+            .accessibilityHidden(true)
+    }
+}
+
 struct WanderChip: View {
     let title: String
     var isSelected = false
