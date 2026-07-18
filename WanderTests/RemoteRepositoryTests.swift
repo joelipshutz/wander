@@ -3,6 +3,50 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testDiscoverPeopleRecommendationsCallsExpectedRPCAndMapsReasons() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["discover_profile_recommendations"] = """
+        [
+          {
+            "id": "user_sofia",
+            "handle": "sofia",
+            "display_name": "Sofia Rivera",
+            "avatar_url": "https://example.com/sofia.jpg",
+            "bio": "Neighborhood restaurants and long walks.",
+            "home_area": "Los Angeles",
+            "created_at": "2026-07-01T12:00:00Z",
+            "relationship": "non_follower",
+            "reason_kind": "shared_follows",
+            "shared_follow_count": 2,
+            "result_rank": 1
+          },
+          {
+            "id": "user_ari",
+            "handle": "ari",
+            "display_name": "Ari Bell",
+            "avatar_url": null,
+            "bio": null,
+            "home_area": null,
+            "created_at": "2026-06-01T12:00:00Z",
+            "relationship": "non_follower",
+            "reason_kind": "follows_you",
+            "shared_follow_count": 0,
+            "result_rank": 2
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let recommendations = try await repository.discoverProfileRecommendations(limit: 12)
+
+        XCTAssertEqual(recommendations.map(\.profile.id), ["user_sofia", "user_ari"])
+        XCTAssertEqual(recommendations.map(\.reason), [.sharedFollows(2), .followsYou])
+        XCTAssertEqual(recommendations.map(\.rank), [1, 2])
+        XCTAssertEqual(recommendations.first?.profile.isPrivateProfile, false)
+        XCTAssertEqual(rpc.calls.map(\.name), ["discover_profile_recommendations"])
+        XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 12)
+    }
+
     func testProfileSearchCallsExpectedRPCAndMapsShells() async throws {
         let rpc = RecordingRPC()
         rpc.responses["search_profiles_by_handle"] = """

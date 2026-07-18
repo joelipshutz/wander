@@ -7,6 +7,26 @@ Linear: `REC-90`
 Status: APPROVED  
 Mode: Startup
 
+## Approved First Build Slice — 2026-07-17
+
+Joe narrowed the first implementation to the Discover null/default states. This section supersedes incompatible Slice 1 implementation language below; the broader document remains the design record for later REC-90 work.
+
+Ship now:
+
+- Places retains newest-first Activity and, only after a successful load renders zero privacy-visible followed-user rows, shows a network-building empty state with **Find people to follow**.
+- People keeps search and shows a horizontal **People worth following** shelf whenever search is inactive.
+- Both surfaces use one shared real-profile recommendation response and one shared card component.
+- All active public profiles are eligible by default. Private Profile, deleted, blocked, current-user, and already-followed profiles are excluded server-side.
+- Reasons are limited to `Follows you`, aggregate shared-follow evidence, or `Suggested by rec.me`. No place data or place-derived eligibility is used.
+- Inline Follow waits for server acknowledgement, keeps the card visible as Following for the current response, and refreshes the existing social graph/place cache. Failure never renders Following.
+- Private Profile is authoritative on the server and enforced by search, recommendations, followers, following, and direct follow eligibility.
+
+Defer:
+
+- place recovery, city shelves, Contacts, recommendation dismissals, curated/fake production profiles, consent/recommendable fields, place-activity ranking, search-answer redesign, and search parser fixes.
+
+The exact engineering contract and test plan are in `docs/reviews/2026-07-17-rec-90-null-states-plan-eng-review.md`.
+
 ## Problem Statement
 
 Discover currently assumes a social graph before it helps create one. The Places mode can show privacy-filtered, newest-first activity from followed people, but the Members mode is primarily a search box plus people the user already follows. A user who does not know another member's handle receives little proactive help, and a user who sees a profile gets little explanation of what following that person will add to their map.

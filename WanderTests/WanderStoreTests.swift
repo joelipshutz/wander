@@ -2680,6 +2680,128 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
 
+    func testDiscoverPeopleRecommendationsLoadsCachesAndHydratesProfiles() async {
+        let store = makeStore()
+        let recommendation = DiscoverPeopleRecommendation(
+            profile: ProfileShell(
+                id: "user_sofia",
+                handle: "sofia",
+                displayName: "Sofia Rivera",
+                avatarURL: nil,
+                bio: "Neighborhood restaurants and long walks.",
+                homeArea: "Los Angeles",
+                isPrivateProfile: false,
+                relationship: .nonFollower
+            ),
+            reason: .sharedFollows(2),
+            rank: 1
+        )
+        let profileRepository = FakeProfileRepository(recommendations: [recommendation])
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        await store.refreshDiscoverPeopleRecommendations(backend: backend, limit: 12)
+        await store.refreshDiscoverPeopleRecommendations(backend: backend, limit: 8)
+
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([recommendation]))
+        XCTAssertEqual(profileRepository.recommendationLimits, [12])
+        XCTAssertEqual(store.profileState(for: "user_sofia")?.shell.bio, recommendation.profile.bio)
+    }
+
+    func testDiscoverPeopleRecommendationsCanForceRefreshAfterAnEmptyResponse() async {
+        let store = makeStore()
+        let recommendation = DiscoverPeopleRecommendation(
+            profile: ProfileShell(
+                id: "user_sofia",
+                handle: "sofia",
+                displayName: "Sofia Rivera",
+                avatarURL: nil,
+                bio: nil,
+                isPrivateProfile: false,
+                relationship: .nonFollower
+            ),
+            reason: .suggested,
+            rank: 1
+        )
+        let profileRepository = FakeProfileRepository(
+            recommendationResponses: [[], [recommendation]]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        await store.refreshDiscoverPeopleRecommendations(backend: backend)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+
+        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([recommendation]))
+        XCTAssertEqual(profileRepository.recommendationLimits, [20, 20])
+    }
+
+    func testDiscoverPeopleRecommendationsRejectPrivateBlockedSelfAndAcknowledgedFollows() async {
+        let store = makeStore()
+        store.block(userID: "user_blocked")
+        let shells = [
+            ProfileShell(
+                id: store.currentUser.id,
+                handle: store.currentUser.handle,
+                displayName: store.currentUser.displayName,
+                avatarURL: nil,
+                bio: nil,
+                isPrivateProfile: false,
+                relationship: .owner
+            ),
+            ProfileShell(
+                id: "user_private",
+                handle: "private",
+                displayName: "Private Person",
+                avatarURL: nil,
+                bio: nil,
+                isPrivateProfile: true,
+                relationship: .nonFollower
+            ),
+            ProfileShell(
+                id: "user_blocked",
+                handle: "blocked",
+                displayName: "Blocked Person",
+                avatarURL: nil,
+                bio: nil,
+                isPrivateProfile: false,
+                relationship: .nonFollower
+            ),
+            ProfileShell(
+                id: "user_maya",
+                handle: "maya",
+                displayName: "Maya",
+                avatarURL: nil,
+                bio: nil,
+                isPrivateProfile: false,
+                relationship: .follower
+            )
+        ]
+        let recommendations = shells.enumerated().map { index, shell in
+            DiscoverPeopleRecommendation(profile: shell, reason: .suggested, rank: index + 1)
+        }
+        let backend = WanderBackend(
+            profileRepository: FakeProfileRepository(recommendations: recommendations)
+        )
+
+        await store.refreshDiscoverPeopleRecommendations(backend: backend)
+
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .loaded([]))
+    }
+
+    func testDiscoverPeopleRecommendationsFailureAndIdentityChangeResetState() async {
+        let store = makeStore()
+        let backend = WanderBackend(
+            profileRepository: FakeProfileRepository(recommendationError: TestError.expected)
+        )
+
+        await store.refreshDiscoverPeopleRecommendations(backend: backend)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .failed)
+
+        store.apply(authState: .signedOut)
+        XCTAssertEqual(store.discoverPeopleRecommendationsState, .idle)
+    }
+
     func testDiscoverMembersKeepsLocalAvatarWhenRemoteSearchOmitsAvatar() async {
         let store = makeStore()
         let avatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=local"
@@ -3715,12 +3837,37 @@ final class WanderStoreTests: XCTestCase {
         let followRepository = FakeFollowRepository(error: WanderRemoteError.invalidResponse("network down"))
         let backend = WanderBackend(followRepository: followRepository)
 
-        await store.follow(userID: "user_sofia", source: .username, backend: backend)
+        let acknowledged = await store.follow(userID: "user_sofia", source: .username, backend: backend)
 
         let follow = store.follows.first { $0.followedUserID == "user_sofia" }
+        XCTAssertFalse(acknowledged)
+        XCTAssertFalse(store.hasAcknowledgedFollow(to: "user_sofia"))
         XCTAssertEqual(follow?.syncStateRaw, SyncState.failed.rawValue)
         XCTAssertEqual(followRepository.followedUserIDs, ["user_sofia"])
         XCTAssertNotNil(follow?.lastSyncError)
+    }
+
+    func testRemoteFollowReturnsAcknowledgedOnlyAfterBackendSuccess() async {
+        let store = makeStore()
+        let sofia = ProfileShell(
+            id: "user_sofia",
+            handle: "sofia",
+            displayName: "Sofia Rivera",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(
+            following: [sofia],
+            relationships: ["user_sofia": .follower]
+        )
+        let backend = WanderBackend(followRepository: followRepository)
+
+        let acknowledged = await store.follow(userID: "user_sofia", source: .profile, backend: backend)
+
+        XCTAssertTrue(acknowledged)
+        XCTAssertTrue(store.hasAcknowledgedFollow(to: "user_sofia"))
+        XCTAssertEqual(followRepository.followedUserIDs, ["user_sofia"])
     }
 
     func testRemoteUnfollowFailureKeepsFailedLocalFollow() async {
@@ -4566,21 +4713,29 @@ private final class FakeProfileRepository: ProfileRepository {
     private let currentProfileResult: LocalProfile?
     private let updateError: Error?
     private let updatedProfileResult: LocalProfile?
+    private var recommendationResponses: [[DiscoverPeopleRecommendation]]
+    private let recommendationError: Error?
     private(set) var queries: [String] = []
     private(set) var profileIDs: [String] = []
+    private(set) var recommendationLimits: [Int] = []
 
     init(
         shells: [ProfileShell] = [],
         profileStates: [String: ProfileViewState] = [:],
         currentProfile: LocalProfile? = nil,
         updateError: Error? = nil,
-        updatedProfile: LocalProfile? = nil
+        updatedProfile: LocalProfile? = nil,
+        recommendations: [DiscoverPeopleRecommendation] = [],
+        recommendationResponses: [[DiscoverPeopleRecommendation]]? = nil,
+        recommendationError: Error? = nil
     ) {
         self.shells = shells
         self.profileStates = profileStates
         self.currentProfileResult = currentProfile
         self.updateError = updateError
         self.updatedProfileResult = updatedProfile
+        self.recommendationResponses = recommendationResponses ?? [recommendations]
+        self.recommendationError = recommendationError
     }
 
     func currentProfile() async throws -> LocalProfile? {
@@ -4608,6 +4763,18 @@ private final class FakeProfileRepository: ProfileRepository {
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
         queries.append(handleQuery)
         return shells
+    }
+
+    func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        recommendationLimits.append(limit)
+        if let recommendationError {
+            throw recommendationError
+        }
+        guard !recommendationResponses.isEmpty else { return [] }
+        if recommendationResponses.count == 1 {
+            return recommendationResponses[0]
+        }
+        return recommendationResponses.removeFirst()
     }
 }
 

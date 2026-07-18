@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-15
+Last updated: 2026-07-17
 
 Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -21,6 +21,8 @@ Durable product and engineering decisions for Wander. See the product spec and e
 | Public/private copy | Locked | UI says Everyone/Friends/Self; data stores `followers`/`mutuals`/`self`. |
 | Block behavior | Locked | Hard block; remove follow edges and hide profiles/content both ways. |
 | People finding | Locked for v0.1 | Username search plus contacts-shaped UI. Native Contacts later. |
+| Discover network-building null state | Locked for REC-90 first slice | Places keeps its tabs and shows **Find people to follow** only after Activity loads successfully with zero rendered followed-user rows. That action switches to People, whose no-search state leads with a horizontal real-profile recommendation shelf and inline Follow actions. |
+| Discover recommendation privacy | Locked for REC-90 first slice | Active public profiles are recommendation-eligible by default. Private Profile, deleted, blocked, current-user, and already-followed accounts are excluded server-side; Private Profile is also enforced by member search, follower/following graph RPCs, and direct follow. Recommendations use profile/follow data only, never place rows. |
 | Following not-yet-on-app users | Deferred | Track later; not in v0.1. |
 
 ## Technical Decisions

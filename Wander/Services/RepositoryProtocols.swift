@@ -43,6 +43,40 @@ struct ProfileViewState {
     let isBlocked: Bool
 }
 
+enum DiscoverPeopleRecommendationReason: Equatable {
+    case followsYou
+    case sharedFollows(Int)
+    case suggested
+
+    func displayText(for profile: ProfileShell) -> String {
+        switch self {
+        case .followsYou:
+            return "Follows you"
+        case .sharedFollows(let count):
+            return count == 1
+                ? "1 person you follow follows \(profile.displayName)"
+                : "\(count) people you follow follow \(profile.displayName)"
+        case .suggested:
+            return "Suggested by rec.me"
+        }
+    }
+}
+
+struct DiscoverPeopleRecommendation: Identifiable, Equatable {
+    let profile: ProfileShell
+    let reason: DiscoverPeopleRecommendationReason
+    let rank: Int
+
+    var id: String { profile.id }
+}
+
+enum DiscoverPeopleRecommendationsState: Equatable {
+    case idle
+    case loading
+    case loaded([DiscoverPeopleRecommendation])
+    case failed
+}
+
 struct MapViewport: Equatable {
     let minLatitude: Double
     let minLongitude: Double
@@ -1238,10 +1272,15 @@ protocol ProfileRepository {
     func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
+    func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation]
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile
 }
 
 extension ProfileRepository {
+    func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        throw WanderRemoteError.notImplemented("profile recommendations RPC")
+    }
+
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
         throw WanderRemoteError.notImplemented("profile privacy RPC")
     }

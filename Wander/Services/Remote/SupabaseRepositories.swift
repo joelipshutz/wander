@@ -55,6 +55,14 @@ struct SupabaseProfileRepository: ProfileRepository {
         return rows.map { $0.profileShell() }
     }
 
+    func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
+        let rows: [RemoteDiscoverPeopleRecommendationDTO] = try await rpc.call(
+            "discover_profile_recommendations",
+            params: DiscoverProfileRecommendationsParams(limit: limit)
+        )
+        return rows.map { $0.recommendation() }
+    }
+
     func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
         let response: RemoteCurrentProfileDTO = try await rpc.call(
             "update_profile_privacy",
@@ -64,6 +72,14 @@ struct SupabaseProfileRepository: ProfileRepository {
             )
         )
         return response.localProfile()
+    }
+}
+
+private struct DiscoverProfileRecommendationsParams: Encodable {
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case limit = "input_limit"
     }
 }
 

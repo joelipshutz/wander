@@ -434,6 +434,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
     }
 
+    func testDiscoverColdStartKeepsTabsAndBuildsThePeopleNetwork() throws {
+        let discoverScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+
+        XCTAssertTrue(discoverScreen.contains("ForEach(DiscoverMode.allCases)"))
+        XCTAssertTrue(discoverScreen.contains("case .loaded where latestActivityPlaces.isEmpty"))
+        XCTAssertTrue(discoverScreen.contains("DiscoverActivityEmptyPanel"))
+        XCTAssertTrue(discoverScreen.contains("selectedMode = .members"))
+        XCTAssertTrue(discoverScreen.contains("PeopleRecommendationShelf"))
+        XCTAssertTrue(discoverScreen.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(discoverScreen.contains("store.hasAcknowledgedFollow(to: $0)"))
+        XCTAssertTrue(discoverScreen.contains("if isMemberSearchActive"))
+    }
+
     @MainActor
     func testPlaceProfileEdgeSwipeBackGestureOnlyTriggersFromLeftEdge() {
         XCTAssertTrue(
