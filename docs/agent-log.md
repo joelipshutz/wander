@@ -12571,3 +12571,10 @@ REC-99 integrated validation completion, 2026-07-17 19:45 PDT:
 - A fresh generic iOS Simulator build passed for both arm64 and x86_64 from `/private/tmp/DerivedData-rec99-integrated`. Independent scope/correctness review found no blocking issue and confirmed the Ryan Been + Joe Been + Maya Wanna scenario produces a full personal Been ring plus the split social Been/Wanna halo.
 - The final diff against integrated `origin/main` remains exactly `Wander/Features/Map/MapScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this required log. `git diff --check` is clean, no fixture or prior mockup artifact remains, and no card, copy, map layout, search, filter, backend, build-number, TestFlight, or Slack change is included.
 - Next: commit this integrated validation record, push the validated branch, convert PR #114 to a ready implementation PR, and move REC-99 to `In Review` with the final evidence.
+
+REC-99 publishing handoff, 2026-07-17 19:47 PDT:
+
+- Committed the production split halo as `c8104706d`, integrated latest `origin/main` `654ea77a7` via `651231c7b`, and committed the integrated validation record as `110a486f3`. Pushed the validated head to `codex/rec-99-social-pin-mockups`.
+- Reframed existing PR #114 as `REC-99: Preserve mixed social Been and Wanna on map pins`, replaced the earlier exploration description with the exact approved scope, and marked it ready for review: https://github.com/joelipshutz/wander/pull/114.
+- Moved Linear REC-99 to `In Review` and added final implementation/validation comment `20fdcc97-1f0b-47bf-a557-cba3f7f9985e`.
+- No merge, selected-place-card or other mockup change, build-number bump, TestFlight archive/upload, hosted-data mutation, or Slack announcement occurred.
