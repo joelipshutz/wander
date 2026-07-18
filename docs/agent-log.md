@@ -12563,3 +12563,11 @@ REC-99 latest-main integration checkpoint, 2026-07-17 19:36 PDT:
 - After the validated split-halo commit, `origin/main` advanced to `654ea77a7` with REC-98. Merged that exact main into this branch; all Swift and project changes auto-merged, including the overlapping production `MapScreen.swift`.
 - The sole conflict was the expected append-only `docs/agent-log.md` tail. Resolved it by retaining the complete REC-98 and REC-99 histories. The post-merge diff against latest main remains limited to `MapScreen.swift`, `MapHitTestingTests.swift`, and this log, with no prior mockup artifacts or unrelated UI changes.
 - Next: complete the merge commit, rerun focused/full/build validation on the integrated source, then publish the ready PR handoff.
+
+REC-99 integrated validation completion, 2026-07-17 19:45 PDT:
+
+- The integrated focused `MapPinOutlineBuilderTests` gate passed 6/6 with zero failures at `/private/tmp/DerivedData-rec99-integrated/Logs/Test/Test-Wander-2026.07.17_19-37-39--0700.xcresult`.
+- The complete integrated iPhone 17 Pro / iOS 26.5 suite passed 408/408 with zero failures at `/private/tmp/DerivedData-rec99-integrated/Logs/Test/Test-Wander-2026.07.17_19-41-31--0700.xcresult`.
+- A fresh generic iOS Simulator build passed for both arm64 and x86_64 from `/private/tmp/DerivedData-rec99-integrated`. Independent scope/correctness review found no blocking issue and confirmed the Ryan Been + Joe Been + Maya Wanna scenario produces a full personal Been ring plus the split social Been/Wanna halo.
+- The final diff against integrated `origin/main` remains exactly `Wander/Features/Map/MapScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this required log. `git diff --check` is clean, no fixture or prior mockup artifact remains, and no card, copy, map layout, search, filter, backend, build-number, TestFlight, or Slack change is included.
+- Next: commit this integrated validation record, push the validated branch, convert PR #114 to a ready implementation PR, and move REC-99 to `In Review` with the final evidence.
