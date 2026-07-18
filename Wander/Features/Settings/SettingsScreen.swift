@@ -9,49 +9,11 @@ struct SettingsScreen: View {
     @State private var activeDetail: SettingsDetail?
     @State private var pendingPrivateProfileValue: Bool?
     @State private var showsPrivateProfileWarning = false
+    @State private var isUpdatingPrivateProfile = false
+    @State private var privacyErrorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    header
-                    accountSection
-                    visibilitySection
-                    blockedSection
-                    groupedRows
-                }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
-            }
-            .wanderScreen()
-        }
-        .sheet(item: $activeDetail) { detail in
-            switch detail {
-            case .trust:
-                TrustAndPrivacySheet()
-            case .notifications:
-                NotificationSettingsSheet()
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-                    .environmentObject(pushNotifications)
-            }
-        }
-        .alert(
-            SettingsProfilePrivacySurface.warningTitle(enabling: pendingPrivateProfileValue ?? false),
-            isPresented: $showsPrivateProfileWarning
-        ) {
-            Button("Cancel", role: .cancel) {
-                pendingPrivateProfileValue = nil
-            }
-            Button(SettingsProfilePrivacySurface.warningConfirmTitle(enabling: pendingPrivateProfileValue ?? false)) {
-                if let pendingPrivateProfileValue {
-                    store.setPrivateProfile(pendingPrivateProfileValue)
-                }
-                pendingPrivateProfileValue = nil
-            }
-        } message: {
-            Text(SettingsProfilePrivacySurface.warningBody(enabling: pendingPrivateProfileValue ?? false))
-        }
+        ProfileSettingsHome()
     }
 
     private var header: some View {
@@ -173,6 +135,15 @@ struct SettingsScreen: View {
 
             privateProfileToggle
 
+            if isUpdatingPrivateProfile {
+                ProgressView("Updating privacy...")
+                    .font(.system(size: 12, weight: .bold))
+            } else if let privacyErrorMessage {
+                Text(privacyErrorMessage)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
+            }
+
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
 
@@ -194,7 +165,6 @@ struct SettingsScreen: View {
                 }
             )
             .disabled(store.isPrivateProfile)
-            .opacity(store.isPrivateProfile ? 0.56 : 1)
         }
         .onAppear {
             if !store.isPrivateProfile {
@@ -238,6 +208,7 @@ struct SettingsScreen: View {
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
+        .disabled(isUpdatingPrivateProfile)
         .accessibilityIdentifier(SettingsProfilePrivacySurface.accessibilityID)
     }
 
@@ -395,7 +366,7 @@ private struct TrustAndPrivacySheet: View {
     }
 }
 
-private struct NotificationSettingsSheet: View {
+struct NotificationSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
@@ -437,6 +408,11 @@ private struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Shared visits",
+                            systemImage: "person.2.badge.plus",
+                            binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
+                        )
+                        notificationToggle(
                             title: "Saves from your map",
                             systemImage: "map",
                             binding: preferenceBinding(\.recommendationsEnabled) { NotificationPreferencesUpdate(recommendationsEnabled: $0) }
@@ -460,7 +436,6 @@ private struct NotificationSettingsSheet: View {
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .opacity(notificationsEnabled ? 1 : 0.45)
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -652,30 +627,18 @@ private struct NotificationSettingsSheet: View {
         pushNotifications.clearLastError()
         defer { isChangingEnabledState = false }
 
-        let permissionGranted: Bool
-        if permissionAlreadyGranted || pushNotifications.canRegisterForRemoteNotifications {
-            permissionGranted = true
+        if permissionAlreadyGranted {
             UIApplication.shared.registerForRemoteNotifications()
-        } else {
-            permissionGranted = await pushNotifications.requestAuthorizationAndRegister()
         }
-
-        guard permissionGranted else {
+        guard let enabledPreferences = await pushNotifications.enableNotifications(
+            backend: backend,
+            authState: auth.state
+        ) else {
             preferences = .allDisabled
             errorMessage = pushNotifications.lastErrorMessage ?? "Notifications were not allowed."
             return
         }
-
-        do {
-            preferences = try await backend.updateNotificationPreferences(.allEnabled)
-            _ = await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: auth.state)
-            if let registrationError = pushNotifications.lastErrorMessage {
-                errorMessage = registrationError
-            }
-        } catch {
-            preferences = .allDisabled
-            errorMessage = "Permission was allowed, but rec.me could not finish notification setup. Try again."
-        }
+        preferences = enabledPreferences
     }
 
     private func disableNotifications() async {
@@ -686,14 +649,10 @@ private struct NotificationSettingsSheet: View {
         pushNotifications.clearLastError()
         defer { isChangingEnabledState = false }
 
-        do {
-            preferences = try await backend.updateNotificationPreferences(.allDisabled)
-            let disconnected = await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
-            if !disconnected {
-                errorMessage = pushNotifications.lastErrorMessage
-            }
-        } catch {
-            errorMessage = "Could not disable notifications. Try again."
+        if let disabledPreferences = await pushNotifications.disableNotifications(backend: backend) {
+            preferences = disabledPreferences
+        } else {
+            errorMessage = pushNotifications.lastErrorMessage
         }
     }
 
@@ -854,37 +813,45 @@ private struct SettingsRow: View {
     var action: (() -> Void)?
 
     var body: some View {
-        Button {
-            action?()
-        } label: {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(width: 38, height: 38)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+        Group {
+            if let action {
+                Button(action: action) {
+                    rowContent
                 }
-                Spacer()
-                if action != nil {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(WanderTheme.textFaint.color)
-                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+                    .accessibilityElement(children: .combine)
             }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
         .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title.lowercased().replacingOccurrences(of: " ", with: "."))")
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(WanderTheme.terracotta.color)
+                .frame(width: 38, height: 38)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if action != nil {
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
+        }
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }

@@ -76,6 +76,46 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testBackendCachesRepeatedPlacePhotoMetadataAndImageLoads() async throws {
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "cached-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/cached-photo",
+            width: 400,
+            height: 300,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/cached-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let repository = CachingPlacePhotoRepository(photo: photo, data: Data([0x01, 0x02]))
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let request = PlacePhotoRequest(
+            name: "One Cedar",
+            address: "Los Angeles, CA",
+            latitude: 34.05,
+            longitude: -118.24,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "cached-google-place"
+        )
+
+        let firstPhoto = try await backend.placePhoto(for: request)
+        let secondPhoto = try await backend.placePhoto(for: request)
+        let firstData = try await backend.placePhotoImageData(for: photo)
+        let secondData = try await backend.placePhotoImageData(for: photo)
+
+        XCTAssertEqual(firstPhoto, photo)
+        XCTAssertEqual(secondPhoto, photo)
+        XCTAssertEqual(firstData, secondData)
+        XCTAssertEqual(repository.metadataRequestCount, 1)
+        XCTAssertEqual(repository.imageRequestCount, 1)
+    }
+
+    @MainActor
     func testPlacePhotoImageReportsRemoteDecodeFailureForUserPhotoFallback() async throws {
         let failureReported = expectation(description: "Place photo failure reported")
         let repository = FailingPlacePhotoRenderingRepository()
@@ -482,6 +522,33 @@ private final class FailingPlacePhotoRenderingRepository: PlacePhotoRepository {
 
     func imageData(for photo: PlacePhoto) async throws -> Data {
         Data([0x00, 0x01, 0x02])
+    }
+}
+
+@MainActor
+private final class CachingPlacePhotoRepository: PlacePhotoRepository {
+    let resolvedPhoto: PlacePhoto
+    let data: Data
+    private(set) var metadataRequestCount = 0
+    private(set) var imageRequestCount = 0
+
+    init(photo: PlacePhoto, data: Data) {
+        resolvedPhoto = photo
+        self.data = data
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        metadataRequestCount += 1
+        return resolvedPhoto
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        resolvedPhoto
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        imageRequestCount += 1
+        return data
     }
 }
 

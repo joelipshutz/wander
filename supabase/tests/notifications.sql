@@ -1,8 +1,9 @@
 begin;
 
 create extension if not exists pgtap;
+set local search_path = public, extensions;
 
-select plan(40);
+select plan(45);
 
 select is(
   (
@@ -67,9 +68,15 @@ select is(
 );
 
 select is(
+  (public.get_notification_preferences()).push_enabled,
+  false,
+  'push delivery defaults off until explicit one-tap enrollment'
+);
+
+select is(
   (public.get_notification_preferences()).social_graph_enabled,
-  true,
-  'social graph notifications default on'
+  false,
+  'social graph notifications default off before enrollment'
 );
 
 select is(
@@ -80,8 +87,73 @@ select is(
 
 select is(
   (public.get_notification_preferences()).followed_activity_enabled,
-  true,
-  'followed-place activity notifications default on'
+  false,
+  'followed-place activity notifications default off before enrollment'
+);
+
+select is(
+  (public.get_notification_preferences()).shared_visits_enabled,
+  false,
+  'shared-visit notifications default off before enrollment'
+);
+
+select public.update_notification_preferences(
+  '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true}'::jsonb
+);
+
+select set_config('request.jwt.claim.sub', 'user_notify_actor_enabled', true);
+select public.register_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox',
+  'com.grayline.wander'
+);
+reset role;
+
+select is(
+  (
+    select count(*)::int
+    from public.notification_device_tokens
+    where user_id = 'user_notify_recipient' and is_active
+  ),
+  0,
+  'registering the same physical token for another account deactivates its prior owner'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.notification_device_tokens
+    where user_id = 'user_notify_actor_enabled' and is_active
+  ),
+  1,
+  'the physical token becomes active for the newly signed-in account'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.notification_device_tokens
+    where environment = 'sandbox'
+      and app_bundle_id = 'com.grayline.wander'
+      and token_hash = encode(
+        extensions.digest(
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'sha256'
+        ),
+        'hex'
+      )
+      and is_active
+  ),
+  1,
+  'one physical APNs token has exactly one active account owner'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
+select public.register_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox',
+  'com.grayline.wander'
 );
 
 select is(
@@ -158,6 +230,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"followed_activity_enabled":true}'::jsonb);
 reset role;
 
 insert into public.follows(follower_user_id, followed_user_id, source)
@@ -272,6 +345,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"social_graph_enabled":true}'::jsonb);
 reset role;
 insert into public.follows(follower_user_id, followed_user_id, source)
 values
@@ -294,6 +368,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"social_graph_enabled":true}'::jsonb);
 select public.block_user('user_block_actor');
 
 reset role;
@@ -332,6 +407,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"recommendations_enabled":true}'::jsonb);
 
 reset role;
 delete from public.notification_events;
@@ -378,6 +454,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"shared_lists_enabled":true}'::jsonb);
 
 reset role;
 insert into public.place_lists (
@@ -475,6 +552,7 @@ select public.register_push_token(
   'sandbox',
   'com.grayline.wander'
 );
+select public.update_notification_preferences('{"push_enabled":true,"capture_enabled":true}'::jsonb);
 
 reset role;
 insert into public.source_artifacts (
@@ -633,6 +711,17 @@ select is(
   'service worker can mark a claimed push event sent'
 );
 
-select * from finish();
+do $pgtap_finish$
+declare
+  diagnostics text;
+begin
+  select string_agg(result.message, E'\n')
+  into diagnostics
+  from finish() as result(message);
+  if diagnostics is not null then
+    raise exception 'Notifications pgTAP failures:%', E'\n' || diagnostics;
+  end if;
+end
+$pgtap_finish$;
 
 rollback;

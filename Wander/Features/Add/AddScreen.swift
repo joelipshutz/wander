@@ -451,7 +451,6 @@ struct AddScreen: View {
                 }
             )
             .disabled(store.isPrivateProfile)
-            .opacity(store.isPrivateProfile ? 0.56 : 1)
 
             WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
                 Task {

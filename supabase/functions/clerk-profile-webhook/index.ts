@@ -1,4 +1,5 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
+import { purgeAccountStorage } from "./account-purge.ts";
 
 type ClerkEmailAddress = {
   id?: string;
@@ -173,6 +174,10 @@ function timingSafeEqual(a: string, b: string): boolean {
 async function mirrorClerkProfile(headers: Headers, event: ClerkWebhookEvent): Promise<unknown> {
   const user = event.data;
   const isDelete = event.type === "user.deleted";
+  const mirroredEventTimestamp = eventTimestamp(event, headers);
+  if (isDelete && user?.id) {
+    await purgeAccountStorage(user.id, mirroredEventTimestamp, supabaseFetch);
+  }
   const response = await supabaseFetch("/rest/v1/rpc/mirror_clerk_profile", {
     method: "POST",
     headers: {
@@ -181,7 +186,7 @@ async function mirrorClerkProfile(headers: Headers, event: ClerkWebhookEvent): P
     body: JSON.stringify({
       event_id: headers.get("svix-id"),
       event_type: event.type,
-      event_timestamp: eventTimestamp(event, headers),
+      event_timestamp: mirroredEventTimestamp,
       profile_id: user?.id,
       desired_handle: !isDelete && user ? profileHandle(user as ClerkUser) : null,
       desired_display_name: !isDelete && user ? displayName(user as ClerkUser) : null,

@@ -57,6 +57,17 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["WANDER_SUPABASE_URL"] as? String, "$(WANDER_SUPABASE_URL)")
     }
 
+    func testInfoPlistRegistersProfileShareURLScheme() throws {
+        let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let urlTypes = try XCTUnwrap(plist["CFBundleURLTypes"] as? [[String: Any]])
+        let schemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+
+        XCTAssertTrue(schemes.contains("recme"))
+    }
+
     func testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI() throws {
         let clerkKey = WanderBackendConfiguration.defaultClerkPublishableKey
         let encoded = try XCTUnwrap(clerkKey.split(separator: "_").last).description

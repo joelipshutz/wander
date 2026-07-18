@@ -48,8 +48,12 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let placeAttributes: [PlaceAttributeRecord]
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
+    let sharedVisitInvitations: [SharedVisitInvitation]?
+    let sharedVisitInboxUserID: String?
+    let pendingSharedVisitInvites: [PendingSharedVisitInvite]?
     let follows: [FollowRecord]
     let blocks: [BlockRecord]
+    let mutes: [MuteRecord]?
     let placeLists: [PlaceListRecord]?
     let placeListMembers: [PlaceListMemberRecord]?
     let placeListItems: [PlaceListItemRecord]?
@@ -71,8 +75,12 @@ struct WanderStoreSnapshot: Codable, Equatable {
         placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
         placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
+        sharedVisitInvitations = store.sharedVisitInvitations
+        sharedVisitInboxUserID = store.sharedVisitInboxUserID
+        pendingSharedVisitInvites = store.pendingSharedVisitInvites
         follows = store.follows.map(FollowRecord.init)
         blocks = store.blocks.map(BlockRecord.init)
+        mutes = store.mutes.map(MuteRecord.init)
         placeLists = store.placeLists.map(PlaceListRecord.init)
         placeListMembers = store.placeListMembers.map(PlaceListMemberRecord.init)
         placeListItems = store.placeListItems.map(PlaceListItemRecord.init)
@@ -101,8 +109,12 @@ struct WanderStoreSnapshot: Codable, Equatable {
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
+            sharedVisitInvitations: sharedVisitInvitations ?? [],
+            sharedVisitInboxUserID: sharedVisitInboxUserID,
+            pendingSharedVisitInvites: pendingSharedVisitInvites ?? [],
             follows: follows.map { $0.model() },
             blocks: blocks.map { $0.model() },
+            mutes: mutes?.map { $0.model() } ?? [],
             placeLists: placeLists?.map { $0.model() } ?? [],
             placeListMembers: placeListMembers?.map { $0.model() } ?? [],
             placeListItems: shouldResetSavedPlaces ? [] : placeListItems?.map { $0.model() } ?? [],
@@ -125,8 +137,12 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let placeAttributes: [LocalPlaceAttribute]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]
+        let sharedVisitInvitations: [SharedVisitInvitation]
+        let sharedVisitInboxUserID: String?
+        let pendingSharedVisitInvites: [PendingSharedVisitInvite]
         let follows: [LocalFollow]
         let blocks: [LocalBlock]
+        let mutes: [LocalMute]
         let placeLists: [LocalPlaceList]
         let placeListMembers: [LocalPlaceListMember]
         let placeListItems: [LocalPlaceListItem]
@@ -699,6 +715,38 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
                 localUpdatedAt: localUpdatedAt,
                 serverUpdatedAt: serverUpdatedAt,
+                lastSyncError: lastSyncError,
+                createdAt: createdAt
+            )
+        }
+    }
+
+    struct MuteRecord: Codable, Equatable {
+        let localID: String
+        let muterUserID: String
+        let mutedUserID: String
+        let syncStateRaw: String
+        let localUpdatedAt: Date
+        let lastSyncError: String?
+        let createdAt: Date
+
+        init(_ mute: LocalMute) {
+            localID = mute.localID
+            muterUserID = mute.muterUserID
+            mutedUserID = mute.mutedUserID
+            syncStateRaw = mute.syncStateRaw
+            localUpdatedAt = mute.localUpdatedAt
+            lastSyncError = mute.lastSyncError
+            createdAt = mute.createdAt
+        }
+
+        func model() -> LocalMute {
+            LocalMute(
+                localID: localID,
+                muterUserID: muterUserID,
+                mutedUserID: mutedUserID,
+                syncState: SyncState(rawValue: syncStateRaw) ?? .localOnly,
+                localUpdatedAt: localUpdatedAt,
                 lastSyncError: lastSyncError,
                 createdAt: createdAt
             )

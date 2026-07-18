@@ -7,11 +7,191 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
+        XCTAssertEqual(
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://profiles/user_joe"))),
+            SharedProfileRoute(profileID: "user_joe")
+        )
+        XCTAssertEqual(
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://profiles/user%20joe"))),
+            SharedProfileRoute(profileID: "user joe")
+        )
+        XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://rec.me/profiles/user_joe"))))
+        XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://places/place_1"))))
+    }
+
+    @MainActor
+    func testSharedProfileContentBuildsTheRegisteredDeepLinkAndCopy() throws {
+        let content = try XCTUnwrap(
+            WanderShareContent.profile(id: "user joe", displayName: "Joe Example", handle: "joe")
+        )
+
+        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20joe")
+        XCTAssertEqual(content.subject, "Joe Example")
+        XCTAssertEqual(content.message, "See @joe on rec.me")
+        XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
+    }
+
+    func testSharedProfileMapContentUsesSharedNativeShareWorker() throws {
+        let content = try XCTUnwrap(
+            WanderShareContent.profileMap(id: "user maya", displayName: "Maya Chen", handle: "maya")
+        )
+
+        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20maya")
+        XCTAssertEqual(content.subject, "Maya Chen's map")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+    }
+
+    func testOtherMemberProfileUsesSharedHomeWithoutOwnerEditActions() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(profileScreen.contains("mode: .member("))
+        XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
+        XCTAssertTrue(home.contains("if mode.isOwner"))
+        XCTAssertTrue(home.contains("label: \"IN COMMON\""))
+        XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
+    }
+
+    func testSharedProfileHomeHidesUnusedNavigationBar() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(home.contains(".toolbar(.hidden, for: .navigationBar)"))
+    }
+
+    func testOwnPlaceActivityAttributionIsStaticInsteadOfDisabled() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let activityCard = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct PlaceActivityCard: View")
+                .last?
+                .components(separatedBy: "private struct VisitPhotoThumbnail: View")
+                .first
+        )
+
+        XCTAssertTrue(activityCard.contains("if entry.isCurrentUser"))
+        XCTAssertTrue(activityCard.contains("activityIdentityLabel"))
+        XCTAssertFalse(activityCard.contains(".disabled(entry.isCurrentUser)"))
+    }
+
+    func testUnavailableContentAvoidsStackedOpacityTreatments() throws {
+        let privateProfileFiles = [
+            "Wander/Features/Add/AddScreen.swift",
+            "Wander/Features/Map/MapScreen.swift",
+            "Wander/Features/Settings/ProfileSettingsViews.swift",
+            "Wander/Features/Settings/SettingsScreen.swift",
+            "Wander/Features/Lists/ListsScreen.swift"
+        ]
+
+        for file in privateProfileFiles {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertFalse(
+                source.contains(".opacity(store.isPrivateProfile ? 0.56 : 1)"),
+                "Private Profile controls should not compound disabled-state opacity in \(file)"
+            )
+        }
+
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Settings/SettingsScreen.swift")
+        )
+        XCTAssertFalse(settings.contains(".opacity(notificationsEnabled ? 1 : 0.45)"))
+        XCTAssertFalse(settings.contains(".disabled(action == nil)"))
+
+        let staticAvatarFiles = [
+            "Wander/Features/Lists/ListsScreen.swift",
+            "Wander/Features/SharedVisits/SharedVisitComponents.swift"
+        ]
+        for file in staticAvatarFiles {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertFalse(
+                source.contains(".disabled(onSelect == nil)"),
+                "Static avatars should not be rendered through disabled buttons in \(file)"
+            )
+        }
+    }
+
+    func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
+        let presentations = [
+            ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
+            ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
+            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
+        ]
+
+        for (file, presentation) in presentations {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(file))
+            XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
+            XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
+        }
+    }
+
+    func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+
+        XCTAssertTrue(home.contains("systemImage: \"chevron.left\""))
+        XCTAssertTrue(home.contains(".popover("))
+        XCTAssertTrue(home.contains("attachmentAnchor: .rect(.bounds)"))
+        XCTAssertTrue(home.contains("arrowEdge: .top"))
+        XCTAssertTrue(home.contains(".presentationCompactAdaptation(.popover)"))
+        XCTAssertFalse(profileScreen.contains(".confirmationDialog(\"Profile actions\""))
+        XCTAssertTrue(profileScreen.contains("if profile == nil"), "Full-screen loading and unavailable states need a dismiss control")
+    }
+
+    func testNativeSharingStaysBehindTheSharedShareComponent() throws {
+        let appRoot = projectRoot.appendingPathComponent("Wander")
+        let sharedComponent = appRoot.appendingPathComponent("DesignSystem/WanderShareButton.swift").standardizedFileURL
+        let directShareLinkFiles = try swiftFiles(in: appRoot).filter { file in
+            guard file.standardizedFileURL != sharedComponent else { return false }
+            return try String(contentsOf: file).contains("ShareLink(")
+        }
+
+        XCTAssertEqual(
+            directShareLinkFiles.map(\.lastPathComponent),
+            [],
+            "Use WanderShareButton so native sharing copy and behavior stay consistent."
+        )
+    }
+
+    func testProfileCalendarDatesUseScrollCompatibleTapHandling() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(source.contains("ScrollView {"))
+        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: WanderTheme.spacing6)"))
+        XCTAssertTrue(source.contains("Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2)"))
+        XCTAssertFalse(source.contains("LazyVStack"))
+        XCTAssertFalse(source.contains("LazyVGrid"))
+        XCTAssertTrue(source.contains(".onTapGesture { selectDate(date, day: day) }"))
+        XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
+        XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
+    }
+
+    @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
+        XCTAssertEqual(
+            WanderRootView.notificationTab(for: .sharedVisit(participantID: "participant-1", generation: 2)),
+            .map
+        )
         XCTAssertEqual(WanderRootView.notificationTab(for: .discover), .discover)
     }
 
@@ -83,10 +263,144 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(ListsScreenScenario.collaboratorsSheet.usesMockData)
     }
 
+    func testVisitFriendMockupsHaveDeterministicLaunchPages() {
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitFriendsEditor"]),
+            .visitFriendsEditor
+        )
+        XCTAssertEqual(
+            PlaceActivityMockupPage.resolved(from: ["Wander", "-WanderPlaceActivityMockup", "visitWithFriend"]),
+            .visitWithFriend
+        )
+    }
+
+    func testRetiredSharedVisitInvitationMockCannotReplaceTheProductionApp() throws {
+        let retiredIdentifiers = [
+            "WanderSharedVisitInvitationMockup",
+            "SharedVisitInvitationMockData",
+            "SharedVisitInvitationMockupRoot"
+        ]
+        let matches = try swiftFiles(in: projectRoot.appendingPathComponent("Wander")).filter { file in
+            let source = try String(contentsOf: file)
+            return retiredIdentifiers.contains { source.contains($0) }
+        }
+
+        XCTAssertEqual(matches.map(\.lastPathComponent), [])
+    }
+
+    @MainActor
+    func testSharedVisitBannerUsesTaggedCopyAndOpensTheProfileInbox() {
+        XCTAssertEqual(
+            SharedVisitBannerCopy.title(inviterName: "Joe Lipshutz", placeName: "RVR"),
+            "Joe Lipshutz tagged you at RVR"
+        )
+        XCTAssertEqual(WanderRootView.sharedVisitBannerDestinationTab, .profile)
+    }
+
+    func testSharedVisitCompanionPresentationUsesViewerAvatarOrderAndYouCopy() {
+        let joe = SharedVisitCompanion(
+            visitID: "visit-joe",
+            userID: "user-joe",
+            handle: "joe",
+            displayName: "Joe Lipshutz",
+            avatarURL: "https://example.com/joe.jpg"
+        )
+        let ryan = SharedVisitCompanion(
+            visitID: "visit-joe",
+            userID: "user-ryan",
+            handle: "ryan",
+            displayName: "Ryan L",
+            avatarURL: "https://example.com/ryan.jpg"
+        )
+
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID),
+            [ryan, joe]
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [ryan], currentUserID: ryan.userID),
+            "with You"
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [], currentUserID: ryan.userID),
+            ""
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.text(companions: [joe, ryan], currentUserID: ryan.userID),
+            "with You and Joe Lipshutz"
+        )
+        XCTAssertEqual(
+            SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID).first?.avatarURL,
+            "https://example.com/ryan.jpg"
+        )
+    }
+
+    func testSharedVisitBannerOnlySurfacesNewInvitationGenerations() {
+        let generationOne = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 1)
+        let generationTwo = SharedVisitBannerTracker.key(participantID: "participant-1", generation: 2)
+        var tracker = SharedVisitBannerTracker()
+
+        tracker.seed(invitationKeys: [generationOne])
+
+        XCTAssertNil(tracker.nextUnseenKey(in: [generationOne]))
+        XCTAssertEqual(tracker.nextUnseenKey(in: [generationTwo, generationOne]), generationTwo)
+        XCTAssertNil(tracker.nextUnseenKey(in: [generationTwo, generationOne]))
+    }
+
+    func testSharedVisitBannerPresentsOnlyNewestInviteWhenRefreshAddsSeveral() {
+        let newest = SharedVisitBannerTracker.key(participantID: "participant-newest", generation: 1)
+        let older = SharedVisitBannerTracker.key(participantID: "participant-older", generation: 1)
+        var tracker = SharedVisitBannerTracker()
+
+        XCTAssertEqual(tracker.nextUnseenKey(in: [newest, older]), newest)
+        XCTAssertNil(tracker.nextUnseenKey(in: [newest, older]))
+    }
+
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
+    }
+
+    @MainActor
+    func testRootViewCanOpenMemberProfileForVisualQA() {
+        XCTAssertEqual(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "user_maya"]
+            ),
+            SharedProfileRoute(profileID: "user_maya")
+        )
+        XCTAssertNil(WanderRootView.resolvedInitialSharedProfile(from: ["Wander"]))
+        XCTAssertNil(
+            WanderRootView.resolvedInitialSharedProfile(
+                from: ["Wander", "-WanderOpenProfile", "   "]
+            )
+        )
+    }
+
+    func testProfileRedesignMockupLaunchArgumentResolvesEveryApprovalState() {
+        for page in ProfileRedesignMockupPage.allCases {
+            XCTAssertEqual(
+                ProfileRedesignMockupPage.resolved(
+                    from: ["Wander", "-WanderProfileRedesignMockup", page.rawValue]
+                ),
+                page
+            )
+        }
+    }
+
+    func testProfileRedesignMockupLaunchArgumentFallsBackWithoutAValidPage() {
+        XCTAssertNil(ProfileRedesignMockupPage.resolved(from: ["Wander"]))
+        XCTAssertEqual(
+            ProfileRedesignMockupPage.resolved(from: ["Wander", "-WanderProfileRedesignMockup"]),
+            .ownerProfile
+        )
+        XCTAssertEqual(
+            ProfileRedesignMockupPage.resolved(
+                from: ["Wander", "-WanderProfileRedesignMockup", "not-a-page"]
+            ),
+            .ownerProfile
+        )
     }
 
     @MainActor
@@ -105,6 +419,19 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
         XCTAssertFalse(mapScreen.contains(".navigationDestination(isPresented: placeProfileDestinationBinding)"))
+    }
+
+    func testDiscoverTickerStateIsOwnedBySearchField() throws {
+        let discoverScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let sections = discoverScreen.components(separatedBy: "private struct DiscoverSearchField: View")
+
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertFalse(sections[0].contains("@State private var tickerIndex"))
+        XCTAssertFalse(sections[0].contains("runTicker()"))
+        XCTAssertTrue(sections[1].contains("@State private var placeholderIndex"))
+        XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
     }
 
     @MainActor
@@ -168,5 +495,22 @@ final class NavigationContractTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func swiftFiles(in directory: URL) throws -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        ) else {
+            return []
+        }
+
+        return try enumerator.compactMap { item in
+            guard let file = item as? URL,
+                  file.pathExtension == "swift",
+                  try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
+            else { return nil }
+            return file
+        }
     }
 }
