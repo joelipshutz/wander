@@ -12520,3 +12520,11 @@ Validation and publishing checkpoint, 2026-07-18 14:34 PDT:
 - The generic iOS Simulator build completed with exit code 0. No schema migration, project-generation change, build-number bump, archive, upload, merge, or Slack announcement occurred.
 - Computer-use visual QA exercised the actual Discover People surface on iPhone 16 Plus and the smaller iPhone 16e. Screenshots are `/private/tmp/rec90-people-16plus.png` and `/private/tmp/rec90-people-16e.png`; both show the **People** heading/count/list, readable copy, stable safe areas, and no clipping at either width. The local QA session was signed out, so hosted recommendation cards were not rendered in these screenshots; their compact 52pt/two-line/238pt source contract is covered by the focused test and the authenticated hosted RPC/data verification.
 - `git diff --check` is clean. Mission Control remained unavailable on a second update attempt because `localhost:4000` is still down. Next: final diff review, commit/push this feedback pass to PR #97, add the complete data/test/visual evidence to REC-90, and move it back to In Review.
+
+Publishing handoff, 2026-07-18 15:40 PDT:
+
+- Committed the validated feedback pass as `91a1f65` (`feat: populate Discover people`) and pushed `codex/rec-90-discover-plan` to existing ready PR #97: https://github.com/joelipshutz/wander/pull/97.
+- Added the hosted cleanup/seed, UI delta, 385/385 XCTest, build, and dual-size visual evidence to PR #97 and Linear REC-90. REC-90 is back in `In Review` with Joe still assigned.
+- The hosted data change is already live in linked project `rugmtlgufrhlxwfkumhw`; the operational script is committed so the exact fixture set remains auditable and idempotently maintainable. No Clerk account deletion was attempted; the removed app-visible Supabase profile rows were the audited Codex/smoke fixtures.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be advanced because `localhost:4000` remained unavailable throughout the pass.
+- This handoff stops at ready PR review. No merge, build-number bump, TestFlight archive/upload, tester Slack note, or release action occurred.
