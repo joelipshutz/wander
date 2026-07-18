@@ -4,6 +4,25 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testPlacePhotoDecodesProviderTypesForCategoryEnrichment() throws {
+        let data = Data(
+            """
+            {
+              "provider": "google_places",
+              "provider_place_id": "google-ugo",
+              "provider_primary_type": "restaurant",
+              "provider_types": ["food", "italian_restaurant", "point_of_interest"],
+              "photo_url": "https://example.com/ugo.jpg"
+            }
+            """.utf8
+        )
+
+        let photo = try JSONDecoder().decode(PlacePhoto.self, from: data)
+
+        XCTAssertEqual(photo.providerPrimaryType, "restaurant")
+        XCTAssertEqual(photo.providerTypes, ["food", "italian_restaurant", "point_of_interest"])
+    }
+
     func testLegacyBeenActivityUsesVisitedDateThenSavedDateInsteadOfLastEdit() {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let place = place(id: "place_coffee", category: "coffee")
