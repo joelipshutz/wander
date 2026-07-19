@@ -13153,3 +13153,23 @@ Build-80 latest-main integration update, 2026-07-18 22:10 PDT:
   responsiveness, and REC-104 cold-start reconciliation. The full suite,
   generic simulator build, artifact metadata, latest-main ancestry, and PR diff
   will be revalidated before PR #125 is merged.
+
+Final REC-104-integrated release gate, 2026-07-18 22:14 PDT:
+
+- The exact combined source passed the complete iPhone 17 Pro / iOS 26.5
+  suite: 436 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/DerivedData-build80/Logs/Test/Test-Wander-2026.07.18_22-07-17--0700.xcresult`.
+  The realistic high-data regression completed in 0.541 seconds, with visit
+  reconciliation recording approximately 9.1 ms backfill plus 5.1 ms refresh.
+- A fresh generic iOS Simulator build passed for the same source. Its artifact
+  reports `rec.me` version `0.1 (80)`, contains both `arm64` and `x86_64`, and
+  the generated Xcode project passes `plutil -lint`.
+- A final remote check confirms `main` remains
+  `4417b303afc4acc7f08cb011b808b6e4681b9cae`; that commit is an ancestor of the
+  release head. `git diff --check origin/main...HEAD` passes.
+- The ready release delta is still exactly three files: the build number in
+  `project.yml`, its two generated project settings, and this append-only log.
+  No REC-104 product source is duplicated in the PR because it is already on
+  `main`.
+- Next: push this exact validated head, refresh PR #125's description and
+  mergeability, squash-merge it, then archive exact post-merge `main`.
