@@ -12670,3 +12670,37 @@ Release validation checkpoint, 2026-07-18 18:34 PDT:
   build 79, group `rec.me Alpha`, and the existing public TestFlight link.
 - `git diff --check` and `plutil -lint` pass. Release-branch scope remains only
   `project.yml`, the two generated project build-number settings, and this log.
+
+Release completion, 2026-07-18 18:56 PDT:
+
+- Release PR #119 squash-merged to `main` as
+  `be535faef4a2b3529f49cf2048a05772d002d2c1`:
+  https://github.com/joelipshutz/wander/pull/119. Build 79 was archived from
+  that exact detached source at `/private/tmp/Wander-0.1-build79.xcarchive`.
+  Archive metadata confirms marketing version `0.1`, build `79`, bundle
+  `com.grayline.wander`, team `Y7TVK75RZ8`, and installed display name
+  `rec.me`.
+- Local pre-export signature inspection could not establish certificate trust
+  and reported an invalid entitlement blob. This was not treated as a pass.
+  The authoritative App Store export then re-signed and analyzed the package,
+  completed successfully, and reported `Upload succeeded`; archive distribution
+  metadata independently records uploaded build number `79`.
+- App Store Connect build id `354f7df5-b746-473c-ab8e-c4f78df90d2c` reached
+  `VALID`. The release helper set `usesNonExemptEncryption=false`, published
+  the `en-US` What to Test copy, attached build 79 to `rec.me Alpha`, submitted
+  external beta review, and confirmed review state `APPROVED`. Public link:
+  https://testflight.apple.com/join/knEhRa6t.
+- Renamed the existing App Store Connect app localization and public beta group
+  in place to `rec.me` and `rec.me Alpha`. Added the subtitle, beta description,
+  App Store description, keywords, and promotional text. The public-link and
+  feedback flags remain enabled; bundle id, accounts, tester data, local saves,
+  and the public link are unchanged.
+- Posted the required tester-facing build-79 note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784426121646939.
+- Linear `REC-84` has the merged PRs, validation, build, TestFlight, and Slack
+  details and is `Done`.
+- Production App Store submission is intentionally not claimed complete. App
+  Store Connect still lacks approved privacy-policy and support URLs, and the
+  final screenshots/listing assets must be completed before submission.
+- No code, schema, auth, data, or additional build-number change follows this
+  completion record. This append-only docs update is release bookkeeping only.
