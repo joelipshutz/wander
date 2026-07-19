@@ -13173,3 +13173,14 @@ Final REC-104-integrated release gate, 2026-07-18 22:14 PDT:
   `main`.
 - Next: push this exact validated head, refresh PR #125's description and
   mergeability, squash-merge it, then archive exact post-merge `main`.
+
+Build-80 TestFlight completion, 2026-07-18 22:27 PDT:
+
+- Ready release PR #125 squash-merged to `main` as `82ea98bca` (`chore: release TestFlight build 80`): https://github.com/joelipshutz/wander/pull/125. The binary includes REC-99 (`6b7a965`), REC-101 (`b0b20a6`), and REC-104/PR #123 (`4417b30`); open PR #124 and all other unmerged work remain excluded.
+- Archived exact detached `origin/main` `82ea98bca` to `/private/tmp/Wander-0.1-build80.xcarchive`. Archive metadata confirms installed display name `rec.me`, marketing version `0.1`, build `80`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export used automatic App Store distribution signing with `manageAppVersionAndBuildNumber=false`. `xcodebuild -exportArchive` completed successfully and App Store Connect reported `Uploaded Wander` / `Upload succeeded`; no silent build-number substitution occurred.
+- App Store Connect build `6702d70b-c819-4ba5-aad6-904c9bd9a996` reached `VALID`. The release helper confirmed archive build 80, set `usesNonExemptEncryption=false`, published the `en-US` What to Test copy, attached build 80 to `rec.me Alpha`, submitted external beta review, and confirmed `APPROVED`. Public link: https://testflight.apple.com/join/knEhRa6t.
+- Exact build-80 source passed 436 tests with zero failures/skips on the prescribed iPhone 16 Plus / iOS 18.6 Simulator. The generic Simulator build also passed and produced `rec.me` `0.1 (80)` with `arm64` and `x86_64`. Two earlier generic final-assembly attempts failed only because the nearly full host disk could not write the universal dylib; clearing only the release's disposable module cache allowed the unchanged build to complete.
+- Posted the required tester-facing live/approved note in `#testflight-feedback`: https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784438741975229. The note includes the public link, performance and mixed Been/Wanna changes, concrete test checklist, REC-103 known limitation, and requested reply details.
+- Added build-80 completion comments to Linear REC-99 (`0bb46587-6244-41ad-8d42-fdc66476245f`), REC-101 (`28601aad-7356-4462-bff6-c7f45ddb1e42`), and REC-104 (`ce34891a-3c68-4ed3-960e-2f435a0b0c01`); all three are `Done`. Mission Control release task `2572f99f-1780-4179-9953-4676b00ff97a` and REC-104 task `1510a8ed-b2a6-4a1a-bca9-7f6754ef5f6a` are `done`.
+- Known/deferred: failed first-sync social saves from some full-form flows may remain locally queued instead of retrying; REC-103 owns that correction. Production App Store submission is not part of this TestFlight release.
