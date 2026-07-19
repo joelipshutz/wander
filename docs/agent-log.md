@@ -12933,6 +12933,39 @@ Release completion, 2026-07-18 18:56 PDT:
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
 
+## 2026-07-18 19:33 PDT - Codex - REC-95 List Map Redesign
+
+Agent: Codex using the Linear and design-review workflows
+Branch: `codex/rec-95-list-map`
+Worktree: `/private/tmp/recme-rec95-list-map`
+Linear: `REC-95` (`In Progress`)
+
+Goal: design, mock, implement, and validate the list-detail map preview and
+full-screen list map as one polished flow, including direct one-tap place-card
+opening, stronger map/pin hierarchy, production place-card vocabulary, and the
+edge states named in REC-95.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `c4251747e`; the primary checkout is on an unrelated
+  REC-88 branch with an untracked `.pnpm-store/`, so it will not be touched.
+- No existing REC-95 worktree or overlapping active agent-log entry was found.
+  Active neighboring worktrees for REC-96 through REC-101 do not overlap the
+  list-map files currently expected here.
+- Linear REC-95 was read in full, including its empty comment history, and
+  moved from `Backlog` to `In Progress`. The existing Joe assignment remains
+  unchanged.
+- Expected files are the list-detail/list-map SwiftUI implementation under
+  `Wander/Features/Lists/`, focused tests under `WanderTests/`, a durable
+  REC-95 design review or implementation note under `docs/`, and this log.
+  `project.yml`, the global Map tab, list collaboration/add-place behavior,
+  schema/RLS, and TestFlight build metadata are out of scope unless code
+  inspection proves a required dependency.
+- Before implementation, the current rendered flow will be captured and
+  reviewed against `DESIGN.md`; the approved direction is an evolution of the
+  existing rec.me design system, not a replacement.
+
 REC-101 latest-main integration and validation checkpoint, 2026-07-18 19:29 PDT:
 
 - Merged exact latest `origin/main` `c4251747e` into
@@ -13009,6 +13042,202 @@ REC-99 latest-main review and validation checkpoint, 2026-07-18 19:38 PDT:
 - A fresh generic iOS Simulator build passed. The rec.me app reports `0.1 (79)` before the authorized release bump, and its executable contains both `arm64` and `x86_64`. `git diff --check` is clean.
 - Next: commit and push this validation record, update PR #114 with the REC-103 deferral, mark it ready, confirm the exact pushed head is merge-clean, and squash-merge. The separate build-80 worktree will start only from the resulting exact latest `main`.
 
+REC-95 coordination correction, 2026-07-18 19:52 PDT:
+
+- The initial overlap scan missed REC-99 PR #114 because it was in its final
+  validation window rather than logged as a new active worktree entry near the
+  REC-95 start. REC-99 edits the same Lists map marker and tile symbols needed
+  here, so REC-95 paused implementation and audited that branch explicitly.
+- REC-99 has now squash-merged to `origin/main` as `6b7a9653d`. REC-95 is
+  merging that exact implementation instead of copying or independently
+  recreating its approved ownership/status halo contract. This preserves the
+  shared Map/Lists semantics and avoids a known high-conflict parallel edit.
+- Baseline screenshots were captured before the integration on iPhone 17 Pro
+  and iPhone 17e under the persistent REC-95 design-audit directory. They
+  confirm the decorative preview, oversized header/rail, overlapping labels,
+  lossy selected-place card, and unnecessary pin-to-intermediate-card path.
+- The design-review workflow created local `.gstack/` session metadata. Its
+  generated ignore rule is retained so that transient review state cannot
+  enter the product diff; no generated design direction replaces `DESIGN.md`.
+
+REC-95 implementation and validation checkpoint, 2026-07-18 21:21 PDT:
+
+- Replaced the decorative list-detail map with a real, non-pannable MapKit
+  preview using production coordinates, the shared REC-99 save outlines, honest
+  mapped/total counts, and a separate 52pt View Map row. The native Apple
+  Maps/Legal strip remains visible and independently tappable; the rest of the
+  map body and the action row both open the full map.
+- Rebuilt the full-screen list map as a persistent map-plus-rail flow. Pin taps
+  focus the matching rail card, rail swipes update the neutral focus ring, a
+  card opens the canonical place profile on its first tap, and returning
+  preserves the map camera and rail focus. Cluster taps zoom rather than opening
+  an arbitrary place.
+- The production projection now retains canonical `PlaceSheetPlace`,
+  privacy-filtered save summaries, taste context, the actual current-user ID,
+  source owner/note/status, and an eligible local visit-photo reference. A
+  discovered projection ambiguity was fixed by preferring
+  `ownerUserPlaceID`, then `sourceUserPlaceID`, then same-place fallback.
+- Added pure content, interaction, clustering, coordinate-validity, antimeridian,
+  pole-clamp, and overlay-aware viewport helpers. Camera fitting measures the
+  actual global header/rail frames, keeps pins out from under both surfaces at
+  standard and accessibility sizes, applies the same adjustment to cluster
+  zoom, and lays MapKit out above the rail so its attribution is unobscured.
+- Added honest ready/loading/error/offline/partial/empty presentations and a
+  resolved-but-unmappable state that shows no fake pin but keeps the real place
+  card openable. Production deliberately does not infer an in-flight request
+  from a cached item count; a future list-scoped repository state is required
+  before wiring live network/offline failures.
+- The rail uses a stable 62pt REC-93 compact-media slot. It reads only a local
+  viewer-visible visit asset when available and otherwise keeps the category
+  fallback; it does not issue provider-photo or per-card backend requests.
+- New deterministic launch scenarios cover empty, one place, clustered,
+  dispersed, partial, unresolved/loading, resolved-unmapped, error, cached
+  offline, long names, and initial focus. New/expanded unit and source-contract
+  tests cover the corresponding logic and navigation.
+- Exact final generic iOS Simulator build passed. Exact final focused run passed
+  53 tests, 0 failures, 0 skipped:
+  `/private/tmp/DerivedData-rec95-focused-final/Logs/Test/Test-Wander-2026.07.18_21-05-25--0700.xcresult`.
+  Exact final full suite passed 429 tests, 0 failures, 0 skipped:
+  `/private/tmp/DerivedData-rec95-full-final/Logs/Test/Test-Wander-2026.07.18_21-09-06--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed, so
+  validation used the available iPhone 17 Pro / iOS 26.5 simulator.
+- Final visual QA passed on iPhone 17 Pro and the smaller iPhone 17e, plus
+  Accessibility Extra Large on iPhone 17e. Before/after evidence is stored in
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/design-audit-20260718-rec95/screenshots/`;
+  the durable mock/interaction contract and implementation plan live in
+  `docs/reviews/2026-07-18-rec-95-list-map-design-review.md` and
+  `docs/plans/2026-07-18-rec-95-list-map.md`.
+- Independent final review found no remaining blocking or non-blocking issue.
+  `git diff --check` is clean. No schema, RLS, auth, user data, App Store build
+  number, archive, upload, TestFlight, or tester-facing Slack action is part of
+  REC-95. Next: commit and push the implementation, open the required ready PR,
+  then update this log and Linear REC-95 with the PR and final status.
+
+REC-95 review handoff, 2026-07-18 21:28 PDT:
+
+- Committed the complete validated implementation as `f03134d94`
+  (`feat: redesign list map flow`) on `codex/rec-95-list-map` and pushed the
+  branch to `origin`.
+- Opened ready-for-review PR #124:
+  https://github.com/joelipshutz/wander/pull/124
+- Linked PR #124 to Linear REC-95, moved the issue from `In Progress` to
+  `In Review`, and posted the implementation, validation, and scoped
+  request-state follow-up details. Joe remains the assignee.
+- Final validation remains the generic simulator build, 53 focused tests and
+  429 full-suite tests with zero failures, plus the iPhone 17 Pro/iPhone 17e
+  simulator audit recorded above. The only runtime variance is the unavailable
+  repo-prescribed iPhone 16 Plus / iOS 18.6 simulator.
+- No TestFlight build was requested or produced. The app remains at `0.1 (79)`;
+  no build-number, archive, App Store Connect, release-note, or Slack action
+  occurred.
+- Handoff: review and merge PR #124. After merge, REC-95 can move to `Done`;
+  live loading/error/offline integration should remain deferred until a
+  list-scoped repository request-state contract exists.
+
+REC-95 latest-main integration gate, 2026-07-18 21:54 PDT:
+
+- GitHub’s final handoff check found PR #124 conflicting because `origin/main`
+  advanced to `b0b20a652` (`REC-101: Remove app-wide interaction stalls`) after
+  the original REC-95 validation. Fetched and merged that exact mainline.
+- `ListsScreen.swift`, its navigation contracts, and the store tests
+  auto-merged. The two manual conflicts were
+  `Wander/Services/WanderLocalStore.swift` and this append-only log. Both REC-95
+  and REC-101 histories were retained.
+- The store resolution preserves REC-101’s indexed/batched list projection,
+  caches, instrumentation, and legacy fallback while adding REC-95’s explicit
+  owner → source → same-place precedence. The lookup now indexes local/server
+  aliases for both user places and places, so correctness does not reintroduce
+  candidate-array scans.
+- Integration review found a separate non-conflicting performance risk:
+  REC-95’s rich map/profile enrichment was being built for every list-home
+  mosaic and repeatedly within list-detail body evaluation. The home grid now
+  builds at most four lightweight cover places per list and evaluates its
+  projection once per update. Detail builds one rendered list snapshot, groups
+  visible saves once, uses already-projected `VisiblePlace.attributes`, and
+  batches current-user visit-photo lookup while preserving REC-93’s local-photo
+  boundary.
+- The post-fix focused integration gate passed 62 tests with zero failures,
+  including REC-95 map/fitting/navigation/projection contracts, batch-photo
+  equivalence, REC-101 account-cancellation checks, and the 2,016-item
+  performance fixture:
+  `/private/tmp/DerivedData-rec95-mainmerge-focused/Logs/Test/Test-Wander-2026.07.18_21-45-58--0700.xcresult`.
+- The exact integrated full suite passed 453 tests with zero failures:
+  `/private/tmp/DerivedData-rec95-mainmerge-full/Logs/Test/Test-Wander-2026.07.18_21-47-43--0700.xcresult`.
+  A fresh generic iOS Simulator build also passed at
+  `/private/tmp/DerivedData-rec95-mainmerge-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Reinstalled that exact build on iPhone 17 Pro and visually reverified the
+  clustered full-map state; map framing, header, aggregate outlines, rail,
+  native attribution, and direct-open card treatment remain correct. Final
+  integrated evidence:
+  `/private/tmp/rec95-final-integrated-map-clustered-17pro.png`.
+- The iPhone 16 Plus / iOS 18.6 runtime remains unavailable; current validation
+  uses iPhone 17 Pro / iOS 26.5 plus the earlier iPhone 17e small-phone and
+  accessibility audit. No TestFlight/build-number/release action occurred.
+  Next: commit and push the merge result, confirm PR #124 is mergeable at the
+  exact pushed head, and post this superseding validation to Linear REC-95.
+
+REC-95 final integrated handoff, 2026-07-18 21:58 PDT:
+
+- Committed the latest-main integration and performance safeguards as
+  `67567a83b` (`Merge latest main into REC-95`) and pushed the exact source
+  validated above to `origin/codex/rec-95-list-map`.
+- GitHub reports ready PR #124 open and mergeable at that exact commit:
+  https://github.com/joelipshutz/wander/pull/124
+- Posted the superseding 62-focused-test, 453-full-test, generic-build, and
+  visual-validation handoff to Linear REC-95 in comment
+  `81598082-1de2-48db-aa97-2fe1d6c9aa86`. The issue remains `In Review`.
+- No TestFlight build was requested or produced. Handoff remains: test the
+  ready PR in Xcode, then merge PR #124 and move REC-95 to `Done`.
+
+## 2026-07-19 00:44 PDT - Codex - REC-95 Landing And TestFlight Build 81
+
+Agent: Codex
+Branch: `codex/rec-95-list-map`
+Worktree: `/private/tmp/recme-rec95-release`
+Linear: `REC-95` (`In Review`)
+PR: #124
+
+Goal: perform the final latest-main review and simulator validation for the
+REC-95 list-map redesign, merge PR #124 if the gate remains clean, then package
+the exact merged `main` as rec.me TestFlight build 81 and attach it to the
+public alpha group.
+
+Starting status and coordination:
+
+- Joe explicitly requested that the previously excluded PR #124 be shipped to
+  TestFlight after build 80. Build 80 is already uploaded, valid, attached, and
+  externally approved, so this release must use a new monotonically increasing
+  build number (81).
+- Fetched `origin`; latest `main` is `0701daa9` and adds the REC-105 Release
+  archive concurrency fix plus its completion record after build 80. PR #124 is
+  ready, but GitHub has not yet recomputed mergeability against that newer
+  mainline.
+- Created this isolated worktree from exact PR head `646d8e9d`; the unrelated
+  root Xcode checkout and all other active worktrees remain untouched. Expected
+  integration changes are limited to conflict resolution if needed and this
+  append-only log. The later release lane will change only `project.yml`, the
+  generated project build number, and release coordination records.
+- Read `DESIGN.md`, the PR design review/engineering plan handoff, Linear
+  REC-95, and the existing validation record. Mission Control is currently
+  unreachable at `localhost:4000`, so tracking there is blocked until the local
+  service returns. GBrain lookup hit a stale dead lock, recovered it per the
+  workspace procedure, then timed out once more; direct KB search found no
+  REC-95 entry.
+- Disk had only 808 MiB free. Removed only the completed build-80 DerivedData
+  cache (972 MiB) while preserving the uploaded build-80 archive. No unrelated
+  worktree or DerivedData directory was deleted.
+
+Plan:
+
+- Merge exact latest `origin/main`, preserve both append-only histories, and
+  review the complete product diff for correctness, privacy, performance,
+  accessibility, navigation, MapKit behavior, and generated-project scope.
+- Run the REC-95 focused gate, complete iPhone 16 Plus / iOS 18.6 suite,
+  generic simulator build, and visual checks on the current and smaller phone
+  simulator before merging PR #124.
+- Start a separate build-81 release branch from exact post-merge `main`, bump
+  `CURRENT_PROJECT_VERSION` once, regenerate, validate, merge, archive, export,
+  upload, process with the TestFlight helper, and post the required tester note.
 ## 2026-07-18 19:47 PDT - Codex - TestFlight Build 80 Split Social Halos
 
 Agent: Codex
@@ -13275,3 +13504,39 @@ REC-105 completion, 2026-07-18 22:43 PDT:
   is not represented in the build-80 binary.
 - REC-103 remains the known deferred limitation: failed first-sync social saves
   from some full-form flows can remain locally queued instead of retrying.
+
+REC-95 latest-main landing gate, 2026-07-19 01:01 PDT:
+
+- Integrated exact latest `origin/main` `0701daa9`, including build 80,
+  REC-104, REC-105, and their completion records, as merge commit `b620ec4c`.
+  All product and test files auto-merged; the only manual conflict was this
+  append-only log, and both histories were preserved.
+- Completed the full diff review against current main. No blocking correctness,
+  privacy, navigation, accessibility, MapKit, data-contract, or performance
+  finding remains. The high-data safeguards are intact: list-home projection is
+  batched/cached, cover projection is capped at four lightweight places, and
+  rich saves/photo/profile context is built once for the opened list snapshot.
+- XcodeGen 2.45.4 attempted to add unrelated default compiler-setting presets
+  that are absent from `project.yml` and current `main`; that uncommitted churn
+  was discarded. The checked-in project diff remains limited to the REC-95
+  source/test file membership. Treat generator preset drift as separate repo
+  maintenance rather than coupling it to this release.
+- Exact integrated source passed the complete repo-prescribed iPhone 16 Plus /
+  iOS 18.6 suite: 454 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/rec95-build81-gate.xcresult`.
+- Simulator visual QA passed on iPhone 16 Plus / iOS 18.6 clustered state and
+  iPhone 16e / iOS 18.6 long-name state, including Accessibility Extra Extra
+  Large. Attribution, pins/clusters, header, rail, safe area, and direct-open
+  tile treatment render without overlap. Evidence:
+  `/private/tmp/rec95-build81-16plus-clustered.png`,
+  `/private/tmp/rec95-build81-16e-long-names.png`, and
+  `/private/tmp/rec95-build81-16e-axxxl.png`.
+- The generic dual-architecture simulator build was attempted twice and stopped
+  in Apple/PostHog module compilation because the machine volume filled; no app
+  source compiler error occurred. The exact arm64 simulator app already built,
+  installed, launched, and passed all 454 tests. Release validation will also
+  include the signed Release archive from exact build-81 `main`.
+- `git diff --check` passes and the worktree is otherwise clean. Next: publish
+  this integrated head, confirm GitHub mergeability, update Linear REC-95 with
+  the superseding gate, and squash-merge PR #124 before creating build 81 from
+  exact post-merge `main`.

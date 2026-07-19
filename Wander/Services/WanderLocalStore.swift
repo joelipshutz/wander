@@ -1683,7 +1683,11 @@ final class WanderStore: ObservableObject {
         var lookup = VisiblePlaceListLookup(
             byUserPlaceID: [:],
             byPlaceID: [:],
-            knownPlaceIDs: Set(places.map(\.id))
+            knownPlaceIDs: Set(
+                places.flatMap { place in
+                    [place.id, place.localID] + [place.serverID].compactMap { $0 }
+                }
+            )
         )
         lookup.byUserPlaceID.reserveCapacity(candidates.count * 2)
         lookup.byPlaceID.reserveCapacity(candidates.count * 2)
@@ -1703,27 +1707,36 @@ final class WanderStore: ObservableObject {
         in lookup: inout VisiblePlaceListLookup
     ) {
         let ranked = RankedVisiblePlace(index: index, visiblePlace: visiblePlace)
-        if lookup.byUserPlaceID[userPlaceID] == nil {
-            lookup.byUserPlaceID[userPlaceID] = ranked
+        let userPlaceIDs = Set(
+            [userPlaceID, visiblePlace.id, visiblePlace.userPlace.id, visiblePlace.userPlace.localID]
+                + [visiblePlace.userPlace.serverID].compactMap { $0 }
+        )
+        for referenceID in userPlaceIDs where lookup.byUserPlaceID[referenceID] == nil {
+            lookup.byUserPlaceID[referenceID] = ranked
         }
-        if lookup.byPlaceID[placeID] == nil {
-            lookup.byPlaceID[placeID] = ranked
+
+        let placeIDs = Set(
+            [placeID, visiblePlace.place.id, visiblePlace.place.localID]
+                + [visiblePlace.place.serverID].compactMap { $0 }
+        )
+        for referenceID in placeIDs where lookup.byPlaceID[referenceID] == nil {
+            lookup.byPlaceID[referenceID] = ranked
         }
     }
 
     private func visiblePlace(for item: LocalPlaceListItem, lookup: VisiblePlaceListLookup) -> VisiblePlace? {
-        var bestMatch: RankedVisiblePlace?
-        for referenceID in [item.ownerUserPlaceID, item.sourceUserPlaceID].compactMap({ $0 }) {
-            guard let match = lookup.byUserPlaceID[referenceID] else { continue }
-            if bestMatch == nil || match.index < bestMatch!.index {
-                bestMatch = match
-            }
+        if let ownerUserPlaceID = item.ownerUserPlaceID,
+           let ownerMatch = lookup.byUserPlaceID[ownerUserPlaceID] {
+            return ownerMatch.visiblePlace
         }
-        if let match = lookup.byPlaceID[item.placeID], bestMatch == nil || match.index < bestMatch!.index {
-            bestMatch = match
+
+        if let sourceUserPlaceID = item.sourceUserPlaceID,
+           let sourceMatch = lookup.byUserPlaceID[sourceUserPlaceID] {
+            return sourceMatch.visiblePlace
         }
-        if let bestMatch {
-            return bestMatch.visiblePlace
+
+        if let samePlaceMatch = lookup.byPlaceID[item.placeID] {
+            return samePlaceMatch.visiblePlace
         }
 
         // A canonical place with no indexed candidate is not visible to the current user.
@@ -1918,7 +1931,11 @@ final class WanderStore: ObservableObject {
         var listLookup = VisiblePlaceListLookup(
             byUserPlaceID: [:],
             byPlaceID: [:],
-            knownPlaceIDs: Set(placesByID.keys)
+            knownPlaceIDs: Set(
+                places.flatMap { place in
+                    [place.id, place.localID] + [place.serverID].compactMap { $0 }
+                }
+            )
         )
         listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
         listLookup.byPlaceID.reserveCapacity(places.count)
@@ -2279,6 +2296,69 @@ final class WanderStore: ObservableObject {
                 return lhs.id < rhs.id
             }
             .first
+    }
+
+    func firstVisitPhotosByPlaceID() -> [String: LocalVisitPhoto] {
+        var placeReferencesByAlias: [String: Set<String>] = [:]
+        placeReferencesByAlias.reserveCapacity(places.count * 2)
+        for place in places {
+            let references = Set([place.id, place.localID, place.serverID].compactMap { $0 })
+            for reference in references {
+                placeReferencesByAlias[reference] = references
+            }
+        }
+
+        var placeReferencesByUserPlaceID: [String: Set<String>] = [:]
+        placeReferencesByUserPlaceID.reserveCapacity(userPlaces.count * 2)
+        for userPlace in userPlaces
+        where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
+            let placeReferences = placeReferencesByAlias[userPlace.placeID] ?? [userPlace.placeID]
+            let userPlaceIDs = [userPlace.id, userPlace.localID]
+                + [userPlace.serverID].compactMap { $0 }
+            for userPlaceID in userPlaceIDs {
+                placeReferencesByUserPlaceID[userPlaceID] = placeReferences
+            }
+        }
+
+        var placeReferencesByVisitID: [String: Set<String>] = [:]
+        placeReferencesByVisitID.reserveCapacity(placeVisits.count * 2)
+        for visit in placeVisits where visit.deletedAt == nil {
+            guard let placeReferences = placeReferencesByUserPlaceID[visit.userPlaceID] else { continue }
+            let visitIDs = [visit.id, visit.localID]
+                + [visit.serverID].compactMap { $0 }
+            for visitID in visitIDs {
+                placeReferencesByVisitID[visitID] = placeReferences
+            }
+        }
+
+        let eligiblePhotos = visitPhotos
+            .filter { photo in
+                guard photo.deletedAt == nil, placeReferencesByVisitID[photo.visitID] != nil else { return false }
+                if let localAssetRef = photo.localAssetRef, !localAssetRef.isEmpty { return true }
+                return photo.uploadState == .uploaded && photo.storagePath?.isEmpty == false
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+                return lhs.id < rhs.id
+            }
+
+        var firstPhotoByPlaceID: [String: LocalVisitPhoto] = [:]
+        firstPhotoByPlaceID.reserveCapacity(eligiblePhotos.count)
+        var resolvedPlaceIDs = Set<String>()
+        for photo in eligiblePhotos {
+            guard let placeReferences = placeReferencesByVisitID[photo.visitID] else { continue }
+            for placeID in placeReferences where !resolvedPlaceIDs.contains(placeID) {
+                resolvedPlaceIDs.insert(placeID)
+                firstPhotoByPlaceID[placeID] = photo
+            }
+        }
+
+        return firstPhotoByPlaceID
     }
 
     @discardableResult
