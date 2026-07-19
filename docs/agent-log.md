@@ -13577,3 +13577,47 @@ Build-81 source validation checkpoint, 2026-07-19 01:10 PDT:
 - Inspected the built simulator app metadata: `CFBundleShortVersionString=0.1`
   and `CFBundleVersion=81`. `git diff --check` passes. Next: commit the minimal
   release diff, open and merge its ready PR, then archive exact merged `main`.
+
+TestFlight build-81 completion, 2026-07-19 01:38 PDT:
+
+- Committed the validated release diff as `a1c22144c`, opened ready PR #129,
+  confirmed its only files were `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this log, then squash-merged it to
+  `main` as `16d95285fb571e8745c3fc69408edad1e9ee5515`:
+  https://github.com/joelipshutz/wander/pull/129.
+- Created a detached archive worktree at exact merged `origin/main` `16d9528`;
+  the validated release branch and merged-main trees were byte-identical.
+  Exact build-81 validation remains 454 passed, 0 failed, 0 skipped on iPhone
+  16 Plus / iOS 18.6, with result bundle
+  `/private/tmp/build81-release-gate.xcresult`.
+- Initial archive attempts reached Apple dSYM/asset-catalog output but failed
+  because the system volume was full; no source, test, provisioning, signing,
+  or App Store validation failure occurred. Stopped the retry loop, surfaced
+  the symbol-preserving vs no-dSYM options, and chose the safe symbol-preserving
+  path.
+- Removed only rebuildable/completed release caches: prior build-79/build-80
+  worktrees while preserving their branches/commits, the already-uploaded local
+  build-79/build-80 archives, failed build-81 DerivedData, and a 1.2 GiB stale
+  Wander DerivedData cache tied to the removed REC-92 worktree. Left the active
+  root Xcode cache and REC-90/performance caches untouched.
+- The clean signed Release archive succeeded at
+  `/private/tmp/Wander-0.1-build81.xcarchive`. Archive metadata confirms rec.me
+  marketing version `0.1`, build `81`, bundle `com.grayline.wander`, and a 132
+  MiB archive with dSYMs. Export options set
+  `manageAppVersionAndBuildNumber=false`, `uploadSymbols=true`, automatic
+  signing, and team `Y7TVK75RZ8`.
+- `xcodebuild -exportArchive` upload succeeded. App Store Connect build
+  `d76aee31-6c54-4aef-a258-b536cceb755d` is `VALID`, reports build 81,
+  `usesNonExemptEncryption=false`, and is attached to public group
+  `rec.me Alpha`. External TestFlight review is `APPROVED`.
+- Updated TestFlight What to Test with the list-map checklist and required lag
+  callout. Public link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required live/approved tester note in `#testflight-feedback` with
+  changes, checklist, known issue, public link, and reply instructions:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784450293098429.
+- Linear REC-95 is `Done` with PR, validation, build, TestFlight, and Slack
+  evidence. Mission Control remained unreachable at `localhost:4000`, so no
+  task could be created there despite start/completion attempts.
+- Known deferred limitation remains REC-103: if the first sync of a new social
+  save fails in some full-form flows, it may remain queued locally instead of
+  retrying automatically. App Store production submission was not performed.
