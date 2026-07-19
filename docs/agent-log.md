@@ -12773,3 +12773,27 @@ Release completion, 2026-07-18 18:56 PDT:
   use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
+
+REC-101 latest-main integration and validation checkpoint, 2026-07-18 19:29 PDT:
+
+- Merged exact latest `origin/main` `c4251747e` into
+  `codex/rec-101-app-performance` as merge commit `8f159fc5c`. This brings the
+  rec.me rename and build 79 release onto the performance branch. The only
+  conflict was this append-only log; both complete histories were preserved.
+  No performance source file overlapped the mainline changes.
+- The integrated branch diff against `origin/main` remains limited to the
+  intended rendering, persistence, Discover, Profile, avatar, cache, regression
+  test, and coordination-log scope. `git diff --check origin/main...HEAD`
+  passes with no unresolved conflict or generated artifact.
+- Exact integrated source passed the complete iPhone 17 Pro / iOS 26.5 suite:
+  429 tests passed with zero failures. Result bundle:
+  `/tmp/DerivedData-rec101-integrated/Logs/Test/Test-Wander-2026.07.18_19-25-15--0700.xcresult`.
+- A fresh generic iOS Simulator build also passed at
+  `/private/tmp/DerivedData-rec101-integrated-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+  Its executable contains both `x86_64` and `arm64`; metadata is `rec.me`
+  version `0.1`, build `79`.
+- Performance implementation commit remains `4dd933ead` (`perf: smooth
+  discover and profile scrolling`). Next: publish the integrated branch,
+  confirm PR #117 is merge-clean with an updated second-pass summary, return
+  Linear REC-101 to `In Review`, and leave merge/TestFlight/release actions
+  untouched.
