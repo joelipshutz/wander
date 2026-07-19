@@ -13504,3 +13504,39 @@ REC-105 completion, 2026-07-18 22:43 PDT:
   is not represented in the build-80 binary.
 - REC-103 remains the known deferred limitation: failed first-sync social saves
   from some full-form flows can remain locally queued instead of retrying.
+
+REC-95 latest-main landing gate, 2026-07-19 01:01 PDT:
+
+- Integrated exact latest `origin/main` `0701daa9`, including build 80,
+  REC-104, REC-105, and their completion records, as merge commit `b620ec4c`.
+  All product and test files auto-merged; the only manual conflict was this
+  append-only log, and both histories were preserved.
+- Completed the full diff review against current main. No blocking correctness,
+  privacy, navigation, accessibility, MapKit, data-contract, or performance
+  finding remains. The high-data safeguards are intact: list-home projection is
+  batched/cached, cover projection is capped at four lightweight places, and
+  rich saves/photo/profile context is built once for the opened list snapshot.
+- XcodeGen 2.45.4 attempted to add unrelated default compiler-setting presets
+  that are absent from `project.yml` and current `main`; that uncommitted churn
+  was discarded. The checked-in project diff remains limited to the REC-95
+  source/test file membership. Treat generator preset drift as separate repo
+  maintenance rather than coupling it to this release.
+- Exact integrated source passed the complete repo-prescribed iPhone 16 Plus /
+  iOS 18.6 suite: 454 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/rec95-build81-gate.xcresult`.
+- Simulator visual QA passed on iPhone 16 Plus / iOS 18.6 clustered state and
+  iPhone 16e / iOS 18.6 long-name state, including Accessibility Extra Extra
+  Large. Attribution, pins/clusters, header, rail, safe area, and direct-open
+  tile treatment render without overlap. Evidence:
+  `/private/tmp/rec95-build81-16plus-clustered.png`,
+  `/private/tmp/rec95-build81-16e-long-names.png`, and
+  `/private/tmp/rec95-build81-16e-axxxl.png`.
+- The generic dual-architecture simulator build was attempted twice and stopped
+  in Apple/PostHog module compilation because the machine volume filled; no app
+  source compiler error occurred. The exact arm64 simulator app already built,
+  installed, launched, and passed all 454 tests. Release validation will also
+  include the signed Release archive from exact build-81 `main`.
+- `git diff --check` passes and the worktree is otherwise clean. Next: publish
+  this integrated head, confirm GitHub mergeability, update Linear REC-95 with
+  the superseding gate, and squash-merge PR #124 before creating build 81 from
+  exact post-merge `main`.
