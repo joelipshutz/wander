@@ -13044,3 +13044,11 @@ REC-104 handoff, 2026-07-18 21:06 PDT:
 - Opened ready PR #123, `REC-104: Optimize high-data cold-start visit reconciliation`: https://github.com/joelipshutz/wander/pull/123
 - Linked PR #123 and the complete performance/test evidence to REC-104, then moved Linear to `In Review`. Mission Control task `1510a8ed-b2a6-4a1a-bca9-7f6754ef5f6a` is also in `review`.
 - No merge, build-number bump, TestFlight upload, hosted-data change, or Slack release note was performed. Restart from PR #123 for review/landing; choose a separate physical-device profiling follow-up once the iPhone is available if production-account evidence is still needed.
+
+REC-104 landing and TestFlight build-80 authorization, 2026-07-18 22:02 PDT:
+
+- Joe explicitly requested a TestFlight push. This authorizes merging ready PR #123, packaging the resulting exact latest `main`, incrementing the build number once from completed build 79 to build 80, archiving/uploading, running the TestFlight helper, and posting the required tester note in `#testflight-feedback`.
+- Release scope since completed build 79 is REC-99 (`6b7a965`, mixed Been/Wanna saved-place indicators), REC-101 (`b0b20a6`, app-wide Discover/Profile/Lists performance and realistic profiling fixture), and PR #123 (REC-104 cold-start visit reconciliation). Open PR #124 and all other open/draft PRs are excluded because they are not merged or part of Joe's request.
+- Rechecked PR #123 at head `c468f594`: ready, no hold label, `MERGEABLE/CLEAN`, based on exact current `origin/main` `b0b20a652`, and no status-check failure. Its exact product source passed 436 tests with zero failures; the post-test commit is append-only documentation. Review finds no blocking alias, deletion/reactivation, summary, performance, privacy, persistence, or scope issue.
+- Completed build 79 is recorded uploaded, `VALID`, attached to `rec.me Alpha`, externally approved, and announced. `origin/main` remains marketing version `0.1`, build `79`; no newer build-number commit on `main` is pending upload.
+- Mission Control release task: `2572f99f-1780-4179-9953-4676b00ff97a`. REC-104 remains `In Review` until build 80 is available. The root checkout and unrelated worktrees remain untouched; build-number/release bookkeeping will use a new isolated worktree from the exact post-merge `origin/main`.
