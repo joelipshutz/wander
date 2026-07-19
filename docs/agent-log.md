@@ -12634,6 +12634,71 @@ Release completion, 2026-07-17 20:00 PDT:
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
 
+## 2026-07-17 20:46 PDT - Codex - REC-101 App-Wide Performance
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-101-app-performance`
+Worktree: `/private/tmp/recme-rec101-app-performance`
+Linear: `REC-101` (`In Progress`)
+
+Goal: reproduce, profile, root-cause, and fix the severe app-wide lag Ryan reports across typing, scrolling, and general interaction on the current build.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact latest `origin/main` commit `02b812fc8` because the root checkout is 22 commits behind, remains on unrelated `codex/rec-88-visit-friends-mockup`, and contains an untracked `.pnpm-store/`. Neither the root checkout nor that untracked directory will be touched.
+- Created urgent Bug `REC-101`, assigned it to Ryan, moved it directly to `In Progress`, and related it to completed performance issues `REC-85` and `REC-91`.
+- Prior physical-device profiling for REC-85 found 133-350 ms SwiftUI hitches from repeated main-actor full-store persistence and coarse store invalidation; REC-91 separately isolated a 2.6-second Discover ticker. Both fixes shipped in build 72. This investigation will test for regression and for remaining shared hot paths through current TestFlight build 78.
+- No latest `origin/main` agent-log entry reports overlapping REC-101 work. Read-only parallel audits may inspect shared store/persistence/sync code, SwiftUI observation and render paths, and the build-72-to-build-78 regression range. No runtime file will be edited until a root-cause hypothesis is confirmed with reproduction/profile evidence.
+- Likely files, pending evidence, are the app/root observation boundary, `Wander/Services/WanderLocalStore.swift`, `Wander/Services/WanderStorePersistence.swift`, representative feature screens and focused tests. `project.yml`, build number, TestFlight release, hosted schema/data, and tester-facing Slack are not in scope unless separately requested.
+
+Investigation and implementation checkpoint, 2026-07-18 15:55 PDT:
+
+- The connected physical iPhone is currently offline, so fresh interaction sampling used the iPhone 17 Pro / iOS 26.5 simulator. Simulator SwiftUI/Hitches instruments are unsupported; a 15-second process sample confirmed the one-place demo fixture is idle between actions rather than producing a simulator-only busy loop.
+- Current build-78 source and prior physical-device evidence converge on the same scale-sensitive path: the REC-98 physical run reached 100% CPU and froze in `ListsScreen.activeLists -> VisiblePlace.categoryEmoji`, while current main's resolver-only benchmark took 1.153 seconds and an exact repeated-`VisiblePlace` redraw regression took 2.567 seconds for 2,000 reads before the fix.
+- Root causes confirmed: repeated category assignment/cuisine JSON decoding/emoji resolution during SwiftUI body evaluation; repeated O(n²) visible-place projection across globally invalidated tab roots; and full-store pretty/sorted JSON encoding plus atomic file I/O synchronously on the main actor across roughly 89 persistence call sites.
+- Implemented a bounded, lock-protected category-presentation memo keyed by every mutable classification/cuisine/name input; a bounded per-filter visible-place projection cache with dictionary-backed place/profile joins; live-only serialized/coalescing background persistence with compact JSON, flush-before-load ordering, and background/termination flush barriers; and no-op suppression for equal settings, remote errors, and repeated same-user auth application. Synchronous `file(url:)` remains unchanged for immediate-relaunch test semantics.
+- The exact repeated-render regression now passes in 0.020 seconds versus the 2.567-second failing baseline (about 128x faster). Focused mutation-invalidation, projection-reuse, persistence-ordering/off-main, and same-user-auth regressions are being run before the complete test/build and simulator dogfood gates.
+
+Validation and pre-PR review checkpoint, 2026-07-18 16:12 PDT:
+
+- The final repeated-`VisiblePlace` category-render regression passes in 0.012 seconds for 2,000 reads versus the 2.567-second pre-fix failure, about 214x faster. The focused final gate passed 7/7 with zero failures at `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_16-07-37--0700.xcresult`.
+- The exact final source passed the complete iPhone 17 Pro / iOS 26.5 suite, 410/410 with zero failures: `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_16-08-21--0700.xcresult`.
+- A fresh generic iOS Simulator build passed at `/private/tmp/DerivedData-rec101-build/Build/Products/Debug-iphonesimulator/Wander.app`; its executable contains both `arm64` and `x86_64` and remains app version `0.1` build `78`.
+- Reinstalled the exact final tested binary and exercised Map and Discover typing, Discover result scrolling, Lists/detail rendering, and Profile navigation on the simulator without the freeze or interaction stall. This deterministic fixture is smaller than Ryan's real account, so a fresh physical-device Instruments confirmation remains required when `Ry’s iPhone` is back online; prior build-78 physical evidence plus the failing/passing scale regression establish the fixed hot path in the meantime.
+- Independent pre-PR review found and resolved two correctness issues before handoff: equal-value guards had removed sign-out's implicit persistence/cache invalidation, and dictionary-backed projection initially used last-match rather than the former first-match semantics for duplicate effective IDs. Dedicated sign-out and duplicate-ID regressions now pass. The remaining non-blocking coverage gap is direct notification-level exercise of the UIKit background/termination observers; coalescing, off-main writes, latest-snapshot ordering, and the underlying flush barrier are covered.
+- `git diff --check` is clean, exact latest `origin/main` `02b812fc8` remains the branch base, and the final scope is five files. No TestFlight build number, archive, upload, hosted data, merge, or tester-facing Slack announcement occurred.
+
+Publishing handoff, 2026-07-18 16:15 PDT:
+
+- Committed the implementation and validation record as `65e839e8c` (`fix: remove app-wide rendering stalls`), pushed `codex/rec-101-app-performance`, and opened ready PR #117: https://github.com/joelipshutz/wander/pull/117.
+- PR #117 is open, non-draft, `MERGEABLE/CLEAN`, and targets `main`; GitHub reports no failing status checks or review decision. The connector lacked PR-write permission, so the authenticated `gh` fallback created the same reviewed PR body.
+- Moved Linear `REC-101` to `In Review`, attached PR #117, and added validation/root-cause comment `c735e884-ca5b-4fbc-8597-b384efbea072`.
+- The requested investigation/fix is complete and PR-ready. Remaining next step is review/merge followed by physical-device Instruments confirmation when `Ry’s iPhone` reconnects. A TestFlight release remains a separate explicit request; no merge, build bump, archive, upload, hosted mutation, or Slack post occurred here.
+
+Remaining-scroll follow-up, 2026-07-18 16:50 PDT:
+
+- Ryan tested PR #117 on `Ry’s iPhone` and reports that Discover and Profile scrolling are improved but still visibly laggy. He asked for another measured optimization pass across those screens and any shared app paths needed to make interaction feel consistently crisp.
+- Reopened the existing clean `codex/rec-101-app-performance` worktree at pushed head `85adfca18`; it tracks `origin/codex/rec-101-app-performance`. The unrelated root checkout remains on `codex/rec-88-visit-friends-mockup` and will not be switched or edited.
+- No current agent-log entry reports overlapping edits on this branch. Read-only parallel audits will cover `Wander/Features/Discover/`, `Wander/Features/Profile/`, and shared SwiftUI/store rendering paths before implementation.
+- Expected files, pending evidence, are the Discover/Profile view implementations, shared row/avatar/image components or store projections they call, focused performance tests, and this append-only log. `project.yml`, build number, TestFlight release, hosted data, and unrelated feature behavior remain out of scope.
+
+Second-pass root cause and implementation checkpoint, 2026-07-18 19:20 PDT:
+
+- Preserved the REC-94 physical-device safety constraint: `ProfileOwnerHome` remains an eager `VStack`/`Grid`; no `LazyVStack` or `LazyVGrid` was reintroduced around its calendar/MapKit subtree. The remaining Profile scroll cost came from retaining a noninteractive live Map with every annotation inside the scroll, rebuilding `ProfileInsights` after broad store publications, and duplicating the social-graph refresh on Profile entry.
+- Replaced the live Profile map with an asynchronously generated, bounded-cache `MKMapSnapshotter` image that preserves the same global camera, muted styling, place dots, dimensions, and accessibility label. Added exact-input caching for Profile insights, independent owner/member cache instances, and removed the duplicate graph request.
+- Discover row-owning sections now use lazy stacks, bind repeated projections once per evaluation, reuse a cached owner recommendation-count dictionary, and precompute saved-place aliases instead of rescanning visible places per row. Search uses 225 ms cancellable `.task(id:)` debounce, exact structured signatures, cancellation/stale-result guards, and explicit auth/visible-data refresh coordination.
+- Shared avatars now load, downsample, and eagerly decode off the main actor through a bounded 128-entry/32 MiB cache; identical in-flight requests coalesce to one download/decode, and same-URL local avatar replacement changes the task identity. Theme colors are parsed once per token instead of on every `.color` read.
+- Remote social surfaces are staged across awaits and applied in one deferred-persistence batch, producing one logical store snapshot instead of per-profile snapshots. The final implementation captures the requesting account and discards cancellation or account-switch completions before any mutation.
+- The two source-contract regressions failed before implementation with ten expected assertions at `/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_17-12-11--0700.xcresult`. The initial integrated focused gate then passed 22/22 at `/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_18-58-38--0700.xcresult`.
+- Independent adversarial review found no P0. It found and drove fixes for the account-switch social-refresh race, same-URL local avatar replacement, stale Discover searches across auth transitions, and duplicate concurrent avatar downloads; dedicated regressions cover all four.
+
+Final validation checkpoint, 2026-07-18 19:20 PDT:
+
+- The exact final source passed the complete iPhone 17 Pro / iOS 26.5 suite, 426/426 with zero failures: `/tmp/DerivedData-rec101-final/Logs/Test/Test-Wander-2026.07.18_19-19-12--0700.xcresult`.
+- The exact final generic iOS Simulator build passed at `/private/tmp/DerivedData-rec101-build/Build/Products/Debug-iphonesimulator/Wander.app`; its executable contains `x86_64` and `arm64` and remains app version `0.1` build `78`.
+- `git diff --check` is clean and no generated build artifact is present in the worktree. The implementation scope is the shared theme/avatar pipeline, Discover, Profile map/insights/entry refresh, the local-store projections/social refresh, matching tests, and this log.
+- `Ry’s iPhone` remains listed offline by Instruments (`00008130-0008095E3408001C`), so an honest post-fix physical Time Profiler trace could not be recorded. Ryan’s direct device test of the prior branch established the remaining symptom; the final branch still needs his tactile scroll check when Xcode reconnects to the phone.
+- Next: commit and push this exact validated follow-up to existing ready PR #117, return Linear REC-101 to `In Review` with the final validation summary, and leave merge/TestFlight/release actions untouched unless separately requested.
 REC-99 Lists and Quick Search implementation completion, 2026-07-18 14:30 PDT:
 
 - Extended the approved split halo to saved-place icons in Lists and Quick Search without changing layout, copy, search behavior, decorative list previews, unsaved MapKit result icons, selected-place cards, fixtures, backend/schema, or any unrelated mockup. Lists now use the same renderer for detail rows, saved suggestions, the full-screen list map, and its place rail; Quick Search now preserves split social arcs instead of redrawing every outline as a full circle.
@@ -12901,6 +12966,74 @@ Starting status and coordination:
   reviewed against `DESIGN.md`; the approved direction is an evolution of the
   existing rec.me design system, not a replacement.
 
+REC-101 latest-main integration and validation checkpoint, 2026-07-18 19:29 PDT:
+
+- Merged exact latest `origin/main` `c4251747e` into
+  `codex/rec-101-app-performance` as merge commit `8f159fc5c`. This brings the
+  rec.me rename and build 79 release onto the performance branch. The only
+  conflict was this append-only log; both complete histories were preserved.
+  No performance source file overlapped the mainline changes.
+- The integrated branch diff against `origin/main` remains limited to the
+  intended rendering, persistence, Discover, Profile, avatar, cache, regression
+  test, and coordination-log scope. `git diff --check origin/main...HEAD`
+  passes with no unresolved conflict or generated artifact.
+- Exact integrated source passed the complete iPhone 17 Pro / iOS 26.5 suite:
+  429 tests passed with zero failures. Result bundle:
+  `/tmp/DerivedData-rec101-integrated/Logs/Test/Test-Wander-2026.07.18_19-25-15--0700.xcresult`.
+- A fresh generic iOS Simulator build also passed at
+  `/private/tmp/DerivedData-rec101-integrated-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+  Its executable contains both `x86_64` and `arm64`; metadata is `rec.me`
+  version `0.1`, build `79`.
+- Performance implementation commit remains `4dd933ead` (`perf: smooth
+  discover and profile scrolling`). Next: publish the integrated branch,
+  confirm PR #117 is merge-clean with an updated second-pass summary, return
+  Linear REC-101 to `In Review`, and leave merge/TestFlight/release actions
+  untouched.
+
+REC-101 second-pass publishing handoff, 2026-07-18 19:32 PDT:
+
+- Pushed integrated head `789183ea6` to
+  `origin/codex/rec-101-app-performance`. Updated ready PR #117 with both
+  performance passes, the current root-cause analysis, regression coverage,
+  integrated 429-test result, and physical-device validation gap:
+  https://github.com/joelipshutz/wander/pull/117.
+- GitHub reports PR #117 open, non-draft, `MERGEABLE`, based on current
+  `origin/main` `c4251747e`, with no failing status check. The branch is ready
+  for Ryan's Xcode/real-account Discover and Profile scroll test.
+- Returned Linear `REC-101` to `In Review` and added final validation comment
+  `3e188be4-8db0-436f-9e87-797b21a387c9`. The issue remains open until review
+  and physical feel confirmation; it is not marked shipped.
+- The sole remaining validation gap is a post-fix physical Instruments trace
+  because `Ry’s iPhone` remains offline to Instruments. No result was
+  fabricated or inferred from incomplete trace artifacts.
+- No merge, TestFlight build bump, archive, upload, hosted mutation, tester-data
+  change, or Slack announcement occurred. Exact next step: run this branch from
+  Xcode on Ryan's real account and judge steady Discover/Profile scrolling;
+  merge/release remains separately authorized work.
+
+Codex landing and scale-validation pass, 2026-07-18 19:24 PDT:
+
+- Joe selected the standard PR review path and explicitly authorized landing PR #117 after validation. He also requested a simulator account with a realistically large dataset before landing, followed by continued diagnosis of any residual lag from fresh `main` after the initial fix ships.
+- Adopted the existing isolated worktree `/private/tmp/recme-rec101-app-performance`, fetched and fast-forwarded to Ryan's pushed `4dd933e` follow-up, and confirmed the worktree is clean and tracks `origin/codex/rec-101-app-performance`. No other worktree owns this branch or overlaps the intended fixture-only scale-validation changes.
+- Mission Control task `7ae3b4a9-e247-4753-9f48-1e91cd5cb45c` is in progress. Linear `REC-101` remains the implementation issue; PR #117 remains the landing vehicle. Expected edits are a deterministic launch-argument-only high-data fixture, matching performance/correctness tests, and this append-only log.
+- The review will preserve production semantics and build number 78. TestFlight packaging, hosted-data mutation, and tester-facing Slack remain out of scope without a separate explicit release request.
+
+Scale-gate diagnosis and validation checkpoint, 2026-07-18 20:30 PDT:
+
+- Added an opt-in `-WanderUsePerformanceFixtures` launch mode with a deterministic power-user account: 64 profiles, 900 places, 1,620 saves, 3,240 attributes, more than 1,200 visits, 72 lists, and 2,016 list items. Normal/demo launches are unchanged. The matching fixture and launch-contract tests ensure this remains a reusable Simulator profiling surface.
+- The realistic account exposed two blockers that the small demo fixture could not: warm Profile insight reads still rebuilt an O(n) fingerprint, and Lists resolved every list item by rescanning SwiftData identity arrays before repeatedly rebuilding category presentation. A 10-second Simulator process sample attributed the original Lists freeze to that identity scan; a later cold sample isolated the remaining category normalization/model-construction work.
+- Made warm Profile insights revision-keyed and constant-time, indexed visible list candidates by user-place/place identity, grouped list items once per projection, and immediately reject known-but-invisible canonical places while retaining the legacy/local-ID compatibility fallback. Lists now reads category presentation once per card, and category assignment/normalization uses bounded memoization plus allocation-light tokenization.
+- The exact scale regression now passes in 1.868 seconds including fixture and store construction. Its all-scope projection of 65 visible lists, 1,440 candidates, and 2,016 list items completes in roughly 4.3 ms with zero compatibility fallbacks; the pre-fix resolution phase alone took roughly 1.0 second. A fresh installed Simulator launch rendered the 24-list default scope with 1,440 candidates in 145.4 ms total projection time and zero fallbacks.
+- The exact final source passed the complete iPhone 17 Pro / iOS 26.2 suite, 428/428 with zero failures, in `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_20-25-37--0700.xcresult`. `git diff --check` is clean. Settled five-second samples on both Discover and Profile left the main thread idle in the run loop, and screenshots confirmed the realistic content rendered correctly.
+- The cold Discover launch sample identified the first post-landing follow-up: `WanderStore` initialization performs repeated visit-history matching/reconciliation on the main thread (`backfillMissingLegacyVisits`, `refreshAllVisitDerivedState`, and `visits(for:)`) before first content. This is distinct from the now-fixed screen projection/render paths and will be investigated from fresh `main` after PR #117 lands, as Joe requested.
+- The physical iPhone remains offline to Xcode, so this pass cannot produce an honest post-fix device trace. No TestFlight build, build-number bump, archive, upload, hosted mutation, or Slack release note is authorized or performed.
+
+Final latest-main landing gate, 2026-07-18 20:35 PDT:
+
+- Concurrent branch work had already integrated the rec.me/build-79 mainline and added Ryan's final 429-test validation notes. Preserved those commits, both append-only histories, and the six local scale-analysis commits without a force-push or overwrite.
+- Merged exact latest `origin/main` `6b7a965`, which adds the REC-99 mixed-status saved-place halo behavior. `ListsScreen.swift` auto-merged cleanly; the only manual conflict was this append-only coordination log, and both REC-99 and REC-101 histories were preserved.
+- The exact merge result passes the complete iPhone 17 Pro / iOS 26.2 suite: 435 tests, zero failures, in `/private/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_20-33-11--0700.xcresult`. This includes the realistic-account performance gate, REC-99 Map/List halo regressions, rec.me build-configuration tests, and all REC-101 rendering/persistence/Discover/Profile tests.
+- `origin/main` is an ancestor of the branch, `git diff --check origin/main...HEAD` is clean, and the PR remains version `0.1` build `79`; no release packaging is part of this merge. Next: push exact head, confirm PR #117 is mergeable, update REC-101 and Mission Control with this evidence, squash-merge to `main`, then begin the separately requested cold-start reconciliation investigation from fresh `main`.
 REC-99 latest-main review and validation checkpoint, 2026-07-18 19:38 PDT:
 
 - Integrated exact `origin/main` `c4251747e`, including the rec.me cutover and completed TestFlight build-79 history, as merge commit `a78888c0f`. The only manual conflict was this append-only log; both histories were preserved. `MapScreen.swift` auto-merged cleanly, latest `origin/main` is an ancestor, and the product diff remains exactly the approved Map/Lists/Quick Search halo implementation plus focused tests.
@@ -13000,3 +13133,45 @@ REC-95 review handoff, 2026-07-18 21:28 PDT:
 - Handoff: review and merge PR #124. After merge, REC-95 can move to `Done`;
   live loading/error/offline integration should remain deferred until a
   list-scoped repository request-state contract exists.
+
+REC-95 latest-main integration gate, 2026-07-18 21:54 PDT:
+
+- GitHub’s final handoff check found PR #124 conflicting because `origin/main`
+  advanced to `b0b20a652` (`REC-101: Remove app-wide interaction stalls`) after
+  the original REC-95 validation. Fetched and merged that exact mainline.
+- `ListsScreen.swift`, its navigation contracts, and the store tests
+  auto-merged. The two manual conflicts were
+  `Wander/Services/WanderLocalStore.swift` and this append-only log. Both REC-95
+  and REC-101 histories were retained.
+- The store resolution preserves REC-101’s indexed/batched list projection,
+  caches, instrumentation, and legacy fallback while adding REC-95’s explicit
+  owner → source → same-place precedence. The lookup now indexes local/server
+  aliases for both user places and places, so correctness does not reintroduce
+  candidate-array scans.
+- Integration review found a separate non-conflicting performance risk:
+  REC-95’s rich map/profile enrichment was being built for every list-home
+  mosaic and repeatedly within list-detail body evaluation. The home grid now
+  builds at most four lightweight cover places per list and evaluates its
+  projection once per update. Detail builds one rendered list snapshot, groups
+  visible saves once, uses already-projected `VisiblePlace.attributes`, and
+  batches current-user visit-photo lookup while preserving REC-93’s local-photo
+  boundary.
+- The post-fix focused integration gate passed 62 tests with zero failures,
+  including REC-95 map/fitting/navigation/projection contracts, batch-photo
+  equivalence, REC-101 account-cancellation checks, and the 2,016-item
+  performance fixture:
+  `/private/tmp/DerivedData-rec95-mainmerge-focused/Logs/Test/Test-Wander-2026.07.18_21-45-58--0700.xcresult`.
+- The exact integrated full suite passed 453 tests with zero failures:
+  `/private/tmp/DerivedData-rec95-mainmerge-full/Logs/Test/Test-Wander-2026.07.18_21-47-43--0700.xcresult`.
+  A fresh generic iOS Simulator build also passed at
+  `/private/tmp/DerivedData-rec95-mainmerge-build/Build/Products/Debug-iphonesimulator/Wander.app`.
+- Reinstalled that exact build on iPhone 17 Pro and visually reverified the
+  clustered full-map state; map framing, header, aggregate outlines, rail,
+  native attribution, and direct-open card treatment remain correct. Final
+  integrated evidence:
+  `/private/tmp/rec95-final-integrated-map-clustered-17pro.png`.
+- The iPhone 16 Plus / iOS 18.6 runtime remains unavailable; current validation
+  uses iPhone 17 Pro / iOS 26.5 plus the earlier iPhone 17e small-phone and
+  accessibility audit. No TestFlight/build-number/release action occurred.
+  Next: commit and push the merge result, confirm PR #124 is mergeable at the
+  exact pushed head, and post this superseding validation to Linear REC-95.

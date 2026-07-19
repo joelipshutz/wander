@@ -251,6 +251,10 @@ Status: DONE
 - Independent final review found no remaining blocking or non-blocking issues.
 - Validated implementation commit: `f03134d94`.
 - Review PR: https://github.com/joelipshutz/wander/pull/124
+- Latest-main revalidation: the exact build including REC-101 performance work
+  passed the iPhone 17 Pro clustered-map visual check with no design regression;
+  the list-home projection is now bounded to lightweight four-place mosaic
+  content while rich map/profile context is built only for list detail.
 
 PR summary: Design review found 8 issues and fixed all 8; design score improved
 from C to A-, and AI-slop score improved from 4/10 to 1/10.
