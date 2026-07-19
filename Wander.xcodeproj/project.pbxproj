@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		001422F87FC100BC18C54CAA /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1E08A489F203F67F25F17 /* AppBrand.swift */; };
 		00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */; };
 		03461155119042D6739D7619 /* WanderEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038D4985674B1D969110954F /* WanderEnums.swift */; };
 		05CD519FB3F114E951C4D2DE /* LinkPlaceParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86041408E563554B57347025 /* LinkPlaceParser.swift */; };
@@ -147,6 +148,7 @@
 		5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParserTests.swift; sourceTree = "<group>"; };
 		6E38429E654223C87319C7AB /* WanderPlaceCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategory.swift; sourceTree = "<group>"; };
 		70527AF1590BEF9CB781A16D /* Wander.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wander.entitlements; sourceTree = "<group>"; };
+		73F1E08A489F203F67F25F17 /* AppBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBrand.swift; sourceTree = "<group>"; };
 		76E267FE49035CB36F175971 /* ProfileImportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileImportViews.swift; sourceTree = "<group>"; };
 		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
 		7A02BE0AE86E482916C8F103 /* Wander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wander.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -381,6 +383,7 @@
 		C8403BB176FCA62C7D566901 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				73F1E08A489F203F67F25F17 /* AppBrand.swift */,
 				0078639327C81EA5F98400B4 /* WanderApp.swift */,
 				E850341A28B18117631F62F5 /* WanderBackend.swift */,
 				DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */,
@@ -583,6 +586,7 @@
 				2EC61D518D9913AD24235D5B /* AddQuestionTemplates.swift in Sources */,
 				7EAAF1336D42DE0DB9D236F9 /* AddScreen.swift in Sources */,
 				6E92ECEF915365AE40170F7E /* AnalyticsEvent.swift in Sources */,
+				001422F87FC100BC18C54CAA /* AppBrand.swift in Sources */,
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,
@@ -694,7 +698,7 @@
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Wander/Resources/Wander.entitlements;
-				CURRENT_PROJECT_VERSION = 78;
+				CURRENT_PROJECT_VERSION = 79;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wander/Resources/Info.plist;
@@ -761,7 +765,7 @@
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Wander/Resources/Wander.entitlements;
-				CURRENT_PROJECT_VERSION = 78;
+				CURRENT_PROJECT_VERSION = 79;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wander/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
