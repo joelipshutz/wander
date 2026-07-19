@@ -13242,3 +13242,15 @@ REC-105 validation and release coordination checkpoint, 2026-07-18 22:31 PDT:
 - No second archive or upload will be attempted. REC-105 will land as a
   source-only archive reproducibility fix on top of the completed build-80 log;
   it does not increment the build number or alter the already-approved binary.
+
+REC-105 signed archive checkpoint, 2026-07-18 22:37 PDT:
+
+- The local signed validation archive passed on Xcode 26.6 at
+  `/private/tmp/Wander-0.1-build80-rec105-validation.xcarchive`. Archive
+  metadata confirms marketing version `0.1`, build `80`, bundle
+  `com.grayline.wander`, architecture `arm64`, and team `Y7TVK75RZ8`.
+- This validation archive was not exported or uploaded. The already-approved
+  App Store Connect build 80 remains the only uploaded build 80.
+- Ready PR #127 contains the source-only REC-105 fix and full validation:
+  https://github.com/joelipshutz/wander/pull/127. It remains unmerged for
+  separate review and does not authorize another TestFlight release.
