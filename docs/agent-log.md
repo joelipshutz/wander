@@ -13175,3 +13175,16 @@ REC-95 latest-main integration gate, 2026-07-18 21:54 PDT:
   accessibility audit. No TestFlight/build-number/release action occurred.
   Next: commit and push the merge result, confirm PR #124 is mergeable at the
   exact pushed head, and post this superseding validation to Linear REC-95.
+
+REC-95 final integrated handoff, 2026-07-18 21:58 PDT:
+
+- Committed the latest-main integration and performance safeguards as
+  `67567a83b` (`Merge latest main into REC-95`) and pushed the exact source
+  validated above to `origin/codex/rec-95-list-map`.
+- GitHub reports ready PR #124 open and mergeable at that exact commit:
+  https://github.com/joelipshutz/wander/pull/124
+- Posted the superseding 62-focused-test, 453-full-test, generic-build, and
+  visual-validation handoff to Linear REC-95 in comment
+  `81598082-1de2-48db-aa97-2fe1d6c9aa86`. The issue remains `In Review`.
+- No TestFlight build was requested or produced. Handoff remains: test the
+  ready PR in Xcode, then merge PR #124 and move REC-95 to `Done`.

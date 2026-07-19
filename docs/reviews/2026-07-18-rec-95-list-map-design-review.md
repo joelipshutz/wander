@@ -249,7 +249,8 @@ Status: DONE
 - Apple Maps/Legal attribution remains visible and tappable in both map
   presentations.
 - Independent final review found no remaining blocking or non-blocking issues.
-- Validated implementation commit: `f03134d94`.
+- Initial validated implementation commit: `f03134d94`.
+- Latest-main integrated and revalidated commit: `67567a83b`.
 - Review PR: https://github.com/joelipshutz/wander/pull/124
 - Latest-main revalidation: the exact build including REC-101 performance work
   passed the iPhone 17 Pro clustered-map visual check with no design regression;
