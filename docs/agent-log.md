@@ -12624,3 +12624,49 @@ Pre-landing review checkpoint, 2026-07-18 18:18 PDT:
   product-spec introduction to canonical `rec.me` naming. Internal paths,
   executable/module/scheme names, and historical records intentionally remain
   Wander where they are contracts or accurate history.
+
+## 2026-07-18 18:18 PDT - Codex - TestFlight Build 79 rec.me Cutover
+
+Agent: Codex
+Branch: `codex/testflight-build-79`
+Worktree: `/private/tmp/recme-build79-release`
+Linear: `REC-84` (`In Review`)
+
+Goal: package the merged rec.me rename as TestFlight build 79, rename the
+existing App Store Connect app metadata and public beta group in place, preserve
+the public link and stable bundle identity, and complete tester-facing release
+communication.
+
+Release start and coordination:
+
+- PR #46 squash-merged to `main` as `d76133e245ee76247fa3f120ff2f7f01a8e20261`.
+- Exact `origin/main` now has the installed display name `rec.me`, canonical
+  lowercase user-facing copy, and the simplified no-pencil production icon.
+- Latest completed TestFlight release is build 78. This explicit release bumps
+  exactly once to build 79; marketing version remains `0.1`.
+- Stable identity remains `com.grayline.wander`, `PRODUCT_NAME=Wander`, and the
+  existing public TestFlight link. No auth, Supabase, notification, tester-data,
+  local persistence, or account migration is included.
+- App Store Connect app/listing is `PREPARE_FOR_SUBMISSION`, so the existing
+  localized name, subtitle, beta description, and beta-group name are editable.
+  The required privacy/support URLs remain blank and are a separate blocker for
+  a future production App Store submission, not for this TestFlight cutover.
+
+Release validation checkpoint, 2026-07-18 18:34 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 78 to 79 in
+  `project.yml` and the generated Xcode project; marketing version remains
+  `0.1`.
+- Ran XcodeGen and reduced its unrelated project-default churn, leaving the
+  generated project diff at exactly the two required build-number values.
+- Exact build-79 source passed the complete iPhone 16 Plus / iOS 18.6 suite:
+  408 passed, 0 failed, 0 skipped. Result bundle was
+  `/private/tmp/DerivedData-build79/Logs/Test/Test-Wander-2026.07.18_18-21-23--0700.xcresult`.
+- A clean generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`.
+  Two earlier generic attempts exhausted the nearly full data volume only at
+  final universal-binary assembly; task-owned simulator caches were removed
+  after their test results were recorded, and the clean rerun completed.
+- `node scripts/testflight-release.mjs --dry-run` resolves app id `6776850787`,
+  build 79, group `rec.me Alpha`, and the existing public TestFlight link.
+- `git diff --check` and `plutil -lint` pass. Release-branch scope remains only
+  `project.yml`, the two generated project build-number settings, and this log.
