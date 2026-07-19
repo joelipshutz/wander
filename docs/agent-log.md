@@ -12585,3 +12585,9 @@ Add launcher mock handoff, 2026-07-18 16:49 PDT:
 - Generated the Xcode project successfully. The final arm64 simulator build passed on iPhone 16 Plus / iOS 18.6 with `ONLY_ACTIVE_ARCH=YES ARCHS=arm64`; `git diff --check` also passed. This mock-only pass did not run the full test suite or change production behavior.
 - Captured six simulator renders under `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/design-audit-20260718/screenshots/` and wrote the comparison/recommendation to the adjacent `report.md`. The small-phone pass found and fixed two copy truncations before final capture.
 - The prior production draft remains recoverable in `stash@{0}` (`REC-17 deferred implementation draft before Add mockups`) and is intentionally not part of this review branch. Next: Joe reviews the four directions and the incoming reference screenshot; after a direction is selected, restore/adapt the shelved implementation and wire the chosen launcher into the real root tab flow.
+
+Mock publishing handoff, 2026-07-18 16:51 PDT:
+
+- Committed the mock gallery as `53c573f` (`feat: add SwiftUI Add launcher mockups`), pushed `codex/rec-17-add-save-flow`, and opened draft PR #118 for design selection: https://github.com/joelipshutz/wander/pull/118.
+- Moved Linear REC-17 to `In Review`, attached the draft PR, and added validation/recommendation comment `a92619c9-8b55-4a4c-a960-49420df18249`.
+- The PR is intentionally draft and mock-only. Do not merge it as the production fix; first incorporate Joe's reference screenshot and selected direction, then restore or replace the shelved production save-flow work with matching tests.
