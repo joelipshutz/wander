@@ -4369,6 +4369,11 @@ final class WanderStoreTests: XCTestCase {
             $0.place.canonicalName == "Griffith Observatory Trail"
                 && $0.userPlace.status == .wannaGo
         })
+        let projectedPlace = store.visiblePlaces(in: list).first {
+            $0.place.canonicalName == "Griffith Observatory Trail"
+        }
+        XCTAssertEqual(projectedPlace?.owner.id, store.currentUser.id)
+        XCTAssertEqual(projectedPlace?.userPlace.status, .wannaGo)
     }
 
     func testNonMemberCannotAddPlaceToSomeoneElsesList() async {
@@ -4467,6 +4472,28 @@ final class WanderStoreTests: XCTestCase {
                 "Batched projection changed the visible places for \(list.id)"
             )
         }
+    }
+
+    func testListProjectionPrefersExactSocialSourceSaveOverEarlierCurrentUserSave() throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_demo_laptop" })
+        let item = try XCTUnwrap(
+            store.placeListItems.first { $0.id == "list_item_demo_laptop_circuit" }
+        )
+        let matchingCandidates = store.visiblePlaces().filter {
+            $0.place.id == "place_circuit_coffee"
+        }
+
+        XCTAssertEqual(matchingCandidates.first?.userPlace.id, "up_joe_circuit_coffee")
+        XCTAssertEqual(item.sourceUserPlaceID, "up_maya_circuit_coffee")
+
+        let projectedPlace = try XCTUnwrap(
+            store.visiblePlaces(in: list).first { $0.place.id == "place_circuit_coffee" }
+        )
+
+        XCTAssertEqual(projectedPlace.userPlace.id, item.sourceUserPlaceID)
+        XCTAssertEqual(projectedPlace.owner.id, "user_maya")
+        XCTAssertEqual(projectedPlace.userPlace.note, "Quiet enough for heads-down work.")
     }
 
     func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {

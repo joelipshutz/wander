@@ -1495,10 +1495,22 @@ final class WanderStore: ObservableObject {
     }
 
     private func visiblePlace(for item: LocalPlaceListItem, candidates: [VisiblePlace]) -> VisiblePlace? {
-        if let matched = candidates.first(where: { visiblePlace in
+        if let exactOwner = candidates.first(where: { visiblePlace in
+            matches(userPlaceID: item.ownerUserPlaceID, visiblePlace: visiblePlace)
+        }) {
+            return exactOwner
+        }
+
+        if let exactSource = candidates.first(where: { visiblePlace in
+            matches(userPlaceID: item.sourceUserPlaceID, visiblePlace: visiblePlace)
+        }) {
+            return exactSource
+        }
+
+        if let samePlace = candidates.first(where: { visiblePlace in
             listItem(item, matches: visiblePlace)
         }) {
-            return matched
+            return samePlace
         }
 
         return fallbackVisiblePlace(for: item)
@@ -1553,10 +1565,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func listItem(_ item: LocalPlaceListItem, matches visiblePlace: VisiblePlace) -> Bool {
-        let userPlaceIDs = Set([item.ownerUserPlaceID, item.sourceUserPlaceID].compactMap { $0 })
-        if userPlaceIDs.contains(visiblePlace.userPlace.id)
-            || userPlaceIDs.contains(visiblePlace.userPlace.localID)
-            || visiblePlace.userPlace.serverID.map(userPlaceIDs.contains) == true {
+        if listItem(item, matchesExactUserPlace: visiblePlace) {
             return true
         }
 
@@ -1564,6 +1573,24 @@ final class WanderStore: ObservableObject {
         return placeIDs.contains(visiblePlace.place.id)
             || placeIDs.contains(visiblePlace.place.localID)
             || visiblePlace.place.serverID.map(placeIDs.contains) == true
+    }
+
+    private func listItem(
+        _ item: LocalPlaceListItem,
+        matchesExactUserPlace visiblePlace: VisiblePlace
+    ) -> Bool {
+        matches(userPlaceID: item.ownerUserPlaceID, visiblePlace: visiblePlace)
+            || matches(userPlaceID: item.sourceUserPlaceID, visiblePlace: visiblePlace)
+    }
+
+    private func matches(
+        userPlaceID: String?,
+        visiblePlace: VisiblePlace
+    ) -> Bool {
+        guard let userPlaceID else { return false }
+        return visiblePlace.userPlace.id == userPlaceID
+            || visiblePlace.userPlace.localID == userPlaceID
+            || visiblePlace.userPlace.serverID == userPlaceID
     }
 
     private func fallbackVisiblePlace(for item: LocalPlaceListItem) -> VisiblePlace? {

@@ -12926,3 +12926,56 @@ REC-95 coordination correction, 2026-07-18 19:52 PDT:
 - The design-review workflow created local `.gstack/` session metadata. Its
   generated ignore rule is retained so that transient review state cannot
   enter the product diff; no generated design direction replaces `DESIGN.md`.
+
+REC-95 implementation and validation checkpoint, 2026-07-18 21:21 PDT:
+
+- Replaced the decorative list-detail map with a real, non-pannable MapKit
+  preview using production coordinates, the shared REC-99 save outlines, honest
+  mapped/total counts, and a separate 52pt View Map row. The native Apple
+  Maps/Legal strip remains visible and independently tappable; the rest of the
+  map body and the action row both open the full map.
+- Rebuilt the full-screen list map as a persistent map-plus-rail flow. Pin taps
+  focus the matching rail card, rail swipes update the neutral focus ring, a
+  card opens the canonical place profile on its first tap, and returning
+  preserves the map camera and rail focus. Cluster taps zoom rather than opening
+  an arbitrary place.
+- The production projection now retains canonical `PlaceSheetPlace`,
+  privacy-filtered save summaries, taste context, the actual current-user ID,
+  source owner/note/status, and an eligible local visit-photo reference. A
+  discovered projection ambiguity was fixed by preferring
+  `ownerUserPlaceID`, then `sourceUserPlaceID`, then same-place fallback.
+- Added pure content, interaction, clustering, coordinate-validity, antimeridian,
+  pole-clamp, and overlay-aware viewport helpers. Camera fitting measures the
+  actual global header/rail frames, keeps pins out from under both surfaces at
+  standard and accessibility sizes, applies the same adjustment to cluster
+  zoom, and lays MapKit out above the rail so its attribution is unobscured.
+- Added honest ready/loading/error/offline/partial/empty presentations and a
+  resolved-but-unmappable state that shows no fake pin but keeps the real place
+  card openable. Production deliberately does not infer an in-flight request
+  from a cached item count; a future list-scoped repository state is required
+  before wiring live network/offline failures.
+- The rail uses a stable 62pt REC-93 compact-media slot. It reads only a local
+  viewer-visible visit asset when available and otherwise keeps the category
+  fallback; it does not issue provider-photo or per-card backend requests.
+- New deterministic launch scenarios cover empty, one place, clustered,
+  dispersed, partial, unresolved/loading, resolved-unmapped, error, cached
+  offline, long names, and initial focus. New/expanded unit and source-contract
+  tests cover the corresponding logic and navigation.
+- Exact final generic iOS Simulator build passed. Exact final focused run passed
+  53 tests, 0 failures, 0 skipped:
+  `/private/tmp/DerivedData-rec95-focused-final/Logs/Test/Test-Wander-2026.07.18_21-05-25--0700.xcresult`.
+  Exact final full suite passed 429 tests, 0 failures, 0 skipped:
+  `/private/tmp/DerivedData-rec95-full-final/Logs/Test/Test-Wander-2026.07.18_21-09-06--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed, so
+  validation used the available iPhone 17 Pro / iOS 26.5 simulator.
+- Final visual QA passed on iPhone 17 Pro and the smaller iPhone 17e, plus
+  Accessibility Extra Large on iPhone 17e. Before/after evidence is stored in
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/design-audit-20260718-rec95/screenshots/`;
+  the durable mock/interaction contract and implementation plan live in
+  `docs/reviews/2026-07-18-rec-95-list-map-design-review.md` and
+  `docs/plans/2026-07-18-rec-95-list-map.md`.
+- Independent final review found no remaining blocking or non-blocking issue.
+  `git diff --check` is clean. No schema, RLS, auth, user data, App Store build
+  number, archive, upload, TestFlight, or tester-facing Slack action is part of
+  REC-95. Next: commit and push the implementation, open the required ready PR,
+  then update this log and Linear REC-95 with the PR and final status.

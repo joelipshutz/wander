@@ -256,6 +256,62 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
     }
 
+    func testListMapVisualQAScenariosResolveDeterministically() {
+        let scenarios: [(argument: String, expected: ListsScreenScenario)] = [
+            ("mapEmpty", .mapEmpty),
+            ("mapSingle", .mapSingle),
+            ("mapClustered", .mapClustered),
+            ("mapDispersed", .mapDispersed),
+            ("mapPartial", .mapPartial),
+            ("mapUnresolved", .mapUnresolved),
+            ("mapUnmapped", .mapUnmapped),
+            ("mapError", .mapError),
+            ("mapOffline", .mapOffline),
+            ("mapLongNames", .mapLongNames)
+        ]
+
+        for scenario in scenarios {
+            let resolved = ListsScreenScenario.resolved(
+                from: ["Wander", "-WanderListsScenario", scenario.argument]
+            )
+
+            XCTAssertEqual(resolved, scenario.expected, scenario.argument)
+            XCTAssertTrue(resolved.showsDetailRoot, scenario.argument)
+            XCTAssertTrue(resolved.opensMapOnLaunch, scenario.argument)
+            XCTAssertTrue(resolved.usesMockData, scenario.argument)
+        }
+    }
+
+    func testListMapUsesFocusThenDirectOpenWithoutIntermediatePlaceSurface() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let fullScreen = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ListMapFullScreen: View")
+                .last?
+                .components(separatedBy: "private struct ListMapMarker: View")
+                .first
+        )
+        let rail = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ListMapPlaceRail: View")
+                .last?
+                .components(separatedBy: "private struct ListMapCompactMedia: View")
+                .first
+        )
+
+        XCTAssertFalse(source.contains("PlaceProfileMapSurface("))
+        XCTAssertFalse(fullScreen.contains("saves: []"))
+        XCTAssertFalse(fullScreen.contains("currentUserID: \"you\""))
+        XCTAssertTrue(fullScreen.contains("focus(place)"), "A pin should focus its rail tile")
+        XCTAssertTrue(rail.contains("let onSelect: (ListPlaceMock) -> Void"))
+        XCTAssertTrue(rail.contains("onSelect(place)"), "Rail selection should open the place directly")
+        XCTAssertTrue(rail.contains("let onOpen: () -> Void"))
+        XCTAssertTrue(rail.contains("Button(action: onOpen)"), "The whole tile should open on its first tap")
+        XCTAssertTrue(rail.contains(".accessibilityHint(\"Opens place\")"))
+    }
+
     func testListsScreenOnlyUsesMockDataForExplicitVisualQAScenarios() {
         XCTAssertFalse(ListsScreenScenario.live.usesMockData)
         XCTAssertFalse(ListsScreenScenario.empty.usesMockData)
