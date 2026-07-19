@@ -12797,3 +12797,24 @@ REC-101 latest-main integration and validation checkpoint, 2026-07-18 19:29 PDT:
   confirm PR #117 is merge-clean with an updated second-pass summary, return
   Linear REC-101 to `In Review`, and leave merge/TestFlight/release actions
   untouched.
+
+REC-101 second-pass publishing handoff, 2026-07-18 19:32 PDT:
+
+- Pushed integrated head `789183ea6` to
+  `origin/codex/rec-101-app-performance`. Updated ready PR #117 with both
+  performance passes, the current root-cause analysis, regression coverage,
+  integrated 429-test result, and physical-device validation gap:
+  https://github.com/joelipshutz/wander/pull/117.
+- GitHub reports PR #117 open, non-draft, `MERGEABLE`, based on current
+  `origin/main` `c4251747e`, with no failing status check. The branch is ready
+  for Ryan's Xcode/real-account Discover and Profile scroll test.
+- Returned Linear `REC-101` to `In Review` and added final validation comment
+  `3e188be4-8db0-436f-9e87-797b21a387c9`. The issue remains open until review
+  and physical feel confirmation; it is not marked shipped.
+- The sole remaining validation gap is a post-fix physical Instruments trace
+  because `Ry’s iPhone` remains offline to Instruments. No result was
+  fabricated or inferred from incomplete trace artifacts.
+- No merge, TestFlight build bump, archive, upload, hosted mutation, tester-data
+  change, or Slack announcement occurred. Exact next step: run this branch from
+  Xcode on Ryan's real account and judge steady Discover/Profile scrolling;
+  merge/release remains separately authorized work.
