@@ -13037,3 +13037,10 @@ REC-104 implementation and validation checkpoint, 2026-07-18 21:03 PDT:
 - The remaining visible white launch interval is no longer explained by reconciliation. About 443 ms of this deterministic run is synthetic performance-fixture construction, which production launches do not perform; app/framework startup and first projection are the next measurable slices. Joe's connected iPhone 16 Pro still reports `unavailable`, so the requested realistic Simulator validation is complete but a production-account physical-device trace remains a separate follow-up option.
 - Two early baseline attempts failed before tests because the host disk was full (GenerateDSYM, then ModuleCache). Only task-owned `/private/tmp` artifacts/caches were removed; the before-test, focused after-test, and all final suites then ran successfully with `DEBUG_INFORMATION_FORMAT=dwarf` and indexing disabled. No product failure was attributed to those environment errors.
 - Next: commit and push the focused change, open a ready PR to `main`, link it to REC-104, and move Linear/Mission Control to review. Do not merge or release without a separate instruction.
+
+REC-104 handoff, 2026-07-18 21:06 PDT:
+
+- Committed the implementation and validation record as `828a105` (`perf: index cold-start visit reconciliation`) and pushed `codex/rec-104-cold-start-performance`.
+- Opened ready PR #123, `REC-104: Optimize high-data cold-start visit reconciliation`: https://github.com/joelipshutz/wander/pull/123
+- Linked PR #123 and the complete performance/test evidence to REC-104, then moved Linear to `In Review`. Mission Control task `1510a8ed-b2a6-4a1a-bca9-7f6754ef5f6a` is also in `review`.
+- No merge, build-number bump, TestFlight upload, hosted-data change, or Slack release note was performed. Restart from PR #123 for review/landing; choose a separate physical-device profiling follow-up once the iPhone is available if production-account evidence is still needed.
