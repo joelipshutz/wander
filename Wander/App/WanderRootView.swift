@@ -426,7 +426,10 @@ struct WanderRootView: View {
     }
 
     static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {
-        arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
+        if arguments.contains("-WanderUsePerformanceFixtures") {
+            return .performance
+        }
+        return arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
     }
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {
@@ -439,6 +442,8 @@ struct WanderRootView: View {
             WanderFixtures.empty()
         case .demo:
             WanderFixtures.seed()
+        case .performance:
+            WanderFixtures.performanceScale()
         }
     }
 }
@@ -446,6 +451,7 @@ struct WanderRootView: View {
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
+    case performance
 }
 
 enum WanderInitialPresentation: String, Identifiable {

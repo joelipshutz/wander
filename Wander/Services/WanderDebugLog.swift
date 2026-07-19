@@ -4,6 +4,7 @@ import OSLog
 enum WanderDebugLog {
     static let sync = Logger(subsystem: "com.grayline.wander", category: "WanderSync")
     static let remote = Logger(subsystem: "com.grayline.wander", category: "WanderRemote")
+    static let performance = Logger(subsystem: "com.grayline.wander", category: "WanderPerformance")
 
     static func shortID(_ value: String?) -> String {
         guard let value, !value.isEmpty else { return "nil" }

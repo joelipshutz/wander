@@ -182,6 +182,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
     }
 
+    func testProfileScrollUsesAStaticMapSnapshotWithoutReintroducingLazyContainers() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let mapSection = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ProfileMapSection: View")
+                .last?
+                .components(separatedBy: "private struct ProfileMapSummaryRow: View")
+                .first
+        )
+
+        XCTAssertTrue(mapSection.contains("ProfileMapSnapshotView("))
+        XCTAssertFalse(mapSection.contains("\n            Map("))
+        XCTAssertFalse(source.contains("LazyVStack"))
+        XCTAssertFalse(source.contains("LazyVGrid"))
+    }
+
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
@@ -357,9 +375,19 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
-    func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
+    func testRootViewUsesEmptyFixturesByDefaultAndExplicitProfilingFixturesWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUsePerformanceFixtures"]),
+            .performance
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderUseDemoFixtures", "-WanderUsePerformanceFixtures"]
+            ),
+            .performance
+        )
     }
 
     @MainActor
@@ -434,6 +462,61 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
     }
 
+    func testDiscoverUnboundedRowsAreLazyAndSearchWorkIsCancellable() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let placeResults = try sourceSection(
+            source,
+            after: "private var placeResultsSection: some View",
+            before: "private var latestActivitySection: some View"
+        )
+        let friends = try sourceSection(
+            source,
+            after: "private var friendsSection: some View",
+            before: "private func beginSaveDiscoverPlace"
+        )
+        let memberResults = try sourceSection(
+            source,
+            after: "private var memberSearchResultsSection: some View",
+            before: "private var friendsSection: some View"
+        )
+
+        XCTAssertTrue(placeResults.contains("LazyVStack"))
+        XCTAssertTrue(friends.contains("LazyVStack"))
+        XCTAssertTrue(memberResults.contains("LazyHStack"))
+        XCTAssertFalse(source.contains("store.visiblePlaces(for: profile.id).count"))
+        XCTAssertTrue(source.contains(".task(id: placesQuery)"))
+        XCTAssertTrue(source.contains(".task(id: memberQuery)"))
+        XCTAssertFalse(source.contains(".onChange(of: placesQuery)"))
+        XCTAssertFalse(source.contains(".onChange(of: memberQuery)"))
+    }
+
+    func testDiscoverAuthAndVisibleDataRefreshesRerunActiveSearchesCancellably() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let authRefresh = try sourceSection(
+            source,
+            after: ".task(id: auth.isSignedIn)",
+            before: ".task(id: placesQuery)"
+        )
+        let visibleDataRefresh = try sourceSection(
+            source,
+            after: ".task(id: visiblePlaceSignature)",
+            before: ".navigationDestination"
+        )
+
+        XCTAssertTrue(authRefresh.contains("previousAuthState != requestedAuthState"))
+        XCTAssertTrue(authRefresh.contains("await refreshPlaces(query: placesQuery)"))
+        XCTAssertTrue(authRefresh.contains("await refreshMembers(query: memberQuery)"))
+        XCTAssertTrue(authRefresh.contains("guard !Task.isCancelled"))
+        XCTAssertTrue(visibleDataRefresh.contains("await refreshPlaces(query: placesQuery)"))
+        XCTAssertTrue(visibleDataRefresh.contains("await refreshMembers(query: memberQuery)"))
+        XCTAssertTrue(visibleDataRefresh.contains("guard !Task.isCancelled"))
+        XCTAssertFalse(source.contains(".onChange(of: visiblePlaceSignature)"))
+    }
+
     @MainActor
     func testPlaceProfileEdgeSwipeBackGestureOnlyTriggersFromLeftEdge() {
         XCTAssertTrue(
@@ -495,6 +578,11 @@ final class NavigationContractTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func sourceSection(_ source: String, after start: String, before end: String) throws -> String {
+        let suffix = try XCTUnwrap(source.components(separatedBy: start).last)
+        return try XCTUnwrap(suffix.components(separatedBy: end).first)
     }
 
     private func swiftFiles(in directory: URL) throws -> [URL] {
