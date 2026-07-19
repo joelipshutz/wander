@@ -2860,9 +2860,11 @@ private struct ListPlaceMock: Identifiable {
 
     init(visiblePlace: VisiblePlace) {
         let place = visiblePlace.place
+        let categoryPresentation = visiblePlace.categoryPresentation
+        let category = categoryPresentation.assignment.primaryCategory
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
+            categoryPresentation.display.compactTitle,
             place.locality
         ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2871,10 +2873,10 @@ private struct ListPlaceMock: Identifiable {
         self.init(
             id: "saved-\(visiblePlace.id)",
             name: place.canonicalName,
-            category: visiblePlace.effectiveCategory,
-            emoji: visiblePlace.categoryEmoji,
+            category: category,
+            emoji: categoryPresentation.emoji,
             metadata: metadataParts.joined(separator: " - "),
-            tint: Self.tint(for: visiblePlace.effectiveCategory),
+            tint: Self.tint(for: category),
             pinPosition: Self.previewPinPosition(for: place.id),
             latitude: place.latitude,
             longitude: place.longitude,

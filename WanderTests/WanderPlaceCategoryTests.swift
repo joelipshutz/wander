@@ -564,6 +564,18 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
         let warmProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmProjectionStart
 
+        let visibleLists = store.visiblePlaceLists
+        let listProjectionStart = CFAbsoluteTimeGetCurrent()
+        let visiblePlacesByListID = store.visiblePlacesByListID(in: visibleLists)
+        let listProjectionElapsed = CFAbsoluteTimeGetCurrent() - listProjectionStart
+        let visibleListItemCount = visiblePlacesByListID.values.reduce(0) { $0 + $1.count }
+
+        let warmListProjectionStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += store.visiblePlacesByListID(in: visibleLists).count
+        }
+        let warmListProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmListProjectionStart
+
         let insightsCache = ProfileInsightsCache()
         let insightsStart = CFAbsoluteTimeGetCurrent()
         let insights = insightsCache.present(
@@ -595,11 +607,14 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let snapshotElapsed = CFAbsoluteTimeGetCurrent() - snapshotStart
 
         XCTAssertGreaterThan(checksum, 0)
+        XCTAssertGreaterThan(visibleListItemCount, 1_500)
         XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
         XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
         XCTAssertLessThan(storeElapsed, 2.0, "High-data store initialization took \(storeElapsed)s")
         XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
         XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
+        XCTAssertLessThan(listProjectionElapsed, 0.5, "High-data list projection took \(listProjectionElapsed)s")
+        XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")
         XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
         XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
         XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")

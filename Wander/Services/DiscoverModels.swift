@@ -106,7 +106,7 @@ private struct VisiblePlaceCategoryPresentationKey: Hashable {
     let cuisineValueJSON: String?
 }
 
-private struct VisiblePlaceCategoryPresentation {
+struct VisiblePlaceCategoryPresentation {
     let assignment: PlaceCategoryAssignment
     let display: PlaceCategoryDisplay
     let restaurantCuisine: String?
@@ -149,6 +149,46 @@ private final class BoundedMemoizationCache<Key: Hashable, Value>: @unchecked Se
     }
 }
 
+private struct LocalPlaceCategoryAssignmentKey: Hashable {
+    let primaryCategory: String
+    let subcategory: String?
+    let source: String
+    let confidence: Double?
+    let rawProviderType: String?
+}
+
+private enum LocalPlaceCategoryAssignmentResolver {
+    private static let cache = BoundedMemoizationCache<
+        LocalPlaceCategoryAssignmentKey,
+        PlaceCategoryAssignment
+    >(capacity: 1_024)
+
+    static func assignment(
+        primaryCategory: String,
+        subcategory: String?,
+        source: String,
+        confidence: Double?,
+        rawProviderType: String?
+    ) -> PlaceCategoryAssignment {
+        let key = LocalPlaceCategoryAssignmentKey(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: source,
+            confidence: confidence,
+            rawProviderType: rawProviderType
+        )
+        return cache.value(for: key) {
+            PlaceCategoryAssignment(
+                primaryCategory: primaryCategory,
+                subcategory: subcategory,
+                source: source,
+                confidence: confidence,
+                rawProviderType: rawProviderType
+            )
+        }
+    }
+}
+
 private enum VisiblePlaceCategoryPresentationResolver {
     private static let cache = BoundedMemoizationCache<
         VisiblePlaceCategoryPresentationKey,
@@ -180,7 +220,7 @@ private enum VisiblePlaceCategoryPresentationResolver {
         return cache.value(for: key) {
             let assignment: PlaceCategoryAssignment
             if let override = userPlace.categoryOverride {
-                assignment = PlaceCategoryAssignment(
+                assignment = LocalPlaceCategoryAssignmentResolver.assignment(
                     primaryCategory: override,
                     subcategory: userPlace.subcategoryOverride,
                     source: userPlace.categoryOverrideSource ?? PlaceCategorySource.user.rawValue,
@@ -188,7 +228,13 @@ private enum VisiblePlaceCategoryPresentationResolver {
                     rawProviderType: place.rawProviderType
                 )
             } else {
-                assignment = place.categoryAssignment
+                assignment = LocalPlaceCategoryAssignmentResolver.assignment(
+                    primaryCategory: key.placePrimaryCategory,
+                    subcategory: key.placeSubcategory,
+                    source: key.placeCategorySource,
+                    confidence: key.placeCategoryConfidence,
+                    rawProviderType: key.placeRawProviderType
+                )
             }
 
             let restaurantCuisine = decodedRestaurantCuisine(from: cuisineValueJSON)
@@ -223,7 +269,7 @@ struct VisiblePlace: Identifiable {
     let owner: LocalProfile
     var attributes: [LocalPlaceAttribute] = []
 
-    private var categoryPresentation: VisiblePlaceCategoryPresentation {
+    var categoryPresentation: VisiblePlaceCategoryPresentation {
         VisiblePlaceCategoryPresentationResolver.presentation(
             place: place,
             userPlace: userPlace,
@@ -275,7 +321,7 @@ struct VisiblePlace: Identifiable {
 
 extension LocalPlace {
     var categoryAssignment: PlaceCategoryAssignment {
-        PlaceCategoryAssignment(
+        LocalPlaceCategoryAssignmentResolver.assignment(
             primaryCategory: primaryCategory,
             subcategory: subcategory,
             source: categorySource,
