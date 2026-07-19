@@ -12486,6 +12486,53 @@ Pre-landing review checkpoint, 2026-07-17 17:11 PDT:
 - Independent review reproduced one release-order finding: REC-98 and REC-100 append `docs/agent-log.md` from the same base, so the second branch must integrate latest `main` and preserve both log histories. Their current overlapping Swift source changes auto-merge cleanly. REC-100 will land first; the active REC-98 owner will then integrate latest `main`, resolve the append-only log conflict, rerun its focused/full/build gate, and provide a final merge-ready head.
 - Merge remains intentionally separate from release: no build 78 bump starts until both PRs are squash-merged into latest `main`.
 
+## 2026-07-17 17:11 PDT - Codex - REC-99 Mixed Social Pin Mockups
+
+Agent: Codex
+Branch: `codex/rec-99-social-pin-mockups`
+Worktree: `/private/tmp/recme-rec99-social-pin-mockups`
+Linear: `REC-99` (`In Progress`)
+
+Goal: turn Ryan's exact mixed-state concern into native SwiftUI comparison mockups: Ryan/current user has Been, Joe/social has Been, and Maya/social has Wanna. Explore three treatments that preserve both social signals and recommend a production direction without changing live map behavior.
+
+Starting status:
+
+- Fetched `origin`; this isolated worktree is clean and starts from exact `origin/main` at `2b2f19a9b`. Ryan's root checkout remains on `codex/rec-88-visit-friends-mockup` with an unrelated untracked `.pnpm-store/`, so it will not be edited.
+- Read the latest agent log, `DESIGN.md`, the existing DEBUG-only mockup routes, the live pin aggregation path, and REC-99. Linear moved from `Backlog` to `In Progress`.
+- The backend and iOS repository already preserve Ryan, Joe, and Maya as separate visible save rows. The loss happens in `MapPinOutlineBuilder`, where any social Been currently collapses the social cohort to Been. The mockup pass will not change that production path.
+- The gstack design-shotgun image renderer is unavailable locally. Its distinct-variant comparison method will be applied directly in native SwiftUI so the concepts can be evaluated at the app's real 40-point pin scale and on two simulator widths.
+- Expected files: `Wander/App/WanderApp.swift`, a new DEBUG-only `Wander/Features/Map/SocialPinConceptMockups.swift`, `WanderTests/NavigationContractTests.swift`, generated `Wander.xcodeproj/project.pbxproj`, and this log. No `MapScreen.swift`, schema/RPC, hosted data, build number, TestFlight, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-17 17:32 PDT:
+
+- Added a deterministic DEBUG-only SwiftUI comparison board plus full-map detail routes for three treatments: A) a split solid/dotted social halo, B) solid/dotted social status pips, and C) three concentric ownership/state lanes. The board also renders today's behavior, where Joe's social Been collapses the shared sky ring to solid and hides Maya's Wanna.
+- Recommend A, the split halo: the inner solid terracotta ring remains Ryan/current-user Been, while equal solid and dotted sky arcs communicate that both social Been and social Wanna are present. The arcs encode presence, not counts or proportions. The selected-place card carries exact attribution with `You + Joe have been here` and `Maya wants to go`, and the mock pin exposes the same facts in its accessibility label.
+- Kept the production aggregation path and `MapScreen.swift` untouched. `WanderApp` only intercepts the new `-WanderSocialPinMockup` launch flag in DEBUG builds; normal launch behavior is unchanged. Added resolver coverage for all four deterministic pages and missing/invalid arguments, then regenerated the Xcode project through XcodeGen.
+- Generic unsigned iOS Simulator build passed for arm64 and x86_64. Focused `NavigationContractTests` passed 35/35. The complete iPhone 17 Pro / iOS 26.5 suite passed 380/380 with zero failures at `/private/tmp/DerivedData-rec99-mockups/Logs/Test/Test-Wander-2026.07.17_17-29-54--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e. Evidence: `/private/tmp/rec99-social-pins-comparison-17pro.png`, `/private/tmp/rec99-social-pins-comparison-17e.png`, `/private/tmp/rec99-social-pins-split-halo-17pro.png`, and `/private/tmp/rec99-social-pins-split-halo-17e.png`. All concepts remain legible at the actual 40-point map size; A best preserves the existing pin grammar and category-glyph clarity, while B reads like notification badges and C becomes a heavy bullseye.
+- `git diff --check` is clean and latest `origin/main` remains the branch base at `2b2f19a9b`. Next: publish this design exploration as a draft PR, attach it to REC-99, and keep the issue `In Progress` until Ryan selects a direction. No production behavior, hosted data, build number, TestFlight release, or Slack announcement changed.
+
+Publishing handoff, 2026-07-17 17:35 PDT:
+
+- Committed the validated mockup and test harness as `8512068a5` (`feat: add REC-99 social pin mockups`), pushed `codex/rec-99-social-pin-mockups`, and opened draft PR #114: https://github.com/joelipshutz/wander/pull/114.
+- Attached PR #114 to REC-99 and added the scenario, option tradeoffs, recommendation, and validation evidence in Linear comment `b7c7775a-ec1b-4695-be25-21e7b9301786`. The issue remains `In Progress` because the production direction is intentionally awaiting Ryan's selection.
+- No TestFlight build number, archive, upload, hosted data mutation, merge, or tester-facing Slack announcement occurred.
+
+Approved production scope, 2026-07-17 19:15 PDT:
+
+- Ryan selected option A, the split halo, and explicitly narrowed implementation to that pin treatment only. Remove the prior DEBUG comparison/full-map concept routes and do not ship any selected-card, map layout, filter, copy, or other mockup changes.
+- The isolated worktree is clean and latest `origin/main` remains `2b2f19a9b`, the branch base. No overlapping REC-99 work is present in the agent log or worktree list.
+- Expected final product files are limited to the existing production pin aggregation/rendering in `Wander/Features/Map/MapScreen.swift` and focused coverage in `WanderTests/MapHitTestingTests.swift`; `docs/agent-log.md` remains the required coordination exception. The prior mockup route/source/test/project additions will be removed so they do not remain in the PR.
+- REC-99 stays `In Progress` while implementation and validation run. No backend/schema, selected-place card, map layout, project build number, TestFlight release, or Slack action is in scope.
+
+Implementation and validation checkpoint, 2026-07-17 19:34 PDT:
+
+- Removed the complete DEBUG-only comparison/full-map mockup route, source, generated project membership, and resolver coverage. The final diff against `origin/main` contains only the production pin renderer/aggregation in `Wander/Features/Map/MapScreen.swift`, focused tests in `WanderTests/MapHitTestingTests.swift`, and this required append-only log.
+- A mixed social cohort now renders one split sky halo: the Been half is solid and the Wanna half is dotted. Ryan/current-user history keeps the existing single personal Been-precedence ring, single-status social halos remain unchanged, and any number of social Been saves plus at least one social Wanna still exposes both statuses.
+- No selected-place card, attribution copy, map layout, search row, filter, fixture, backend/schema, accessibility copy, build number, or other UI behavior changed.
+- Focused `MapPinOutlineBuilderTests` passed 6/6 with zero failures at `/private/tmp/DerivedData-rec99-implementation/Logs/Test/Test-Wander-2026.07.17_19-24-47--0700.xcresult`. The complete iPhone 17 Pro / iOS 26.5 suite passed 381/381 with zero failures at `/private/tmp/DerivedData-rec99-implementation/Logs/Test/Test-Wander-2026.07.17_19-31-09--0700.xcresult`. A final generic iOS Simulator build passed for arm64 and x86_64.
+- Production visual QA passed on iPhone 17 Pro and the smaller iPhone 17e: `/private/tmp/rec99-split-halo-production-17pro.png` and `/private/tmp/rec99-split-halo-production-17e.png`. To expose the exact Ryan Been + Joe Been + Maya Wanna topology, one existing demo fixture status was changed only long enough to compile the screenshot artifact, then immediately restored before the full suite and final build; `git diff --exit-code -- Wander/Services/WanderFixtures.swift` is clean.
+- `git diff --check` is clean. Next: commit and push the narrowly scoped implementation, update draft PR #114 into a ready implementation PR, add the validation evidence to REC-99, and move the issue to `In Review`. No TestFlight release or tester-facing Slack announcement was requested.
 REC-98 latest-main integration and validation, 2026-07-17 17:36 PDT:
 
 - Fetched and integrated exact `origin/main` `2b2f19a9b` (`REC-100: Improve content contrast and Profile header (#113)`) into `codex/rec-98-category-emojis` as merge commit `3643a214a`. The four overlapping Swift files (`AddScreen`, `ListsScreen`, `MapScreen`, and `SharedVisitComponents`) auto-merged; direct inspection confirms REC-100's static-content/contrast fixes and REC-98's rich category emoji rendering both remain intact.
@@ -12511,6 +12558,27 @@ REC-98 publishing handoff, 2026-07-17 19:31 PDT:
 - Moved Linear REC-98 to `In Review`, attached the final PR handoff, and added validation comment `c464278a-9491-4089-8858-ecb5e1d9cc47`.
 - Sent the exact release-gate result to the coordinating REC-100/build-78 task. It now owns the squash merge and the single combined TestFlight release; no merge, build bump, archive, upload, or Slack post occurred in this task.
 
+REC-99 latest-main integration checkpoint, 2026-07-17 19:36 PDT:
+
+- After the validated split-halo commit, `origin/main` advanced to `654ea77a7` with REC-98. Merged that exact main into this branch; all Swift and project changes auto-merged, including the overlapping production `MapScreen.swift`.
+- The sole conflict was the expected append-only `docs/agent-log.md` tail. Resolved it by retaining the complete REC-98 and REC-99 histories. The post-merge diff against latest main remains limited to `MapScreen.swift`, `MapHitTestingTests.swift`, and this log, with no prior mockup artifacts or unrelated UI changes.
+- Next: complete the merge commit, rerun focused/full/build validation on the integrated source, then publish the ready PR handoff.
+
+REC-99 integrated validation completion, 2026-07-17 19:45 PDT:
+
+- The integrated focused `MapPinOutlineBuilderTests` gate passed 6/6 with zero failures at `/private/tmp/DerivedData-rec99-integrated/Logs/Test/Test-Wander-2026.07.17_19-37-39--0700.xcresult`.
+- The complete integrated iPhone 17 Pro / iOS 26.5 suite passed 408/408 with zero failures at `/private/tmp/DerivedData-rec99-integrated/Logs/Test/Test-Wander-2026.07.17_19-41-31--0700.xcresult`.
+- A fresh generic iOS Simulator build passed for both arm64 and x86_64 from `/private/tmp/DerivedData-rec99-integrated`. Independent scope/correctness review found no blocking issue and confirmed the Ryan Been + Joe Been + Maya Wanna scenario produces a full personal Been ring plus the split social Been/Wanna halo.
+- The final diff against integrated `origin/main` remains exactly `Wander/Features/Map/MapScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this required log. `git diff --check` is clean, no fixture or prior mockup artifact remains, and no card, copy, map layout, search, filter, backend, build-number, TestFlight, or Slack change is included.
+- Next: commit this integrated validation record, push the validated branch, convert PR #114 to a ready implementation PR, and move REC-99 to `In Review` with the final evidence.
+
+REC-99 publishing handoff, 2026-07-17 19:47 PDT:
+
+- Committed the production split halo as `c8104706d`, integrated latest `origin/main` `654ea77a7` via `651231c7b`, and committed the integrated validation record as `110a486f3`. Pushed the validated head to `codex/rec-99-social-pin-mockups`.
+- Reframed existing PR #114 as `REC-99: Preserve mixed social Been and Wanna on map pins`, replaced the earlier exploration description with the exact approved scope, and marked it ready for review: https://github.com/joelipshutz/wander/pull/114.
+- Moved Linear REC-99 to `In Review` and added final implementation/validation comment `20fdcc97-1f0b-47bf-a557-cba3f7f9985e`.
+- No merge, selected-place-card or other mockup change, build-number bump, TestFlight archive/upload, hosted-data mutation, or Slack announcement occurred.
+
 ## 2026-07-17 19:35 PDT - Codex - Combined REC-98 + REC-100 TestFlight Build 78
 
 Agent: Codex
@@ -12534,6 +12602,27 @@ Build-78 validation checkpoint, 2026-07-17 19:45 PDT:
 - A fresh generic iOS Simulator build passed after rerunning with the required CoreSimulator/package access. The resulting app reports `0.1 (78)`, and its executable contains both `arm64` and `x86_64`.
 - `git diff --check` is clean. The release diff remains limited to `project.yml`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log. Next: commit/push, open and review a ready release PR, squash-merge it, then archive and upload exact post-merge `main`.
 
+REC-99 build-78 latest-main integration completion, 2026-07-17 19:55 PDT:
+
+- `origin/main` advanced once more to `d2b650a47` with the separate build-78 release metadata. Integrated that exact head as merge commit `3365d2603`; its only conflict was the expected append-only agent-log tail, and both REC-99 and build-78 histories were preserved.
+- The split-halo Swift source and tests did not conflict or change. On the exact latest-main-integrated branch, the complete iPhone 17 Pro / iOS 26.5 suite passed 408/408 with zero failures at `/private/tmp/DerivedData-rec99-final/Logs/Test/Test-Wander-2026.07.17_19-49-18--0700.xcresult`.
+- The final generic iOS Simulator build passed for arm64 and x86_64 from `/private/tmp/DerivedData-rec99-final`. `git diff --check` is clean, latest `origin/main` is an ancestor, and the PR diff remains exactly `MapScreen.swift`, `MapHitTestingTests.swift`, and this required log.
+- Next: commit and push this final integration record, then reconfirm PR #114 remains ready and merge-clean. REC-99 stays `In Review`; no new TestFlight, Slack, backend, fixture, card, copy, layout, search, filter, or other UI action belongs to this task.
+
+REC-99 final review-ready handoff, 2026-07-17 19:56 PDT:
+
+- Pushed the exact latest-main-integrated and fully validated head through `b860d3533`. PR #114 is ready, `MERGEABLE/CLEAN`, based on `d2b650a47`, and reports only the two intended source/test files plus this required log: https://github.com/joelipshutz/wander/pull/114.
+- REC-99 remains correctly in `In Review` with final evidence in comment `20fdcc97-1f0b-47bf-a557-cba3f7f9985e`. There are no known implementation issues or deferred changes inside the approved split-halo scope.
+- Handoff is complete. The next authorized action is review/merge; this task did not merge or initiate another release.
+
+REC-99 Lists and Quick Search scope expansion, 2026-07-17 20:38 PDT:
+
+- Ryan explicitly expanded the approved split-halo treatment to the saved-place icons shown in Lists and Quick Search results. No list/search layout, behavior, copy, selected-place card, fixture, backend/schema, or unrelated mockup change is authorized.
+- Resuming the existing clean isolated worktree `/private/tmp/recme-rec99-social-pin-mockups` on `codex/rec-99-social-pin-mockups`; the root checkout and unrelated worktrees remain untouched. Existing PR #114 stays the delivery vehicle.
+- Fetched `origin`. Latest `origin/main` is `02b812fc8`, one append-only build-78 completion-log commit ahead of this branch; it will be integrated before final validation with both histories preserved.
+- Moved Linear REC-99 from `In Review` back to `In Progress` and recorded the scope expansion in comment `dbe14ed8-1572-4390-9c6b-475b067b3562`.
+- Expected product scope is the current saved-place icon rendering in `Wander/Features/Lists/ListsScreen.swift` and the Quick Search result path in `Wander/Features/Map/MapScreen.swift`, plus the narrowest shared halo extraction if required, focused tests, and this log. Exact files will be locked after the read-only render-path audit.
+
 Release completion, 2026-07-17 20:00 PDT:
 
 - Committed and pushed release branch `codex/testflight-build-78` at `32c3c6683`, opened ready PR #115, confirmed it was `MERGEABLE/CLEAN` with the intended three-file diff, and squash-merged it to `main`: https://github.com/joelipshutz/wander/pull/115. Exact released source commit is `d2b650a476cd5d7d795ffa2b97a4ad0835342a2a`; its ancestry contains REC-100 squash commit `2b2f19a9b` followed directly by REC-98 squash commit `654ea77a7`.
@@ -12544,6 +12633,76 @@ Release completion, 2026-07-17 20:00 PDT:
 - Linear `REC-98` and `REC-100` are both `Done`. The managed external-disclosure policy rejected new comments containing the private release metadata, so no workaround was attempted; the issues retain their linked implementation/release PR attachments and prior validation history.
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
+
+REC-99 Lists and Quick Search implementation completion, 2026-07-18 14:30 PDT:
+
+- Extended the approved split halo to saved-place icons in Lists and Quick Search without changing layout, copy, search behavior, decorative list previews, unsaved MapKit result icons, selected-place cards, fixtures, backend/schema, or any unrelated mockup. Lists now use the same renderer for detail rows, saved suggestions, the full-screen list map, and its place rail; Quick Search now preserves split social arcs instead of redrawing every outline as a full circle.
+- Added one privacy-filtered outline catalog derived from each caller's `store.visiblePlaces()` snapshot. Every visible save in a grouped real place receives the complete aggregate topology, so a list's representative save cannot discard another visible owner's status. Fallback rendering now uses explicit current-user/social ownership rather than inferring ownership from Been/Wanna.
+- Added a regression for the exact requested topology: Ryan/current-user Been + Joe/social Been + Maya/social Wanna resolves identically from all three grouped save IDs to one full coral personal Been ring plus one sky social ring split into solid Been and dotted Wanna halves. Existing outline and grouping gates also passed.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 409/409 with zero failures at `/private/tmp/DerivedData-rec99-followup-20260717/Logs/Test/Test-Wander-2026.07.18_14-21-01--0700.xcresult`. The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed on this machine; focused and full validation used the available current iPhone 17 Pro / iOS 26.5 runtime instead.
+- A final generic iOS Simulator build passed. The moved DerivedData database emitted non-blocking stale-file path warnings that reference its former worktree location; compilation completed successfully from the exact clean source state.
+- Visually verified the mixed halo in both Lists and Quick Search on iPhone 17 Pro and the smaller iPhone 17e using `/private/tmp/rec99-lists-17pro.png`, `/private/tmp/rec99-quick-search-17pro.png`, `/private/tmp/rec99-lists-17e.png`, and `/private/tmp/rec99-quick-search-17e.png`. A temporary local fixture-only Maya Wanna state was used to expose the topology in the demo UI, then reverted; `Wander/Services/WanderFixtures.swift` has no diff.
+- Independent scope/correctness review found no remaining blocker after replacing the initial status-based ownership fallback with explicit ownership. `git diff --check` is clean. Next: commit and push these three intended source/test files plus this log to existing ready PR #114, return REC-99 to `In Review`, and attach the final validation evidence. No merge or TestFlight action belongs to this follow-up.
+
+REC-99 Lists and Quick Search publishing handoff, 2026-07-18 14:34 PDT:
+
+- Committed the validated follow-up as `16bf3e809` (`fix: use split halos in lists and quick search`) and pushed `codex/rec-99-social-pin-mockups` to the existing PR.
+- Updated ready PR #114 to `REC-99: Preserve mixed Been and Wanna across saved-place icons` with the Lists/Quick Search scope, root cause, exact Ryan/Joe/Maya contract, and final validation: https://github.com/joelipshutz/wander/pull/114. The GitHub connector was read-capable but denied PR writes and the local `gh` token was stale, so the authenticated GitHub UI was used for the metadata update; a fresh connector read confirms the new title/body, head `16bf3e809`, `draft: false`, and `mergeable: true`.
+- Returned Linear REC-99 to `In Review` and added final validation comment `c339c8a3-1954-4b12-9be8-57e88f33e53c`. The linked PR attachment reflects its updated title.
+- Handoff is complete with no known issue inside the authorized scope. The next action is review/merge; this task did not merge, bump a build number, archive/upload TestFlight, mutate hosted data, or post Slack.
+
+REC-99 live-data follow-up investigation, 2026-07-18 16:13 PDT:
+
+- Ryan reported that Anajak Thai does not show the expected half-solid/half-dotted social halo even though the selected-place UI appears to attribute opposite-status saves to Joe and `rylane2394`; Ryan confirmed the active account is `ryan_lieblein`, so both named people would be social.
+- Resumed the existing isolated worktree `/private/tmp/recme-rec99-social-pin-mockups` on clean branch `codex/rec-99-social-pin-mockups`; root checkout and unrelated worktrees remain untouched. No overlapping uncommitted work was present.
+- This is diagnosis-only until the root cause is established. Expected touch scope is this append-only log plus Linear REC-99 evidence/status; app source/tests will be changed only if a concrete defect is confirmed and implementation is authorized by the existing fix context.
+- Initial hosted Supabase evidence contradicts the displayed attribution: Anajak has a current-user `ryan_lieblein` Been row and a Joe Wanna row, while no Anajak save exists for `rylane2394`. The split renderer would correctly emit a mixed social halo if two opposite-status social rows reached it, so current hypotheses are stale/local-only save state, incorrect saver attribution, or incomplete sync rather than arc rendering. PostHog credentials are not configured on this machine; continue with code/data-path tracing and record that telemetry gap rather than guessing.
+
+REC-99 live-data diagnosis completion, 2026-07-18 16:27 PDT:
+
+- Confirmed the app and linked CLI target the same hosted Supabase project. Hosted rows show Ryan Been and Joe Wanna for Anajak in the same normalized name/coordinate bucket; `rylane2394` has four active hosted saves but zero for Anajak. Ryan follows both Joe and `rylane2394`, and all three profiles use follower-visible defaults, so social relationship, privacy, RPC row collapse, and client grouping are ruled out.
+- The retained Xcode device console confirms the active Clerk session was Ryan and that signed-in maintenance successfully backfilled Ryan's pending Anajak row. The paired iPhone disconnected before the prior Rylane run could be inspected; no warm live-device QA bridge exists, and no debug instrumentation was added. PostHog query credentials are absent on this machine.
+- Root cause is upstream of halo rendering: full-form Map/Discover social saves persist locally before their remote `save_own_place` attempt, but both signed-in and failed retry selection explicitly exclude `.socialSave` rows. A failed Rylane save can therefore continue to look saved locally while never becoming visible social data for Ryan. The single global persisted store also retains old-account rows across account switches, which can make that discrepancy visible after switching accounts.
+- A second confirmed but non-causal-for-this-exact-name/bucket defect is that visible-place RPCs omit provider identity. Copying a social result through the rich save form can therefore create a duplicate canonical place keyed by the source place UUID; Joe's hosted Anajak row exhibits that malformed provider identity. Fixing canonical identity and cross-account reconciliation is materially broader than the approved icon-only change and was not silently added.
+- Moved Linear REC-99 from `In Review` back to `In Progress` and added sanitized evidence comment `34dd6502-73a5-42d2-beaf-fc6d46d843ca`. No app source, tests, hosted tester data, schema, build number, TestFlight release, or Slack message changed during this diagnosis. Next decision: authorize the narrow social-save sync/retry correction (with regression coverage), or keep the visual PR isolated and track the sync/reconciliation defects separately.
+
+REC-99 live-data draft handoff, 2026-07-18:
+
+- Converted PR #114 back to draft because the live Ryan/Joe/Rylane scenario remains unresolved upstream of the split-halo renderer. The implementation branch remains the delivery vehicle, but it is not review-ready while Linear REC-99 is `In Progress`.
+- Ryan clarified that the active account is `ryan_lieblein`, making both Joe and `rylane2394` social owners. The intended result for opposite social statuses is therefore unequivocally one half-solid/half-dotted sky-blue halo; hosted Anajak data still contains no `rylane2394` row, so the current server-backed result cannot produce that topology.
+- No app code or hosted data changed in this handoff. Awaiting a scope decision between the narrow social-save retry correction and a separate broader sync/reconciliation issue.
+
+REC-99 conditional merge/TestFlight verification, 2026-07-18:
+
+- Ryan requested a definitive bug/no-bug check for the `ryan_lieblein` viewer scenario, with squash-merge to `main` and a TestFlight release authorized only if no bug exists.
+- Resumed the clean isolated worktree `/private/tmp/recme-rec99-social-pin-mockups` on `codex/rec-99-social-pin-mockups`. Fetched `origin`; latest `origin/main` remains `02b812fc8`, is already an ancestor of this branch, and the latest completed TestFlight release is build 78 with no unfinished build bump.
+- Applying the repo feedback bug-catcher and hosted Linear-log triage gates first. PR #114 remains draft and Linear REC-99 remains `In Progress`; no merge, build-number bump, release, or app edit will occur unless live data, retry behavior, and regression coverage establish that the reported state is not a product bug.
+- Expected touch scope for this verification is this coordination log only. Independent read-only checks are covering the live-data verdict and PR release gate; no overlapping source edits are authorized.
+
+Verification outcome:
+
+- **Confirmed a real upstream sync bug; the conditional merge/TestFlight gate failed.** Fresh hosted queries show Ryan follows both Joe and Rylane and all three profiles are follower-visible, but Anajak contains only Ryan Been and Joe Wanna. Rylane has four other active saves and zero Anajak rows, including no differently named row within 200 meters. With hosted truth as-is, the correct rendering is Ryan's solid coral halo plus Joe's dotted sky halo; there is no second social status from which to build a split sky halo.
+- The split-halo renderer and real-place grouping are not the failing layer. Three focused iPhone 17 Pro / iOS 26.5 tests passed with zero failures, including mixed social Been/Wanna and the exact grouped Ryan/Joe/Maya topology: `/private/tmp/DerivedData-rec99-verdict/Logs/Test/Test-Wander-2026.07.18_16-49-40--0700.xcresult`. An independent gate passed 8/8, also exercising the existing test that confirms signed-in backfill skips social saves.
+- Code inspection proves the persistence hole: Map and Discover full-form social saves call generic `saveCandidate`, which saves locally before the remote request and marks failures `.failed`; both failed retry and signed-in backfill call `syncableOwnPlaceIDs`, which explicitly excludes `.socialSave`. Discover nevertheless reports, “Queued locally. We'll retry sync.” A failed Rylane save can therefore look saved locally indefinitely while never reaching hosted `user_places`.
+- Added the durable Linear evidence comment `cb1e4d78-49d1-4176-908e-f73ae8ccec93`. The GitHub connector could not create a PR review (`403 Resource not accessible by integration`), so the authenticated GitHub UI was used to add blocking comment `issuecomment-5013431341`. PR #114 remains draft and REC-99 remains `In Progress`.
+- Engineering-plan review was not invoked because this run performed diagnosis and stopped before implementation; the required release review gate is blocked on the confirmed product bug. Per Ryan's condition, no squash merge, `main` push, build-number change, archive/upload, TestFlight helper action, hosted data mutation, Linear `Done`, or Slack release note occurred.
+
+## 2026-07-18 19:26 PDT - Codex - REC-99 approved merge and build 80 release
+
+Agent: Codex
+Branch: `codex/rec-99-social-pin-mockups`
+Worktree: `/private/tmp/recme-rec99-social-pin-mockups`
+Linear: `REC-99` (`In Review`), `REC-103` (`Todo`)
+
+Goal: ship the validated REC-99 split-halo UI on Map, Lists, and Quick Search, while explicitly deferring the two-path social-save sync/retry correction to REC-103, then release the resulting latest `main` as TestFlight build 80.
+
+Release authorization and coordination:
+
+- Ryan explicitly accepted the known upstream social-save limitation for this release and authorized squash-merging REC-99, pushing the result to `main`, and creating a new TestFlight build.
+- Created REC-103, “Unify social-save sync and retry across simple and full-form saves,” to own the deferred sync/retry, canonical-identity, and account-scoped reconciliation work. REC-99 is back in `In Review`; its implementation remains intentionally visual-only.
+- Fetched `origin`. Latest `origin/main` is `c4251747e`, four commits ahead of the REC-99 merge base, and records completed/approved TestFlight build 79. The next release number is therefore 80.
+- The isolated REC-99 worktree is clean apart from this append-only coordination entry. The root checkout has unrelated `.pnpm-store/` state and remains untouched. Expected REC-99 files remain `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this log.
+- Next: integrate exact latest `origin/main`, preserve both append-only histories, rerun pre-landing review plus full simulator test/build validation, update and ready PR #114, and squash-merge it. Build 80 will then be prepared in a new isolated release worktree from the exact merged `main`.
 
 ## 2026-07-18 16:44 PDT - Codex - REC-84 rec.me App Store Cutover
 
@@ -12708,3 +12867,11 @@ Release completion, 2026-07-18 18:56 PDT:
   use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
+
+REC-99 latest-main review and validation checkpoint, 2026-07-18 19:38 PDT:
+
+- Integrated exact `origin/main` `c4251747e`, including the rec.me cutover and completed TestFlight build-79 history, as merge commit `a78888c0f`. The only manual conflict was this append-only log; both histories were preserved. `MapScreen.swift` auto-merged cleanly, latest `origin/main` is an ancestor, and the product diff remains exactly the approved Map/Lists/Quick Search halo implementation plus focused tests.
+- Completed the repo pre-landing review workflow against the full diff. Scope is clean: the UI preserves mixed social Been/Wanna state across saved-place icons while the upstream save-path sync/retry defect is explicitly deferred to REC-103 by Ryan's release decision. No blocking correctness, security, data, API-contract, SwiftUI identity, or test finding remains; no Greptile review comments exist.
+- The exact latest-main-integrated source passed the complete iPhone 17 Pro / iOS 26.5 suite: 412 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec99-build80-gate/Logs/Test/Test-Wander-2026.07.18_19-31-52--0700.xcresult`. The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed in the current Xcode runtime.
+- A fresh generic iOS Simulator build passed. The rec.me app reports `0.1 (79)` before the authorized release bump, and its executable contains both `arm64` and `x86_64`. `git diff --check` is clean.
+- Next: commit and push this validation record, update PR #114 with the REC-103 deferral, mark it ready, confirm the exact pushed head is merge-clean, and squash-merge. The separate build-80 worktree will start only from the resulting exact latest `main`.
