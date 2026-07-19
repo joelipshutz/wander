@@ -534,6 +534,76 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     @MainActor
+    func testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget() {
+        let fixtureStart = CFAbsoluteTimeGetCurrent()
+        let fixtures = WanderFixtures.performanceScale()
+        let fixtureElapsed = CFAbsoluteTimeGetCurrent() - fixtureStart
+
+        XCTAssertEqual(fixtures.profiles.count, 64)
+        XCTAssertEqual(fixtures.places.count, 900)
+        XCTAssertEqual(fixtures.userPlaces.count, 1_620)
+        XCTAssertEqual(fixtures.placeAttributes.count, 3_240)
+        XCTAssertGreaterThan(fixtures.placeVisits.count, 1_200)
+        XCTAssertEqual(fixtures.placeLists.count, 72)
+        XCTAssertEqual(fixtures.placeListItems.count, 2_016)
+
+        let storeStart = CFAbsoluteTimeGetCurrent()
+        let store = WanderStore(fixtures: fixtures)
+        let storeElapsed = CFAbsoluteTimeGetCurrent() - storeStart
+
+        let coldProjectionStart = CFAbsoluteTimeGetCurrent()
+        let visiblePlaces = store.visiblePlaces()
+        let coldProjectionElapsed = CFAbsoluteTimeGetCurrent() - coldProjectionStart
+        XCTAssertGreaterThan(visiblePlaces.count, 1_400)
+
+        let warmProjectionStart = CFAbsoluteTimeGetCurrent()
+        var checksum = 0
+        for _ in 0..<20 {
+            checksum += store.visiblePlaces().count
+            checksum += store.visiblePlaceCountsByOwnerID().count
+        }
+        let warmProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmProjectionStart
+
+        let insightsCache = ProfileInsightsCache()
+        let insightsStart = CFAbsoluteTimeGetCurrent()
+        let insights = insightsCache.present(
+            ownerID: store.currentUser.id,
+            userPlaces: store.userPlaces,
+            visits: store.placeVisits,
+            places: store.places,
+            month: Date(timeIntervalSince1970: 1_735_689_600)
+        )
+        let insightsElapsed = CFAbsoluteTimeGetCurrent() - insightsStart
+        XCTAssertGreaterThan(insights.mapPoints.count, 250)
+
+        let warmInsightsStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += insightsCache.present(
+                ownerID: store.currentUser.id,
+                userPlaces: store.userPlaces,
+                visits: store.placeVisits,
+                places: store.places,
+                month: Date(timeIntervalSince1970: 1_735_689_600)
+            ).mapPoints.count
+        }
+        let warmInsightsElapsed = CFAbsoluteTimeGetCurrent() - warmInsightsStart
+
+        let snapshotStart = CFAbsoluteTimeGetCurrent()
+        let snapshot = WanderStoreSnapshot(store: store)
+        let snapshotElapsed = CFAbsoluteTimeGetCurrent() - snapshotStart
+
+        XCTAssertGreaterThan(checksum, 0)
+        XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
+        XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
+        XCTAssertLessThan(storeElapsed, 2.0, "High-data store initialization took \(storeElapsed)s")
+        XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
+        XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
+        XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
+        XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
+        XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")
+    }
+
+    @MainActor
     func testVisiblePlaceProjectionIsReusedUntilStoreMutation() {
         let store = WanderStore(fixtures: .seed())
         let filters = PlaceFilters(ownerScopes: ["you"])

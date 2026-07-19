@@ -375,9 +375,19 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
-    func testRootViewUsesEmptyFixturesByDefaultAndDemoFixturesOnlyWhenRequested() {
+    func testRootViewUsesEmptyFixturesByDefaultAndExplicitProfilingFixturesWhenRequested() {
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUsePerformanceFixtures"]),
+            .performance
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderUseDemoFixtures", "-WanderUsePerformanceFixtures"]
+            ),
+            .performance
+        )
     }
 
     @MainActor

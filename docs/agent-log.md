@@ -12610,3 +12610,10 @@ Final validation checkpoint, 2026-07-18 19:20 PDT:
 - `git diff --check` is clean and no generated build artifact is present in the worktree. The implementation scope is the shared theme/avatar pipeline, Discover, Profile map/insights/entry refresh, the local-store projections/social refresh, matching tests, and this log.
 - `Ry’s iPhone` remains listed offline by Instruments (`00008130-0008095E3408001C`), so an honest post-fix physical Time Profiler trace could not be recorded. Ryan’s direct device test of the prior branch established the remaining symptom; the final branch still needs his tactile scroll check when Xcode reconnects to the phone.
 - Next: commit and push this exact validated follow-up to existing ready PR #117, return Linear REC-101 to `In Review` with the final validation summary, and leave merge/TestFlight/release actions untouched unless separately requested.
+
+Codex landing and scale-validation pass, 2026-07-18 19:24 PDT:
+
+- Joe selected the standard PR review path and explicitly authorized landing PR #117 after validation. He also requested a simulator account with a realistically large dataset before landing, followed by continued diagnosis of any residual lag from fresh `main` after the initial fix ships.
+- Adopted the existing isolated worktree `/private/tmp/recme-rec101-app-performance`, fetched and fast-forwarded to Ryan's pushed `4dd933e` follow-up, and confirmed the worktree is clean and tracks `origin/codex/rec-101-app-performance`. No other worktree owns this branch or overlaps the intended fixture-only scale-validation changes.
+- Mission Control task `7ae3b4a9-e247-4753-9f48-1e91cd5cb45c` is in progress. Linear `REC-101` remains the implementation issue; PR #117 remains the landing vehicle. Expected edits are a deterministic launch-argument-only high-data fixture, matching performance/correctness tests, and this append-only log.
+- The review will preserve production semantics and build number 78. TestFlight packaging, hosted-data mutation, and tester-facing Slack remain out of scope without a separate explicit release request.
