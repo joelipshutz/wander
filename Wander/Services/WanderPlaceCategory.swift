@@ -2011,14 +2011,10 @@ enum WanderPlaceCategory {
         let canonicalValue = mapKitProviderMetadata(for: value)?.canonicalType ?? value
         return canonicalValue
             .lowercased()
-            .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "&", with: " and ")
-            .replacingOccurrences(of: "-", with: " ")
-            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/ ")).inverted)
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
             .joined(separator: " ")
-            .replacingOccurrences(of: "/", with: " ")
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func subcategory(forRawValue rawValue: String, primaryCategory: String) -> String? {

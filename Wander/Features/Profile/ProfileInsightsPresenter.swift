@@ -97,6 +97,169 @@ enum CityCanonicalizer {
     }
 }
 
+final class ProfileInsightsCache {
+    private var lastKey: ProfileInsightsCacheKey?
+    private var lastInsights: ProfileInsights?
+
+    private(set) var computationCount = 0
+
+    func present(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        month: Date,
+        calendar: Calendar = .current,
+        dataRevision: UInt64? = nil
+    ) -> ProfileInsights {
+        let key = ProfileInsightsCacheKey(
+            ownerID: ownerID,
+            userPlaces: userPlaces,
+            visits: visits,
+            places: places,
+            month: month,
+            calendar: calendar,
+            dataRevision: dataRevision
+        )
+        if key == lastKey, let lastInsights {
+            return lastInsights
+        }
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: ownerID,
+            userPlaces: userPlaces,
+            visits: visits,
+            places: places,
+            month: month,
+            calendar: calendar
+        )
+        lastKey = key
+        lastInsights = insights
+        computationCount += 1
+        return insights
+    }
+}
+
+private struct ProfileInsightsCacheKey: Equatable {
+    let ownerID: String
+    let month: Date
+    let calendar: Calendar
+    let localeIdentifier: String
+    let dataRevision: UInt64?
+    let inputFingerprint: ProfileInsightsInputFingerprint?
+
+    init(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        month: Date,
+        calendar: Calendar,
+        dataRevision: UInt64?
+    ) {
+        self.ownerID = ownerID
+        self.month = month
+        self.calendar = calendar
+        localeIdentifier = Locale.current.identifier
+        self.dataRevision = dataRevision
+        inputFingerprint = dataRevision == nil
+            ? ProfileInsightsInputFingerprint(
+                ownerID: ownerID,
+                userPlaces: userPlaces,
+                visits: visits,
+                places: places,
+                month: month,
+                calendar: calendar
+            )
+            : nil
+    }
+}
+
+private struct ProfileInsightsInputFingerprint: Equatable {
+    let ownerID: String
+    let userPlaces: [UserPlaceFingerprint]
+    let visits: [VisitFingerprint]
+    let places: [PlaceFingerprint]
+    let month: Date
+    let calendar: Calendar
+    let localeIdentifier: String
+
+    init(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        month: Date,
+        calendar: Calendar
+    ) {
+        self.ownerID = ownerID
+        self.userPlaces = userPlaces.map(UserPlaceFingerprint.init)
+        self.visits = visits.map(VisitFingerprint.init)
+        self.places = places.map(PlaceFingerprint.init)
+        self.month = month
+        self.calendar = calendar
+        localeIdentifier = Locale.current.identifier
+    }
+}
+
+private struct UserPlaceFingerprint: Equatable {
+    let localID: String
+    let serverID: String?
+    let userID: String
+    let placeID: String
+    let statusRaw: String
+    let categoryOverride: String?
+    let deletedAt: Date?
+
+    init(_ userPlace: LocalUserPlace) {
+        localID = userPlace.localID
+        serverID = userPlace.serverID
+        userID = userPlace.userID
+        placeID = userPlace.placeID
+        statusRaw = userPlace.statusRaw
+        categoryOverride = userPlace.categoryOverride
+        deletedAt = userPlace.deletedAt
+    }
+}
+
+private struct VisitFingerprint: Equatable {
+    let localID: String
+    let serverID: String?
+    let userPlaceID: String
+    let visitedAt: Date
+    let deletedAt: Date?
+
+    init(_ visit: LocalPlaceVisit) {
+        localID = visit.localID
+        serverID = visit.serverID
+        userPlaceID = visit.userPlaceID
+        visitedAt = visit.visitedAt
+        deletedAt = visit.deletedAt
+    }
+}
+
+private struct PlaceFingerprint: Equatable {
+    let localID: String
+    let serverID: String?
+    let canonicalName: String
+    let primaryCategory: String
+    let locality: String?
+    let country: String?
+    let latitudeBitPattern: UInt64
+    let longitudeBitPattern: UInt64
+
+    init(_ place: LocalPlace) {
+        localID = place.localID
+        serverID = place.serverID
+        canonicalName = place.canonicalName
+        primaryCategory = place.primaryCategory
+        locality = place.locality
+        country = place.country
+        latitudeBitPattern = place.latitude.bitPattern
+        longitudeBitPattern = place.longitude.bitPattern
+    }
+}
+
 enum ProfileInsightsPresenter {
     static func present(
         ownerID: String,
