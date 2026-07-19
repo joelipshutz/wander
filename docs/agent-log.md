@@ -12764,3 +12764,12 @@ Checkpoint, 2026-07-18 19:53 PDT:
 - Committed this coordination record as `c0e0fd6` and opened draft PR #122:
   https://github.com/joelipshutz/wander/pull/122. `git diff --check` passes;
   no app code, schema, auth, or TestFlight build was changed.
+
+Follow-up, 2026-07-19:
+
+- At Joe's request, sent Ryan a Slack DM with the GitHub and Vercel project
+  links, the pending GitHub collaborator invitation, and the Vercel Hobby-plan
+  access blocker:
+  https://recmegroup.slack.com/archives/D0B90ELP4K1/p1784482741987909.
+- Ryan's Vercel access remains the only incomplete item; PR #122 remains a
+  draft and Linear `REC-102` remains `In Progress` until that access is enabled.
