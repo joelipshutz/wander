@@ -1,12 +1,24 @@
+import ImageIO
 import SwiftUI
 import UIKit
 
 struct WanderColorToken: Equatable {
     let name: String
     let hex: String
+    private let resolvedColor: Color
+
+    init(name: String, hex: String) {
+        self.name = name
+        self.hex = hex
+        resolvedColor = Color(hex: hex)
+    }
 
     var color: Color {
-        Color(hex: hex)
+        resolvedColor
+    }
+
+    static func == (lhs: WanderColorToken, rhs: WanderColorToken) -> Bool {
+        lhs.name == rhs.name && lhs.hex == rhs.hex
     }
 }
 
@@ -329,7 +341,255 @@ struct WanderPrimaryButton: View {
     }
 }
 
+struct WanderAvatarLocalFileRevision: Hashable, Sendable {
+    let modificationTimeBitPattern: UInt64
+    let fileSize: UInt64
+    let fileNumber: UInt64
+
+    init?(url: URL, fileManager: FileManager = .default) {
+        guard url.isFileURL,
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let fileSize = (attributes[.size] as? NSNumber)?.uint64Value
+        else {
+            return nil
+        }
+
+        let modificationDate = attributes[.modificationDate] as? Date
+        modificationTimeBitPattern = (
+            modificationDate?.timeIntervalSinceReferenceDate ?? 0
+        ).bitPattern
+        self.fileSize = fileSize
+        fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
+    }
+}
+
+struct WanderAvatarImageRequest: Hashable, Sendable {
+    let url: URL
+    let targetPixelSize: Int
+    let localFileRevision: WanderAvatarLocalFileRevision?
+
+    init?(avatarURL: String?, targetPixelSize: Int) {
+        guard targetPixelSize > 0,
+              let url = avatarURL.flatMap(URL.init(string:)),
+              let scheme = url.scheme?.lowercased(),
+              url.isFileURL || scheme == "http" || scheme == "https"
+        else {
+            return nil
+        }
+
+        self.url = url
+        self.targetPixelSize = targetPixelSize
+        localFileRevision = WanderAvatarLocalFileRevision(url: url)
+    }
+}
+
+final class WanderAvatarDecodedImage: @unchecked Sendable {
+    let image: UIImage
+
+    init(image: UIImage) {
+        self.image = image
+    }
+
+    var pixelSize: CGSize {
+        guard let cgImage = image.cgImage else { return .zero }
+        return CGSize(width: cgImage.width, height: cgImage.height)
+    }
+
+    var estimatedByteCost: Int {
+        guard let cgImage = image.cgImage else { return 0 }
+        return cgImage.bytesPerRow * cgImage.height
+    }
+}
+
+actor WanderAvatarImagePipeline {
+    static let shared = WanderAvatarImagePipeline()
+
+    typealias DataLoader = @Sendable (URL) async -> Data?
+
+    private struct CacheKey: Hashable, Sendable {
+        let url: URL
+        let targetPixelSize: Int
+        let localFileRevision: WanderAvatarLocalFileRevision?
+    }
+
+    private struct CacheEntry {
+        let image: WanderAvatarDecodedImage
+        let byteCost: Int
+    }
+
+    private struct InFlightEntry {
+        let id: UUID
+        let task: Task<WanderAvatarDecodedImage?, Never>
+    }
+
+    private let countLimit: Int
+    private let totalCostLimit: Int
+    private let dataLoader: DataLoader
+    private var entries: [CacheKey: CacheEntry] = [:]
+    private var recency: [CacheKey] = []
+    private var inFlight: [CacheKey: InFlightEntry] = [:]
+    private var totalCost = 0
+
+    init(
+        countLimit: Int = 128,
+        totalCostLimit: Int = 32 * 1_024 * 1_024,
+        session: URLSession = .shared
+    ) {
+        self.countLimit = max(1, countLimit)
+        self.totalCostLimit = max(1, totalCostLimit)
+        dataLoader = { url in
+            if url.isFileURL {
+                return try? Data(contentsOf: url, options: [.mappedIfSafe])
+            }
+
+            do {
+                let (data, response) = try await session.data(from: url)
+                if let httpResponse = response as? HTTPURLResponse {
+                    guard (200..<300).contains(httpResponse.statusCode) else { return nil }
+                }
+                return data
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    init(
+        countLimit: Int = 128,
+        totalCostLimit: Int = 32 * 1_024 * 1_024,
+        dataLoader: @escaping DataLoader
+    ) {
+        self.countLimit = max(1, countLimit)
+        self.totalCostLimit = max(1, totalCostLimit)
+        self.dataLoader = dataLoader
+    }
+
+    func image(for request: WanderAvatarImageRequest) async -> WanderAvatarDecodedImage? {
+        guard !Task.isCancelled else { return nil }
+
+        let revision: WanderAvatarLocalFileRevision?
+        if request.url.isFileURL {
+            guard let fileRevision = WanderAvatarLocalFileRevision(url: request.url) else {
+                return nil
+            }
+            revision = fileRevision
+        } else {
+            revision = nil
+        }
+
+        let key = CacheKey(
+            url: request.url,
+            targetPixelSize: request.targetPixelSize,
+            localFileRevision: revision
+        )
+        if let cached = cachedImage(for: key) {
+            return cached
+        }
+
+        let entry: InFlightEntry
+        if let existing = inFlight[key] {
+            entry = existing
+        } else {
+            let id = UUID()
+            let dataLoader = self.dataLoader
+            let url = request.url
+            let targetPixelSize = request.targetPixelSize
+            let task = Task<WanderAvatarDecodedImage?, Never>.detached(priority: .utility) {
+                guard let data = await dataLoader(url),
+                      !Task.isCancelled,
+                      let image = Self.downsampledImage(
+                          from: data,
+                          targetPixelSize: targetPixelSize
+                      ),
+                      !Task.isCancelled
+                else {
+                    return nil
+                }
+                return WanderAvatarDecodedImage(image: image)
+            }
+            let newEntry = InFlightEntry(id: id, task: task)
+            inFlight[key] = newEntry
+            entry = newEntry
+        }
+
+        let decodedImage = await entry.task.value
+        if inFlight[key]?.id == entry.id {
+            inFlight.removeValue(forKey: key)
+            if let decodedImage {
+                insert(decodedImage, for: key)
+            }
+        }
+        guard !Task.isCancelled else { return nil }
+        return decodedImage
+    }
+
+    nonisolated private static func downsampledImage(
+        from data: Data,
+        targetPixelSize: Int
+    ) -> UIImage? {
+        let sourceOptions = [
+            kCGImageSourceShouldCache: false
+        ] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: targetPixelSize
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            source,
+            0,
+            thumbnailOptions
+        ) else {
+            return nil
+        }
+
+        return UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+    }
+
+    private func cachedImage(for key: CacheKey) -> WanderAvatarDecodedImage? {
+        guard let entry = entries[key] else { return nil }
+        markRecentlyUsed(key)
+        return entry.image
+    }
+
+    private func insert(_ image: WanderAvatarDecodedImage, for key: CacheKey) {
+        if let previousEntry = entries.removeValue(forKey: key) {
+            totalCost -= previousEntry.byteCost
+        }
+        recency.removeAll { $0 == key }
+
+        let entry = CacheEntry(
+            image: image,
+            byteCost: max(1, image.estimatedByteCost)
+        )
+        entries[key] = entry
+        recency.append(key)
+        totalCost += entry.byteCost
+
+        while entries.count > countLimit || totalCost > totalCostLimit {
+            guard let oldestKey = recency.first else { break }
+            recency.removeFirst()
+            if let removedEntry = entries.removeValue(forKey: oldestKey) {
+                totalCost -= removedEntry.byteCost
+            }
+        }
+    }
+
+    private func markRecentlyUsed(_ key: CacheKey) {
+        recency.removeAll { $0 == key }
+        recency.append(key)
+    }
+}
+
 struct WanderAvatar: View {
+    @Environment(\.displayScale) private var displayScale
+    @State private var loadedImage: UIImage?
+
     let initials: String
     var avatarURL: String?
     var size: CGFloat = 44
@@ -341,27 +601,24 @@ struct WanderAvatar: View {
             .background(color)
             .clipShape(Circle())
             .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+            .task(id: imageRequest) {
+                loadedImage = nil
+                guard let imageRequest else { return }
+
+                let decodedImage = await WanderAvatarImagePipeline.shared.image(
+                    for: imageRequest
+                )
+                guard !Task.isCancelled else { return }
+                loadedImage = decodedImage?.image
+            }
     }
 
     @ViewBuilder
     private var avatarContent: some View {
-        if let fileImage {
-            Image(uiImage: fileImage)
+        if let loadedImage {
+            Image(uiImage: loadedImage)
                 .resizable()
                 .scaledToFill()
-        } else if let remoteURL {
-            AsyncImage(url: remoteURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .empty, .failure:
-                    initialsFallback
-                @unknown default:
-                    initialsFallback
-                }
-            }
         } else {
             initialsFallback
         }
@@ -374,19 +631,13 @@ struct WanderAvatar: View {
             .frame(width: size, height: size)
     }
 
-    private var fileImage: UIImage? {
-        guard let url = avatarURL.flatMap(URL.init(string:)),
-              url.isFileURL
-        else { return nil }
-        return UIImage(contentsOfFile: url.path)
-    }
-
-    private var remoteURL: URL? {
-        guard let url = avatarURL.flatMap(URL.init(string:)),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https"
-        else { return nil }
-        return url
+    private var imageRequest: WanderAvatarImageRequest? {
+        let requestedPixels = size * displayScale
+        guard requestedPixels.isFinite, requestedPixels > 0 else { return nil }
+        return WanderAvatarImageRequest(
+            avatarURL: avatarURL,
+            targetPixelSize: min(2_048, max(1, Int(ceil(requestedPixels))))
+        )
     }
 }
 

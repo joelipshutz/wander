@@ -186,6 +186,208 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(insights.placeSummaries.first { $0.id == WanderPlaceCategory.thingsToDo }?.count, 1)
     }
 
+    func testCacheReusesLastPresentationForIdenticalRelevantSnapshot() {
+        let fixture = makeFixture()
+        let cache = ProfileInsightsCache()
+
+        let first = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        let second = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(cache.computationCount, 1)
+    }
+
+    func testCacheIgnoresModelFieldsThatCannotChangeInsights() {
+        let fixture = makeFixture()
+        let cache = ProfileInsightsCache()
+
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        fixture.userPlaces[0].note = "Unrelated note change"
+        fixture.visits[0].note = "Unrelated visit note change"
+        fixture.places[0].address = "Unrelated address change"
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertEqual(cache.computationCount, 1)
+    }
+
+    func testCacheInvalidatesForOwnerMonthAndCalendarChanges() {
+        let fixture = makeFixture()
+        let cache = ProfileInsightsCache()
+        let nextMonth = fixture.calendar.date(byAdding: .month, value: 1, to: fixture.month)!
+        var alternateCalendar = fixture.calendar
+        alternateCalendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        _ = cache.present(
+            ownerID: "another-owner",
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        _ = cache.present(
+            ownerID: "another-owner",
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: nextMonth,
+            calendar: fixture.calendar
+        )
+        _ = cache.present(
+            ownerID: "another-owner",
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: nextMonth,
+            calendar: alternateCalendar
+        )
+
+        XCTAssertEqual(cache.computationCount, 4)
+    }
+
+    func testCacheInvalidatesForEveryRelevantUserPlaceField() {
+        assertCacheInvalidates("user place local ID") {
+            $0.userPlaces[0].localID += "-changed"
+        }
+        assertCacheInvalidates("user place server ID") {
+            $0.userPlaces[0].serverID = "server-user-place"
+        }
+        assertCacheInvalidates("user place owner") {
+            $0.userPlaces[0].userID = "another-owner"
+        }
+        assertCacheInvalidates("user place place ID") {
+            $0.userPlaces[0].placeID = "another-place"
+        }
+        assertCacheInvalidates("user place status") {
+            $0.userPlaces[0].statusRaw = PlaceStatus.wannaGo.rawValue
+        }
+        assertCacheInvalidates("user place category override") {
+            $0.userPlaces[0].categoryOverride = WanderPlaceCategory.thingsToDo
+        }
+        assertCacheInvalidates("user place deletion") {
+            $0.userPlaces[0].deletedAt = Date(timeIntervalSince1970: 1)
+        }
+    }
+
+    func testCacheInvalidatesForEveryRelevantVisitField() {
+        assertCacheInvalidates("visit local ID") {
+            $0.visits[0].localID += "-changed"
+        }
+        assertCacheInvalidates("visit server ID") {
+            $0.visits[0].serverID = "server-visit"
+        }
+        assertCacheInvalidates("visit user place ID") {
+            $0.visits[0].userPlaceID = "another-user-place"
+        }
+        assertCacheInvalidates("visit date") {
+            $0.visits[0].visitedAt = $0.visits[0].visitedAt.addingTimeInterval(3_600)
+        }
+        assertCacheInvalidates("visit deletion") {
+            $0.visits[0].deletedAt = Date(timeIntervalSince1970: 1)
+        }
+    }
+
+    func testCacheInvalidatesForEveryRelevantPlaceField() {
+        assertCacheInvalidates("place local ID") {
+            $0.places[0].localID += "-changed"
+        }
+        assertCacheInvalidates("place server ID") {
+            $0.places[0].serverID = "server-place"
+        }
+        assertCacheInvalidates("place name") {
+            $0.places[0].canonicalName += " Changed"
+        }
+        assertCacheInvalidates("place category") {
+            $0.places[0].primaryCategory = WanderPlaceCategory.thingsToDo
+        }
+        assertCacheInvalidates("place locality") {
+            $0.places[0].locality = "Pasadena"
+        }
+        assertCacheInvalidates("place country") {
+            $0.places[0].country = "Canada"
+        }
+        assertCacheInvalidates("place latitude") {
+            $0.places[0].latitude += 0.01
+        }
+        assertCacheInvalidates("place longitude") {
+            $0.places[0].longitude += 0.01
+        }
+    }
+
+    private func assertCacheInvalidates(
+        _ name: String,
+        mutation: (Fixture) -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let fixture = makeFixture()
+        let cache = ProfileInsightsCache()
+
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        mutation(fixture)
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        _ = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertEqual(cache.computationCount, 2, name, file: file, line: line)
+    }
+
     private func makeFixture() -> Fixture {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

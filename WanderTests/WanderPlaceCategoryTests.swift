@@ -552,6 +552,24 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     @MainActor
+    func testVisiblePlaceOwnerCountsAreBuiltOnceAndReusedAcrossDiscoverRows() {
+        let store = WanderStore(fixtures: .seed())
+
+        let first = store.visiblePlaceCountsByOwnerID()
+        let initialBuildCount = store.visiblePlaceOwnerCountBuildCount
+        let second = store.visiblePlaceCountsByOwnerID()
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(store.visiblePlaceOwnerCountBuildCount, initialBuildCount)
+        XCTAssertEqual(first.values.reduce(0, +), store.visiblePlaces().count)
+
+        store.defaultVisibility = .mutuals
+        _ = store.visiblePlaceCountsByOwnerID()
+
+        XCTAssertEqual(store.visiblePlaceOwnerCountBuildCount, initialBuildCount + 1)
+    }
+
+    @MainActor
     func testVisiblePlaceProjectionPreservesFirstMatchForDuplicateEffectiveIDs() {
         let firstOwner = LocalProfile(
             localID: "first-owner",

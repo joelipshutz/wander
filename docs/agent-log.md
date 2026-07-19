@@ -12585,3 +12585,28 @@ Publishing handoff, 2026-07-18 16:15 PDT:
 - PR #117 is open, non-draft, `MERGEABLE/CLEAN`, and targets `main`; GitHub reports no failing status checks or review decision. The connector lacked PR-write permission, so the authenticated `gh` fallback created the same reviewed PR body.
 - Moved Linear `REC-101` to `In Review`, attached PR #117, and added validation/root-cause comment `c735e884-ca5b-4fbc-8597-b384efbea072`.
 - The requested investigation/fix is complete and PR-ready. Remaining next step is review/merge followed by physical-device Instruments confirmation when `Ry’s iPhone` reconnects. A TestFlight release remains a separate explicit request; no merge, build bump, archive, upload, hosted mutation, or Slack post occurred here.
+
+Remaining-scroll follow-up, 2026-07-18 16:50 PDT:
+
+- Ryan tested PR #117 on `Ry’s iPhone` and reports that Discover and Profile scrolling are improved but still visibly laggy. He asked for another measured optimization pass across those screens and any shared app paths needed to make interaction feel consistently crisp.
+- Reopened the existing clean `codex/rec-101-app-performance` worktree at pushed head `85adfca18`; it tracks `origin/codex/rec-101-app-performance`. The unrelated root checkout remains on `codex/rec-88-visit-friends-mockup` and will not be switched or edited.
+- No current agent-log entry reports overlapping edits on this branch. Read-only parallel audits will cover `Wander/Features/Discover/`, `Wander/Features/Profile/`, and shared SwiftUI/store rendering paths before implementation.
+- Expected files, pending evidence, are the Discover/Profile view implementations, shared row/avatar/image components or store projections they call, focused performance tests, and this append-only log. `project.yml`, build number, TestFlight release, hosted data, and unrelated feature behavior remain out of scope.
+
+Second-pass root cause and implementation checkpoint, 2026-07-18 19:20 PDT:
+
+- Preserved the REC-94 physical-device safety constraint: `ProfileOwnerHome` remains an eager `VStack`/`Grid`; no `LazyVStack` or `LazyVGrid` was reintroduced around its calendar/MapKit subtree. The remaining Profile scroll cost came from retaining a noninteractive live Map with every annotation inside the scroll, rebuilding `ProfileInsights` after broad store publications, and duplicating the social-graph refresh on Profile entry.
+- Replaced the live Profile map with an asynchronously generated, bounded-cache `MKMapSnapshotter` image that preserves the same global camera, muted styling, place dots, dimensions, and accessibility label. Added exact-input caching for Profile insights, independent owner/member cache instances, and removed the duplicate graph request.
+- Discover row-owning sections now use lazy stacks, bind repeated projections once per evaluation, reuse a cached owner recommendation-count dictionary, and precompute saved-place aliases instead of rescanning visible places per row. Search uses 225 ms cancellable `.task(id:)` debounce, exact structured signatures, cancellation/stale-result guards, and explicit auth/visible-data refresh coordination.
+- Shared avatars now load, downsample, and eagerly decode off the main actor through a bounded 128-entry/32 MiB cache; identical in-flight requests coalesce to one download/decode, and same-URL local avatar replacement changes the task identity. Theme colors are parsed once per token instead of on every `.color` read.
+- Remote social surfaces are staged across awaits and applied in one deferred-persistence batch, producing one logical store snapshot instead of per-profile snapshots. The final implementation captures the requesting account and discards cancellation or account-switch completions before any mutation.
+- The two source-contract regressions failed before implementation with ten expected assertions at `/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_17-12-11--0700.xcresult`. The initial integrated focused gate then passed 22/22 at `/tmp/DerivedData-rec101-full/Logs/Test/Test-Wander-2026.07.18_18-58-38--0700.xcresult`.
+- Independent adversarial review found no P0. It found and drove fixes for the account-switch social-refresh race, same-URL local avatar replacement, stale Discover searches across auth transitions, and duplicate concurrent avatar downloads; dedicated regressions cover all four.
+
+Final validation checkpoint, 2026-07-18 19:20 PDT:
+
+- The exact final source passed the complete iPhone 17 Pro / iOS 26.5 suite, 426/426 with zero failures: `/tmp/DerivedData-rec101-final/Logs/Test/Test-Wander-2026.07.18_19-19-12--0700.xcresult`.
+- The exact final generic iOS Simulator build passed at `/private/tmp/DerivedData-rec101-build/Build/Products/Debug-iphonesimulator/Wander.app`; its executable contains `x86_64` and `arm64` and remains app version `0.1` build `78`.
+- `git diff --check` is clean and no generated build artifact is present in the worktree. The implementation scope is the shared theme/avatar pipeline, Discover, Profile map/insights/entry refresh, the local-store projections/social refresh, matching tests, and this log.
+- `Ry’s iPhone` remains listed offline by Instruments (`00008130-0008095E3408001C`), so an honest post-fix physical Time Profiler trace could not be recorded. Ryan’s direct device test of the prior branch established the remaining symptom; the final branch still needs his tactile scroll check when Xcode reconnects to the phone.
+- Next: commit and push this exact validated follow-up to existing ready PR #117, return Linear REC-101 to `In Review` with the final validation summary, and leave merge/TestFlight/release actions untouched unless separately requested.

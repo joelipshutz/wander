@@ -27,6 +27,7 @@ struct ProfileScreen: View {
     @State private var showsImportInbox = false
     @State private var opensImportInboxAfterSource = false
     @State private var selectedMonth = Date.now
+    @State private var profileInsightsCache = ProfileInsightsCache()
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     let onFindFriends: () -> Void
@@ -158,7 +159,6 @@ struct ProfileScreen: View {
                 .task(id: auth.isSignedIn) {
                     guard auth.isSignedIn else { return }
                     await store.refreshRemoteCurrentProfile(backend: backend)
-                    await store.refreshRemoteSocialGraph(backend: backend)
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
                     importStore.resumePendingImports()
@@ -218,7 +218,7 @@ struct ProfileScreen: View {
     }
 
     private var profileInsights: ProfileInsights {
-        ProfileInsightsPresenter.present(
+        profileInsightsCache.present(
             ownerID: store.currentUser.id,
             userPlaces: profileUserPlaces,
             visits: store.placeVisits,
@@ -873,6 +873,7 @@ struct ProfileDetailView: View {
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
     @State private var isLoading = true
+    @State private var profileInsightsCache = ProfileInsightsCache()
 
     init(profileID: String, onBlock: @escaping (String) -> Void = { _ in }) {
         self.profileID = profileID
@@ -1013,7 +1014,7 @@ struct ProfileDetailView: View {
     }
 
     private var profileInsights: ProfileInsights {
-        ProfileInsightsPresenter.present(
+        profileInsightsCache.present(
             ownerID: profileID,
             userPlaces: profileVisiblePlaces.map(\.userPlace),
             visits: store.placeVisits,

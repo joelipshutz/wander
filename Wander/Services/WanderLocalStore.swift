@@ -97,6 +97,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = [] {
         didSet {
             visiblePlacesCache.removeAll(keepingCapacity: true)
+            visiblePlaceCountsByOwnerIDCache = nil
         }
     }
     private(set) var lastRemoteError: String? = nil {
@@ -153,8 +154,10 @@ final class WanderStore: ObservableObject {
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
     private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
+    private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
     #if DEBUG
     private(set) var visiblePlaceProjectionBuildCount = 0
+    private(set) var visiblePlaceOwnerCountBuildCount = 0
     #endif
     private var discoverParseCache: [String: DiscoverFilters] = [:]
     private(set) var providerCategoryEnrichmentAttemptedAtByKey: [String: Date] = [:]
@@ -246,6 +249,7 @@ final class WanderStore: ObservableObject {
 
     private func persist() {
         visiblePlacesCache.removeAll(keepingCapacity: true)
+        visiblePlaceCountsByOwnerIDCache = nil
         guard let persistence else { return }
 
         if persistenceDeferralDepth > 0 {
@@ -1811,6 +1815,21 @@ final class WanderStore: ObservableObject {
         visiblePlaces().filter { $0.owner.id == profileID }
     }
 
+    func visiblePlaceCountsByOwnerID() -> [String: Int] {
+        if let visiblePlaceCountsByOwnerIDCache {
+            return visiblePlaceCountsByOwnerIDCache
+        }
+
+        #if DEBUG
+        visiblePlaceOwnerCountBuildCount += 1
+        #endif
+        let counts = visiblePlaces().reduce(into: [String: Int]()) { result, visiblePlace in
+            result[visiblePlace.owner.id, default: 0] += 1
+        }
+        visiblePlaceCountsByOwnerIDCache = counts
+        return counts
+    }
+
     func profile(for profileID: String) -> LocalProfile? {
         profiles.first { $0.id == profileID }
     }
@@ -2670,9 +2689,12 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
+                try Task.checkCancellation()
                 upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
+            } catch is CancellationError {
+                return profiles
             } catch {
                 lastRemoteError = remoteErrorMessage(error)
             }
@@ -2693,7 +2715,10 @@ final class WanderStore: ObservableObject {
     func parseDiscover(query: String) async -> DiscoverFilters {
         let cacheKey = normalizedParseCacheKey(query)
         if let cached = discoverParseCache[cacheKey] {
-            lastDiscoverFilters = cached
+            guard !Task.isCancelled else { return cached }
+            if lastDiscoverFilters != cached {
+                lastDiscoverFilters = cached
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
@@ -2707,8 +2732,11 @@ final class WanderStore: ObservableObject {
 
         do {
             let filters = try await parser.parse(query: query, schema: schema)
+            try Task.checkCancellation()
             discoverParseCache[cacheKey] = filters
-            lastDiscoverFilters = filters
+            if lastDiscoverFilters != filters {
+                lastDiscoverFilters = filters
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
@@ -2716,9 +2744,13 @@ final class WanderStore: ObservableObject {
                 )
             )
             return filters
+        } catch is CancellationError {
+            return DiscoverFilters(query: query)
         } catch {
             let fallback = DiscoverFilters(query: query)
-            lastDiscoverFilters = fallback
+            if lastDiscoverFilters != fallback {
+                lastDiscoverFilters = fallback
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverParseFailed,
@@ -2731,6 +2763,9 @@ final class WanderStore: ObservableObject {
 
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
+        guard !Task.isCancelled else {
+            return DiscoverResults(places: [], profiles: [])
+        }
         var placeFilters = PlaceFilters()
         placeFilters.statuses = filters.statuses
         placeFilters.categories = Set(filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
@@ -2761,9 +2796,12 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
+                try Task.checkCancellation()
                 upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
+            } catch is CancellationError {
+                return DiscoverResults(places: places, profiles: profiles)
             } catch {
                 lastRemoteError = remoteErrorMessage(error)
             }
@@ -3879,20 +3917,84 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async {
-        guard backend != nil else {
-            return
+        guard let backend else { return }
+        let requestUserID = currentUser.id
+        guard !Task.isCancelled else { return }
+
+        let locallyFollowedProfileIDs = Set(following(of: requestUserID).map(\.id))
+        var remoteFollowing: [ProfileShell]?
+        var remoteFollowers: [ProfileShell]?
+        var viewportPlaces: [VisiblePlace]?
+        var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
+        var relationshipsByOwnerID: [String: ViewerRelationship] = [:]
+        var firstRefreshError: Error?
+
+        if backend.followRepository != nil {
+            do {
+                remoteFollowing = try await backend.following(userID: requestUserID)
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+                remoteFollowers = try await backend.followers(userID: requestUserID)
+            } catch {
+                firstRefreshError = firstRefreshError ?? error
+            }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        }
+        if backend.placeRepository != nil {
+            do {
+                viewportPlaces = try await backend.visiblePlaces(in: viewport)
+            } catch {
+                firstRefreshError = firstRefreshError ?? error
+            }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        }
+        let followedProfileIDs = locallyFollowedProfileIDs
+            .union(remoteFollowing?.map(\.id) ?? [])
+            .subtracting([requestUserID])
+            .sorted()
+
+        for profileID in followedProfileIDs {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            if backend.userPlaceRepository != nil {
+                do {
+                    visiblePlacesByOwnerID[profileID] = try await backend.userPlaces(for: profileID)
+                } catch {
+                    firstRefreshError = firstRefreshError ?? error
+                }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            }
+            if backend.followRepository != nil {
+                do {
+                    relationshipsByOwnerID[profileID] = try await backend.relationship(to: profileID)
+                } catch {
+                    firstRefreshError = firstRefreshError ?? error
+                }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            }
         }
 
-        let locallyFollowedProfileIDs = Set(following(of: currentUser.id).map(\.id))
-        await refreshRemoteSocialGraph(backend: backend)
-        await refreshRemoteVisiblePlaces(in: viewport, backend: backend)
-
-        let followedProfileIDs = locallyFollowedProfileIDs
-            .union(following(of: currentUser.id).map(\.id))
-            .subtracting([currentUser.id])
-            .sorted()
-        for profileID in followedProfileIDs {
-            await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        withDeferredPersistence {
+            if let remoteFollowing, let remoteFollowers {
+                upsertRemoteSocialGraph(
+                    userID: requestUserID,
+                    following: remoteFollowing,
+                    followers: remoteFollowers
+                )
+            }
+            if let viewportPlaces {
+                remoteVisiblePlaceCache = viewportPlaces
+                hydrateRemoteVisiblePlaceMetadata(viewportPlaces)
+            }
+            for profileID in followedProfileIDs {
+                if let visiblePlaces = visiblePlacesByOwnerID[profileID] {
+                    applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: profileID)
+                }
+                if let relationship = relationshipsByOwnerID[profileID] {
+                    applyRemoteRelationship(profileID: profileID, relationship: relationship)
+                }
+            }
+            lastRemoteError = firstRefreshError.map(remoteErrorMessage)
+            persist()
         }
     }
 

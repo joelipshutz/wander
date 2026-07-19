@@ -3081,8 +3081,14 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces() async {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
         let mayaAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=2"
         let ryanAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=2"
         let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: mayaAvatarURL, bio: nil, relationship: .follower)
@@ -3181,6 +3187,90 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
         XCTAssertEqual(placeRepository.viewports.count, 1)
         XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya", "user_ryan"])
+        XCTAssertEqual(snapshots.count, 1, "A logical social refresh should materialize one store snapshot")
+    }
+
+    func testRemoteSocialSurfacesDiscardCompletionFromPreviousAccount() async {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
+        let maya = ProfileShell(
+            id: "user_maya",
+            handle: "maya",
+            displayName: "Maya",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(following: [maya])
+        followRepository.shouldSuspendFollowing = true
+        let backend = WanderBackend(followRepository: followRepository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshRemoteSocialSurfaces(backend: backend)
+        }
+        while !followRepository.hasSuspendedFollowingRequest {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        snapshots.removeAll()
+        followRepository.resumeFollowing()
+        await refreshTask.value
+
+        XCTAssertEqual(store.currentUser.id, "user_sarah")
+        XCTAssertFalse(store.profiles.contains { $0.id == "user_maya" })
+        XCTAssertFalse(store.follows.contains {
+            $0.followerUserID == "user_sarah" && $0.followedUserID == "user_maya"
+        })
+        XCTAssertEqual(followRepository.followingUserIDs, ["user_joe"])
+        XCTAssertTrue(followRepository.followersUserIDs.isEmpty)
+        XCTAssertTrue(snapshots.isEmpty, "The stale refresh must not persist into the new account")
+    }
+
+    func testCancelledRemoteSocialSurfacesRefreshDoesNotMutateStore() async {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
+        let maya = ProfileShell(
+            id: "user_maya",
+            handle: "maya",
+            displayName: "Maya",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(following: [maya])
+        followRepository.shouldSuspendFollowing = true
+        let backend = WanderBackend(followRepository: followRepository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshRemoteSocialSurfaces(backend: backend)
+        }
+        while !followRepository.hasSuspendedFollowingRequest {
+            await Task.yield()
+        }
+
+        refreshTask.cancel()
+        followRepository.resumeFollowing()
+        await refreshTask.value
+
+        XCTAssertFalse(store.profiles.contains { $0.id == "user_maya" })
+        XCTAssertFalse(store.follows.contains {
+            $0.followerUserID == "user_joe" && $0.followedUserID == "user_maya"
+        })
+        XCTAssertTrue(followRepository.followersUserIDs.isEmpty)
+        XCTAssertTrue(snapshots.isEmpty, "A cancelled refresh must not publish or persist staged results")
     }
 
     func testRemoteSocialSaveMarksLocalCopySynced() async {
@@ -5202,6 +5292,10 @@ private final class FakeFollowRepository: FollowRepository {
     private(set) var followersUserIDs: [String] = []
     private(set) var followingUserIDs: [String] = []
     private(set) var relationshipUserIDs: [String] = []
+    var shouldSuspendFollowing = false
+    private var followingContinuation: CheckedContinuation<[ProfileShell], Error>?
+
+    var hasSuspendedFollowingRequest: Bool { followingContinuation != nil }
 
     init(
         error: Error? = nil,
@@ -5236,12 +5330,22 @@ private final class FakeFollowRepository: FollowRepository {
 
     func following(userID: String) async throws -> [ProfileShell] {
         followingUserIDs.append(userID)
+        if shouldSuspendFollowing {
+            return try await withCheckedThrowingContinuation { continuation in
+                followingContinuation = continuation
+            }
+        }
         return followingResult
     }
 
     func relationship(to userID: String) async throws -> ViewerRelationship {
         relationshipUserIDs.append(userID)
         return relationships[userID] ?? .nonFollower
+    }
+
+    func resumeFollowing() {
+        followingContinuation?.resume(returning: followingResult)
+        followingContinuation = nil
     }
 }
 
