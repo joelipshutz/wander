@@ -1281,6 +1281,78 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.recommendedCount, 3)
     }
 
+    func testStoreInitializationReconcilesLocalAndServerVisitAliasesWithoutBackfill() throws {
+        let currentUser = LocalProfile(
+            localID: "local_profile_alias",
+            serverID: "user_alias",
+            handle: "alias",
+            displayName: "Alias User",
+            syncState: .synced
+        )
+        let place = LocalPlace(
+            localID: "local_place_alias",
+            serverID: "place_alias",
+            canonicalName: "Alias Cafe",
+            category: "coffee",
+            latitude: 34.0,
+            longitude: -118.0,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_alias",
+            serverID: "up_alias",
+            userID: currentUser.id,
+            placeID: place.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let visits = [
+            LocalPlaceVisit(
+                localID: "local_visit_alias_local",
+                userPlaceID: userPlace.localID,
+                visitedAt: Date(timeIntervalSince1970: 100),
+                ratingScore: 3,
+                backfilledFromUserPlace: false,
+                syncState: .synced
+            ),
+            LocalPlaceVisit(
+                localID: "local_visit_alias_server",
+                serverID: "visit_alias_server",
+                userPlaceID: userPlace.id,
+                visitedAt: Date(timeIntervalSince1970: 200),
+                ratingScore: 5,
+                backfilledFromUserPlace: false,
+                syncState: .synced
+            )
+        ]
+        let fixtures = WanderFixtures(
+            currentUser: currentUser,
+            profiles: [currentUser],
+            places: [place],
+            userPlaces: [userPlace],
+            placeAttributes: [],
+            placeVisits: visits,
+            follows: [],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        )
+
+        let store = WanderStore(fixtures: fixtures)
+        let saved = try XCTUnwrap(store.currentUserVisiblePlaces.first?.userPlace)
+
+        XCTAssertEqual(store.visits(for: userPlace.id).count, 2)
+        XCTAssertFalse(store.visits(for: userPlace.id).contains(where: \.backfilledFromUserPlace))
+        XCTAssertEqual(saved.ratingScore, 4)
+        XCTAssertEqual(saved.recommendedScore, 4)
+        XCTAssertEqual(saved.recommendedCount, 2)
+        XCTAssertEqual(saved.visitedAt, Date(timeIntervalSince1970: 200))
+    }
+
     func testBackfilledVisitDoesNotMutateAfterExplicitVisitExists() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

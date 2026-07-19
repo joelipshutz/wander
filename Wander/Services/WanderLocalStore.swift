@@ -173,6 +173,81 @@ final class WanderStore: ObservableObject {
         let listLookup: VisiblePlaceListLookup
     }
 
+    private struct VisitReconciliationIndex {
+        private let canonicalUserPlaceIDByReferenceID: [String: String]
+        private var visitsByCanonicalUserPlaceID: [String: [LocalPlaceVisit]]
+        private let attributesByCanonicalUserPlaceID: [String: [LocalPlaceAttribute]]
+
+        init(
+            userPlaces: [LocalUserPlace],
+            visits: [LocalPlaceVisit],
+            attributes: [LocalPlaceAttribute]
+        ) {
+            var canonicalUserPlaceIDByReferenceID: [String: String] = [:]
+            canonicalUserPlaceIDByReferenceID.reserveCapacity(userPlaces.count * 2)
+            for userPlace in userPlaces {
+                var referenceIDs = [userPlace.id, userPlace.localID]
+                if let serverID = userPlace.serverID {
+                    referenceIDs.append(serverID)
+                }
+                let canonicalID = referenceIDs.compactMap { canonicalUserPlaceIDByReferenceID[$0] }.first
+                    ?? userPlace.id
+                for referenceID in referenceIDs where canonicalUserPlaceIDByReferenceID[referenceID] == nil {
+                    canonicalUserPlaceIDByReferenceID[referenceID] = canonicalID
+                }
+            }
+
+            self.canonicalUserPlaceIDByReferenceID = canonicalUserPlaceIDByReferenceID
+
+            var visitsByCanonicalUserPlaceID: [String: [LocalPlaceVisit]] = [:]
+            visitsByCanonicalUserPlaceID.reserveCapacity(userPlaces.count)
+            for visit in visits {
+                let canonicalID = canonicalUserPlaceIDByReferenceID[visit.userPlaceID] ?? visit.userPlaceID
+                visitsByCanonicalUserPlaceID[canonicalID, default: []].append(visit)
+            }
+            self.visitsByCanonicalUserPlaceID = visitsByCanonicalUserPlaceID
+
+            var attributesByCanonicalUserPlaceID: [String: [LocalPlaceAttribute]] = [:]
+            attributesByCanonicalUserPlaceID.reserveCapacity(userPlaces.count)
+            for attribute in attributes {
+                let canonicalID = canonicalUserPlaceIDByReferenceID[attribute.userPlaceID] ?? attribute.userPlaceID
+                attributesByCanonicalUserPlaceID[canonicalID, default: []].append(attribute)
+            }
+            self.attributesByCanonicalUserPlaceID = attributesByCanonicalUserPlaceID
+        }
+
+        func visits(for userPlace: LocalUserPlace) -> [LocalPlaceVisit] {
+            visitsByCanonicalUserPlaceID[canonicalID(for: userPlace), default: []]
+        }
+
+        func activeVisits(for userPlace: LocalUserPlace) -> [LocalPlaceVisit] {
+            visits(for: userPlace).filter { $0.deletedAt == nil }
+        }
+
+        func attributeDrafts(for userPlace: LocalUserPlace) -> [PlaceAttributeDraft] {
+            attributesByCanonicalUserPlaceID[canonicalID(for: userPlace), default: []]
+                .sorted { $0.questionKey < $1.questionKey }
+                .map { attribute in
+                    PlaceAttributeDraft(
+                        questionKey: attribute.questionKey,
+                        valueType: attribute.valueType,
+                        valueJSON: attribute.valueJSON
+                    )
+                }
+        }
+
+        mutating func append(_ visit: LocalPlaceVisit) {
+            let canonicalID = canonicalUserPlaceIDByReferenceID[visit.userPlaceID] ?? visit.userPlaceID
+            visitsByCanonicalUserPlaceID[canonicalID, default: []].append(visit)
+        }
+
+        private func canonicalID(for userPlace: LocalUserPlace) -> String {
+            canonicalUserPlaceIDByReferenceID[userPlace.id]
+                ?? canonicalUserPlaceIDByReferenceID[userPlace.localID]
+                ?? userPlace.id
+        }
+    }
+
     private var visiblePlaceListLookupCache: VisiblePlaceListLookup?
     private var visibleListFallbackResolutionCount = 0
     #if DEBUG
@@ -259,8 +334,19 @@ final class WanderStore: ObservableObject {
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
         self.currentUser.defaultVisibilityRaw = self.defaultVisibility.rawValue
-        backfillMissingLegacyVisits()
-        refreshAllVisitDerivedState()
+        let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
+        var reconciliationIndex = VisitReconciliationIndex(
+            userPlaces: userPlaces,
+            visits: placeVisits,
+            attributes: placeAttributes
+        )
+        backfillMissingLegacyVisits(using: &reconciliationIndex)
+        let backfillFinishedAt = CFAbsoluteTimeGetCurrent()
+        refreshAllVisitDerivedState(using: reconciliationIndex)
+        let reconciliationFinishedAt = CFAbsoluteTimeGetCurrent()
+        WanderDebugLog.performance.notice(
+            "store reconciliation user_places=\(self.userPlaces.count, privacy: .public) visits=\(self.placeVisits.count, privacy: .public) attributes=\(self.placeAttributes.count, privacy: .public) backfill_ms=\((backfillFinishedAt - reconciliationStartedAt) * 1_000, privacy: .public) refresh_ms=\((reconciliationFinishedAt - backfillFinishedAt) * 1_000, privacy: .public)"
+        )
 
         if shouldPersistAfterRestore {
             persist()
@@ -4809,28 +4895,48 @@ final class WanderStore: ObservableObject {
         userPlace.historicalWantedAt = wantedAt
     }
 
-    private func backfillMissingLegacyVisits() {
+    private func backfillMissingLegacyVisits(using index: inout VisitReconciliationIndex) {
         for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
-            if userPlace.status == .been, visits(for: userPlace.id).isEmpty {
-                syncBackfilledVisit(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
+            let matchingVisits = index.visits(for: userPlace)
+            if userPlace.status == .been, !matchingVisits.contains(where: { $0.deletedAt == nil }) {
+                let previousVisitCount = placeVisits.count
+                syncBackfilledVisit(
+                    for: userPlace,
+                    attributes: index.attributeDrafts(for: userPlace),
+                    matchingVisits: matchingVisits
+                )
+                if placeVisits.count > previousVisitCount, let appendedVisit = placeVisits.last {
+                    index.append(appendedVisit)
+                }
             } else if userPlace.status != .been {
-                softDeleteBackfilledVisits(for: userPlace.id, at: .now)
+                let now = Date.now
+                for visit in matchingVisits where visit.backfilledFromUserPlace && visit.deletedAt == nil {
+                    softDelete(visit, at: now)
+                }
             }
         }
     }
 
-    private func syncBackfilledVisit(for userPlace: LocalUserPlace, attributes: [PlaceAttributeDraft]? = nil) {
+    private func syncBackfilledVisit(
+        for userPlace: LocalUserPlace,
+        attributes: [PlaceAttributeDraft]? = nil,
+        matchingVisits: [LocalPlaceVisit]? = nil
+    ) {
         let now = Date.now
         guard userPlace.deletedAt == nil, userPlace.status == .been else {
             softDeleteBackfilledVisits(for: userPlace.id, at: now)
             return
         }
 
-        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
-        let hasExplicitVisit = placeVisits.contains { visit in
-            userPlaceIDs.contains(visit.userPlaceID)
-                && !visit.backfilledFromUserPlace
-                && visit.deletedAt == nil
+        let candidateVisits: [LocalPlaceVisit]
+        if let matchingVisits {
+            candidateVisits = matchingVisits
+        } else {
+            let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+            candidateVisits = placeVisits.filter { userPlaceIDs.contains($0.userPlaceID) }
+        }
+        let hasExplicitVisit = candidateVisits.contains { visit in
+            !visit.backfilledFromUserPlace && visit.deletedAt == nil
         }
         if hasExplicitVisit {
             return
@@ -4840,9 +4946,7 @@ final class WanderStore: ObservableObject {
         let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: drafts)
         let tags = VisitAttributeAnswers.tags(from: drafts)
 
-        if let existing = placeVisits.first(where: { visit in
-            visit.backfilledFromUserPlace && userPlaceIDs.contains(visit.userPlaceID)
-        }) {
+        if let existing = candidateVisits.first(where: { $0.backfilledFromUserPlace }) {
             existing.userPlaceID = userPlace.id
             existing.visitedAt = userPlace.visitedAt ?? userPlace.savedAt
             existing.note = userPlace.note
@@ -4878,12 +4982,12 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    private func refreshAllVisitDerivedState() {
+    private func refreshAllVisitDerivedState(using index: VisitReconciliationIndex) {
         for visit in placeVisits {
             visit.setDerivedTags(VisitAttributeAnswers.tags(fromAttributeAnswersJSON: visit.attributeAnswersJSON))
         }
         for userPlace in userPlaces where userPlace.userID == currentUser.id {
-            refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            updateVisitSummary(for: userPlace, activeVisits: index.activeVisits(for: userPlace))
         }
     }
 
@@ -4894,6 +4998,10 @@ final class WanderStore: ObservableObject {
             return
         }
 
+        updateVisitSummary(for: userPlace, activeVisits: visits(for: userPlace.id))
+    }
+
+    private func updateVisitSummary(for userPlace: LocalUserPlace, activeVisits: [LocalPlaceVisit]) {
         guard userPlace.deletedAt == nil, userPlace.status == .been else {
             userPlace.ratingScore = nil
             userPlace.recommendedScore = nil
@@ -4901,7 +5009,6 @@ final class WanderStore: ObservableObject {
             return
         }
 
-        let activeVisits = visits(for: userPlace.id)
         let ratings = activeVisits.compactMap { PlaceRating.normalized($0.ratingScore) }
         if ratings.isEmpty {
             userPlace.ratingScore = nil

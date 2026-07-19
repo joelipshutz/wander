@@ -13090,3 +13090,66 @@ Integrated build-80 release gate, 2026-07-18 22:02 PDT:
   REC-103 and is included in tester-facing notes.
 - Next: commit this validation record, push and review the ready build-80 PR,
   squash-merge it, then archive and upload exact post-merge `main`.
+
+## 2026-07-18 20:38 PDT - Codex - REC-104 Cold-Start Reconciliation
+
+Agent: Codex
+Branch: `codex/rec-104-cold-start-performance`
+Worktree: `/private/tmp/recme-rec104-cold-start-performance`
+Linear: `REC-104` (`In Progress`)
+Mission Control: `1510a8ed-b2a6-4a1a-bca9-7f6754ef5f6a`
+
+Goal: continue Joe's requested performance diagnosis after REC-101 landed by measuring and removing the realistic-account cold-start visit-history reconciliation stall without changing visit semantics.
+
+Starting status and coordination:
+
+- PR #117 squash-merged to `main` as `b0b20a652`; REC-101 is `Done`, and its Mission Control task is complete. No TestFlight release or build-number change occurred.
+- Created urgent follow-up REC-104 and this clean isolated worktree from exact merged `origin/main` `b0b20a652`. No other listed worktree owns this branch. The merged REC-101 worktree and unrelated root/agent worktrees remain untouched.
+- Runtime evidence from the deterministic 64-profile / 900-place / 1,200+ visit Simulator account shows first content blocked while `WanderStore.init` repeatedly calls `backfillMissingLegacyVisits`, `refreshAllVisitDerivedState`, `visits(for:)`, and `matchingUserPlaceIDs` on the main thread. Settled Discover/Profile samples are idle, so this slice targets initialization only.
+- Expected files are `Wander/Services/WanderLocalStore.swift`, the realistic performance regression in `WanderTests/WanderPlaceCategoryTests.swift` or a narrower store test, and this append-only log. Phase-level performance logging may reuse `WanderDebugLog.performance`. No schema, auth, hosted data, release, build-number, or tester-facing Slack change is authorized.
+
+REC-104 implementation and validation checkpoint, 2026-07-18 21:03 PDT:
+
+- Root cause confirmed in the realistic 64-profile / 900-place / 1,620-save / 1,215-visit account: initialization repeatedly scanned all visits, attributes, and user-place aliases once per current-user save. The focused before-test recorded `backfill_ms=494.573` and `refresh_ms=656.169` (about 1,150.7 ms total) and correctly failed the new `<0.5s` high-data store budget.
+- Added a launch-scoped `VisitReconciliationIndex` that canonicalizes local/server user-place aliases once, groups visits and attributes once, preserves existing explicit/backfilled/deleted visit semantics, and feeds summary refresh without repeated global scans. Mutation-time paths keep their prior behavior.
+- Added PII-free `WanderPerformance` phase logs for fixture creation, store initialization, visit backfill/summary refresh, and the existing list projection. `WanderRootView.makeStore` remains inside `StateObject`'s lazy wrapped-value autoclosure; a five-second Simulator observation emitted one root/store initialization only, so normal SwiftUI view reconstruction does not recreate the synthetic dataset or store.
+- Focused after-test recorded `backfill_ms=11.026` and `refresh_ms=10.234` (about 21.26 ms total), roughly 54x faster. The new alias regression verifies explicit visits referenced through both local and server user-place IDs are retained without a synthetic backfill and still produce the expected aggregate/latest-visit summary.
+- Exact final source passed the complete iPhone 17 Pro / iOS 26.2 suite: 436 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec104/Logs/Test/Test-Wander-2026.07.18_21-00-06--0700.xcresult`. `git diff --check` is clean. The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed in the current Xcode runtime.
+- Final realistic Simulator cold-process evidence recorded `fixture_ms=443.296`, `store_ms=23.599`, visit reconciliation `backfill_ms=12.177` + `refresh_ms=7.778`, and first Discover projection `candidate_ms=144.911` + `item_ms=0.804` + `resolve_ms=0.792`. The populated Discover screen rendered, and the settled sample was idle rather than executing Wander store/projection work. Local artifacts: `/private/tmp/rec104-final-cold-launch.mov`, `/private/tmp/rec104-final-cold-launch.png`, and `/private/tmp/rec104-final-settled.sample.txt`.
+- The remaining visible white launch interval is no longer explained by reconciliation. About 443 ms of this deterministic run is synthetic performance-fixture construction, which production launches do not perform; app/framework startup and first projection are the next measurable slices. Joe's connected iPhone 16 Pro still reports `unavailable`, so the requested realistic Simulator validation is complete but a production-account physical-device trace remains a separate follow-up option.
+- Two early baseline attempts failed before tests because the host disk was full (GenerateDSYM, then ModuleCache). Only task-owned `/private/tmp` artifacts/caches were removed; the before-test, focused after-test, and all final suites then ran successfully with `DEBUG_INFORMATION_FORMAT=dwarf` and indexing disabled. No product failure was attributed to those environment errors.
+- Next: commit and push the focused change, open a ready PR to `main`, link it to REC-104, and move Linear/Mission Control to review. Do not merge or release without a separate instruction.
+
+REC-104 handoff, 2026-07-18 21:06 PDT:
+
+- Committed the implementation and validation record as `828a105` (`perf: index cold-start visit reconciliation`) and pushed `codex/rec-104-cold-start-performance`.
+- Opened ready PR #123, `REC-104: Optimize high-data cold-start visit reconciliation`: https://github.com/joelipshutz/wander/pull/123
+- Linked PR #123 and the complete performance/test evidence to REC-104, then moved Linear to `In Review`. Mission Control task `1510a8ed-b2a6-4a1a-bca9-7f6754ef5f6a` is also in `review`.
+- No merge, build-number bump, TestFlight upload, hosted-data change, or Slack release note was performed. Restart from PR #123 for review/landing; choose a separate physical-device profiling follow-up once the iPhone is available if production-account evidence is still needed.
+
+REC-104 landing and TestFlight build-80 authorization, 2026-07-18 22:02 PDT:
+
+- Joe explicitly requested a TestFlight push. This authorizes merging ready PR #123, packaging the resulting exact latest `main`, incrementing the build number once from completed build 79 to build 80, archiving/uploading, running the TestFlight helper, and posting the required tester note in `#testflight-feedback`.
+- Release scope since completed build 79 is REC-99 (`6b7a965`, mixed Been/Wanna saved-place indicators), REC-101 (`b0b20a6`, app-wide Discover/Profile/Lists performance and realistic profiling fixture), and PR #123 (REC-104 cold-start visit reconciliation). Open PR #124 and all other open/draft PRs are excluded because they are not merged or part of Joe's request.
+- Rechecked PR #123 at head `c468f594`: ready, no hold label, `MERGEABLE/CLEAN`, based on exact current `origin/main` `b0b20a652`, and no status-check failure. Its exact product source passed 436 tests with zero failures; the post-test commit is append-only documentation. Review finds no blocking alias, deletion/reactivation, summary, performance, privacy, persistence, or scope issue.
+- Completed build 79 is recorded uploaded, `VALID`, attached to `rec.me Alpha`, externally approved, and announced. `origin/main` remains marketing version `0.1`, build `79`; no newer build-number commit on `main` is pending upload.
+- Mission Control release task: `2572f99f-1780-4179-9953-4676b00ff97a`. REC-104 remains `In Review` until build 80 is available. The root checkout and unrelated worktrees remain untouched; build-number/release bookkeeping will use a new isolated worktree from the exact post-merge `origin/main`.
+
+Build-80 latest-main integration update, 2026-07-18 22:10 PDT:
+
+- After ready release PR #125 opened, `main` advanced from `b0b20a652` to
+  `4417b303afc4acc7f08cb011b808b6e4681b9cae` with the separately reviewed and
+  authorized REC-104 cold-start reconciliation fix. GitHub correctly blocked
+  the earlier release head because both branches had appended this coordination
+  log after their prior merge base.
+- Merged exact new `origin/main` into the existing isolated build-80 branch.
+  The four REC-104 app/test files merged automatically. The sole manual conflict
+  was this append-only log; both complete release and REC-104 histories were
+  preserved without changing feature code.
+- The existing build-80 release vehicle remains PR #125:
+  https://github.com/joelipshutz/wander/pull/125. No second build-number branch,
+  archive, or upload was created.
+- Build 80 now packages REC-99 mixed social halos, REC-101 interaction
+  responsiveness, and REC-104 cold-start reconciliation. The full suite,
+  generic simulator build, artifact metadata, latest-main ancestry, and PR diff
+  will be revalidated before PR #125 is merged.
