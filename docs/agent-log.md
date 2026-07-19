@@ -12544,3 +12544,83 @@ Release completion, 2026-07-17 20:00 PDT:
 - Linear `REC-98` and `REC-100` are both `Done`. The managed external-disclosure policy rejected new comments containing the private release metadata, so no workaround was attempted; the issues retain their linked implementation/release PR attachments and prior validation history.
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
+
+## 2026-07-18 16:44 PDT - Codex - REC-84 rec.me App Store Cutover
+
+Agent: Codex
+Branch: `codex/recme-app-rename-spec`
+Worktree: `/private/tmp/recme-rec84-cutover`
+Linear: `REC-84` (`In Progress`)
+
+Goal: complete the approved user-facing rename to `rec.me`, remove the
+pencil-like lower-right object from the app icon, make the brand asset contract
+discoverable to future agents, land the implementation on current `main`, and
+cut the public TestFlight/App Store Connect surfaces over without changing the
+bundle id or breaking tester/account continuity.
+
+Starting status:
+
+- User explicitly requested the App Store and related external cutover after
+  previously pausing the unpushed icon follow-up.
+- PR #46 remained open at `c015ab3`, 36 commits behind current `origin/main`,
+  and conflicted in generated project settings, branding tests, and the shared
+  append-only log.
+- Merged current `origin/main` (`02b812f`, TestFlight build 78 completion) into
+  the isolated branch. Preserved current-main product, backend, schema, and
+  release behavior while reapplying only the `rec.me` branding contracts.
+- The surviving built-in image-generation output for the approved simplified
+  icon is `/Users/joelipshutz/.codex/generated_images/019ee09c-6643-7e03-a924-f770839a13c7/exec-0df32aec-4ae4-4f8a-9ac8-6ff4a66c1dcd.png`.
+- Mission Control remains unavailable at `http://localhost:4000` (`curl` exit
+  7), so Linear REC-84 and this log remain the durable trackers.
+- No other listed worktree overlaps the rebrand files. Stable identifiers stay
+  unchanged: `com.grayline.wander`, `PRODUCT_NAME=Wander`, scheme/module names,
+  auth/Supabase/PostHog keys, and public TestFlight link.
+
+Validation checkpoint, 2026-07-18 18:11 PDT:
+
+- Replaced the old corner treatment with the approved no-pencil icon. The
+  canonical 1024 px master and all eight device renditions are square, opaque,
+  and exact-size; direct inspection at 1024 px and 87 px confirms the lower-right
+  field is clear and the pin/bookmark/orbit/social-dot mark remains legible.
+- Added `docs/brand/recme-app-icon.md`, executable
+  `scripts/generate-app-icon-renditions.sh`, and mirrored AGENTS guidance so
+  future agents can find the canonical asset and cannot silently restore the
+  folded map/page corner or pencil-like object.
+- Updated the TestFlight helper default to `rec.me Alpha` with a temporary
+  legacy-group fallback, and updated current release/setup guidance. Historical
+  records remain unchanged.
+- App Store Connect audit confirmed app id `6776850787`, bundle
+  `com.grayline.wander`, app/listing state `PREPARE_FOR_SUBMISSION`, current app
+  name `Wander: Find Places`, public group `Wander Alpha`, and public-link and
+  feedback flags enabled. The existing group can be renamed in place without
+  replacing the public TestFlight URL. App Store subtitle, privacy URL, support
+  URL, and version-level listing copy are currently blank.
+- Focused `BuildConfigurationTests` passed 13/13 after correcting one
+  line-wrapped documentation assertion. Full integrated iOS suite passed
+  408/408 with 0 failures and 0 skips on iPhone 16 Plus / iOS 18.6:
+  `/private/tmp/DerivedData-rec84-cutover/Logs/Test/Test-Wander-2026.07.18_17-57-38--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. The first
+  fresh-cache attempt reached universal-binary assembly but exhausted the disk;
+  deleting only its 2.0 GB disposable derived-data directory and reusing the
+  validated task cache completed successfully.
+- Installed the exact validated app on the iPhone 16 Plus simulator. The home
+  screen shows the simplified icon and `rec.me` label:
+  `/private/tmp/rec84-cutover-home.png`.
+- Static checks pass: `plutil -lint`, `git diff --check`, shell/Node syntax,
+  icon dimension/alpha validation, and targeted user-visible legacy-brand scan.
+
+Pre-landing review checkpoint, 2026-07-18 18:18 PDT:
+
+- Pushed integrated head `948f173` and updated ready PR #46. GitHub reports
+  `MERGEABLE/CLEAN`; there are no failing checks, human reviews, or unresolved
+  comments.
+- Reviewed the full current-main diff for identity continuity, user-visible
+  copy, icon assets, generated-project scope, release-helper fallback behavior,
+  and test coverage. No blocking correctness, auth, data, notification,
+  performance, or release-pipeline finding remains.
+- The generated Xcode project diff is exactly four `AppBrand.swift` membership
+  lines; 109 lines of unrelated XcodeGen defaults were removed before testing.
+- Updated README, DESIGN, the current developer handoff, decisions header, and
+  product-spec introduction to canonical `rec.me` naming. Internal paths,
+  executable/module/scheme names, and historical records intentionally remain
+  Wander where they are contracts or accurate history.

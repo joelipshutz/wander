@@ -75,7 +75,7 @@ enum AuthGateIntent: String, Equatable, Identifiable {
         case .socialSave:
             AuthGateCopy(
                 title: "Sign in to save from people",
-                message: "Social saves need an account so Wander knows whose map gets the copy.",
+                message: "Social saves need an account so \(AppBrand.displayName) knows whose map gets the copy.",
                 primaryAction: "Sign in",
                 secondaryAction: "Keep browsing"
             )

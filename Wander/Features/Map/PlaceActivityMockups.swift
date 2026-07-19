@@ -581,7 +581,7 @@ private struct ClassicRatingSummary: View {
             )
 
             ClassicMetricCard(
-                title: "Rec.me rating",
+                title: "rec.me rating",
                 value: "4.5",
                 suffix: "/5",
                 subtitle: "2 ratings",

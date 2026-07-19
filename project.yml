@@ -55,6 +55,7 @@ targets:
         WANDER_POSTHOG_PROJECT_TOKEN: $(WANDER_POSTHOG_PROJECT_TOKEN)
         WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
+        CFBundleDisplayName: rec.me
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
@@ -62,8 +63,8 @@ targets:
             CFBundleURLName: com.grayline.wander.profile
             CFBundleURLSchemes:
               - recme
-        NSCameraUsageDescription: Wander uses the camera only when you choose to take a photo in the app.
-        NSLocationWhenInUseUsageDescription: Wander uses your location once to suggest nearby places. It never broadcasts live location.
+        NSCameraUsageDescription: rec.me uses the camera only when you choose to take a photo in the app.
+        NSLocationWhenInUseUsageDescription: rec.me uses your location once to suggest nearby places. It never broadcasts live location.
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
