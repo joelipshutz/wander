@@ -12761,3 +12761,6 @@ Checkpoint, 2026-07-18 19:53 PDT:
   access is not complete. Resume by resolving the Vercel collaboration
   entitlement, inviting `ryan.lieblein@gmail.com` to this project, verifying
   his role, and then DMing Slack user `U0B9KH48X9S` with both links.
+- Committed this coordination record as `c0e0fd6` and opened draft PR #122:
+  https://github.com/joelipshutz/wander/pull/122. `git diff --check` passes;
+  no app code, schema, auth, or TestFlight build was changed.
