@@ -13540,3 +13540,40 @@ REC-95 latest-main landing gate, 2026-07-19 01:01 PDT:
   this integrated head, confirm GitHub mergeability, update Linear REC-95 with
   the superseding gate, and squash-merge PR #124 before creating build 81 from
   exact post-merge `main`.
+
+REC-95 merge and build-81 release start, 2026-07-19 01:05 PDT:
+
+- Published exact validated PR head `5e09e3dc`; GitHub reported PR #124 clean
+  and mergeable. Squash-merged through GitHub's API as exact latest `main`
+  commit `526d3deac69489fb6dcc77cdd7f1c8ef8388563f` after the normal CLI path was
+  blocked only because another worktree already owns local branch `main`.
+- Created isolated release worktree `/private/tmp/recme-build81-release` and
+  branch `codex/testflight-build-81` from exact post-merge `origin/main`
+  `526d3de`. REC-95 remains `In Review` until the requested TestFlight build is
+  attached and live.
+- Build 80 is already uploaded, valid, attached, externally approved, and
+  cannot be modified. This release increments `CURRENT_PROJECT_VERSION` once
+  from 80 to 81 and packages all latest-main code, including REC-95 and the
+  post-build-80 REC-105 Release archive fix.
+- Mission Control remains unavailable at `localhost:4000`. Linear and the
+  append-only agent log are the active durable tracking surfaces.
+- Expected release files: `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this log. No marketing-version,
+  App Store production submission, schema, hosted data, or tester-data change
+  is in scope.
+
+Build-81 source validation checkpoint, 2026-07-19 01:10 PDT:
+
+- Added `options.settingPresets: none` to `project.yml` so installed XcodeGen
+  2.45.4 reproduces the repo's intentionally minimal generated settings instead
+  of injecting unrelated default compiler presets. `xcodegen generate` now
+  produces a project diff limited to the two intended build-number lines.
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 80 to 81 in
+  `project.yml`; regenerated `Wander.xcodeproj/project.pbxproj` reports 81 for
+  Debug and Release. Marketing version remains `0.1`.
+- Exact generated build-81 source passed the complete repo-prescribed iPhone 16
+  Plus / iOS 18.6 suite: 454 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/build81-release-gate.xcresult`.
+- Inspected the built simulator app metadata: `CFBundleShortVersionString=0.1`
+  and `CFBundleVersion=81`. `git diff --check` passes. Next: commit the minimal
+  release diff, open and merge its ready PR, then archive exact merged `main`.
