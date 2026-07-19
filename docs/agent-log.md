@@ -12867,3 +12867,11 @@ Release completion, 2026-07-18 18:56 PDT:
   use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
+
+REC-99 latest-main review and validation checkpoint, 2026-07-18 19:38 PDT:
+
+- Integrated exact `origin/main` `c4251747e`, including the rec.me cutover and completed TestFlight build-79 history, as merge commit `a78888c0f`. The only manual conflict was this append-only log; both histories were preserved. `MapScreen.swift` auto-merged cleanly, latest `origin/main` is an ancestor, and the product diff remains exactly the approved Map/Lists/Quick Search halo implementation plus focused tests.
+- Completed the repo pre-landing review workflow against the full diff. Scope is clean: the UI preserves mixed social Been/Wanna state across saved-place icons while the upstream save-path sync/retry defect is explicitly deferred to REC-103 by Ryan's release decision. No blocking correctness, security, data, API-contract, SwiftUI identity, or test finding remains; no Greptile review comments exist.
+- The exact latest-main-integrated source passed the complete iPhone 17 Pro / iOS 26.5 suite: 412 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec99-build80-gate/Logs/Test/Test-Wander-2026.07.18_19-31-52--0700.xcresult`. The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed in the current Xcode runtime.
+- A fresh generic iOS Simulator build passed. The rec.me app reports `0.1 (79)` before the authorized release bump, and its executable contains both `arm64` and `x86_64`. `git diff --check` is clean.
+- Next: commit and push this validation record, update PR #114 with the REC-103 deferral, mark it ready, confirm the exact pushed head is merge-clean, and squash-merge. The separate build-80 worktree will start only from the resulting exact latest `main`.
