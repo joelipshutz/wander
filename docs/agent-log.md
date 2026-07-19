@@ -12708,3 +12708,36 @@ Release completion, 2026-07-18 18:56 PDT:
   use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
+
+## 2026-07-18 19:33 PDT - Codex - REC-95 List Map Redesign
+
+Agent: Codex using the Linear and design-review workflows
+Branch: `codex/rec-95-list-map`
+Worktree: `/private/tmp/recme-rec95-list-map`
+Linear: `REC-95` (`In Progress`)
+
+Goal: design, mock, implement, and validate the list-detail map preview and
+full-screen list map as one polished flow, including direct one-tap place-card
+opening, stronger map/pin hierarchy, production place-card vocabulary, and the
+edge states named in REC-95.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `c4251747e`; the primary checkout is on an unrelated
+  REC-88 branch with an untracked `.pnpm-store/`, so it will not be touched.
+- No existing REC-95 worktree or overlapping active agent-log entry was found.
+  Active neighboring worktrees for REC-96 through REC-101 do not overlap the
+  list-map files currently expected here.
+- Linear REC-95 was read in full, including its empty comment history, and
+  moved from `Backlog` to `In Progress`. The existing Joe assignment remains
+  unchanged.
+- Expected files are the list-detail/list-map SwiftUI implementation under
+  `Wander/Features/Lists/`, focused tests under `WanderTests/`, a durable
+  REC-95 design review or implementation note under `docs/`, and this log.
+  `project.yml`, the global Map tab, list collaboration/add-place behavior,
+  schema/RLS, and TestFlight build metadata are out of scope unless code
+  inspection proves a required dependency.
+- Before implementation, the current rendered flow will be captured and
+  reviewed against `DESIGN.md`; the approved direction is an evolution of the
+  existing rec.me design system, not a replacement.
