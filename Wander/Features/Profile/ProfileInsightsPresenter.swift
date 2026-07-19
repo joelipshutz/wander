@@ -98,7 +98,7 @@ enum CityCanonicalizer {
 }
 
 final class ProfileInsightsCache {
-    private var lastFingerprint: ProfileInsightsInputFingerprint?
+    private var lastKey: ProfileInsightsCacheKey?
     private var lastInsights: ProfileInsights?
 
     private(set) var computationCount = 0
@@ -109,17 +109,19 @@ final class ProfileInsightsCache {
         visits: [LocalPlaceVisit],
         places: [LocalPlace],
         month: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        dataRevision: UInt64? = nil
     ) -> ProfileInsights {
-        let fingerprint = ProfileInsightsInputFingerprint(
+        let key = ProfileInsightsCacheKey(
             ownerID: ownerID,
             userPlaces: userPlaces,
             visits: visits,
             places: places,
             month: month,
-            calendar: calendar
+            calendar: calendar,
+            dataRevision: dataRevision
         )
-        if fingerprint == lastFingerprint, let lastInsights {
+        if key == lastKey, let lastInsights {
             return lastInsights
         }
 
@@ -131,10 +133,45 @@ final class ProfileInsightsCache {
             month: month,
             calendar: calendar
         )
-        lastFingerprint = fingerprint
+        lastKey = key
         lastInsights = insights
         computationCount += 1
         return insights
+    }
+}
+
+private struct ProfileInsightsCacheKey: Equatable {
+    let ownerID: String
+    let month: Date
+    let calendar: Calendar
+    let localeIdentifier: String
+    let dataRevision: UInt64?
+    let inputFingerprint: ProfileInsightsInputFingerprint?
+
+    init(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        month: Date,
+        calendar: Calendar,
+        dataRevision: UInt64?
+    ) {
+        self.ownerID = ownerID
+        self.month = month
+        self.calendar = calendar
+        localeIdentifier = Locale.current.identifier
+        self.dataRevision = dataRevision
+        inputFingerprint = dataRevision == nil
+            ? ProfileInsightsInputFingerprint(
+                ownerID: ownerID,
+                userPlaces: userPlaces,
+                visits: visits,
+                places: places,
+                month: month,
+                calendar: calendar
+            )
+            : nil
     }
 }
 

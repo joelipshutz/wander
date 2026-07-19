@@ -211,6 +211,48 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(cache.computationCount, 1)
     }
 
+    func testCacheUsesExplicitStoreRevisionWithoutRescanningModelFields() {
+        let fixture = makeFixture()
+        let cache = ProfileInsightsCache()
+
+        let first = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar,
+            dataRevision: 41
+        )
+        let changedPlaceID = fixture.places[0].id
+        fixture.places[0].canonicalName = "Changed behind the same revision"
+        let sameRevision = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar,
+            dataRevision: 41
+        )
+        let nextRevision = cache.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar,
+            dataRevision: 42
+        )
+
+        XCTAssertEqual(sameRevision, first)
+        XCTAssertEqual(cache.computationCount, 2)
+        XCTAssertNotEqual(
+            nextRevision.mapPoints.first(where: { $0.id == changedPlaceID })?.name,
+            first.mapPoints.first(where: { $0.id == changedPlaceID })?.name
+        )
+    }
+
     func testCacheIgnoresModelFieldsThatCannotChangeInsights() {
         let fixture = makeFixture()
         let cache = ProfileInsightsCache()

@@ -571,7 +571,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
             userPlaces: store.userPlaces,
             visits: store.placeVisits,
             places: store.places,
-            month: Date(timeIntervalSince1970: 1_735_689_600)
+            month: Date(timeIntervalSince1970: 1_735_689_600),
+            dataRevision: store.presentationRevision
         )
         let insightsElapsed = CFAbsoluteTimeGetCurrent() - insightsStart
         XCTAssertGreaterThan(insights.mapPoints.count, 250)
@@ -583,7 +584,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
                 userPlaces: store.userPlaces,
                 visits: store.placeVisits,
                 places: store.places,
-                month: Date(timeIntervalSince1970: 1_735_689_600)
+                month: Date(timeIntervalSince1970: 1_735_689_600),
+                dataRevision: store.presentationRevision
             ).mapPoints.count
         }
         let warmInsightsElapsed = CFAbsoluteTimeGetCurrent() - warmInsightsStart

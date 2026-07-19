@@ -223,7 +223,8 @@ struct ProfileScreen: View {
             userPlaces: profileUserPlaces,
             visits: store.placeVisits,
             places: profilePlaces,
-            month: selectedMonth
+            month: selectedMonth,
+            dataRevision: store.presentationRevision
         )
     }
 
@@ -1019,7 +1020,8 @@ struct ProfileDetailView: View {
             userPlaces: profileVisiblePlaces.map(\.userPlace),
             visits: store.placeVisits,
             places: profileVisiblePlaces.map(\.place),
-            month: selectedMonth
+            month: selectedMonth,
+            dataRevision: store.presentationRevision
         )
     }
 

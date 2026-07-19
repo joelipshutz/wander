@@ -96,8 +96,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
     @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = [] {
         didSet {
-            visiblePlacesCache.removeAll(keepingCapacity: true)
-            visiblePlaceCountsByOwnerIDCache = nil
+            invalidatePresentationCaches()
         }
     }
     private(set) var lastRemoteError: String? = nil {
@@ -155,6 +154,7 @@ final class WanderStore: ObservableObject {
     private var persistenceRequestedWhileDeferred = false
     private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
     private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
+    private(set) var presentationRevision: UInt64 = 0
     #if DEBUG
     private(set) var visiblePlaceProjectionBuildCount = 0
     private(set) var visiblePlaceOwnerCountBuildCount = 0
@@ -248,8 +248,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
-        visiblePlacesCache.removeAll(keepingCapacity: true)
-        visiblePlaceCountsByOwnerIDCache = nil
+        invalidatePresentationCaches()
         guard let persistence else { return }
 
         if persistenceDeferralDepth > 0 {
@@ -258,6 +257,12 @@ final class WanderStore: ObservableObject {
         }
 
         persistence.save(WanderStoreSnapshot(store: self))
+    }
+
+    private func invalidatePresentationCaches() {
+        visiblePlacesCache.removeAll(keepingCapacity: true)
+        visiblePlaceCountsByOwnerIDCache = nil
+        presentationRevision &+= 1
     }
 
     @discardableResult
