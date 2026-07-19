@@ -610,7 +610,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertGreaterThan(visibleListItemCount, 1_500)
         XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
         XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
-        XCTAssertLessThan(storeElapsed, 2.0, "High-data store initialization took \(storeElapsed)s")
+        XCTAssertLessThan(storeElapsed, 0.5, "High-data store initialization took \(storeElapsed)s")
         XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
         XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
         XCTAssertLessThan(listProjectionElapsed, 0.5, "High-data list projection took \(listProjectionElapsed)s")

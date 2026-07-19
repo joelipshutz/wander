@@ -37,8 +37,8 @@ struct WanderRootView: View {
         _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
-            wrappedValue: WanderStore(
-                fixtures: Self.resolvedFixtures(mode: fixtureMode),
+            wrappedValue: Self.makeStore(
+                fixtureMode: fixtureMode,
                 parser: parser,
                 analytics: analytics,
                 persistence: persistence
@@ -445,6 +445,28 @@ struct WanderRootView: View {
         case .performance:
             WanderFixtures.performanceScale()
         }
+    }
+
+    private static func makeStore(
+        fixtureMode: WanderFixtureMode,
+        parser: any LLMFilterParser,
+        analytics: AnalyticsClient,
+        persistence: WanderStorePersistence?
+    ) -> WanderStore {
+        let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
+        let fixtures = resolvedFixtures(mode: fixtureMode)
+        let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
+        let store = WanderStore(
+            fixtures: fixtures,
+            parser: parser,
+            analytics: analytics,
+            persistence: persistence
+        )
+        let storeFinishedAt = CFAbsoluteTimeGetCurrent()
+        WanderDebugLog.performance.notice(
+            "root initialization fixture_mode=\(String(describing: fixtureMode), privacy: .public) fixture_ms=\((fixturesFinishedAt - fixturesStartedAt) * 1_000, privacy: .public) store_ms=\((storeFinishedAt - fixturesFinishedAt) * 1_000, privacy: .public)"
+        )
+        return store
     }
 }
 
