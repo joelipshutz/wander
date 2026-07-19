@@ -12686,3 +12686,20 @@ Verification outcome:
 - Code inspection proves the persistence hole: Map and Discover full-form social saves call generic `saveCandidate`, which saves locally before the remote request and marks failures `.failed`; both failed retry and signed-in backfill call `syncableOwnPlaceIDs`, which explicitly excludes `.socialSave`. Discover nevertheless reports, “Queued locally. We'll retry sync.” A failed Rylane save can therefore look saved locally indefinitely while never reaching hosted `user_places`.
 - Added the durable Linear evidence comment `cb1e4d78-49d1-4176-908e-f73ae8ccec93`. The GitHub connector could not create a PR review (`403 Resource not accessible by integration`), so the authenticated GitHub UI was used to add blocking comment `issuecomment-5013431341`. PR #114 remains draft and REC-99 remains `In Progress`.
 - Engineering-plan review was not invoked because this run performed diagnosis and stopped before implementation; the required release review gate is blocked on the confirmed product bug. Per Ryan's condition, no squash merge, `main` push, build-number change, archive/upload, TestFlight helper action, hosted data mutation, Linear `Done`, or Slack release note occurred.
+
+## 2026-07-18 19:26 PDT - Codex - REC-99 approved merge and build 80 release
+
+Agent: Codex
+Branch: `codex/rec-99-social-pin-mockups`
+Worktree: `/private/tmp/recme-rec99-social-pin-mockups`
+Linear: `REC-99` (`In Review`), `REC-103` (`Todo`)
+
+Goal: ship the validated REC-99 split-halo UI on Map, Lists, and Quick Search, while explicitly deferring the two-path social-save sync/retry correction to REC-103, then release the resulting latest `main` as TestFlight build 80.
+
+Release authorization and coordination:
+
+- Ryan explicitly accepted the known upstream social-save limitation for this release and authorized squash-merging REC-99, pushing the result to `main`, and creating a new TestFlight build.
+- Created REC-103, “Unify social-save sync and retry across simple and full-form saves,” to own the deferred sync/retry, canonical-identity, and account-scoped reconciliation work. REC-99 is back in `In Review`; its implementation remains intentionally visual-only.
+- Fetched `origin`. Latest `origin/main` is `c4251747e`, four commits ahead of the REC-99 merge base, and records completed/approved TestFlight build 79. The next release number is therefore 80.
+- The isolated REC-99 worktree is clean apart from this append-only coordination entry. The root checkout has unrelated `.pnpm-store/` state and remains untouched. Expected REC-99 files remain `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this log.
+- Next: integrate exact latest `origin/main`, preserve both append-only histories, rerun pre-landing review plus full simulator test/build validation, update and ready PR #114, and squash-merge it. Build 80 will then be prepared in a new isolated release worktree from the exact merged `main`.
