@@ -6,7 +6,7 @@ Repo guidance for Codex, Claude Code, OpenClaw, and any developer joining Wander
 
 rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
-North Star: when someone needs a place, Wander shows where trusted people have actually been, what they thought, and whether it fits the moment.
+North Star: when someone needs a place, rec.me shows where trusted people have actually been, what they thought, and whether it fits the moment.
 
 Current wedge: trusted people's place memories become a searchable map you can actually use.
 

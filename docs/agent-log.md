@@ -12608,3 +12608,19 @@ Validation checkpoint, 2026-07-18 18:11 PDT:
   `/private/tmp/rec84-cutover-home.png`.
 - Static checks pass: `plutil -lint`, `git diff --check`, shell/Node syntax,
   icon dimension/alpha validation, and targeted user-visible legacy-brand scan.
+
+Pre-landing review checkpoint, 2026-07-18 18:18 PDT:
+
+- Pushed integrated head `948f173` and updated ready PR #46. GitHub reports
+  `MERGEABLE/CLEAN`; there are no failing checks, human reviews, or unresolved
+  comments.
+- Reviewed the full current-main diff for identity continuity, user-visible
+  copy, icon assets, generated-project scope, release-helper fallback behavior,
+  and test coverage. No blocking correctness, auth, data, notification,
+  performance, or release-pipeline finding remains.
+- The generated Xcode project diff is exactly four `AppBrand.swift` membership
+  lines; 109 lines of unrelated XcodeGen defaults were removed before testing.
+- Updated README, DESIGN, the current developer handoff, decisions header, and
+  product-spec introduction to canonical `rec.me` naming. Internal paths,
+  executable/module/scheme names, and historical records intentionally remain
+  Wander where they are contracts or accurate history.
