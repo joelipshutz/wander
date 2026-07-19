@@ -12708,3 +12708,56 @@ Release completion, 2026-07-18 18:56 PDT:
   use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
+
+## 2026-07-18 19:22 PDT - Codex - REC-102 Website Repository Bootstrap
+
+Agent: Codex
+Branch: `codex/rec-102-site-bootstrap`
+Worktree: `/private/tmp/recme-site-bootstrap`
+Linear: `REC-102` (`In Progress`)
+
+Goal: create the standalone rec.me website GitHub repository and Vercel project,
+grant Ryan Lieblein access to both, and send Ryan the completed setup links in
+Slack.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected the root checkout and all current
+  worktrees, and read the latest `docs/agent-log.md` entries.
+- The root checkout is clean but remains on the now-removed
+  `codex/rec-60-notifications` remote branch, so this coordination-only log is
+  isolated from it.
+- Existing GitHub convention is Joe's personal account (`joelipshutz`); the
+  app repository is public. No `joelipshutz/recme-site` repository exists.
+- Existing Vercel scope is team `joe's projects`; no `recme-site` project
+  exists and Ryan is not currently a member.
+- Ryan's resolved identities are GitHub `ryanlane23`, Vercel/Linear/Slack email
+  `ryan.lieblein@gmail.com`, and Slack user `U0B9KH48X9S`.
+- Mission Control task creation is currently blocked because its local service
+  at `localhost:4000` is not running. Linear `REC-102` is the active tracker.
+
+Expected repository files:
+
+- `docs/agent-log.md` only. The website code/repository and Vercel project are
+  external setup targets created by this task.
+
+Checkpoint, 2026-07-18 19:53 PDT:
+
+- Created the public GitHub repository `joelipshutz/recme-site` with the
+  description `The rec.me website.`, a `main` branch, and an initial README:
+  https://github.com/joelipshutz/recme-site.
+- Invited Ryan's GitHub account, `ryanlane23`, as a repository collaborator.
+  GitHub shows the invitation as `Pending Invite`, awaiting Ryan's acceptance.
+- Created Vercel project `recme-site` (`prj_ekKzgeLLYe5KUzCo9FtdWPz2Y6U2`)
+  under team `joe's projects` and linked it to
+  `joelipshutz/recme-site`, production branch `main`:
+  https://vercel.com/joes-projects-2c5c57c9/recme-site.
+- Vercel rejected Ryan's project/team invitation with
+  `invites_not_allowed`: the current team is on the Hobby plan, which does not
+  permit team members. Vercel requires upgrading the team to Pro or enabling
+  its v0 entitlement before Ryan can be added. No plan or billing change was
+  made without Joe's authorization.
+- The requested Slack completion message has not been sent because Vercel
+  access is not complete. Resume by resolving the Vercel collaboration
+  entitlement, inviting `ryan.lieblein@gmail.com` to this project, verifying
+  his role, and then DMing Slack user `U0B9KH48X9S` with both links.
