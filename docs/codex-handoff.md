@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-01
 
-This is the short durable handoff for a new developer or Codex instance joining Wander. It summarizes the repo state, decisions, current work, open questions, and where the real source documents live.
+This is the short durable handoff for a new developer or Codex instance joining rec.me, formerly Wander. It summarizes the repo state, decisions, current work, open questions, and where the real source documents live.
 
 ## Current Repo State
 
@@ -38,15 +38,15 @@ Important local caveat: after the push, the local worktree showed an uncommitted
 
 ## Product Summary
 
-Wander is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+rec.me is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
 North Star:
 
-> When I need a place, Wander shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
+> When I need a place, rec.me shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
 
 Wedge:
 
-> Wander turns trusted people's place memories into a searchable map you can actually use.
+> rec.me turns trusted people's place memories into a searchable map you can actually use.
 
 Core loop:
 

@@ -4,9 +4,9 @@ Repo guidance for Codex, Claude Code, OpenClaw, and any developer joining Wander
 
 ## Project Overview
 
-Rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
-North Star: when someone needs a place, Wander shows where trusted people have actually been, what they thought, and whether it fits the moment.
+North Star: when someone needs a place, rec.me shows where trusted people have actually been, what they thought, and whether it fits the moment.
 
 Current wedge: trusted people's place memories become a searchable map you can actually use.
 
@@ -286,6 +286,20 @@ Observability policy:
 - Respect safe areas, Dynamic Type, 44pt minimum tap targets, keyboard, and the home indicator.
 - iPhone-first. Do not stretch phone UI into desktop/iPad layouts without a specific side-panel plan.
 
+## Brand And App Icon
+
+- The canonical public app name is `rec.me`. Internal `Wander*` names, the
+  Xcode target/scheme/module, and bundle id `com.grayline.wander` remain stable
+  unless a separate migration explicitly changes them.
+- Before editing the app icon, read `docs/brand/recme-app-icon.md`.
+- The canonical icon master is
+  `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
+- Do not add a folded corner, folded map sheet, pencil, road lines, text, or any
+  extra lower-right object. The lower-right area stays clear terracotta.
+- Regenerate all icon renditions with
+  `scripts/generate-app-icon-renditions.sh`, then retain the
+  `BuildConfigurationTests` size, alpha, and discoverability coverage.
+
 ## Testing Rules
 
 - Every milestone should land with matching tests.
@@ -352,7 +366,7 @@ For broad announcements only, `#all-recme` (`C0B9FU1QNG2`) exists, but TestFligh
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `rec.me Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
 
 ```bash
 node scripts/testflight-release.mjs
@@ -380,3 +394,4 @@ The script reads App Store Connect credentials from env vars or `/Users/joelipsh
 - Handoff for new agents/developers: `docs/codex-handoff.md`
 - Setup commands: `docs/setup.md`
 - Agent coordination log: `docs/agent-log.md`
+- App icon source of truth: `docs/brand/recme-app-icon.md`

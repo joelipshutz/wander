@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 final class BuildConfigurationTests: XCTestCase {
@@ -66,6 +67,78 @@ final class BuildConfigurationTests: XCTestCase {
         let schemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
 
         XCTAssertTrue(schemes.contains("recme"))
+    }
+
+    func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
+        let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let generatedProject = try String(contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj"))
+
+        XCTAssertEqual(AppBrand.displayName, "rec.me")
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "rec.me")
+        XCTAssertEqual(plist["CFBundleName"] as? String, "$(PRODUCT_NAME)")
+
+        for key in ["NSCameraUsageDescription", "NSLocationWhenInUseUsageDescription"] {
+            let usageDescription = try XCTUnwrap(plist[key] as? String)
+            XCTAssertTrue(usageDescription.contains("rec.me"), "\(key) must use the public app name")
+            XCTAssertFalse(usageDescription.contains("Wander"), "\(key) must not expose the internal app name")
+        }
+
+        XCTAssertTrue(project.contains("CFBundleDisplayName: rec.me"))
+        XCTAssertTrue(project.contains("PRODUCT_NAME: Wander"))
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander"))
+        XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander;"))
+    }
+
+    func testAppIconRenditionsHaveRequiredSizesAndNoAlpha() throws {
+        let iconDirectory = projectRoot.appendingPathComponent(
+            "Wander/Resources/Assets.xcassets/AppIcon.appiconset",
+            isDirectory: true
+        )
+        let expectedSizes = [
+            "Icon-20@2x.png": 40,
+            "Icon-20@3x.png": 60,
+            "Icon-29@2x.png": 58,
+            "Icon-29@3x.png": 87,
+            "Icon-40@2x.png": 80,
+            "Icon-40@3x.png": 120,
+            "Icon-60@2x.png": 120,
+            "Icon-60@3x.png": 180,
+            "Icon-1024.png": 1024
+        ]
+
+        for (filename, expectedPixels) in expectedSizes {
+            let data = try Data(contentsOf: iconDirectory.appendingPathComponent(filename))
+            let image = try XCTUnwrap(UIImage(data: data)?.cgImage, filename)
+            XCTAssertEqual(image.width, expectedPixels, filename)
+            XCTAssertEqual(image.height, expectedPixels, filename)
+
+            switch image.alphaInfo {
+            case .first, .last, .premultipliedFirst, .premultipliedLast, .alphaOnly:
+                XCTFail("\(filename) must not contain an alpha channel")
+            case .none, .noneSkipFirst, .noneSkipLast:
+                break
+            @unknown default:
+                XCTFail("\(filename) has an unknown alpha configuration")
+            }
+        }
+    }
+
+    func testAppIconContractIsDiscoverableByFutureAgents() throws {
+        let agents = try String(contentsOf: projectRoot.appendingPathComponent("AGENTS.md"))
+        let contract = try String(contentsOf: projectRoot.appendingPathComponent("docs/brand/recme-app-icon.md"))
+        let releaseHelper = try String(contentsOf: projectRoot.appendingPathComponent("scripts/testflight-release.mjs"))
+        let generator = projectRoot.appendingPathComponent("scripts/generate-app-icon-renditions.sh")
+
+        XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
+        XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
+        XCTAssertTrue(contract.contains("folded map/page corner"))
+        XCTAssertTrue(contract.contains("pencil"))
+        XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: generator.path))
     }
 
     func testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI() throws {
