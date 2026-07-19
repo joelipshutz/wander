@@ -12979,3 +12979,24 @@ REC-95 implementation and validation checkpoint, 2026-07-18 21:21 PDT:
   number, archive, upload, TestFlight, or tester-facing Slack action is part of
   REC-95. Next: commit and push the implementation, open the required ready PR,
   then update this log and Linear REC-95 with the PR and final status.
+
+REC-95 review handoff, 2026-07-18 21:28 PDT:
+
+- Committed the complete validated implementation as `f03134d94`
+  (`feat: redesign list map flow`) on `codex/rec-95-list-map` and pushed the
+  branch to `origin`.
+- Opened ready-for-review PR #124:
+  https://github.com/joelipshutz/wander/pull/124
+- Linked PR #124 to Linear REC-95, moved the issue from `In Progress` to
+  `In Review`, and posted the implementation, validation, and scoped
+  request-state follow-up details. Joe remains the assignee.
+- Final validation remains the generic simulator build, 53 focused tests and
+  429 full-suite tests with zero failures, plus the iPhone 17 Pro/iPhone 17e
+  simulator audit recorded above. The only runtime variance is the unavailable
+  repo-prescribed iPhone 16 Plus / iOS 18.6 simulator.
+- No TestFlight build was requested or produced. The app remains at `0.1 (79)`;
+  no build-number, archive, App Store Connect, release-note, or Slack action
+  occurred.
+- Handoff: review and merge PR #124. After merge, REC-95 can move to `Done`;
+  live loading/error/offline integration should remain deferred until a
+  list-scoped repository request-state contract exists.

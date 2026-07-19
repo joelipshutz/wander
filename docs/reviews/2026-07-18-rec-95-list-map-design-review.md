@@ -249,6 +249,8 @@ Status: DONE
 - Apple Maps/Legal attribution remains visible and tappable in both map
   presentations.
 - Independent final review found no remaining blocking or non-blocking issues.
+- Validated implementation commit: `f03134d94`.
+- Review PR: https://github.com/joelipshutz/wander/pull/124
 
 PR summary: Design review found 8 issues and fixed all 8; design score improved
 from C to A-, and AI-slop score improved from 4/10 to 1/10.
