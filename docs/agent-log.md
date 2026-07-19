@@ -12701,6 +12701,10 @@ Release completion, 2026-07-18 18:56 PDT:
   details and is `Done`.
 - Production App Store submission is intentionally not claimed complete. App
   Store Connect still lacks approved privacy-policy and support URLs, and the
-  final screenshots/listing assets must be completed before submission.
+  final screenshots/listing assets must be completed before submission. The
+  prepared App Store version is `1.0`, while released TestFlight build 79 has
+  marketing version `0.1`; Apple associates uploaded builds to version records
+  using the binary's embedded version, so the production candidate must also
+  use marketing version `1.0`.
 - No code, schema, auth, data, or additional build-number change follows this
   completion record. This append-only docs update is release bookkeeping only.
