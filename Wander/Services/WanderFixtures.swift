@@ -261,9 +261,15 @@ struct WanderFixtures {
         placeAttributes.reserveCapacity(3_240)
         placeVisits.reserveCapacity(1_300)
 
-        func appendSave(owner: LocalProfile, place: LocalPlace, placeIndex: Int, variant: Int) {
+        func appendSave(
+            ownerIndex: Int,
+            place: LocalPlace,
+            placeIndex: Int,
+            variant: Int
+        ) {
+            let owner = profiles[ownerIndex]
             let placeSuffix = String(format: "%04d", placeIndex)
-            let ownerSuffix = String(format: "%03d", profiles.firstIndex(where: { $0 === owner }) ?? 0)
+            let ownerSuffix = String(format: "%03d", ownerIndex)
             let suffix = "\(ownerSuffix)_\(placeSuffix)_\(variant)"
             let isBeen = (placeIndex + variant) % 4 != 0
             let status: PlaceStatus = isBeen ? .been : .wannaGo
@@ -357,18 +363,25 @@ struct WanderFixtures {
         }
 
         for (index, place) in places.enumerated() {
+            let primaryOwnerIndex = 1 + (index % (profiles.count - 1))
             appendSave(
-                owner: profiles[1 + (index % (profiles.count - 1))],
+                ownerIndex: primaryOwnerIndex,
                 place: place,
                 placeIndex: index,
                 variant: 0
             )
             if index < 420 {
-                appendSave(owner: currentUser, place: place, placeIndex: index, variant: 1)
+                appendSave(
+                    ownerIndex: 0,
+                    place: place,
+                    placeIndex: index,
+                    variant: 1
+                )
             }
             if index % 3 == 0 {
+                let secondaryOwnerIndex = 1 + ((index + 19) % (profiles.count - 1))
                 appendSave(
-                    owner: profiles[1 + ((index + 19) % (profiles.count - 1))],
+                    ownerIndex: secondaryOwnerIndex,
                     place: place,
                     placeIndex: index,
                     variant: 2

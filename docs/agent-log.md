@@ -13173,3 +13173,61 @@ Final REC-104-integrated release gate, 2026-07-18 22:14 PDT:
   `main`.
 - Next: push this exact validated head, refresh PR #125's description and
   mergeability, squash-merge it, then archive exact post-merge `main`.
+
+## 2026-07-18 22:20 PDT - Codex - REC-105 Build 80 Release Archive Fix
+
+Agent: Codex
+Branch: `codex/rec-105-build80-archive-fix`
+Worktree: `/private/tmp/recme-rec105-build80-archive-fix`
+Linear: `REC-105` (`In Progress`)
+
+Goal: unblock the signed build-80 archive after Swift 6 Release compilation
+rejected the realistic performance fixture's owner lookup, preserve fixture
+identity and cardinality, land the narrow fix on `main`, and resume the same
+unuploaded build-80 release.
+
+Starting status and coordination:
+
+- Release PR #125 squash-merged to `main` as
+  `82ea98bce119bf0662f55265ddd57a7190aa417a`. Its tree exactly matched the
+  validated release head, and build 80 has not been uploaded to App Store
+  Connect.
+- The first signed archive stopped during Release compilation at
+  `WanderFixtures.swift:266`: `profiles.firstIndex(where:)` captured the
+  non-Sendable `owner` reference in a main-actor-isolated closure. No archive,
+  export, upload, TestFlight helper mutation, or tester announcement occurred.
+- Created REC-105 and this clean isolated worktree from exact merged `main`.
+  Expected files are `Wander/Services/WanderFixtures.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, and this append-only log.
+  The unrelated root checkout and open list-map PR remain untouched.
+- Planned fix: pass the already-known profile index into the local fixture
+  builder instead of searching profiles by object identity, then assert stable
+  owner-index prefixes in the existing realistic-fixture regression. Build
+  number remains 80 and marketing version remains `0.1`.
+
+REC-105 validation and release coordination checkpoint, 2026-07-18 22:31 PDT:
+
+- Replaced the higher-order owner search with the caller's deterministic
+  profile index and derive the owner from that index inside the fixture builder.
+  This removes the Swift 6 sendability violation and the unreachable fallback
+  without changing any fixture owner, user-place ID, attribute ID, visit ID,
+  cardinality, or production behavior.
+- Extended the realistic-fixture regression to lock the first primary-social,
+  current-user, and secondary-social owner/ID pairs. The final focused test
+  passed in 0.556 seconds with zero failures. Result bundle:
+  `/private/tmp/DerivedData-rec105/Logs/Test/Test-Wander-2026.07.18_22-25-57--0700.xcresult`.
+- The exact Release/whole-module generic iOS device build that previously
+  failed now passes with `CODE_SIGNING_ALLOWED=NO`. The complete Debug suite
+  also passes: 436 tests, 0 failures, 0 skips. Result bundle:
+  `/private/tmp/DerivedData-rec105/Logs/Test/Test-Wander-2026.07.18_22-29-30--0700.xcresult`.
+- `xcodegen generate` produced no project diff. Independent review confirmed
+  the owner-index approach is the smallest safe fix and rejected unsafe
+  Sendable or compiler-setting workarounds. `git diff --check` passes.
+- While this forward-compatibility fix was validating, the separately running
+  build-80 release lane completed on its older Xcode/iPhone 16 Plus environment.
+  App Store Connect build `6702d70b-c819-4ba5-aad6-904c9bd9a996` is `VALID`,
+  attached to `rec.me Alpha`, externally `APPROVED`, and already announced in
+  `#testflight-feedback`. Completion PR #126 landed as `1acc8e0f5`.
+- No second archive or upload will be attempted. REC-105 will land as a
+  source-only archive reproducibility fix on top of the completed build-80 log;
+  it does not increment the build number or alter the already-approved binary.

@@ -546,6 +546,14 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertGreaterThan(fixtures.placeVisits.count, 1_200)
         XCTAssertEqual(fixtures.placeLists.count, 72)
         XCTAssertEqual(fixtures.placeListItems.count, 2_016)
+        XCTAssertEqual(
+            fixtures.userPlaces.prefix(3).map { "\($0.localID)|\($0.userID)" },
+            [
+                "perf_user_place_001_0000_0|perf_user_001",
+                "perf_user_place_000_0000_1|perf_user_000",
+                "perf_user_place_020_0000_2|perf_user_020"
+            ]
+        )
 
         let storeStart = CFAbsoluteTimeGetCurrent()
         let store = WanderStore(fixtures: fixtures)
