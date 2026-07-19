@@ -13068,3 +13068,25 @@ Latest-main advancement, 2026-07-18 20:37 PDT:
   will be merged with both append-only log histories preserved. The full suite
   and generic simulator build will be rerun against that integrated source
   before the release PR is opened.
+
+Integrated build-80 release gate, 2026-07-18 22:02 PDT:
+
+- Merged exact latest `origin/main`
+  `b0b20a652e2a063866116f8c227fdc1be08c2a64` into the release branch, preserving
+  the REC-99 and REC-101 append-only histories. A final fetch confirmed that
+  commit remains current and is an ancestor of the release head.
+- The exact integrated build-80 source passed the complete iPhone 17 Pro /
+  iOS 26.5 suite: 435 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/DerivedData-build80/Logs/Test/Test-Wander-2026.07.18_21-56-44--0700.xcresult`.
+- A fresh generic iOS Simulator build passed. The resulting `rec.me` app reports
+  version `0.1 (80)`, contains both `arm64` and `x86_64`, and its generated
+  project file passes `plutil -lint`.
+- `git diff --check origin/main...HEAD` passes. The complete release delta
+  remains limited to `project.yml`, the two generated build-number settings in
+  `Wander.xcodeproj/project.pbxproj`, and this append-only work log.
+- Build 80 therefore packages both REC-99 mixed social Been/Wanna halos across
+  Map, Lists, and Quick Search and REC-101 interaction-performance fixes. The
+  known social-save sync/retry limitation remains explicitly deferred to
+  REC-103 and is included in tester-facing notes.
+- Next: commit this validation record, push and review the ready build-80 PR,
+  squash-merge it, then archive and upload exact post-merge `main`.
