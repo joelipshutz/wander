@@ -170,6 +170,31 @@ npx supabase functions deploy parse-discover-query --project-ref "$WANDER_SUPABA
 npx supabase functions deploy extraction-worker --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
 ```
 
+### Google Places venue photos
+
+REC-82 resolves one preferred image for both the full place-profile header and collapsed map card. The iOS app first calls the authenticated `place-photo` Edge Function, which validates the Clerk/Supabase bearer token through the existing `current_profile` PostgREST contract, matches the place by provider id or name plus coordinates, requests Google's first returned usable photo, and returns a short-lived image URL plus the required Google Maps/author/source attribution. Google does not expose a storefront/signage label or usage count, so this is a best available default rather than a guaranteed exterior photo.
+
+If Google has no trustworthy match or is unavailable, iOS calls `public.first_visible_place_photo(place_id)`. That security-invoker RPC returns the earliest uploaded visit-photo object allowed by existing user-place/visit/photo RLS. The image bytes are downloaded from the private `visit-photos` bucket with the signed-in user's auth headers. This makes the first uploaded photo the shared default for dropped pins that friends can see, without exposing a permanent public URL. A just-added local photo renders immediately from its local asset while upload is pending. MapKit/category artwork remains the final fallback when neither source exists.
+
+With the REC-82 field mask, Google currently bills venue matching as Text Search Pro, which has a separate 5,000-event monthly free cap; Place Details Photos has a 1,000-event monthly free cap. Most rec.me places originate in MapKit, so the first photo open can consume one event from each SKU. The database RPC `public.consume_place_photo_quota()` admits at most 900 provider lookups per UTC month globally and 120 per user per UTC day before the Edge Function returns `429`, preventing the alpha from crossing the smaller photo free cap even if Google Cloud budget alerts are only advisory. Coordinate/dropped pins bypass Google and go directly to the visible user-photo fallback. The Google Cloud project must still have billing enabled. Keep Places API (New) method quotas and budget alerts configured as a second control, and restrict the server-side key to Places API. Yelp is not a free commercial fallback: its free access is a 30-day evaluation trial.
+
+Keep the key server-side and deploy the function:
+
+```bash
+npx supabase secrets set WANDER_GOOGLE_PLACES_API_KEY=<restricted-server-key> --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy place-photo --project-ref "$WANDER_SUPABASE_PROJECT_REF" --use-api
+```
+
+The function and `first_visible_place_photo` RPC were deployed to the linked rec.me project on 2026-07-12. The user-photo fallback is live. `WANDER_GOOGLE_PLACES_API_KEY` was installed as a managed Supabase secret and `place-photo` was redeployed on 2026-07-12. A live Text Search plus Place Details Photo check matched Ronan and returned an attributed Google media URL. The hard quota RPC was added on 2026-07-13; deploy its migration before deploying the updated Edge Function. Keep the Google Cloud key restricted to Places API (New), retain provider-side quotas and budget alerts, and rotate the credential if it is ever exposed outside approved secret storage.
+
+Do not store Google photo names, image bytes, or returned image URLs in SwiftData, Supabase, fixtures, or analytics. Google Place IDs may be retained. The UI must keep the Google Maps attribution, photo author attribution when present, and source-photo link visible with the image.
+
+After changing the preferred-photo RPC or its RLS path, run the hosted smoke test. `--linked` uses the Supabase Management API when a direct database password is not available:
+
+```bash
+node scripts/supabase-smoke-test.mjs --linked
+```
+
 Current hosted SQL test status:
 
 ```text
@@ -237,7 +262,7 @@ Current status as of 2026-06-16:
 - Signed archive succeeds locally for `com.grayline.wander`.
 - App Store Connect app record exists for bundle id `com.grayline.wander`.
 - Builds `0.1 (1)` through `0.1 (27)` uploaded successfully and began App Store Connect processing. Build `0.1 (27)` packages the expanded map place detail sheet from PR #9.
-- Public TestFlight group `Wander Alpha` exists with public link enabled and no custom tester cap: `https://testflight.apple.com/join/knEhRa6t`.
+- Public TestFlight group `rec.me Alpha` exists with public link enabled and no custom tester cap: `https://testflight.apple.com/join/knEhRa6t`.
 - Build `0.1 (5)` is attached to the public group. Export compliance is set to `usesNonExemptEncryption=false`.
 - Build `0.1 (5)` passed external TestFlight review.
 - Build `0.1 (6)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.
@@ -259,7 +284,7 @@ Current status as of 2026-06-16:
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml` before each additional TestFlight upload, then run `xcodegen generate`.
 - When creating the export options plist for App Store Connect upload, set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently upload a different build number than the archive.
 - If Xcode Accounts cannot be used for upload, pass the local App Store Connect API key to `xcodebuild -exportArchive` with `-authenticationKeyPath`, `-authenticationKeyID`, and `-authenticationKeyIssuerID`.
-- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run `node scripts/testflight-release.mjs --archive-path <archive>`. It waits for the uploaded build to become `VALID`, sets export compliance, attaches the build to `Wander Alpha`, submits external beta review, and prints the final TestFlight summary. Passing `--archive-path` lets the helper detect Xcode upload build-number drift before attaching the wrong TestFlight build. Use `--dry-run` before upload to verify the resolved build number and App Store Connect config.
+- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run `node scripts/testflight-release.mjs --archive-path <archive>`. It waits for the uploaded build to become `VALID`, sets export compliance, attaches the build to `rec.me Alpha`, submits external beta review, and prints the final TestFlight summary. Passing `--archive-path` lets the helper detect Xcode upload build-number drift before attaching the wrong TestFlight build. Use `--dry-run` before upload to verify the resolved build number and App Store Connect config.
 
 ## Main Files To Read First
 

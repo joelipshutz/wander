@@ -7,7 +7,32 @@ struct ProfileShell: Identifiable, Equatable {
     let displayName: String
     let avatarURL: String?
     let bio: String?
+    let homeArea: String?
+    let isPrivateProfile: Bool?
+    let createdAt: Date?
     let relationship: ViewerRelationship
+
+    init(
+        id: String,
+        handle: String,
+        displayName: String,
+        avatarURL: String?,
+        bio: String?,
+        homeArea: String? = nil,
+        isPrivateProfile: Bool? = nil,
+        createdAt: Date? = nil,
+        relationship: ViewerRelationship
+    ) {
+        self.id = id
+        self.handle = handle
+        self.displayName = displayName
+        self.avatarURL = avatarURL
+        self.bio = bio
+        self.homeArea = homeArea
+        self.isPrivateProfile = isPrivateProfile
+        self.createdAt = createdAt
+        self.relationship = relationship
+    }
 }
 
 struct ProfileViewState {
@@ -180,6 +205,10 @@ extension PlaceCandidate {
             confidence: categoryConfidence,
             rawProviderType: rawProviderType
         )
+    }
+
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(for: categoryAssignment, name: name)
     }
 
     func recategorized(as category: String) -> PlaceCandidate {
@@ -686,6 +715,155 @@ struct VisitPhotoResult: Equatable {
     let uploadState: VisitPhotoUploadState
 }
 
+struct PlacePhotoRequest: Encodable, Equatable {
+    let placeID: String?
+    let name: String
+    let address: String?
+    let latitude: Double?
+    let longitude: Double?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
+    let requiresPhoto: Bool
+
+    init(
+        placeID: String? = nil,
+        name: String,
+        address: String?,
+        latitude: Double?,
+        longitude: Double?,
+        sourceProvider: String?,
+        sourceProviderPlaceID: String?,
+        requiresPhoto: Bool = true
+    ) {
+        self.placeID = placeID
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.sourceProvider = sourceProvider
+        self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.requiresPhoto = requiresPhoto
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case placeID = "place_id"
+        case name
+        case address
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case requiresPhoto = "requires_photo"
+    }
+
+    var lookupKey: String {
+        let coordinate = [latitude, longitude]
+            .compactMap { $0.map { String(format: "%.5f", $0) } }
+            .joined(separator: ",")
+        var components = [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        if !requiresPhoto {
+            components.append("metadata-only")
+        }
+        return components.joined(separator: "|")
+    }
+
+    var skipsGooglePlacesLookup: Bool {
+        let provider = sourceProvider?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let normalizedName = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return provider == "coordinate"
+            || sourceProviderPlaceID?.lowercased().hasPrefix("coordinate_") == true
+            || normalizedName == "dropped pin"
+    }
+}
+
+struct PlacePhoto: Decodable, Equatable {
+    let provider: String
+    let providerPlaceID: String
+    let providerPrimaryType: String?
+    let providerTypes: [String]?
+    let photoURLString: String
+    let width: Int?
+    let height: Int?
+    let authorName: String?
+    let authorProfileURLString: String?
+    let authorAvatarURLString: String?
+    let sourcePhotoURLString: String?
+    let flagContentURLString: String?
+    let storageBucket: String?
+    let storagePath: String?
+    let localAssetRef: String?
+
+    init(
+        provider: String,
+        providerPlaceID: String,
+        providerPrimaryType: String? = nil,
+        providerTypes: [String]? = nil,
+        photoURLString: String,
+        width: Int?,
+        height: Int?,
+        authorName: String?,
+        authorProfileURLString: String?,
+        authorAvatarURLString: String?,
+        sourcePhotoURLString: String?,
+        flagContentURLString: String?,
+        storageBucket: String?,
+        storagePath: String?,
+        localAssetRef: String?
+    ) {
+        self.provider = provider
+        self.providerPlaceID = providerPlaceID
+        self.providerPrimaryType = providerPrimaryType
+        self.providerTypes = providerTypes
+        self.photoURLString = photoURLString
+        self.width = width
+        self.height = height
+        self.authorName = authorName
+        self.authorProfileURLString = authorProfileURLString
+        self.authorAvatarURLString = authorAvatarURLString
+        self.sourcePhotoURLString = sourcePhotoURLString
+        self.flagContentURLString = flagContentURLString
+        self.storageBucket = storageBucket
+        self.storagePath = storagePath
+        self.localAssetRef = localAssetRef
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case providerPlaceID = "provider_place_id"
+        case providerPrimaryType = "provider_primary_type"
+        case providerTypes = "provider_types"
+        case photoURLString = "photo_url"
+        case width
+        case height
+        case authorName = "author_name"
+        case authorProfileURLString = "author_profile_url"
+        case authorAvatarURLString = "author_avatar_url"
+        case sourcePhotoURLString = "source_photo_url"
+        case flagContentURLString = "flag_content_url"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case localAssetRef = "local_asset_ref"
+    }
+
+    var photoURL: URL? { URL(string: photoURLString) }
+    var authorProfileURL: URL? { authorProfileURLString.flatMap(URL.init(string:)) }
+    var authorAvatarURL: URL? { authorAvatarURLString.flatMap(URL.init(string:)) }
+    var sourcePhotoURL: URL? { sourcePhotoURLString.flatMap(URL.init(string:)) }
+    var isGooglePlacesPhoto: Bool { provider == "google_places" }
+
+    var cacheKey: String {
+        [provider, providerPlaceID, photoURLString, storageBucket, storagePath, localAssetRef]
+            .compactMap { $0 }
+            .joined(separator: "|")
+    }
+}
+
 struct SaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
@@ -783,24 +961,51 @@ struct ProfileAvatarResult: Equatable {
     let storagePath: String
 }
 
+struct ProfileDetailsUpdate: Equatable {
+    let displayName: String?
+    let handle: String?
+    let bio: String?
+    let homeArea: String?
+    let defaultVisibility: PlaceVisibility?
+    let isPrivateProfile: Bool?
+
+    init(
+        displayName: String? = nil,
+        handle: String? = nil,
+        bio: String? = nil,
+        homeArea: String? = nil,
+        defaultVisibility: PlaceVisibility? = nil,
+        isPrivateProfile: Bool? = nil
+    ) {
+        self.displayName = displayName
+        self.handle = handle
+        self.bio = bio
+        self.homeArea = homeArea
+        self.defaultVisibility = defaultVisibility
+        self.isPrivateProfile = isPrivateProfile
+    }
+}
+
 enum PushTokenEnvironment: String, Equatable {
     case sandbox
     case production
 }
 
 struct NotificationPreferences: Equatable {
-    var pushEnabled: Bool = true
-    var socialGraphEnabled: Bool = true
-    var sharedListsEnabled: Bool = true
-    var recommendationsEnabled: Bool = true
-    var captureEnabled: Bool = true
+    var pushEnabled: Bool = false
+    var socialGraphEnabled: Bool = false
+    var sharedListsEnabled: Bool = false
+    var sharedVisitsEnabled: Bool = false
+    var recommendationsEnabled: Bool = false
+    var captureEnabled: Bool = false
     var discoveryDigestEnabled: Bool = false
-    var followedActivityEnabled: Bool = true
+    var followedActivityEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
         pushEnabled: true,
         socialGraphEnabled: true,
         sharedListsEnabled: true,
+        sharedVisitsEnabled: true,
         recommendationsEnabled: true,
         captureEnabled: true,
         discoveryDigestEnabled: true,
@@ -811,6 +1016,7 @@ struct NotificationPreferences: Equatable {
         pushEnabled: false,
         socialGraphEnabled: false,
         sharedListsEnabled: false,
+        sharedVisitsEnabled: false,
         recommendationsEnabled: false,
         captureEnabled: false,
         discoveryDigestEnabled: false,
@@ -822,6 +1028,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var pushEnabled: Bool?
     var socialGraphEnabled: Bool?
     var sharedListsEnabled: Bool?
+    var sharedVisitsEnabled: Bool?
     var recommendationsEnabled: Bool?
     var captureEnabled: Bool?
     var discoveryDigestEnabled: Bool?
@@ -831,6 +1038,7 @@ struct NotificationPreferencesUpdate: Equatable {
         pushEnabled: Bool? = nil,
         socialGraphEnabled: Bool? = nil,
         sharedListsEnabled: Bool? = nil,
+        sharedVisitsEnabled: Bool? = nil,
         recommendationsEnabled: Bool? = nil,
         captureEnabled: Bool? = nil,
         discoveryDigestEnabled: Bool? = nil,
@@ -839,6 +1047,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.pushEnabled = pushEnabled
         self.socialGraphEnabled = socialGraphEnabled
         self.sharedListsEnabled = sharedListsEnabled
+        self.sharedVisitsEnabled = sharedVisitsEnabled
         self.recommendationsEnabled = recommendationsEnabled
         self.captureEnabled = captureEnabled
         self.discoveryDigestEnabled = discoveryDigestEnabled
@@ -849,6 +1058,7 @@ struct NotificationPreferencesUpdate: Equatable {
         pushEnabled: true,
         socialGraphEnabled: true,
         sharedListsEnabled: true,
+        sharedVisitsEnabled: true,
         recommendationsEnabled: true,
         captureEnabled: true,
         discoveryDigestEnabled: true,
@@ -859,6 +1069,7 @@ struct NotificationPreferencesUpdate: Equatable {
         pushEnabled: false,
         socialGraphEnabled: false,
         sharedListsEnabled: false,
+        sharedVisitsEnabled: false,
         recommendationsEnabled: false,
         captureEnabled: false,
         discoveryDigestEnabled: false,
@@ -866,11 +1077,269 @@ struct NotificationPreferencesUpdate: Equatable {
     )
 }
 
+enum SharedVisitParticipantStatus: String, Codable, Equatable {
+    case owner
+    case pending
+    case accepted
+    case declined
+    case cancelled
+    case expired
+    case removed
+}
+
+struct SharedVisitPhotoSnapshot: Identifiable, Codable, Equatable {
+    let photoID: String
+    let storageBucket: String
+    let storagePath: String
+    let contentType: String
+    let byteSize: Int?
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+    let sortOrder: Int
+
+    var id: String { photoID }
+}
+
+struct SharedVisitInvitation: Identifiable, Codable, Equatable {
+    let participantID: String
+    let groupID: String
+    let invitationGeneration: Int
+    let snapshotRevision: Int
+    let status: SharedVisitParticipantStatus
+    let invitedAt: Date
+    let sourceVisitID: String
+    let sourceOwnerUserID: String
+    let sourceOwnerHandle: String
+    let sourceOwnerDisplayName: String
+    let sourceOwnerAvatarURL: String?
+    let placeID: String
+    let placeName: String
+    let category: String
+    let primaryCategory: String
+    let subcategory: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double
+    let longitude: Double
+    let sourceProvider: String
+    let sourceProviderPlaceID: String?
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswers: [VisitAttributeAnswer]
+    let tags: [String]
+    let photos: [SharedVisitPhotoSnapshot]
+
+    var id: String { participantID }
+
+    var categoryAssignment: PlaceCategoryAssignment {
+        PlaceCategoryAssignment(
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            source: PlaceCategorySource.legacy.rawValue,
+            confidence: nil,
+            rawProviderType: category
+        )
+    }
+
+    var restaurantCuisine: String? {
+        guard let answer = attributeAnswers.first(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
+        }) else {
+            return nil
+        }
+
+        switch answer.value {
+        case .string(let value):
+            return value
+        case .array(let values):
+            for value in values {
+                if case .string(let string) = value {
+                    return string
+                }
+            }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    var categoryEmoji: String {
+        WanderPlaceCategory.emoji(
+            for: categoryAssignment,
+            cuisine: restaurantCuisine,
+            name: placeName
+        )
+    }
+
+    var candidate: PlaceCandidate {
+        PlaceCandidate(
+            id: placeID,
+            name: placeName,
+            category: primaryCategory,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: PlaceCategorySource.legacy.rawValue,
+            categoryConfidence: nil,
+            rawProviderType: category,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            confidence: 1
+        )
+    }
+
+    var attributeDrafts: [PlaceAttributeDraft] {
+        attributeAnswers.map { answer in
+            let data = (try? JSONEncoder().encode(answer.value)) ?? Data("null".utf8)
+            return PlaceAttributeDraft(
+                questionKey: answer.questionKey,
+                valueType: answer.valueType,
+                valueJSON: String(data: data, encoding: .utf8) ?? "null"
+            )
+        }
+    }
+}
+
+struct SharedVisitInviteResult: Equatable {
+    let participantID: String
+    let inviteeUserID: String
+    let status: SharedVisitParticipantStatus
+    let invitationGeneration: Int
+}
+
+struct PendingSharedVisitInvite: Identifiable, Codable, Equatable {
+    let id: String
+    let ownerUserID: String
+    let sourceVisitID: String
+    let inviteeUserIDs: [String]
+    let createdAt: Date
+}
+
+struct SharedVisitAcceptanceIdentifiers: Equatable {
+    let operationID: String
+    let userPlaceID: String
+    let visitID: String
+
+    static func deterministic(participantID: String, generation: Int) -> SharedVisitAcceptanceIdentifiers {
+        let prefix = "shared-visit:\(participantID):\(generation)"
+        return SharedVisitAcceptanceIdentifiers(
+            operationID: stableUUID(for: "\(prefix):operation"),
+            userPlaceID: stableUUID(for: "\(prefix):user-place"),
+            visitID: stableUUID(for: "\(prefix):visit")
+        )
+    }
+
+    private static func stableUUID(for value: String) -> String {
+        let bytes = Array(value.utf8)
+        var first: UInt64 = 14_695_981_039_346_656_037
+        var second: UInt64 = 1_099_511_628_211
+
+        for byte in bytes {
+            first = (first ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+        for byte in bytes.reversed() {
+            second = (second ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+
+        var uuidBytes = withUnsafeBytes(of: first.bigEndian, Array.init)
+        uuidBytes.append(contentsOf: withUnsafeBytes(of: second.bigEndian, Array.init))
+        uuidBytes[6] = (uuidBytes[6] & 0x0f) | 0x50
+        uuidBytes[8] = (uuidBytes[8] & 0x3f) | 0x80
+
+        let hex = uuidBytes.map { String(format: "%02x", $0) }.joined()
+        return "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
+    }
+}
+
+struct SharedVisitAcceptanceDraft: Equatable {
+    let participantID: String
+    let invitationGeneration: Int
+    let snapshotRevision: Int
+    let operationID: String
+    let userPlaceID: String
+    let visitID: String
+    let visibility: PlaceVisibility
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributes: [PlaceAttributeDraft]
+    let selectedPhotoIDs: [String]
+}
+
+struct SharedVisitPhotoCopy: Equatable {
+    let sourcePhotoID: String
+    let sourceBucket: String
+    let sourcePath: String
+    let destinationPhotoID: String
+    let destinationBucket: String
+    let destinationPath: String
+    let contentType: String
+}
+
+struct SharedVisitAcceptanceResult: Equatable {
+    let operationID: String
+    let participantID: String
+    let userPlaceID: String
+    let visitID: String
+    let backfilledFromUserPlace: Bool
+    let status: SharedVisitParticipantStatus
+    let photoCopies: [SharedVisitPhotoCopy]
+}
+
+struct SharedVisitCompanion: Identifiable, Equatable {
+    let visitID: String
+    let userID: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+
+    var id: String { "\(visitID):\(userID)" }
+}
+
+struct SharedVisitDestination: Equatable {
+    let participantID: String
+    let requestedGeneration: Int
+    let currentGeneration: Int
+    let status: String
+    let placeID: String
+    let acceptedVisitID: String?
+    let sourceVisitID: String
+}
+
+enum SharedVisitDestinationResolution: Equatable {
+    case resolved(SharedVisitDestination)
+    case unavailable
+    case retryableFailure
+}
+
 @MainActor
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
+    func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile
+}
+
+extension ProfileRepository {
+    func updatePrivacy(isPrivateProfile: Bool, defaultVisibility: PlaceVisibility) async throws -> LocalProfile {
+        throw WanderRemoteError.notImplemented("profile privacy RPC")
+    }
+}
+
+extension ProfileRepository {
+    func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        throw WanderRemoteError.notImplemented("update current profile")
+    }
 }
 
 @MainActor
@@ -894,6 +1363,13 @@ protocol BlockRepository {
     func unblock(userID: String) async throws
     func blockedProfiles() async throws -> [ProfileShell]
     func isBlocked(userID: String) async throws -> Bool
+}
+
+@MainActor
+protocol MuteRepository {
+    func mute(userID: String) async throws
+    func unmute(userID: String) async throws
+    func mutedProfiles() async throws -> [ProfileShell]
 }
 
 @MainActor
@@ -922,6 +1398,13 @@ protocol UserPlaceRepository {
 @MainActor
 protocol SocialPlaceSaveRepository {
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult
+}
+
+@MainActor
+protocol PlacePhotoRepository {
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func imageData(for photo: PlacePhoto) async throws -> Data
 }
 
 @MainActor
@@ -975,4 +1458,20 @@ protocol NotificationRepository {
     func updatePreferences(_ update: NotificationPreferencesUpdate) async throws -> NotificationPreferences
     func registerPushToken(_ token: String, environment: PushTokenEnvironment, appBundleID: String) async throws -> String
     func unregisterPushToken(_ token: String, environment: PushTokenEnvironment?) async throws
+}
+
+@MainActor
+protocol SharedVisitRepository {
+    func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String]
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult]
+    func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation]
+    func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation?
+    func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination?
+    func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult
+    func decline(participantID: String, generation: Int) async throws
+    func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion]
+    func downloadPhotoData(bucket: String, path: String) async throws -> Data
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws
+    func markPhotoUploaded(photoID: String) async throws
 }

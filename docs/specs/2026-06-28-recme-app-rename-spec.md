@@ -1,7 +1,7 @@
 # rec.me App Rename Spec
 
 Date: 2026-06-28
-Status: planned
+Status: implementation validated; App Store cutover in progress
 Owner: Codex plan-eng-review pass
 
 ## Goal
@@ -115,9 +115,13 @@ Replace the legacy `W` icon with a full-bleed, text-free mark built around the p
 - a location pin for places;
 - a bookmark cutout for remembering/saving;
 - a small blue orbit dot for the trusted social layer;
-- a restrained folded-map corner for the map surface.
+- a clear terracotta lower-right field that keeps the mark legible at small sizes.
 
 Keep the existing terracotta, cream, espresso, and sky-blue palette. Generate every raster rendition referenced by `AppIcon.appiconset/Contents.json`, require exact dimensions, and remove alpha from every file. Do not bake rounded corners into the artwork; iOS applies the system mask.
+
+The approved icon has no folded map/page corner, pencil, road lines, or secondary
+lower-right object. The durable visual contract and rendition workflow live in
+`docs/brand/recme-app-icon.md`.
 
 ### 5. Manual QA
 

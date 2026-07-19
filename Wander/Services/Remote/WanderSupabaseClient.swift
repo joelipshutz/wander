@@ -52,7 +52,15 @@ protocol RemoteStorageCalling {
         upsert: Bool
     ) async throws
     func deleteObject(bucket: String, path: String) async throws
+    func downloadObject(bucket: String, path: String) async throws -> Data
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL
+}
+
+extension RemoteStorageCalling {
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        throw WanderRemoteError.notImplemented("private storage signed URL")
+    }
 }
 
 @MainActor
@@ -120,6 +128,14 @@ enum RemoteEncoding {
     }()
 }
 
+private struct SignedStorageURLResponse: Decodable {
+    let signedURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case signedURL = "signedURL"
+    }
+}
+
 @MainActor
 final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteTableCalling, RemoteUserPlaceDeleting {
     let configuration: WanderBackendConfiguration
@@ -134,6 +150,10 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
     var isConfigured: Bool {
         self.configuration.isSupabaseConfigured
+    }
+
+    static func encodeRequestBody<Value: Encodable>(_ value: Value) throws -> Data {
+        try RemoteEncoding.encoder.encode(value)
     }
 
     func authenticatedHeaders() async throws -> [String: String] {
@@ -192,7 +212,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
-        request.httpBody = try JSONEncoder().encode(params)
+        request.httpBody = try Self.encodeRequestBody(params)
 
         #if DEBUG
         WanderDebugLog.remote.debug("rpc request name=\(name, privacy: .public) path=\(endpoint.path, privacy: .public)")
@@ -280,7 +300,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.encodeRequestBody(body)
 
         #if DEBUG
         WanderDebugLog.remote.debug("function request name=\(name, privacy: .public) path=\(endpoint.path, privacy: .public)")
@@ -521,6 +541,31 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         )
     }
 
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        let headers = try await authenticatedHeaders()
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WanderRemoteError.invalidResponse("Missing HTTP response for storage download")
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw WanderRemoteError.notAuthenticated
+            }
+            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
+            throw WanderRemoteError.invalidResponse("Storage download failed with \(httpResponse.statusCode): \(body)")
+        }
+        return data
+    }
+
     func publicObjectURL(bucket: String, path: String, cacheBust: String? = nil) throws -> URL {
         let url = try storageObjectURL(bucket: bucket, path: path, isPublic: true)
         guard let cacheBust, !cacheBust.isEmpty else {
@@ -535,6 +580,50 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("Invalid versioned public storage URL")
         }
         return versionedURL
+    }
+
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int = 3600) async throws -> URL {
+        guard let supabaseURL = configuration.supabaseURL else {
+            throw WanderRemoteError.notConfigured
+        }
+        let objectURL = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        guard let objectRange = objectURL.absoluteString.range(of: "/storage/v1/object/") else {
+            throw WanderRemoteError.invalidResponse("Invalid private storage URL")
+        }
+        let objectSuffix = String(objectURL.absoluteString[objectRange.upperBound...])
+        let endpoint = supabaseURL
+            .appendingPathComponent("storage")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("object")
+            .appendingPathComponent("sign")
+            .appendingPathComponent(objectSuffix)
+        let headers = try await authenticatedHeaders()
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        headers.forEach { key, value in request.setValue(value, forHTTPHeaderField: key) }
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["expiresIn": max(60, min(expiresIn, 86_400))]
+        )
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode)
+        else {
+            throw WanderRemoteError.invalidResponse("Could not create private storage URL")
+        }
+        let payload = try JSONDecoder().decode(SignedStorageURLResponse.self, from: data)
+        if let absoluteURL = URL(string: payload.signedURL), absoluteURL.scheme != nil {
+            return absoluteURL
+        }
+        let relativePath = payload.signedURL.hasPrefix("/object/")
+            ? "/storage/v1\(payload.signedURL)"
+            : payload.signedURL
+        guard let relativeURL = URL(string: relativePath, relativeTo: supabaseURL)?.absoluteURL else {
+            throw WanderRemoteError.invalidResponse("Invalid signed storage URL")
+        }
+        return relativeURL
     }
 
     func deleteUserPlace(userPlaceID: String) async throws {

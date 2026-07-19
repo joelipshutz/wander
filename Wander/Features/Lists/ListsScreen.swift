@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ListsScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     private let scenario: ListsScreenScenario
@@ -13,6 +14,7 @@ struct ListsScreen: View {
     @State private var selectedList: PlaceListMock?
     @State private var collaboratorList: PlaceListMock?
     @State private var mapList: PlaceListMock?
+    @State private var selectedProfileID: String?
     @State private var deletedListIDs = Set<String>()
 
     init(scenario: ListsScreenScenario = .resolved()) {
@@ -80,6 +82,14 @@ struct ListsScreen: View {
                     initialSelectedPlaceID: scenario == .mapSelectedPlace ? list.places.first?.id : nil
                 )
             }
+            .fullScreenCover(isPresented: profileDestinationBinding) {
+                if let selectedProfileID {
+                    ProfileDetailView(profileID: selectedProfileID)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                }
+            }
         }
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
@@ -123,7 +133,18 @@ struct ListsScreen: View {
             onListChanged: { sourceListID in
                 refreshOpenList(sourceListID: sourceListID)
             },
+            onOpenProfile: { profileID in
+                guard profileID != store.currentUser.id else { return }
+                selectedProfileID = profileID
+            },
             initialSelectedPlace: initialSelectedPlace
+        )
+    }
+
+    private var profileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedProfileID != nil },
+            set: { if !$0 { selectedProfileID = nil } }
         )
     }
 
@@ -400,8 +421,16 @@ struct ListsScreen: View {
     private var activeLists: [PlaceListMock] {
         guard scenario != .empty else { return [] }
 
-        let storeLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
-            .map { PlaceListMock(list: $0, store: store) }
+        let sourceLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
+        let visiblePlacesByListID = store.visiblePlacesByListID(in: sourceLists)
+        let storeLists = sourceLists
+            .map { list in
+                PlaceListMock(
+                    list: list,
+                    visiblePlaces: visiblePlacesByListID[list.id] ?? [],
+                    store: store
+                )
+            }
             .filter { !deletedListIDs.contains($0.id) }
 
         guard !storeLists.isEmpty else {
@@ -630,9 +659,7 @@ private struct ListPreviewMosaic: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                 .fill(place.tint)
 
-            Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.68))
+            WanderCategoryEmoji(emoji: place.emoji, size: 22)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -648,6 +675,7 @@ private struct ListDetailScreen: View {
     var onCollaborators: (PlaceListMock) -> Void
     var onOpenMap: (PlaceListMock) -> Void
     var onListChanged: (String) -> Void
+    var onOpenProfile: (String) -> Void
     @State private var removedPlaceIDs = Set<String>()
     @State private var selectedPlace: ListPlaceMock?
     @State private var isAddingPlaces = false
@@ -662,6 +690,7 @@ private struct ListDetailScreen: View {
         onCollaborators: @escaping (PlaceListMock) -> Void = { _ in },
         onOpenMap: @escaping (PlaceListMock) -> Void = { _ in },
         onListChanged: @escaping (String) -> Void = { _ in },
+        onOpenProfile: @escaping (String) -> Void = { _ in },
         initialSelectedPlace: ListPlaceMock? = nil
     ) {
         self.list = list
@@ -669,6 +698,7 @@ private struct ListDetailScreen: View {
         self.onCollaborators = onCollaborators
         self.onOpenMap = onOpenMap
         self.onListChanged = onListChanged
+        self.onOpenProfile = onOpenProfile
         _selectedPlace = State(initialValue: initialSelectedPlace)
     }
 
@@ -719,9 +749,11 @@ private struct ListDetailScreen: View {
                 }
             }
         }
-        .task(id: sourceList?.id ?? list.id) {
+        .task(id: list.sourceListID ?? list.id) {
             _ = await store.syncPendingPlaceLists(backend: backend)
-            await store.refreshRemotePlaceLists(backend: backend)
+            if let sourceList {
+                await store.refreshRemotePlaceList(sourceList, backend: backend)
+            }
             await loadSuggestions()
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
@@ -806,7 +838,30 @@ private struct ListDetailScreen: View {
             }
 
             HStack(spacing: WanderTheme.spacing2) {
-                FacePileView(collaborators: displayList.collaborators, size: 30)
+                if let owner = listOwnerProfile {
+                    Button {
+                        onOpenProfile(owner.id)
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            WanderAvatar(
+                                initials: owner.initials,
+                                avatarURL: owner.avatarURL,
+                                size: 30,
+                                color: WanderTheme.pinSocial.color
+                            )
+                            Text(owner.displayName)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(owner.displayName)'s profile")
+                }
+                FacePileView(
+                    collaborators: displayList.collaborators,
+                    size: 30,
+                    onSelect: onOpenProfile
+                )
                 Text(displayList.collaboratorSummary)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -906,6 +961,15 @@ private struct ListDetailScreen: View {
 
     private var displayList: PlaceListMock {
         sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
+    }
+
+    private var listOwnerProfile: LocalProfile? {
+        guard !displayList.isOwnedByCurrentUser else { return nil }
+        return store.profiles.first { profile in
+            profile.id == displayList.ownerUserID
+                || profile.handle.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
+                || profile.displayName.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
+        }
     }
 
     private var canManageList: Bool {
@@ -1380,9 +1444,7 @@ private struct ListVisiblePlaceAddRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 18, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(emoji: place.emoji, size: 18)
                     }
                     .frame(width: 48, height: 48)
 
@@ -1443,9 +1505,7 @@ private struct ListPlaceCandidateAddRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                         .fill(ListPlaceMock.tint(for: candidate.primaryCategory))
-                    Image(systemName: WanderPlaceCategory.symbolName(for: candidate.primaryCategory))
-                        .font(.system(size: 18, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 18)
                 }
                 .frame(width: 48, height: 48)
 
@@ -1578,9 +1638,7 @@ private struct ListPlaceRow: View {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(place.tint)
 
-                        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                            .font(.system(size: 20, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                        WanderCategoryEmoji(emoji: place.emoji, size: 20)
                     }
                     .frame(width: 56, height: 56)
 
@@ -2118,11 +2176,9 @@ private struct ListMapMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-            .font(.system(size: isSelected ? 17 : 16, weight: .black))
+        WanderCategoryEmoji(emoji: place.emoji, size: isSelected ? 17 : 16)
             .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
             .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -2178,9 +2234,7 @@ private struct ListMapPlaceTile: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                         .fill(place.tint)
-                    Image(systemName: WanderPlaceCategory.symbolName(for: place.category))
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
+                    WanderCategoryEmoji(emoji: place.emoji, size: 22)
                 }
                 .frame(width: 62, height: 62)
 
@@ -2503,7 +2557,6 @@ private struct ListEditorSheet: View {
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
         .disabled(store.isPrivateProfile)
-        .opacity(store.isPrivateProfile ? 0.56 : 1)
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
@@ -2627,19 +2680,35 @@ private struct FacePileView: View {
     @EnvironmentObject private var store: WanderStore
     let collaborators: [ListCollaboratorMock]
     var size: CGFloat
+    var onSelect: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: -8) {
             ForEach(collaborators.prefix(3)) { collaborator in
-                WanderAvatar(
-                    initials: collaborator.initials,
-                    avatarURL: avatarURL(for: collaborator),
-                    size: size,
-                    color: collaborator.color
-                )
+                if let onSelect {
+                    Button {
+                        onSelect(profileID(for: collaborator))
+                    } label: {
+                        collaboratorAvatar(collaborator)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(collaborator.name)'s profile")
+                } else {
+                    collaboratorAvatar(collaborator)
+                        .accessibilityLabel(collaborator.name)
+                }
             }
         }
         .frame(minWidth: collaborators.isEmpty ? 0 : size + CGFloat(max(0, min(collaborators.count, 3) - 1)) * (size - 8), alignment: .leading)
+    }
+
+    private func collaboratorAvatar(_ collaborator: ListCollaboratorMock) -> some View {
+        WanderAvatar(
+            initials: collaborator.initials,
+            avatarURL: avatarURL(for: collaborator),
+            size: size,
+            color: collaborator.color
+        )
     }
 
     private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
@@ -2650,6 +2719,13 @@ private struct FacePileView: View {
         return store.profiles.first { profile in
             profile.id == collaborator.id || profile.handle == collaborator.handle
         }?.avatarURL
+    }
+
+    private func profileID(for collaborator: ListCollaboratorMock) -> String {
+        store.profiles.first { profile in
+            profile.id == collaborator.id
+                || profile.handle.caseInsensitiveCompare(collaborator.handle) == .orderedSame
+        }?.id ?? collaborator.id
     }
 }
 
@@ -2709,6 +2785,10 @@ private struct PlaceListMock: Identifiable, Hashable {
 @MainActor
 private extension PlaceListMock {
     init(list: LocalPlaceList, store: WanderStore) {
+        self.init(list: list, visiblePlaces: store.visiblePlaces(in: list), store: store)
+    }
+
+    init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
         self.id = list.id
         self.name = list.name
@@ -2716,7 +2796,7 @@ private extension PlaceListMock {
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = store.visiblePlaces(in: list).map(ListPlaceMock.init(visiblePlace:))
+        self.places = visiblePlaces.map(ListPlaceMock.init(visiblePlace:))
         self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
@@ -2729,6 +2809,7 @@ private struct ListPlaceMock: Identifiable {
     let id: String
     let name: String
     let category: String
+    let emoji: String
     let metadata: String
     let tint: Color
     let pinPosition: CGPoint
@@ -2743,6 +2824,7 @@ private struct ListPlaceMock: Identifiable {
         id: String,
         name: String,
         category: String,
+        emoji: String? = nil,
         metadata: String,
         tint: Color,
         pinPosition: CGPoint,
@@ -2756,6 +2838,7 @@ private struct ListPlaceMock: Identifiable {
         self.id = id
         self.name = name
         self.category = category
+        self.emoji = emoji ?? WanderPlaceCategory.emoji(for: category, name: name)
         self.metadata = metadata
         self.tint = tint
         self.pinPosition = pinPosition
@@ -2779,7 +2862,7 @@ private struct ListPlaceMock: Identifiable {
         let place = visiblePlace.place
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
-            place.category,
+            visiblePlace.effectiveCategoryDisplay.compactTitle,
             place.locality
         ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2788,9 +2871,10 @@ private struct ListPlaceMock: Identifiable {
         self.init(
             id: "saved-\(visiblePlace.id)",
             name: place.canonicalName,
-            category: place.category,
+            category: visiblePlace.effectiveCategory,
+            emoji: visiblePlace.categoryEmoji,
             metadata: metadataParts.joined(separator: " - "),
-            tint: Self.tint(for: place.category),
+            tint: Self.tint(for: visiblePlace.effectiveCategory),
             pinPosition: Self.previewPinPosition(for: place.id),
             latitude: place.latitude,
             longitude: place.longitude,
@@ -2927,6 +3011,7 @@ private extension PlaceSheetPlace {
         self.categorySource = assignment.source
         self.categoryConfidence = assignment.confidence
         self.rawProviderType = assignment.rawProviderType
+        self.cuisine = nil
         self.address = nil
         self.locality = "Los Angeles"
         self.region = "CA"
@@ -2935,6 +3020,8 @@ private extension PlaceSheetPlace {
         self.websiteURLString = nil
         self.phoneNumber = nil
         self.actionLinksJSON = nil
+        self.sourceProvider = nil
+        self.sourceProviderPlaceID = nil
         self.compactSubtitleOverride = listPlace.metadata
         self.status = listPlace.status
         self.visibility = .followers

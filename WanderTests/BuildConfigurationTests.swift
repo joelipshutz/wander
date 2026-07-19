@@ -58,6 +58,17 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["WANDER_SUPABASE_URL"] as? String, "$(WANDER_SUPABASE_URL)")
     }
 
+    func testInfoPlistRegistersProfileShareURLScheme() throws {
+        let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let urlTypes = try XCTUnwrap(plist["CFBundleURLTypes"] as? [[String: Any]])
+        let schemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+
+        XCTAssertTrue(schemes.contains("recme"))
+    }
+
     func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(
@@ -114,6 +125,20 @@ final class BuildConfigurationTests: XCTestCase {
                 XCTFail("\(filename) has an unknown alpha configuration")
             }
         }
+    }
+
+    func testAppIconContractIsDiscoverableByFutureAgents() throws {
+        let agents = try String(contentsOf: projectRoot.appendingPathComponent("AGENTS.md"))
+        let contract = try String(contentsOf: projectRoot.appendingPathComponent("docs/brand/recme-app-icon.md"))
+        let releaseHelper = try String(contentsOf: projectRoot.appendingPathComponent("scripts/testflight-release.mjs"))
+        let generator = projectRoot.appendingPathComponent("scripts/generate-app-icon-renditions.sh")
+
+        XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
+        XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
+        XCTAssertTrue(contract.contains("folded map/page corner"))
+        XCTAssertTrue(contract.contains("pencil"))
+        XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: generator.path))
     }
 
     func testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI() throws {

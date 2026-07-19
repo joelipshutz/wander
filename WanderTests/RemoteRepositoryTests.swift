@@ -39,7 +39,9 @@ final class RemoteRepositoryTests: XCTestCase {
             "avatar_url": "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=remote",
             "bio": "places worth returning to",
             "home_area": "Los Angeles",
-            "default_visibility": "mutuals"
+            "default_visibility": "mutuals",
+            "is_private_profile": true,
+            "created_at": "2024-10-01T12:00:00Z"
           }
         ]
         """.data(using: .utf8)
@@ -54,8 +56,125 @@ final class RemoteRepositoryTests: XCTestCase {
             "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_123/avatar.jpg?v=remote"
         )
         XCTAssertEqual(profile?.defaultVisibility, .mutuals)
+        XCTAssertEqual(profile?.isPrivateProfile, true)
+        XCTAssertEqual(profile?.createdAt, ISO8601DateFormatter().date(from: "2024-10-01T12:00:00Z"))
         XCTAssertEqual(rpc.calls.map(\.name), ["current_profile"])
         XCTAssertTrue(rpc.rawBodies[0].isEmpty)
+    }
+
+    func testMemberProfileCallsDetailRPCAndMapsReadOnlyProfileMetadata() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["profile_detail"] = """
+        [
+          {
+            "id": "user_maya",
+            "handle": "maya",
+            "display_name": "Maya Chen",
+            "avatar_url": "https://example.com/maya.jpg",
+            "bio": "coffee and hikes",
+            "home_area": "Los Angeles",
+            "is_private_profile": false,
+            "created_at": "2023-10-01T12:00:00Z",
+            "relationship": "mutual"
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let state = try await repository.profile(id: "user_maya")
+
+        XCTAssertEqual(state.shell.id, "user_maya")
+        XCTAssertEqual(state.shell.displayName, "Maya Chen")
+        XCTAssertEqual(state.shell.avatarURL, "https://example.com/maya.jpg")
+        XCTAssertEqual(state.shell.bio, "coffee and hikes")
+        XCTAssertEqual(state.shell.homeArea, "Los Angeles")
+        XCTAssertEqual(state.shell.isPrivateProfile, false)
+        XCTAssertEqual(state.shell.createdAt, ISO8601DateFormatter().date(from: "2023-10-01T12:00:00Z"))
+        XCTAssertEqual(state.shell.relationship, .mutual)
+        XCTAssertFalse(state.canFollow)
+        XCTAssertTrue(state.canBlock)
+        XCTAssertEqual(rpc.calls.map(\.name), ["profile_detail"])
+        XCTAssertEqual(rpc.calls[0].body["input_profile_id"] as? String, "user_maya")
+    }
+
+    func testMemberProfileRejectsProfileHiddenByRLS() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["profile_detail"] = "[]".data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        do {
+            _ = try await repository.profile(id: "user_blocked")
+            XCTFail("Expected hidden profile detail to be rejected")
+        } catch let error as WanderRemoteError {
+            guard case .invalidResponse = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testProfileDetailsUpdateCallsOwnerRPCAndMapsResult() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["update_own_profile"] = """
+        {
+          "id": "user_123",
+          "handle": "joe",
+          "display_name": "Joe",
+          "avatar_url": null,
+          "bio": "new bio",
+          "home_area": "Los Angeles",
+          "default_visibility": "followers",
+          "is_private_profile": false,
+          "created_at": "2024-10-01T12:00:00Z"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let profile = try await repository.updateCurrentProfile(
+            ProfileDetailsUpdate(
+                displayName: "Joe Updated",
+                handle: "joe_updated",
+                bio: "new bio",
+                homeArea: "Los Angeles",
+                defaultVisibility: .mutuals,
+                isPrivateProfile: true
+            )
+        )
+
+        XCTAssertEqual(profile.bio, "new bio")
+        XCTAssertEqual(profile.homeArea, "Los Angeles")
+        XCTAssertEqual(rpc.calls.map(\.name), ["update_own_profile"])
+        XCTAssertEqual(rpc.calls[0].body["input_display_name"] as? String, "Joe Updated")
+        XCTAssertEqual(rpc.calls[0].body["input_handle"] as? String, "joe_updated")
+        XCTAssertEqual(rpc.calls[0].body["input_bio"] as? String, "new bio")
+        XCTAssertEqual(rpc.calls[0].body["input_home_area"] as? String, "Los Angeles")
+        XCTAssertEqual(rpc.calls[0].body["input_default_visibility"] as? String, "mutuals")
+        XCTAssertEqual(rpc.calls[0].body["input_is_private_profile"] as? Bool, true)
+    }
+
+    func testMuteRepositoryUsesDedicatedRPCsAndMapsProfiles() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["mute_profile"] = "null".data(using: .utf8)
+        rpc.responses["unmute_profile"] = "null".data(using: .utf8)
+        rpc.responses["muted_profiles"] = """
+        [{
+          "id": "user_maya",
+          "handle": "maya",
+          "display_name": "Maya",
+          "avatar_url": null,
+          "bio": null,
+          "home_area": null,
+          "relationship": "mutual"
+        }]
+        """.data(using: .utf8)
+        let repository = SupabaseMuteRepository(rpc: rpc)
+
+        try await repository.mute(userID: "user_maya")
+        let profiles = try await repository.mutedProfiles()
+        try await repository.unmute(userID: "user_maya")
+
+        XCTAssertEqual(profiles.map(\.id), ["user_maya"])
+        XCTAssertEqual(rpc.calls.map(\.name), ["mute_profile", "muted_profiles", "unmute_profile"])
+        XCTAssertEqual(rpc.calls[0].body["profile_id"] as? String, "user_maya")
     }
 
     func testProfileAvatarUploadStoresRemoteURL() async throws {
@@ -189,7 +308,10 @@ final class RemoteRepositoryTests: XCTestCase {
             path: "user_123/visit_123/photo_123.jpg"
         )
 
-        XCTAssertTrue(url.absoluteString.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/user_123/visit_123/photo_123.jpg?v="))
+        XCTAssertEqual(
+            url.absoluteString,
+            "https://example.supabase.co/storage/v1/object/sign/visit-photos/user_123/visit_123/photo_123.jpg?token=test"
+        )
         XCTAssertEqual(
             storage.uploads,
             [
@@ -225,6 +347,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "been",
             "visibility": "followers",
             "note": "Easy sunset win.",
+            "visited_at": "2026-07-09T20:00:00Z",
+            "saved_at": "2026-07-08T19:00:00Z",
+            "created_at": "2026-07-08T18:00:00Z",
+            "updated_at": "2026-07-10T21:00:00Z",
             "rating_signal": null,
             "rating_score": 4.5,
             "recommended_score": 4.5,
@@ -260,6 +386,11 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(places[0].userPlace.ratingScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedScore, 4.5)
         XCTAssertEqual(places[0].userPlace.recommendedCount, 2)
+        XCTAssertEqual(places[0].userPlace.visitedAt, ISO8601DateFormatter().date(from: "2026-07-09T20:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.savedAt, ISO8601DateFormatter().date(from: "2026-07-08T19:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.createdAt, ISO8601DateFormatter().date(from: "2026-07-08T18:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.updatedAt, ISO8601DateFormatter().date(from: "2026-07-10T21:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.serverUpdatedAt, ISO8601DateFormatter().date(from: "2026-07-10T21:00:00Z"))
         XCTAssertEqual(places[0].attributes.map(\.questionKey), ["strenuousness"])
         XCTAssertEqual(places[0].attributes[0].valueJSON, "\"easy\"")
         XCTAssertEqual(rpc.calls.map(\.name), ["visible_places_in_view"])
@@ -320,6 +451,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "wanna_go",
             "visibility": "mutuals",
             "note": "rainy night",
+            "visited_at": null,
+            "saved_at": "2026-07-07T18:00:00Z",
+            "created_at": "2026-07-07T18:00:00Z",
+            "updated_at": "2026-07-08T19:00:00Z",
             "rating_signal": null,
             "rating_score": null,
             "recommended_score": null,
@@ -343,6 +478,9 @@ final class RemoteRepositoryTests: XCTestCase {
             "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=1"
         )
         XCTAssertEqual(places[0].userPlace.status, .wannaGo)
+        XCTAssertNil(places[0].userPlace.visitedAt)
+        XCTAssertEqual(places[0].userPlace.savedAt, ISO8601DateFormatter().date(from: "2026-07-07T18:00:00Z"))
+        XCTAssertEqual(places[0].userPlace.updatedAt, ISO8601DateFormatter().date(from: "2026-07-08T19:00:00Z"))
         XCTAssertEqual(rpc.calls.map(\.name), ["profile_visible_places"])
         XCTAssertEqual(rpc.calls[0].body["profile_id"] as? String, "user_ryan")
         XCTAssertEqual(rpc.calls[0].body["status_filter"] as? [String], ["wanna_go"])
@@ -367,6 +505,10 @@ final class RemoteRepositoryTests: XCTestCase {
             "status": "maybe",
             "visibility": "followers",
             "note": null,
+            "visited_at": null,
+            "saved_at": "2026-07-08T18:00:00Z",
+            "created_at": "2026-07-08T18:00:00Z",
+            "updated_at": "2026-07-08T18:00:00Z",
             "rating_signal": null,
             "rating_score": null,
             "recommended_score": null,
@@ -433,7 +575,17 @@ final class RemoteRepositoryTests: XCTestCase {
             nearbyConfirmed: true,
             sourceType: "current_location",
             attributes: [
-                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"])
+                PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["wifi solid", "quiet"]),
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: ["work favorite", "joe rec"]
+                ),
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "restaurant_cuisine",
+                    stringValue: "Thai"
+                )
             ]
         )
 
@@ -456,8 +608,17 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(userPlace?["rating_signal"])
 
         let attributes = body["input_attributes"] as? [[String: Any]]
-        XCTAssertEqual(attributes?.map { $0["question_key"] as? String }, ["coffee_tags"])
+        XCTAssertEqual(
+            attributes?.map { $0["question_key"] as? String },
+            ["coffee_tags", PlaceMemoryAttributeKeys.personalLabels, PlaceMemoryAttributeKeys.restaurantCuisine]
+        )
+        XCTAssertEqual(
+            attributes?.map { $0["value_type"] as? String },
+            ["multi_tag", "personal_label", "restaurant_cuisine"]
+        )
         XCTAssertEqual(attributes?.first?["value"] as? [String], ["wifi solid", "quiet"])
+        XCTAssertEqual(attributes?[1]["value"] as? [String], ["work favorite", "joe rec"])
+        XCTAssertEqual(attributes?[2]["value"] as? String, "Thai")
     }
 
     func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
@@ -810,6 +971,192 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["limit"] as? Int, 4)
     }
 
+    func testPlacePhotoRepositoryInvokesEdgeFunctionAndMapsAttribution() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "provider": "google_places",
+          "provider_place_id": "ChIJwoodcat",
+          "photo_url": "https://lh3.googleusercontent.com/example",
+          "width": 1600,
+          "height": 1000,
+          "author_name": "Woodcat Coffee",
+          "author_profile_url": "https://maps.google.com/maps/contrib/example",
+          "author_avatar_url": "https://lh3.googleusercontent.com/avatar",
+          "source_photo_url": "https://www.google.com/maps/photos/example",
+          "flag_content_url": "https://www.google.com/maps/photos/flag/example"
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: "1532 Sunset Blvd, Los Angeles, CA",
+            latitude: 34.0777,
+            longitude: -118.2588,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-woodcat"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "google_places")
+        XCTAssertEqual(photo.providerPlaceID, "ChIJwoodcat")
+        XCTAssertEqual(photo.authorName, "Woodcat Coffee")
+        XCTAssertEqual(photo.sourcePhotoURL?.host, "www.google.com")
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["name"] as? String, "Woodcat Coffee")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider"] as? String, "mapkit")
+        XCTAssertEqual(rpc.rawBodies[0]["source_provider_place_id"] as? String, "mapkit-woodcat")
+        XCTAssertEqual(rpc.rawBodies[0]["requires_photo"] as? Bool, true)
+        XCTAssertEqual(
+            try XCTUnwrap(rpc.rawBodies[0]["latitude"] as? Double),
+            34.0777,
+            accuracy: 0.00001
+        )
+    }
+
+    func testPlaceProviderMetadataRequestDoesNotRequireAProviderPhoto() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "provider": "google_places",
+          "provider_place_id": "ChIJugo",
+          "provider_primary_type": "italian_restaurant",
+          "provider_types": ["italian_restaurant", "restaurant", "food"],
+          "photo_url": ""
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let request = PlacePhotoRequest(
+            name: "Ugo",
+            address: "3865 Cardiff Ave, Culver City, CA",
+            latitude: 34.0223,
+            longitude: -118.3952,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-ugo",
+            requiresPhoto: false
+        )
+
+        let metadata = try await repository.photo(for: request)
+
+        XCTAssertEqual(metadata.providerPlaceID, "ChIJugo")
+        XCTAssertEqual(metadata.providerPrimaryType, "italian_restaurant")
+        XCTAssertEqual(metadata.providerTypes, ["italian_restaurant", "restaurant", "food"])
+        XCTAssertNil(metadata.photoURL)
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["requires_photo"] as? Bool, false)
+    }
+
+    func testPlacePhotoRepositoryFallsBackToFirstVisibleVisitPhotoAndAuthenticatedStorage() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000001",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg",
+          "width": 1200,
+          "height": 900
+        }]
+        """.data(using: .utf8)
+        let storage = RecordingStorage()
+        storage.downloadData = Data([0xFF, 0xD8, 0xFF])
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: storage)
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000001",
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        let photo = try await repository.photo(for: request)
+        let data = try await repository.imageData(for: photo)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(photo.providerPlaceID, "55000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(photo.storageBucket, "visit-photos")
+        XCTAssertEqual(data, Data([0xFF, 0xD8, 0xFF]))
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
+    }
+
+    func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000002",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_joe/coordinate.jpg",
+          "width": 900,
+          "height": 1200
+        }]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(rpc: rpc, functions: rpc, storage: RecordingStorage())
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000002",
+            name: "A custom pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "coordinate",
+            sourceProviderPlaceID: "coordinate_34.09435_-118.44982"
+        )
+
+        let photo = try await repository.photo(for: request)
+
+        XCTAssertEqual(photo.provider, "visit_photo")
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
+    }
+
+    func testPlacePhotoLookupKeyUsesProviderIdentityAndCoordinates() {
+        let request = PlacePhotoRequest(
+            name: "Woodcat Coffee",
+            address: nil,
+            latitude: 34.077712,
+            longitude: -118.258812,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "ChIJwoodcat"
+        )
+
+        XCTAssertEqual(
+            request.lookupKey,
+            "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
+        )
+    }
+
+    func testProviderMetadataLookupKeyDoesNotCollideWithPhotoLookup() {
+        let request = PlacePhotoRequest(
+            name: "Ugo",
+            address: nil,
+            latitude: 34.0223,
+            longitude: -118.3952,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-ugo",
+            requiresPhoto: false
+        )
+
+        XCTAssertEqual(
+            request.lookupKey,
+            "mapkit|mapkit-ugo|ugo|34.02230,-118.39520|metadata-only"
+        )
+    }
+
+    func testDroppedPinPhotoRequestSkipsGooglePlacesLookup() {
+        let request = PlacePhotoRequest(
+            name: "Dropped pin",
+            address: "34.09435, -118.44982",
+            latitude: 34.09435,
+            longitude: -118.44982,
+            sourceProvider: "manual",
+            sourceProviderPlaceID: nil
+        )
+
+        XCTAssertTrue(request.skipsGooglePlacesLookup)
+    }
+
     func testNotificationRepositoryCallsPreferenceAndTokenRPCs() async throws {
         let rpc = RecordingRPC()
         rpc.responses["get_notification_preferences"] = """
@@ -817,6 +1164,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "push_enabled": true,
           "social_graph_enabled": true,
           "shared_lists_enabled": true,
+          "shared_visits_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": false,
@@ -828,6 +1176,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "push_enabled": true,
           "social_graph_enabled": true,
           "shared_lists_enabled": true,
+          "shared_visits_enabled": true,
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": true,
@@ -849,6 +1198,7 @@ final class RemoteRepositoryTests: XCTestCase {
         try await repository.unregisterPushToken("abcdef1234567890", environment: .sandbox)
 
         XCTAssertTrue(preferences.socialGraphEnabled)
+        XCTAssertTrue(preferences.sharedVisitsEnabled)
         XCTAssertTrue(preferences.followedActivityEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
@@ -876,8 +1226,127 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[3]["input_environment"] as? String, "sandbox")
     }
 
+    func testSharedVisitRepositoryLoadsAndReconcilesExactInviteeSet() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["list_shared_visit_invitees"] = """
+        [
+          {
+            "invitee_user_id": "user_sarah",
+            "participant_status": "pending",
+            "invitation_generation": 1
+          }
+        ]
+        """.data(using: .utf8)
+        rpc.responses["set_shared_visit_invitees"] = """
+        [
+          {
+            "participant_id": "48000000-0000-0000-0000-000000000001",
+            "invitee_user_id": "user_maya",
+            "participant_status": "pending",
+            "invitation_generation": 2
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseSharedVisitRepository(
+            rpc: rpc,
+            table: RecordingTable(),
+            storage: RecordingStorage()
+        )
+
+        let existingInviteeUserIDs = try await repository.inviteeUserIDs(
+            sourceVisitID: "83000000-0000-0000-0000-000000000001"
+        )
+        let reconciled = try await repository.setInvitees(
+            sourceVisitID: "83000000-0000-0000-0000-000000000001",
+            inviteeUserIDs: ["user_maya"]
+        )
+
+        XCTAssertEqual(existingInviteeUserIDs, ["user_sarah"])
+        XCTAssertEqual(reconciled.map(\.inviteeUserID), ["user_maya"])
+        XCTAssertEqual(reconciled.map(\.invitationGeneration), [2])
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            ["list_shared_visit_invitees", "set_shared_visit_invitees"]
+        )
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_source_visit_id"] as? String,
+            "83000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertEqual(rpc.rawBodies[1]["input_invitee_user_ids"] as? [String], ["user_maya"])
+    }
+
+    func testSharedVisitAcceptanceEncodesNestedVisitTimestampAsISO8601() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["accept_shared_visit"] = """
+        {
+          "operation_id": "48000000-0000-0000-0000-000000000010",
+          "participant_id": "48000000-0000-0000-0000-000000000001",
+          "user_place_id": "82000000-0000-0000-0000-000000000010",
+          "visit_id": "83000000-0000-0000-0000-000000000010",
+          "backfilled_from_user_place": false,
+          "status": "accepted",
+          "photo_copies": []
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseSharedVisitRepository(
+            rpc: rpc,
+            table: RecordingTable(),
+            storage: RecordingStorage()
+        )
+        let visitedAt = Date(timeIntervalSince1970: 1_786_665_600)
+
+        _ = try await repository.accept(
+            SharedVisitAcceptanceDraft(
+                participantID: "48000000-0000-0000-0000-000000000001",
+                invitationGeneration: 1,
+                snapshotRevision: 2,
+                operationID: "48000000-0000-0000-0000-000000000010",
+                userPlaceID: "82000000-0000-0000-0000-000000000010",
+                visitID: "83000000-0000-0000-0000-000000000010",
+                visibility: .mutuals,
+                visitedAt: visitedAt,
+                note: "Recipient copy",
+                ratingScore: 4.5,
+                attributes: [],
+                selectedPhotoIDs: []
+            )
+        )
+
+        let visitPayload = try XCTUnwrap(rpc.rawBodies.first?["input_visit"] as? [String: Any])
+        let encodedTimestamp = try XCTUnwrap(visitPayload["visited_at"] as? String)
+        let decodedTimestamp = try XCTUnwrap(ISO8601DateFormatter().date(from: encodedTimestamp))
+        XCTAssertEqual(decodedTimestamp.timeIntervalSince1970, visitedAt.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(visitPayload["visited_at"] as? Double)
+    }
+
     func testPushNotificationDeviceTokenHexEncoding() {
         XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
+    }
+
+    func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
+        let manager = PushNotificationManager()
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "notification-event-1",
+                "notification_type": "shared_visit",
+                "data": [
+                    "participant_id": "48000000-0000-0000-0000-000000000001",
+                    "invitation_generation": 3
+                ]
+            ]
+        ]
+
+        XCTAssertTrue(manager.handleNotificationResponse(userInfo: userInfo))
+        let firstRequest = manager.navigationRequest
+        XCTAssertFalse(manager.handleNotificationResponse(userInfo: userInfo))
+        XCTAssertEqual(manager.navigationRequest, firstRequest)
+        XCTAssertEqual(
+            manager.navigationRequest?.destination,
+            .sharedVisit(
+                participantID: "48000000-0000-0000-0000-000000000001",
+                generation: 3
+            )
+        )
     }
 
     func testNotificationPreferencePresetsToggleEveryTypeTogether() {
@@ -887,6 +1356,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 pushEnabled: true,
                 socialGraphEnabled: true,
                 sharedListsEnabled: true,
+                sharedVisitsEnabled: true,
                 recommendationsEnabled: true,
                 captureEnabled: true,
                 discoveryDigestEnabled: true,
@@ -897,6 +1367,7 @@ final class RemoteRepositoryTests: XCTestCase {
             pushEnabled: false,
             socialGraphEnabled: false,
             sharedListsEnabled: false,
+            sharedVisitsEnabled: false,
             recommendationsEnabled: false,
             captureEnabled: false,
             discoveryDigestEnabled: false,
@@ -919,6 +1390,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(
+                from: URL(string: "recme://shared-visits/48000000-0000-0000-0000-000000000001?generation=3")!
+            ),
+            .sharedVisit(participantID: "48000000-0000-0000-0000-000000000001", generation: 3)
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "recme://extraction-jobs/43000000-0000-0000-0000-000000000001")!),
@@ -953,8 +1430,37 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(
+            destination(
+                "shared_visit",
+                data: ["participant_id": "participant-1", "invitation_generation": 4]
+            ),
+            .sharedVisit(participantID: "participant-1", generation: 4)
+        )
         XCTAssertEqual(destination("capture_ready", data: ["extraction_job_id": "job-1"]), .drafts(extractionJobID: "job-1"))
         XCTAssertEqual(destination("followed_activity_digest"), .discover)
+    }
+
+    func testSharedVisitAcceptanceIdentifiersAreStableAndGenerationScoped() {
+        let first = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 1
+        )
+        let retry = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 1
+        )
+        let reinvite = SharedVisitAcceptanceIdentifiers.deterministic(
+            participantID: "48000000-0000-0000-0000-000000000001",
+            generation: 2
+        )
+
+        XCTAssertEqual(first, retry)
+        XCTAssertNotEqual(first, reinvite)
+        XCTAssertNotNil(UUID(uuidString: first.operationID))
+        XCTAssertNotNil(UUID(uuidString: first.userPlaceID))
+        XCTAssertNotNil(UUID(uuidString: first.visitID))
+        XCTAssertEqual(Set([first.operationID, first.userPlaceID, first.visitID]).count, 3)
     }
 
     func testRemoteDiscoverFilterParserFallsBackToDeterministicParser() async throws {
@@ -988,6 +1494,9 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     private(set) var uploads: [Upload] = []
     private(set) var deletes: [Delete] = []
+    private(set) var downloads: [Delete] = []
+    private(set) var signedURLs: [Delete] = []
+    var downloadData = Data()
 
     func uploadObject(
         bucket: String,
@@ -1009,6 +1518,16 @@ private final class RecordingStorage: RemoteStorageCalling {
 
     func deleteObject(bucket: String, path: String) async throws {
         deletes.append(Delete(bucket: bucket, path: path))
+    }
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        downloads.append(Delete(bucket: bucket, path: path))
+        return downloadData
+    }
+
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        signedURLs.append(Delete(bucket: bucket, path: path))
+        return URL(string: "https://example.supabase.co/storage/v1/object/sign/\(bucket)/\(path)?token=test")!
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {
@@ -1150,7 +1669,7 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {
-        let data = try JSONEncoder().encode(params)
+        let data = try WanderSupabaseClient.encodeRequestBody(params)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
         }

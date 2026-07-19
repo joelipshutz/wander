@@ -7,6 +7,8 @@ enum PlaceActivityMockupPage: String, CaseIterable {
     case latestActivity
     case myVisits
     case addVisit
+    case visitFriendsEditor
+    case visitWithFriend
     case photoMenu
     case photoViewer
     case friendView
@@ -40,9 +42,28 @@ struct PlaceActivityMockupRoot: View {
             case .myVisits:
                 ClassicPlaceDetailMockup(selectedSegment: "MY VISITS", entries: ClassicActivityData.mine, mode: .owner)
             case .addVisit:
-                ClassicAddVisitMockup(showsMenu: false)
+                ClassicAddVisitMockup(
+                    title: "add a visit",
+                    placeSubtitle: "Existing save - new visit",
+                    showsMenu: false,
+                    showsInvitedFriend: false
+                )
+            case .visitFriendsEditor:
+                ClassicAddVisitMockup(
+                    title: "save this place",
+                    placeSubtitle: "New place - been",
+                    showsMenu: false,
+                    showsInvitedFriend: true
+                )
+            case .visitWithFriend:
+                ClassicPlaceDetailMockup(selectedSegment: "ALL", entries: [ClassicActivityData.withFriend], mode: .owner)
             case .photoMenu:
-                ClassicAddVisitMockup(showsMenu: true)
+                ClassicAddVisitMockup(
+                    title: "add a visit",
+                    placeSubtitle: "Existing save - new visit",
+                    showsMenu: true,
+                    showsInvitedFriend: false
+                )
             case .photoViewer:
                 ClassicPhotoViewerMockup()
             case .friendView:
@@ -64,6 +85,22 @@ private enum ClassicSaveBadgeState {
     case been
 }
 
+private struct ClassicVisitFriend: Identifiable {
+    let id: String
+    let name: String
+    let handle: String
+    let initials: String
+    let color: Color
+
+    static let maya = ClassicVisitFriend(
+        id: "maya",
+        name: "Maya Chen",
+        handle: "mayac",
+        initials: "MC",
+        color: WanderTheme.avatarAndrew.color
+    )
+}
+
 private struct ClassicActivityEntry: Identifiable {
     let id = UUID()
     let name: String
@@ -78,6 +115,7 @@ private struct ClassicActivityEntry: Identifiable {
     let note: String
     let photos: Int
     let isMine: Bool
+    let companions: [ClassicVisitFriend]
 }
 
 private enum ClassicActivityData {
@@ -93,7 +131,24 @@ private enum ClassicActivityData {
         tags: ["quick bite", "date night", "looks cozy"],
         note: "Sat at the bar after Venice. Fast enough for a weeknight, still feels like a real plan.",
         photos: 3,
-        isMine: true
+        isMine: true,
+        companions: []
+    )
+
+    static let withFriend = ClassicActivityEntry(
+        name: "You",
+        handle: "ryan",
+        initials: "RL",
+        avatarColor: WanderTheme.terracotta.color,
+        date: "Jun 30, 11:21 PM",
+        status: "been",
+        visibility: "friends",
+        rating: 5,
+        tags: ["quick bite", "date night", "looks cozy"],
+        note: "Sat at the bar after Venice. Fast enough for a weeknight, still feels like a real plan.",
+        photos: 3,
+        isMine: true,
+        companions: [.maya]
     )
 
     static let privateVisit = ClassicActivityEntry(
@@ -108,7 +163,8 @@ private enum ClassicActivityData {
         tags: ["solo dinner", "bar seats"],
         note: "Good solo save. Keep this private because it is more about timing than the place.",
         photos: 1,
-        isMine: true
+        isMine: true,
+        companions: []
     )
 
     static let roughVisit = ClassicActivityEntry(
@@ -123,7 +179,8 @@ private enum ClassicActivityData {
         tags: ["late night", "crowded"],
         note: "Useful in a pinch, but not the night I would plan around.",
         photos: 1,
-        isMine: true
+        isMine: true,
+        companions: []
     )
 
     static let joe = ClassicActivityEntry(
@@ -138,7 +195,8 @@ private enum ClassicActivityData {
         tags: ["wanna go", "excited", "quick bite", "date night", "looks cozy"],
         note: "Looks cozy. Save this for an easy Venice dinner.",
         photos: 0,
-        isMine: false
+        isMine: false,
+        companions: []
     )
 
     static let maya = ClassicActivityEntry(
@@ -153,7 +211,8 @@ private enum ClassicActivityData {
         tags: ["walk-in", "good counter", "share plates"],
         note: "Tiny wait, good counter seats, better as a two-person dinner than a big group.",
         photos: 2,
-        isMine: false
+        isMine: false,
+        companions: []
     )
 
     static let all = [latest, joe, maya]
@@ -288,19 +347,26 @@ private struct ClassicPlaceDetailMockup: View {
 }
 
 private struct ClassicAddVisitMockup: View {
+    let title: String
+    let placeSubtitle: String
     let showsMenu: Bool
+    let showsInvitedFriend: Bool
     @State private var showsPhotoOptions = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                ClassicEditorNav(title: "add a visit")
-                ClassicEditorPlaceHeader()
+                ClassicEditorNav(title: title)
+                ClassicEditorPlaceHeader(subtitle: placeSubtitle)
 
                 ClassicEditorSection(title: "VISIT") {
                     ClassicSegmented(options: ["BEEN", "WANNA"], selected: "BEEN")
                     ClassicRatingPicker()
                 }
+
+                ClassicVisitFriendsSection(
+                    friends: showsInvitedFriend ? [.maya] : []
+                )
 
                 ClassicEditorSection(title: "TAGS") {
                     ClassicTagWrap(tags: ["quick bite", "date night", "bar seats", "looks cozy", "walk-in"])
@@ -645,6 +711,23 @@ private struct ClassicActivityCard: View {
                 }
             }
 
+            if !entry.companions.isEmpty {
+                HStack(spacing: WanderTheme.spacing2) {
+                    HStack(spacing: -8) {
+                        ForEach(entry.companions.prefix(3)) { friend in
+                            ClassicAvatar(initials: friend.initials, color: friend.color, size: 28)
+                        }
+                    }
+
+                    companionText
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             ClassicTagWrap(tags: entry.tags)
 
             Text("\"\(entry.note)\"")
@@ -673,6 +756,19 @@ private struct ClassicActivityCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(entry.isMine ? WanderTheme.borderStrong.color.opacity(0.5) : WanderTheme.borderHairline.color, lineWidth: 1)
         )
+    }
+
+    private var companionText: Text {
+        let names = entry.companions.map(\.name)
+        let displayNames: String
+        if names.count == 1 {
+            displayNames = names[0]
+        } else if names.count == 2 {
+            displayNames = names.joined(separator: " and ")
+        } else {
+            displayNames = "\(names[0]), \(names[1]) + \(names.count - 2)"
+        }
+        return Text("with ") + Text(displayNames).fontWeight(.black).foregroundColor(WanderTheme.textInk.color)
     }
 }
 
@@ -780,6 +876,8 @@ private struct ClassicEditorNav: View {
 }
 
 private struct ClassicEditorPlaceHeader: View {
+    let subtitle: String
+
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             ClassicCategoryIcon(size: 58, badge: .been)
@@ -787,7 +885,7 @@ private struct ClassicEditorPlaceHeader: View {
                 Text("RVR")
                     .font(.system(size: 24, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text("Existing save - new visit")
+                Text(subtitle)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -812,6 +910,79 @@ private struct ClassicEditorSection<Content: View>: View {
             ClassicSectionTitle(title)
             content
         }
+    }
+}
+
+private struct ClassicVisitFriendsSection: View {
+    let friends: [ClassicVisitFriend]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text("add friends to this visit")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("Invite friends who were here with you.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                Button {} label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .black))
+                        .frame(width: 44, height: 44)
+                        .background(WanderTheme.terracottaTint.color)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add friends to this visit")
+            }
+
+            if friends.isEmpty {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 18, weight: .black))
+                        .frame(width: 32, height: 32)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Text("No friends added yet")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Spacer()
+                }
+            } else {
+                ForEach(friends) { friend in
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ClassicAvatar(initials: friend.initials, color: friend.color, size: 32)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(friend.name)
+                                .font(.system(size: 13, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                            Text("@\(friend.handle)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+
+                        Spacer()
+
+                        Button {} label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22, weight: .black))
+                                .foregroundStyle(WanderTheme.stateError.color)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove @\(friend.handle)")
+                    }
+                }
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }
 
@@ -1115,9 +1286,10 @@ private struct ClassicCategoryIcon: View {
                 .fill(WanderTheme.terracottaTint.color)
                 .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 7))
 
-            Image(systemName: "fork.knife")
-                .font(.system(size: size * 0.36, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
+            WanderCategoryEmoji(
+                category: WanderPlaceCategory.restaurantsFood,
+                size: size * 0.36
+            )
                 .frame(width: size, height: size)
 
             switch badge {

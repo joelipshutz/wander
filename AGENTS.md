@@ -4,7 +4,7 @@ Repo guidance for Codex, Claude Code, OpenClaw, and any developer joining Wander
 
 ## Project Overview
 
-Rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
 North Star: when someone needs a place, Wander shows where trusted people have actually been, what they thought, and whether it fits the moment.
 
@@ -209,6 +209,17 @@ Rules:
   direct hosted verification query that checks the relevant policy/security
   posture. For recreated RPCs, add metadata assertions for `prosecdef`,
   `proconfig`, and grants when relevant.
+- Treat `question_definitions.value_type`, `place_attributes.value_type`, and
+  every iOS `PlaceAttributeDraft.valueType` as one shared cross-layer contract.
+  Any new or changed iOS attribute value type must update both Supabase check
+  constraints in the same branch, add SQL regression coverage, and exercise the
+  exact production payload through authenticated `public.save_own_place` in
+  `scripts/supabase-smoke-test.mjs`. An iOS unit test or a successful local-only
+  save is not sufficient because a constraint failure rolls back the entire
+  remote place/user-place transaction.
+- Before merging or releasing a change to save-form questions, tags, cuisines,
+  or personal labels, search the diff for new `valueType:` literals and verify
+  each one against the hosted constraint plus the rolled-back smoke transaction.
 - Any migration that creates, replaces, grants, revokes, or otherwise changes an
   iOS-called Supabase RPC must run the hosted smoke test before handoff:
   `npm --prefix scripts ci --ignore-scripts`, then
@@ -274,6 +285,20 @@ Observability policy:
 - Use SF Symbols/native controls where appropriate. Emoji may appear in category/question affordances only if accessible and not structural.
 - Respect safe areas, Dynamic Type, 44pt minimum tap targets, keyboard, and the home indicator.
 - iPhone-first. Do not stretch phone UI into desktop/iPad layouts without a specific side-panel plan.
+
+## Brand And App Icon
+
+- The canonical public app name is `rec.me`. Internal `Wander*` names, the
+  Xcode target/scheme/module, and bundle id `com.grayline.wander` remain stable
+  unless a separate migration explicitly changes them.
+- Before editing the app icon, read `docs/brand/recme-app-icon.md`.
+- The canonical icon master is
+  `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
+- Do not add a folded corner, folded map sheet, pencil, road lines, text, or any
+  extra lower-right object. The lower-right area stays clear terracotta.
+- Regenerate all icon renditions with
+  `scripts/generate-app-icon-renditions.sh`, then retain the
+  `BuildConfigurationTests` size, alpha, and discoverability coverage.
 
 ## Testing Rules
 
@@ -341,7 +366,7 @@ For broad announcements only, `#all-recme` (`C0B9FU1QNG2`) exists, but TestFligh
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `Wander Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `rec.me Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
 
 ```bash
 node scripts/testflight-release.mjs
@@ -369,3 +394,4 @@ The script reads App Store Connect credentials from env vars or `/Users/joelipsh
 - Handoff for new agents/developers: `docs/codex-handoff.md`
 - Setup commands: `docs/setup.md`
 - Agent coordination log: `docs/agent-log.md`
+- App icon source of truth: `docs/brand/recme-app-icon.md`

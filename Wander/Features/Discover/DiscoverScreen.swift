@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum DiscoverSection: String, Equatable {
+    case places
+    case members
+}
+
 struct DiscoverScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -14,8 +19,12 @@ struct DiscoverScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var selectedOwnerCandidateID: String?
-    @State private var tickerIndex = 0
     @FocusState private var searchFieldFocused: Bool
+    @Binding private var requestedSection: DiscoverSection?
+
+    init(requestedSection: Binding<DiscoverSection?> = .constant(nil)) {
+        _requestedSection = requestedSection
+    }
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -67,11 +76,10 @@ struct DiscoverScreen: View {
     }
 
     private var latestActivityPlaces: [VisiblePlace] {
-        Array(
-            store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
+        DiscoverLatestActivityPresentation.places(
+            from: store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
                 .filter { $0.owner.id != store.currentUser.id }
-                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
-                .prefix(10)
+                .filter { !store.isMuted(userID: $0.owner.id) }
         )
     }
 
@@ -137,10 +145,10 @@ struct DiscoverScreen: View {
             .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
             .task {
+                applyRequestedSection()
                 await refreshRemotePlacesIfNeeded()
                 await refreshPlaces()
                 await refreshMembers()
-                await runTicker()
             }
             .onChange(of: auth.isSignedIn) { _, _ in
                 Task {
@@ -148,6 +156,9 @@ struct DiscoverScreen: View {
                     await refreshPlaces()
                     await refreshMembers()
                 }
+            }
+            .onChange(of: requestedSection) { _, _ in
+                applyRequestedSection()
             }
             .onChange(of: placesQuery) { _, _ in
                 selectedOwnerCandidateID = nil
@@ -165,7 +176,7 @@ struct DiscoverScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
-            .sheet(item: $selectedProfile) { profile in
+            .fullScreenCover(item: $selectedProfile) { profile in
                 ProfileDetailView(profileID: profile.id) { blockedProfileID in
                     handleMemberBlocked(profileID: blockedProfileID)
                 }
@@ -186,6 +197,13 @@ struct DiscoverScreen: View {
                 Text(savedMessage ?? "")
             }
         }
+    }
+
+    private func applyRequestedSection() {
+        guard let requestedSection else { return }
+        selectedMode = requestedSection == .members ? .members : .places
+        self.requestedSection = nil
+        searchFieldFocused = false
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -257,7 +275,7 @@ struct DiscoverScreen: View {
     private var placesSearchField: some View {
         DiscoverSearchField(
             text: $placesQuery,
-            placeholder: tickerSuggestions[tickerIndex],
+            placeholders: tickerSuggestions,
             isTicker: true,
             accessibilityLabel: "Search places"
         )
@@ -267,7 +285,7 @@ struct DiscoverScreen: View {
     private var membersSearchField: some View {
         DiscoverSearchField(
             text: $memberQuery,
-            placeholder: "Search rec.me members",
+            placeholders: ["Search rec.me members"],
             isTicker: false,
             accessibilityLabel: "Search rec.me members"
         )
@@ -338,9 +356,11 @@ struct DiscoverScreen: View {
                 EmptyPanel(title: "No activity yet", action: "follow more people to fill this in")
             } else {
                 ForEach(latestActivityPlaces) { visiblePlace in
-                    LatestActivityRow(visiblePlace: visiblePlace) {
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace)
-                    }
+                    LatestActivityRow(
+                        visiblePlace: visiblePlace,
+                        openPlace: { selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace) },
+                        openProfile: { selectedProfile = SelectedProfile(id: visiblePlace.owner.id) }
+                    )
                 }
             }
         }
@@ -438,6 +458,8 @@ struct DiscoverScreen: View {
     private func saveDiscoverFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
+        case .sharedVisit:
+            return nil
         case .add(let sourceType):
             if sourceType == .socialSave, !auth.isSignedIn {
                 placeSaveFlow = nil
@@ -499,6 +521,8 @@ struct DiscoverScreen: View {
             return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
         case .addVisit:
             return "Visit saved." + suffix
+        case .sharedVisit:
+            return "Shared visit saved." + suffix
         case .editVisit:
             return "Visit updated." + suffix
         case .editWant:
@@ -527,7 +551,7 @@ struct DiscoverScreen: View {
             selectedPlace = nil
             savedMessage = "Want removed."
             return true
-        case .add, .addVisit:
+        case .add, .addVisit, .sharedVisit:
             return false
         }
     }
@@ -632,15 +656,6 @@ struct DiscoverScreen: View {
         return store.shell(for: localProfile)
     }
 
-    private func runTicker() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 2_600_000_000)
-            guard !isPlacesSearchActive, selectedMode == .places else { continue }
-            withAnimation(.easeInOut(duration: 0.24)) {
-                tickerIndex = (tickerIndex + 1) % tickerSuggestions.count
-            }
-        }
-    }
 }
 
 private enum DiscoverMode: String, CaseIterable, Identifiable {
@@ -712,9 +727,15 @@ private struct EmptyPanel: View {
 
 private struct DiscoverSearchField: View {
     @Binding var text: String
-    let placeholder: String
+    let placeholders: [String]
     let isTicker: Bool
     let accessibilityLabel: String
+    @State private var placeholderIndex = 0
+
+    private var placeholder: String {
+        guard !placeholders.isEmpty else { return "" }
+        return placeholders[placeholderIndex % placeholders.count]
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -763,6 +784,25 @@ private struct DiscoverSearchField: View {
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
         .accessibilityLabel(accessibilityLabel)
+        .task {
+            await runPlaceholderTicker()
+        }
+    }
+
+    private func runPlaceholderTicker() async {
+        guard isTicker, placeholders.count > 1 else { return }
+
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: 2_600_000_000)
+            } catch {
+                return
+            }
+            guard text.isEmpty else { continue }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                placeholderIndex = (placeholderIndex + 1) % placeholders.count
+            }
+        }
     }
 }
 
@@ -781,7 +821,7 @@ private struct DiscoverPlaceResultCard: View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             Button(action: openPlace) {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                    DiscoverCategoryThumb(category: visiblePlace.effectiveCategory, size: 62, iconSize: 24)
+                    DiscoverCategoryThumb(emoji: visiblePlace.categoryEmoji, size: 62, iconSize: 24)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         HStack(spacing: WanderTheme.spacing2) {
@@ -903,28 +943,46 @@ private struct DiscoverPlaceResultCard: View {
 
 private struct LatestActivityRow: View {
     let visiblePlace: VisiblePlace
-    let open: () -> Void
+    let openPlace: () -> Void
+    let openProfile: () -> Void
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: WanderTheme.spacing3) {
+        HStack(spacing: WanderTheme.spacing3) {
+            Button(action: openProfile) {
                 WanderAvatar(
                     initials: visiblePlace.owner.initials,
                     avatarURL: visiblePlace.owner.avatarURL,
                     size: 42,
                     color: avatarColor
                 )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(visiblePlace.owner.displayName)'s profile")
 
+            Button(action: openPlace) {
+                HStack(spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text("\(visiblePlace.owner.displayName) saved \(visiblePlace.place.canonicalName)")
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
 
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+                    HStack(spacing: WanderTheme.spacing1) {
+                        if !metadataSubtitle.isEmpty {
+                            Text(metadataSubtitle)
+                                .lineLimit(1)
+
+                            Text("·")
+                                .accessibilityHidden(true)
+                        }
+
+                        Text(savedTimeText)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .accessibilityElement(children: .combine)
                 }
 
                 Spacer()
@@ -932,15 +990,16 @@ private struct LatestActivityRow: View {
                 Text(visiblePlace.userPlace.status.displayTitle)
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
+                }
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
-    private var subtitle: String {
+    private var metadataSubtitle: String {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
@@ -951,6 +1010,10 @@ private struct LatestActivityRow: View {
                 return trimmed?.isEmpty == false ? trimmed : nil
             }
             .joined(separator: " · ")
+    }
+
+    private var savedTimeText: String {
+        DiscoverLatestActivityPresentation.timestampText(for: visiblePlace.userPlace.savedAt)
     }
 
     private var avatarColor: Color {
@@ -1089,14 +1152,12 @@ private struct FriendListRow: View {
 }
 
 private struct DiscoverCategoryThumb: View {
-    let category: String
+    let emoji: String
     let size: CGFloat
     let iconSize: CGFloat
 
     var body: some View {
-        Image(systemName: WanderPlaceCategory.symbolName(for: category))
-            .font(.system(size: iconSize, weight: .bold))
-            .foregroundStyle(WanderTheme.terracotta.color)
+        WanderCategoryEmoji(emoji: emoji, size: iconSize)
             .frame(width: size, height: size)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())

@@ -1,5 +1,6 @@
 @preconcurrency import MapKit
 import SwiftUI
+import UIKit
 
 struct PlaceProfileMapSurface: View {
     let place: PlaceSheetPlace
@@ -43,6 +44,7 @@ struct PlaceProfileFullScreen: View {
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+    private static let minimumFullViewBottomContentInset: CGFloat = 64
 
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
@@ -89,6 +91,10 @@ struct PlaceProfileFullScreen: View {
         PlaceProfileMapHeader.resolvedTopInset(from: safeAreaTopInset)
     }
 
+    static func resolvedFullViewBottomContentInset(from safeAreaBottomInset: CGFloat) -> CGFloat {
+        max(minimumFullViewBottomContentInset, safeAreaBottomInset + WanderTheme.spacing8)
+    }
+
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
@@ -110,11 +116,20 @@ private struct PlaceProfilePreviewCard: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
+    @State private var photo: PlacePhoto? = nil
+    @State private var failedGooglePhotoID: String?
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                PlaceProfileCategoryThumb(category: place.primaryCategory, size: 82)
+                PlaceProfilePhotoThumb(
+                    place: place,
+                    photo: photo,
+                    size: 82,
+                    onLoadFailure: handlePhotoLoadFailure
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     if let previewSignal {
@@ -168,7 +183,7 @@ private struct PlaceProfilePreviewCard: View {
                     }
 
                     if let shareURL {
-                        ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
+                        WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15, weight: .black))
                                 .frame(width: 36, height: 36)
@@ -187,6 +202,64 @@ private struct PlaceProfilePreviewCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(place.name)")
+        .task(id: photoResolutionKey) {
+            await resolvePhoto()
+        }
+    }
+
+    private var localPhoto: PlacePhoto? {
+        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+    }
+
+    private var photoResolutionKey: String {
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
+    }
+
+    private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
+        let localPhoto = localPhoto
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+        photo = localPhoto
+        do {
+            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                photo = resolvedPhoto
+            }
+            if resolvedPhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: resolvedPhoto.providerPrimaryType,
+                    types: resolvedPhoto.providerTypes ?? [],
+                    backend: backend
+                )
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = localPhoto
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+            photo = nil
+        } else {
+            photo = localPhoto
+        }
     }
 
     private var previewSignal: String? {
@@ -247,20 +320,27 @@ private struct PlaceProfileFullView: View {
     let onBack: () -> Void
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
+    @State private var photo: PlacePhoto?
+    @State private var failedGooglePhotoID: String?
 
     var body: some View {
         GeometryReader { proxy in
             let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
+            let bottomContentInset = PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: proxy.safeAreaInsets.bottom)
 
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
                     place: place,
+                    photo: photo,
                     action: action,
                     shareURL: shareURL,
                     shareText: shareText,
                     topInset: headerTopInset,
                     onBack: onBack,
-                    onAction: onAction
+                    onAction: onAction,
+                    onPhotoLoadFailure: handlePhotoLoadFailure
                 )
 
                 ScrollView(showsIndicators: false) {
@@ -289,17 +369,80 @@ private struct PlaceProfileFullView: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing8 + proxy.safeAreaInsets.bottom)
+                    .padding(.bottom, bottomContentInset)
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(WanderTheme.surfaceBone.color)
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
+            .ignoresSafeArea(.container, edges: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .ignoresSafeArea(.container, edges: .top)
+        .task(id: photoResolutionKey) {
+            await resolvePhoto()
+        }
+    }
+
+    private var localPhoto: PlacePhoto? {
+        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+    }
+
+    private var photoResolutionKey: String {
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
+    }
+
+    private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
+        let localPhoto = localPhoto
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
+        photo = localPhoto
+        do {
+            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
+                photo = resolvedPhoto
+            }
+            if resolvedPhoto.isGooglePlacesPhoto {
+                await store.applyProviderCategoryEnrichment(
+                    placeID: place.id,
+                    primaryType: resolvedPhoto.providerPrimaryType,
+                    types: resolvedPhoto.providerTypes ?? [],
+                    backend: backend
+                )
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = localPhoto
+            #if DEBUG
+            WanderDebugLog.remote.debug(
+                "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+            photo = nil
+        } else {
+            photo = localPhoto
+        }
     }
 
     private var heading: some View {
@@ -588,26 +731,25 @@ private struct PlaceProfileMapHeader: View {
     static let minimumFullBleedTopInset: CGFloat = 54
 
     let place: PlaceSheetPlace
+    let photo: PlacePhoto?
     let action: PlaceSheetAction
     let shareURL: URL?
     let shareText: String
     let topInset: CGFloat
     let onBack: () -> Void
     let onAction: () -> Void
+    let onPhotoLoadFailure: (PlacePhoto) -> Void
 
     var body: some View {
         ZStack {
-            if let latitude = place.latitude, let longitude = place.longitude {
-                Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
-                    Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                        PlaceProfileCategoryThumb(category: place.primaryCategory, size: 54)
-                            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
-                    }
-                }
-                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-                .allowsHitTesting(false)
-            } else {
-                PlaceProfileMapFallback()
+            mapFallback
+
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.name,
+                    onLoadFailure: onPhotoLoadFailure
+                )
             }
 
             LinearGradient(
@@ -620,12 +762,24 @@ private struct PlaceProfileMapHeader: View {
                 endPoint: .bottom
             )
 
+            if let photo, photo.isGooglePlacesPhoto {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        PlacePhotoAttribution(photo: photo)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.bottom, WanderTheme.spacing3)
+                }
+            }
+
             VStack {
                 HStack {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .black))
-                            .frame(width: 42, height: 42)
+                            .frame(width: 44, height: 44)
                             .background(WanderTheme.surfaceBone.color.opacity(0.96))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .clipShape(Circle())
@@ -641,7 +795,7 @@ private struct PlaceProfileMapHeader: View {
                             Button(action: onAction) {
                                 Image(systemName: action.systemImage)
                                     .font(.system(size: action.isPrimaryAction ? 20 : 17, weight: .black))
-                                    .frame(width: 42, height: 42)
+                                    .frame(width: 44, height: 44)
                                     .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
                                     .foregroundStyle(WanderTheme.textOnAction.color)
                                     .clipShape(Circle())
@@ -652,10 +806,10 @@ private struct PlaceProfileMapHeader: View {
                         }
 
                         if let shareURL {
-                            ShareLink(item: shareURL, subject: Text(place.name), message: Text(shareText)) {
+                            WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                                 Image(systemName: "square.and.arrow.up")
                                     .font(.system(size: 16, weight: .black))
-                                    .frame(width: 42, height: 42)
+                                    .frame(width: 44, height: 44)
                                     .background(WanderTheme.surfaceBone.color.opacity(0.96))
                                     .foregroundStyle(WanderTheme.textInk.color)
                                     .clipShape(Circle())
@@ -672,6 +826,23 @@ private struct PlaceProfileMapHeader: View {
         }
         .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var mapFallback: some View {
+        if let latitude = place.latitude, let longitude = place.longitude {
+            Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
+                Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
+                    PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 54)
+                        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .allowsHitTesting(false)
+        } else {
+            PlaceProfileMapFallback()
+        }
     }
 
     static func resolvedTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
@@ -682,6 +853,160 @@ private struct PlaceProfileMapHeader: View {
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
             span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+        )
+    }
+}
+
+private struct PlacePhotoAttribution: View {
+    let photo: PlacePhoto
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let authorName = photo.authorName, !authorName.isEmpty {
+                if let authorURL = photo.authorProfileURL {
+                    Link("Photo by \(authorName)", destination: authorURL)
+                } else {
+                    Text("Photo by \(authorName)")
+                }
+
+                Text("·")
+            }
+
+            if let sourceURL = photo.sourcePhotoURL {
+                Link("Google Maps", destination: sourceURL)
+            } else {
+                Text("Google Maps")
+            }
+        }
+        .font(.system(size: 12, weight: .regular))
+        .lineLimit(1)
+        .padding(.horizontal, 9)
+        .frame(minHeight: 44)
+        .background(Color.black.opacity(0.68))
+        .foregroundStyle(Color.white)
+        .tint(Color.white)
+        .clipShape(Capsule())
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var label: String {
+        if let authorName = photo.authorName, !authorName.isEmpty {
+            return "Photo by \(authorName) · Google Maps"
+        }
+        return "Google Maps"
+    }
+
+    private var accessibilityLabel: String {
+        if photo.sourcePhotoURL != nil {
+            return "\(label). Open source photo in Google Maps."
+        }
+        return label
+    }
+}
+
+struct PlaceProfilePhotoImage: View {
+    let photo: PlacePhoto
+    let placeName: String
+    var onLoadFailure: ((PlacePhoto) -> Void)? = nil
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var image: Image?
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.clear
+
+                if let image {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .transition(.opacity)
+                        .accessibilityLabel("Photo of \(placeName)")
+                }
+            }
+        }
+        .clipped()
+        .task(id: photo) {
+            image = nil
+            let uiImage: UIImage?
+            if let localAssetRef = photo.localAssetRef,
+               let localImage = VisitPhotoLocalFileStore.image(from: localAssetRef) {
+                uiImage = localImage
+            } else if let data = try? await backend.placePhotoImageData(for: photo) {
+                uiImage = UIImage(data: data)
+            } else {
+                uiImage = nil
+            }
+
+            guard !Task.isCancelled else { return }
+            guard let uiImage else {
+                onLoadFailure?(photo)
+                return
+            }
+
+            withAnimation(.easeOut(duration: 0.24)) {
+                image = Image(uiImage: uiImage)
+            }
+        }
+    }
+}
+
+private struct PlaceProfilePhotoThumb: View {
+    let place: PlaceSheetPlace
+    let photo: PlacePhoto?
+    let size: CGFloat
+    let onLoadFailure: (PlacePhoto) -> Void
+
+    var body: some View {
+        ZStack {
+            PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: size)
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.name,
+                    onLoadFailure: onLoadFailure
+                )
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+
+                if photo.isGooglePlacesPhoto {
+                    VStack {
+                        Spacer()
+                        Text("Google Maps")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                            .frame(maxWidth: .infinity, minHeight: 20)
+                            .background(Color.black.opacity(0.68))
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
+                    .allowsHitTesting(false)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private extension PlacePhoto {
+    init(localVisitPhoto photo: LocalVisitPhoto) {
+        self.init(
+            provider: "visit_photo",
+            providerPlaceID: photo.id,
+            photoURLString: "",
+            width: photo.width,
+            height: photo.height,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: photo.storageBucket,
+            storagePath: photo.storagePath,
+            localAssetRef: photo.localAssetRef
         )
     }
 }
@@ -717,17 +1042,15 @@ private struct PlaceProfileMapFallback: View {
 }
 
 private struct PlaceProfileCategoryThumb: View {
-    let category: String
+    let emoji: String
     var status: PlaceStatus? = nil
     var size: CGFloat
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Image(systemName: WanderPlaceCategory.symbolName(for: category))
-                .font(.system(size: max(17, size * 0.34), weight: .black))
+            WanderCategoryEmoji(emoji: emoji, size: max(17, size * 0.34))
                 .frame(width: size, height: size)
                 .background(WanderTheme.terracottaTint.color)
-                .foregroundStyle(WanderTheme.terracotta.color)
                 .clipShape(RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2))
                 .overlay(
                     RoundedRectangle(cornerRadius: size >= 70 ? 16 : size / 2)
@@ -1243,16 +1566,9 @@ private enum PlaceProfileCopy {
     }
 
     static func attributeFacts(for attribute: LocalPlaceAttribute) -> [PlaceFact] {
-        guard attribute.questionKey != PlaceMemoryAttributeKeys.restaurantCuisine else { return [] }
-
-        if attribute.valueType == "multi_tag" {
-            return decodedStringArray(from: attribute.valueJSON).map { value in
-                PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
-            }
+        PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).map { value in
+            PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))
         }
-
-        guard let value = decodedString(from: attribute.valueJSON) else { return [] }
-        return [PlaceFact(title: value, systemImage: icon(for: attribute.questionKey))]
     }
 
     static func trimmed(_ value: String?) -> String? {
@@ -1284,19 +1600,11 @@ private enum PlaceProfileCopy {
             "dollarsign.circle.fill"
         case "occasion", "best_for":
             "sparkles"
+        case PlaceMemoryAttributeKeys.restaurantCuisine:
+            "fork.knife"
         default:
             "tag.fill"
         }
-    }
-
-    private static func decodedString(from valueJSON: String) -> String? {
-        guard let data = valueJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private static func decodedStringArray(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 }
 

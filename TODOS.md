@@ -74,10 +74,12 @@ Date: 2026-05-29
   - Why: Slate has useful extraction pieces, but Instagram and location extraction are known weak spots.
   - Decision so far: backend extraction jobs are the alpha direction; detailed provider/job architecture still needs a focused pass before real social alpha.
   - Status 2026-06-10: in-app link fallback now attempts the backend extraction job path when local link parsing cannot find a place, gated by confidence and coordinates. Richer providers for Instagram/TikTok/photo OCR remain later work.
+  - Status 2026-07-15: superseded by Linear REC-97 and `docs/plans/2026-07-15-rec-97-place-imports.md`. REC-97 keeps the current extraction substrate but replaces the deferred provider pass with one normalized adapter contract for Google Maps, Instagram, TikTok, and Text/Notes, Apple Maps Server API resolution, scheduled processing, golden fixtures, and explicit rescue states.
 
 - Decide whether share extension ships in v0.1. Done 2026-06-01.
   - Why: share-sheet capture may be a major activation path, but can slow first implementation.
   - Decision: defer. Track as a later TODO after in-app add, map, and social loop work.
+  - Status 2026-07-15: the deferral is superseded by Linear REC-97. The complete four-source import release includes a Share Extension behind `import_places_v1`, with an App Group capture envelope, host-app authenticated drain, idempotency, signing/provisioning, system share-sheet QA, and no provider parsing or long network work inside the extension.
 
 - Build richer share/deep-link surface later.
   - Why: current share uses a generic Google Maps/search URL only. Product direction is that shared Wander places should open in the app when installed, otherwise open a lightweight web page that shows the place/social context and prompts download.

@@ -280,12 +280,7 @@ struct ParsedTag: Hashable {
 enum PlaceProfileTagParser {
     static func tags(from attribute: LocalPlaceAttribute) -> [ParsedTag] {
         guard shouldSurface(attribute.questionKey) else { return [] }
-
-        if attribute.valueType == "multi_tag" {
-            return decodedStringArray(from: attribute.valueJSON).compactMap(parsedTag)
-        }
-
-        return decodedString(from: attribute.valueJSON).flatMap(parsedTag).map { [$0] } ?? []
+        return PlaceAttributeValuePresentation.strings(from: attribute.valueJSON).compactMap(parsedTag)
     }
 
     private static func shouldSurface(_ questionKey: String) -> Bool {
@@ -306,15 +301,6 @@ enum PlaceProfileTagParser {
         return ParsedTag(normalized: display.lowercased(), displayTitle: display)
     }
 
-    private static func decodedString(from valueJSON: String) -> String? {
-        guard let data = valueJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private static func decodedStringArray(from valueJSON: String) -> [String] {
-        guard let data = valueJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
-    }
 }
 
 private struct TasteProfile {

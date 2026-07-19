@@ -7,6 +7,8 @@ struct RemoteProfileShellDTO: Codable, Equatable {
     let avatarURL: String?
     let bio: String?
     let homeArea: String?
+    let isPrivateProfile: Bool?
+    let createdAt: Date?
     let relationship: String?
 
     enum CodingKeys: String, CodingKey {
@@ -16,6 +18,8 @@ struct RemoteProfileShellDTO: Codable, Equatable {
         case avatarURL = "avatar_url"
         case bio
         case homeArea = "home_area"
+        case isPrivateProfile = "is_private_profile"
+        case createdAt = "created_at"
         case relationship
     }
 
@@ -26,6 +30,9 @@ struct RemoteProfileShellDTO: Codable, Equatable {
             displayName: displayName,
             avatarURL: avatarURL,
             bio: bio,
+            homeArea: homeArea,
+            isPrivateProfile: isPrivateProfile,
+            createdAt: createdAt,
             relationship: relationship.flatMap(ViewerRelationship.init(rawValue:)) ?? fallbackRelationship
         )
     }
@@ -39,6 +46,8 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
     let bio: String?
     let homeArea: String?
     let defaultVisibility: String
+    let isPrivateProfile: Bool
+    let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -48,6 +57,8 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
         case bio
         case homeArea = "home_area"
         case defaultVisibility = "default_visibility"
+        case isPrivateProfile = "is_private_profile"
+        case createdAt = "created_at"
     }
 
     func localProfile() -> LocalProfile {
@@ -59,8 +70,10 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
             avatarURL: avatarURL,
             bio: bio,
             homeArea: homeArea,
+            isPrivateProfile: isPrivateProfile,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibility) ?? .followers,
-            syncState: .synced
+            syncState: .synced,
+            createdAt: createdAt
         )
     }
 }
@@ -79,11 +92,20 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let categorySource: String?
     let categoryConfidence: Double?
     let rawProviderType: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let timeZoneIdentifier: String?
     let latitude: Double
     let longitude: Double
     let status: String
     let visibility: String
     let note: String?
+    let visitedAt: Date?
+    let savedAt: Date
+    let createdAt: Date
+    let updatedAt: Date
     let ratingSignal: String?
     let ratingScore: Double?
     let recommendedScore: Double?
@@ -109,11 +131,20 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case categorySource = "category_source"
         case categoryConfidence = "category_confidence"
         case rawProviderType = "raw_provider_type"
+        case address
+        case locality
+        case region
+        case country
+        case timeZoneIdentifier = "time_zone_identifier"
         case latitude
         case longitude
         case status
         case visibility
         case note
+        case visitedAt = "visited_at"
+        case savedAt = "saved_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case ratingSignal = "rating_signal"
         case ratingScore = "rating_score"
         case recommendedScore = "recommended_score"
@@ -152,8 +183,13 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
             categoryConfidence: categoryConfidence,
             rawProviderType: rawProviderType ?? category,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
             latitude: latitude,
             longitude: longitude,
+            timeZoneIdentifier: timeZoneIdentifier,
             syncState: .synced
         )
         let userPlace = LocalUserPlace(
@@ -172,8 +208,14 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             subcategoryOverride: subcategoryOverride,
             categoryOverrideSource: categoryOverrideSource,
             categoryOverrideConfidence: categoryOverrideConfidence,
+            visitedAt: visitedAt,
+            savedAt: savedAt,
             sourceType: sourceType,
-            syncState: .synced
+            syncState: .synced,
+            localUpdatedAt: updatedAt,
+            serverUpdatedAt: updatedAt,
+            createdAt: createdAt,
+            updatedAt: updatedAt
         )
         return VisiblePlace(
             id: userPlaceID,
