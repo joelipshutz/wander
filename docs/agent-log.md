@@ -12875,3 +12875,63 @@ REC-99 latest-main review and validation checkpoint, 2026-07-18 19:38 PDT:
 - The exact latest-main-integrated source passed the complete iPhone 17 Pro / iOS 26.5 suite: 412 passed, 0 failed, 0 skipped. Result bundle: `/private/tmp/DerivedData-rec99-build80-gate/Logs/Test/Test-Wander-2026.07.18_19-31-52--0700.xcresult`. The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed in the current Xcode runtime.
 - A fresh generic iOS Simulator build passed. The rec.me app reports `0.1 (79)` before the authorized release bump, and its executable contains both `arm64` and `x86_64`. `git diff --check` is clean.
 - Next: commit and push this validation record, update PR #114 with the REC-103 deferral, mark it ready, confirm the exact pushed head is merge-clean, and squash-merge. The separate build-80 worktree will start only from the resulting exact latest `main`.
+
+## 2026-07-18 19:47 PDT - Codex - TestFlight Build 80 Split Social Halos
+
+Agent: Codex
+Branch: `codex/testflight-build-80`
+Worktree: `/private/tmp/recme-build80-release`
+Linear: `REC-99` (`In Review`); follow-up `REC-103` (`Todo`)
+
+Goal: package the approved REC-99 mixed Been/Wanna halo implementation from
+latest `main` as rec.me TestFlight build 80, validate the exact release source,
+upload and attach the build, and publish tester-facing release notes.
+
+Release start and coordination:
+
+- PR #114 squash-merged to `main` as
+  `6b7a9653d8f60b66cf65764a9586cfc3a8c7c618`:
+  https://github.com/joelipshutz/wander/pull/114.
+- This isolated worktree starts at that exact `origin/main`; the release branch
+  and worktree did not previously exist. The shared root worktree has unrelated
+  `.pnpm-store/` content and is intentionally untouched.
+- Latest completed TestFlight release is build 79. This explicit release will
+  bump exactly once to build 80; marketing version remains `0.1`.
+- Scope is the build-number bump, generated project build-number values, and
+  this required release log. Expected files are `project.yml`,
+  `Wander.xcodeproj/project.pbxproj`, and `docs/agent-log.md`.
+- Ryan explicitly approved shipping the renderer now and deferring the two
+  social-save persistence/retry paths to REC-103. Testers should use accounts
+  whose social saves are confirmed synced until that follow-up lands.
+
+Release validation checkpoint, 2026-07-18 19:56 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 79 to 80 in
+  `project.yml` and regenerated the Xcode project. The generated project diff is
+  exactly the two required build-number settings; marketing version remains
+  `0.1`.
+- Exact build-80 source passed the complete iPhone 17 Pro / iOS 26.5 suite:
+  412 passed, 0 failed, 0 skipped. Result bundle:
+  `/private/tmp/DerivedData-build80/Logs/Test/Test-Wander-2026.07.18_19-48-46--0700.xcresult`.
+  The first sandboxed attempt could not reach CoreSimulator or SwiftPM; the
+  repo-prescribed elevated rerun exercised the app and passed.
+- The generic iOS Simulator build passed after the same sandbox-only cache
+  restriction was cleared. The resulting `rec.me` app reports `0.1 (80)` and
+  contains both `arm64` and `x86_64`.
+- `node scripts/testflight-release.mjs --build-number 80 --dry-run` resolves app
+  id `6776850787`, build 80, group `rec.me Alpha`, and the existing public
+  TestFlight link. `plutil -lint` and `git diff --check` pass.
+- Release-branch scope remains only `project.yml`, the two generated project
+  build-number values, and this append-only log. Next: commit, push, open and
+  review the ready release PR, then squash-merge before archiving exact `main`.
+
+Latest-main advancement, 2026-07-18 20:37 PDT:
+
+- While build-80 validation was running, separately authorized PR #117 landed
+  on `main` as `b0b20a652` (`REC-101: Remove app-wide interaction stalls`).
+  Because explicit TestFlight releases package latest `main`, build 80 will
+  include both REC-99 and REC-101. PR #117 did not bump the build number.
+- The current release edits will be committed, then exact latest `origin/main`
+  will be merged with both append-only log histories preserved. The full suite
+  and generic simulator build will be rerun against that integrated source
+  before the release PR is opened.
