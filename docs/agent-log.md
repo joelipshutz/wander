@@ -13188,3 +13188,53 @@ REC-95 final integrated handoff, 2026-07-18 21:58 PDT:
   `81598082-1de2-48db-aa97-2fe1d6c9aa86`. The issue remains `In Review`.
 - No TestFlight build was requested or produced. Handoff remains: test the
   ready PR in Xcode, then merge PR #124 and move REC-95 to `Done`.
+
+## 2026-07-19 00:44 PDT - Codex - REC-95 Landing And TestFlight Build 81
+
+Agent: Codex
+Branch: `codex/rec-95-list-map`
+Worktree: `/private/tmp/recme-rec95-release`
+Linear: `REC-95` (`In Review`)
+PR: #124
+
+Goal: perform the final latest-main review and simulator validation for the
+REC-95 list-map redesign, merge PR #124 if the gate remains clean, then package
+the exact merged `main` as rec.me TestFlight build 81 and attach it to the
+public alpha group.
+
+Starting status and coordination:
+
+- Joe explicitly requested that the previously excluded PR #124 be shipped to
+  TestFlight after build 80. Build 80 is already uploaded, valid, attached, and
+  externally approved, so this release must use a new monotonically increasing
+  build number (81).
+- Fetched `origin`; latest `main` is `0701daa9` and adds the REC-105 Release
+  archive concurrency fix plus its completion record after build 80. PR #124 is
+  ready, but GitHub has not yet recomputed mergeability against that newer
+  mainline.
+- Created this isolated worktree from exact PR head `646d8e9d`; the unrelated
+  root Xcode checkout and all other active worktrees remain untouched. Expected
+  integration changes are limited to conflict resolution if needed and this
+  append-only log. The later release lane will change only `project.yml`, the
+  generated project build number, and release coordination records.
+- Read `DESIGN.md`, the PR design review/engineering plan handoff, Linear
+  REC-95, and the existing validation record. Mission Control is currently
+  unreachable at `localhost:4000`, so tracking there is blocked until the local
+  service returns. GBrain lookup hit a stale dead lock, recovered it per the
+  workspace procedure, then timed out once more; direct KB search found no
+  REC-95 entry.
+- Disk had only 808 MiB free. Removed only the completed build-80 DerivedData
+  cache (972 MiB) while preserving the uploaded build-80 archive. No unrelated
+  worktree or DerivedData directory was deleted.
+
+Plan:
+
+- Merge exact latest `origin/main`, preserve both append-only histories, and
+  review the complete product diff for correctness, privacy, performance,
+  accessibility, navigation, MapKit behavior, and generated-project scope.
+- Run the REC-95 focused gate, complete iPhone 16 Plus / iOS 18.6 suite,
+  generic simulator build, and visual checks on the current and smaller phone
+  simulator before merging PR #124.
+- Start a separate build-81 release branch from exact post-merge `main`, bump
+  `CURRENT_PROJECT_VERSION` once, regenerate, validate, merge, archive, export,
+  upload, process with the TestFlight helper, and post the required tester note.
