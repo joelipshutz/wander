@@ -107,7 +107,9 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 
         XCTAssertEqual(outlines.map(\.ownership), [.currentUser])
         XCTAssertEqual(outlines.map(\.status), [.been])
+        XCTAssertNil(outlines.first?.secondaryStatus)
         XCTAssertEqual(outlines.first?.dashPattern ?? [], [CGFloat]())
+        XCTAssertEqual(outlines.first?.arcs.count, 1)
     }
 
     func testPersonalAndSocialSavesProduceTwoStatusAwareOutlines() {
@@ -120,24 +122,132 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 
         XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
         XCTAssertEqual(outlines.map(\.status), [.wannaGo, .been])
+        XCTAssertEqual(outlines.compactMap(\.secondaryStatus), [])
         XCTAssertEqual(outlines.first?.dashPattern ?? [], [5, 4])
         XCTAssertEqual(outlines.last?.dashPattern ?? [], [CGFloat]())
     }
 
-    func testMultipleSocialSavesCollapseToOneSocialOutlineWithBeenPrecedence() {
+    func testMixedSocialSavesKeepWannaVisibleAlongsideAnyNumberOfBeenSaves() throws {
         let outlines = MapPinOutlineBuilder.outlines(
             for: [
                 MapPinSaveState(ownership: .social, status: .wannaGo),
+                MapPinSaveState(ownership: .social, status: .been),
+                MapPinSaveState(ownership: .social, status: .been),
                 MapPinSaveState(ownership: .social, status: .been)
             ]
         )
 
         XCTAssertEqual(outlines.map(\.ownership), [.social])
         XCTAssertEqual(outlines.map(\.status), [.been])
+        XCTAssertEqual(outlines.map(\.secondaryStatus), [.wannaGo])
+
+        let socialOutline = try XCTUnwrap(outlines.first)
+        XCTAssertEqual(socialOutline.arcs.map(\.status), [.been, .wannaGo])
+        XCTAssertEqual(socialOutline.arcs.map(\.trimFrom), [0.028, 0.528])
+        XCTAssertEqual(socialOutline.arcs.map(\.trimTo), [0.472, 0.972])
+        XCTAssertEqual(socialOutline.arcs.map(\.rotationDegrees), [-90, -90])
+        XCTAssertEqual(socialOutline.arcs[0].dashPattern, [])
+        XCTAssertEqual(socialOutline.arcs[1].dashPattern, [1.5, 3.5])
+    }
+
+    func testRyanBeenJoeBeenAndMayaWannaProducePersonalRingAndSplitSocialHalo() throws {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .currentUser, status: .been),
+                MapPinSaveState(ownership: .social, status: .been),
+                MapPinSaveState(ownership: .social, status: .wannaGo)
+            ]
+        )
+
+        XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
+        XCTAssertEqual(outlines.map(\.status), [.been, .been])
+        XCTAssertNil(outlines[0].secondaryStatus)
+        XCTAssertEqual(outlines[1].secondaryStatus, .wannaGo)
+        XCTAssertEqual(outlines[0].arcs.count, 1)
+        XCTAssertEqual(outlines[1].arcs.count, 2)
+    }
+
+    func testSingleSocialWannaRemainsOneFullDashedHalo() throws {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .social, status: .wannaGo)
+            ]
+        )
+
+        let socialOutline = try XCTUnwrap(outlines.first)
+        XCTAssertNil(socialOutline.secondaryStatus)
+        XCTAssertEqual(socialOutline.arcs.count, 1)
+        XCTAssertEqual(socialOutline.arcs[0].status, .wannaGo)
+        XCTAssertEqual(socialOutline.arcs[0].trimFrom, 0)
+        XCTAssertEqual(socialOutline.arcs[0].trimTo, 1)
+        XCTAssertEqual(socialOutline.arcs[0].dashPattern, [5, 4])
+    }
+
+    func testMixedCurrentUserHistoryKeepsExistingBeenPrecedence() throws {
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: [
+                MapPinSaveState(ownership: .currentUser, status: .wannaGo),
+                MapPinSaveState(ownership: .currentUser, status: .been)
+            ]
+        )
+
+        let personalOutline = try XCTUnwrap(outlines.first)
+        XCTAssertEqual(personalOutline.ownership, .currentUser)
+        XCTAssertEqual(personalOutline.status, .been)
+        XCTAssertNil(personalOutline.secondaryStatus)
+        XCTAssertEqual(personalOutline.dashPattern, [])
     }
 }
 
 final class VisiblePlaceGroupingTests: XCTestCase {
+    func testOutlineCatalogCarriesRyanJoeMayaTopologyToEveryGroupedSaveID() throws {
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let joe = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let maya = profile(id: "user_maya", handle: "maya", displayName: "Maya")
+        let ryanBeen = visiblePlace(
+            owner: ryan,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05004,
+            longitude: -118.25003,
+            providerID: "mapkit_mutsu_ryan",
+            status: .been,
+            ratingScore: 5
+        )
+        let joeBeen = visiblePlace(
+            owner: joe,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05022,
+            longitude: -118.25018,
+            providerID: "mapkit_mutsu_joe",
+            status: .been,
+            ratingScore: 4
+        )
+        let mayaWanna = visiblePlace(
+            owner: maya,
+            name: "Mutsu",
+            category: "restaurant",
+            latitude: 34.05037,
+            longitude: -118.25031,
+            providerID: "mapkit_mutsu_maya",
+            status: .wannaGo
+        )
+
+        let catalog = MapPinOutlineBuilder.outlineCatalog(
+            for: [joeBeen, mayaWanna, ryanBeen],
+            currentUserID: ryan.id
+        )
+        let outlines = try XCTUnwrap(catalog[joeBeen.id])
+
+        XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
+        XCTAssertEqual(outlines.map(\.status), [.been, .been])
+        XCTAssertNil(outlines[0].secondaryStatus)
+        XCTAssertEqual(outlines[1].secondaryStatus, .wannaGo)
+        XCTAssertEqual(catalog[ryanBeen.id], outlines)
+        XCTAssertEqual(catalog[mayaWanna.id], outlines)
+    }
+
     func testGroupsSameNamedNearbyPlaceAcrossDifferentProviderIDsAndStatuses() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

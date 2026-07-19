@@ -2146,15 +2146,10 @@ private struct MapTypeaheadRow: View {
     @ViewBuilder
     private var savedOutlineLayer: some View {
         ForEach(Array(savedOutlines.indices), id: \.self) { index in
-            Circle()
-                .stroke(
-                    savedOutlines[index].color,
-                    style: StrokeStyle(
-                        lineWidth: savedOutlines.count > 1 ? 2.2 : 3,
-                        lineCap: .round,
-                        dash: savedOutlines[index].dashPattern
-                    )
-                )
+            MapPinOutlineStroke(
+                outline: savedOutlines[index],
+                lineWidth: savedOutlines.count > 1 ? 2.2 : 3
+            )
                 .padding(typeaheadOutlinePadding(for: index))
         }
     }
@@ -2401,15 +2396,10 @@ private struct WanderMapPin: View {
 
     private var outlineLayer: some View {
         ForEach(Array(outlines.indices), id: \.self) { index in
-            Circle()
-                .stroke(
-                    outlines[index].color,
-                    style: StrokeStyle(
-                        lineWidth: outlineLineWidth,
-                        lineCap: .round,
-                        dash: outlines[index].dashPattern
-                    )
-                )
+            MapPinOutlineStroke(
+                outline: outlines[index],
+                lineWidth: outlineLineWidth
+            )
                 .padding(outlinePadding(for: index))
         }
     }
@@ -2432,6 +2422,43 @@ private struct WanderMapPin: View {
         }
 
         return hasCurrentUser ? "Your saved place" : "Social saved place"
+    }
+}
+
+struct MapPinOutlineStroke: View {
+    let outline: MapPinOutline
+    let lineWidth: CGFloat
+
+    var body: some View {
+        Group {
+            if outline.secondaryStatus == nil {
+                Circle()
+                    .stroke(
+                        outline.color,
+                        style: StrokeStyle(
+                            lineWidth: lineWidth,
+                            lineCap: .round,
+                            dash: outline.dashPattern
+                        )
+                    )
+            } else {
+                ZStack {
+                    ForEach(Array(outline.arcs.enumerated()), id: \.offset) { _, arc in
+                        Circle()
+                            .trim(from: arc.trimFrom, to: arc.trimTo)
+                            .stroke(
+                                outline.color,
+                                style: StrokeStyle(
+                                    lineWidth: lineWidth,
+                                    lineCap: .round,
+                                    dash: arc.dashPattern
+                                )
+                            )
+                            .rotationEffect(.degrees(arc.rotationDegrees))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2462,9 +2489,22 @@ struct MapPinSaveState: Equatable {
 struct MapPinOutline: Identifiable, Equatable {
     let ownership: MapPinSaveOwnership
     let status: PlaceStatus
+    let secondaryStatus: PlaceStatus?
+
+    init(
+        ownership: MapPinSaveOwnership,
+        status: PlaceStatus,
+        secondaryStatus: PlaceStatus? = nil
+    ) {
+        self.ownership = ownership
+        self.status = status
+        self.secondaryStatus = secondaryStatus
+    }
 
     var id: String {
-        "\(ownership.key)-\(status.rawValue)"
+        [ownership.key, status.rawValue, secondaryStatus?.rawValue]
+            .compactMap { $0 }
+            .joined(separator: "-")
     }
 
     var color: Color {
@@ -2474,6 +2514,45 @@ struct MapPinOutline: Identifiable, Equatable {
     var dashPattern: [CGFloat] {
         status == .wannaGo ? [5, 4] : []
     }
+
+    var arcs: [MapPinOutlineArc] {
+        guard let secondaryStatus else {
+            return [
+                MapPinOutlineArc(
+                    status: status,
+                    trimFrom: 0,
+                    trimTo: 1,
+                    rotationDegrees: 0,
+                    dashPattern: status == .wannaGo ? [5, 4] : []
+                )
+            ]
+        }
+
+        return [
+            MapPinOutlineArc(
+                status: status,
+                trimFrom: 0.028,
+                trimTo: 0.472,
+                rotationDegrees: -90,
+                dashPattern: []
+            ),
+            MapPinOutlineArc(
+                status: secondaryStatus,
+                trimFrom: 0.528,
+                trimTo: 0.972,
+                rotationDegrees: -90,
+                dashPattern: [1.5, 3.5]
+            )
+        ]
+    }
+}
+
+struct MapPinOutlineArc: Equatable {
+    let status: PlaceStatus
+    let trimFrom: CGFloat
+    let trimTo: CGFloat
+    let rotationDegrees: Double
+    let dashPattern: [CGFloat]
 }
 
 enum MapPinOutlineBuilder {
@@ -2485,6 +2564,33 @@ enum MapPinOutlineBuilder {
         .compactMap { $0 }
     }
 
+    static func outlineCatalog(
+        for visiblePlaces: [VisiblePlace],
+        currentUserID: String
+    ) -> [String: [MapPinOutline]] {
+        var catalog: [String: [MapPinOutline]] = [:]
+
+        for group in VisiblePlaceGrouping.groups(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        ) {
+            let outlines = outlines(
+                for: group.places.map { visiblePlace in
+                    MapPinSaveState(
+                        ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                        status: visiblePlace.userPlace.status
+                    )
+                }
+            )
+
+            for visiblePlace in group.places {
+                catalog[visiblePlace.id] = outlines
+            }
+        }
+
+        return catalog
+    }
+
     private static func outline(
         for ownership: MapPinSaveOwnership,
         in states: [MapPinSaveState]
@@ -2492,7 +2598,18 @@ enum MapPinOutlineBuilder {
         let matchingStates = states.filter { $0.ownership == ownership }
         guard !matchingStates.isEmpty else { return nil }
 
-        let status: PlaceStatus = matchingStates.contains { $0.status == .been } ? .been : .wannaGo
+        let hasBeen = matchingStates.contains { $0.status == .been }
+        let hasWanna = matchingStates.contains { $0.status == .wannaGo }
+
+        if ownership == .social && hasBeen && hasWanna {
+            return MapPinOutline(
+                ownership: ownership,
+                status: .been,
+                secondaryStatus: .wannaGo
+            )
+        }
+
+        let status: PlaceStatus = hasBeen ? .been : .wannaGo
         return MapPinOutline(ownership: ownership, status: status)
     }
 }
