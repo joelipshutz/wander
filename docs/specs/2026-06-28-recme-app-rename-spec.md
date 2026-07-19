@@ -1,7 +1,7 @@
 # rec.me App Rename Spec
 
 Date: 2026-06-28
-Status: implementation validated; App Store cutover in progress
+Status: user-facing and TestFlight cutover complete; production App Store submission pending privacy/support URLs and final listing assets
 Owner: Codex plan-eng-review pass
 
 ## Goal
