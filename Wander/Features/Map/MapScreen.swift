@@ -1980,7 +1980,7 @@ private struct MapSearchSuggestion: Identifiable {
         return MapSearchSuggestion(
             id: "saved_\(visiblePlace.id)",
             title: visiblePlace.place.canonicalName,
-            subtitle: subtitle.isEmpty ? "saved on Wander" : subtitle,
+            subtitle: subtitle.isEmpty ? "saved on \(AppBrand.displayName)" : subtitle,
             category: visiblePlace.effectiveCategory,
             source: .saved(visiblePlace, saveStates: saveStates)
         )
@@ -5810,7 +5810,7 @@ private struct PlaceProfileRatingStrip: View {
             )
 
             PlaceProfileMetricCard(
-                title: "Rec.me rating",
+                title: "rec.me rating",
                 value: presentation.overallRating?.displayScore ?? "No ratings yet",
                 suffix: presentation.overallRating == nil ? nil : "/5",
                 subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
@@ -7062,7 +7062,7 @@ private struct SocialProofRow: View {
     }
 
     private var proofText: String {
-        guard let first = savers.first else { return "saved on Wander" }
+        guard let first = savers.first else { return "saved on \(AppBrand.displayName)" }
         let name = first.id == currentUserID ? "you" : first.displayName
         guard savers.count > 1 else { return "\(name) saved it" }
         return "\(name) +\(savers.count - 1) others saved it"

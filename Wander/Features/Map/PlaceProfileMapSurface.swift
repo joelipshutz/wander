@@ -485,7 +485,7 @@ private struct PlaceProfileFullView: View {
                 PlaceProfileRatingTile(
                     value: presentation.overallRating?.displayScore ?? "No ratings yet",
                     suffix: presentation.overallRating == nil ? nil : "/5",
-                    title: "Rec.me rating",
+                    title: "rec.me rating",
                     subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                     systemImage: "person.2.fill",
                     tint: WanderTheme.pinSocial.color

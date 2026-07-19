@@ -12703,3 +12703,167 @@ Release authorization and coordination:
 - Fetched `origin`. Latest `origin/main` is `c4251747e`, four commits ahead of the REC-99 merge base, and records completed/approved TestFlight build 79. The next release number is therefore 80.
 - The isolated REC-99 worktree is clean apart from this append-only coordination entry. The root checkout has unrelated `.pnpm-store/` state and remains untouched. Expected REC-99 files remain `Wander/Features/Map/MapScreen.swift`, `Wander/Features/Lists/ListsScreen.swift`, `WanderTests/MapHitTestingTests.swift`, and this log.
 - Next: integrate exact latest `origin/main`, preserve both append-only histories, rerun pre-landing review plus full simulator test/build validation, update and ready PR #114, and squash-merge it. Build 80 will then be prepared in a new isolated release worktree from the exact merged `main`.
+
+## 2026-07-18 16:44 PDT - Codex - REC-84 rec.me App Store Cutover
+
+Agent: Codex
+Branch: `codex/recme-app-rename-spec`
+Worktree: `/private/tmp/recme-rec84-cutover`
+Linear: `REC-84` (`In Progress`)
+
+Goal: complete the approved user-facing rename to `rec.me`, remove the
+pencil-like lower-right object from the app icon, make the brand asset contract
+discoverable to future agents, land the implementation on current `main`, and
+cut the public TestFlight/App Store Connect surfaces over without changing the
+bundle id or breaking tester/account continuity.
+
+Starting status:
+
+- User explicitly requested the App Store and related external cutover after
+  previously pausing the unpushed icon follow-up.
+- PR #46 remained open at `c015ab3`, 36 commits behind current `origin/main`,
+  and conflicted in generated project settings, branding tests, and the shared
+  append-only log.
+- Merged current `origin/main` (`02b812f`, TestFlight build 78 completion) into
+  the isolated branch. Preserved current-main product, backend, schema, and
+  release behavior while reapplying only the `rec.me` branding contracts.
+- The surviving built-in image-generation output for the approved simplified
+  icon is `/Users/joelipshutz/.codex/generated_images/019ee09c-6643-7e03-a924-f770839a13c7/exec-0df32aec-4ae4-4f8a-9ac8-6ff4a66c1dcd.png`.
+- Mission Control remains unavailable at `http://localhost:4000` (`curl` exit
+  7), so Linear REC-84 and this log remain the durable trackers.
+- No other listed worktree overlaps the rebrand files. Stable identifiers stay
+  unchanged: `com.grayline.wander`, `PRODUCT_NAME=Wander`, scheme/module names,
+  auth/Supabase/PostHog keys, and public TestFlight link.
+
+Validation checkpoint, 2026-07-18 18:11 PDT:
+
+- Replaced the old corner treatment with the approved no-pencil icon. The
+  canonical 1024 px master and all eight device renditions are square, opaque,
+  and exact-size; direct inspection at 1024 px and 87 px confirms the lower-right
+  field is clear and the pin/bookmark/orbit/social-dot mark remains legible.
+- Added `docs/brand/recme-app-icon.md`, executable
+  `scripts/generate-app-icon-renditions.sh`, and mirrored AGENTS guidance so
+  future agents can find the canonical asset and cannot silently restore the
+  folded map/page corner or pencil-like object.
+- Updated the TestFlight helper default to `rec.me Alpha` with a temporary
+  legacy-group fallback, and updated current release/setup guidance. Historical
+  records remain unchanged.
+- App Store Connect audit confirmed app id `6776850787`, bundle
+  `com.grayline.wander`, app/listing state `PREPARE_FOR_SUBMISSION`, current app
+  name `Wander: Find Places`, public group `Wander Alpha`, and public-link and
+  feedback flags enabled. The existing group can be renamed in place without
+  replacing the public TestFlight URL. App Store subtitle, privacy URL, support
+  URL, and version-level listing copy are currently blank.
+- Focused `BuildConfigurationTests` passed 13/13 after correcting one
+  line-wrapped documentation assertion. Full integrated iOS suite passed
+  408/408 with 0 failures and 0 skips on iPhone 16 Plus / iOS 18.6:
+  `/private/tmp/DerivedData-rec84-cutover/Logs/Test/Test-Wander-2026.07.18_17-57-38--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. The first
+  fresh-cache attempt reached universal-binary assembly but exhausted the disk;
+  deleting only its 2.0 GB disposable derived-data directory and reusing the
+  validated task cache completed successfully.
+- Installed the exact validated app on the iPhone 16 Plus simulator. The home
+  screen shows the simplified icon and `rec.me` label:
+  `/private/tmp/rec84-cutover-home.png`.
+- Static checks pass: `plutil -lint`, `git diff --check`, shell/Node syntax,
+  icon dimension/alpha validation, and targeted user-visible legacy-brand scan.
+
+Pre-landing review checkpoint, 2026-07-18 18:18 PDT:
+
+- Pushed integrated head `948f173` and updated ready PR #46. GitHub reports
+  `MERGEABLE/CLEAN`; there are no failing checks, human reviews, or unresolved
+  comments.
+- Reviewed the full current-main diff for identity continuity, user-visible
+  copy, icon assets, generated-project scope, release-helper fallback behavior,
+  and test coverage. No blocking correctness, auth, data, notification,
+  performance, or release-pipeline finding remains.
+- The generated Xcode project diff is exactly four `AppBrand.swift` membership
+  lines; 109 lines of unrelated XcodeGen defaults were removed before testing.
+- Updated README, DESIGN, the current developer handoff, decisions header, and
+  product-spec introduction to canonical `rec.me` naming. Internal paths,
+  executable/module/scheme names, and historical records intentionally remain
+  Wander where they are contracts or accurate history.
+
+## 2026-07-18 18:18 PDT - Codex - TestFlight Build 79 rec.me Cutover
+
+Agent: Codex
+Branch: `codex/testflight-build-79`
+Worktree: `/private/tmp/recme-build79-release`
+Linear: `REC-84` (`In Review`)
+
+Goal: package the merged rec.me rename as TestFlight build 79, rename the
+existing App Store Connect app metadata and public beta group in place, preserve
+the public link and stable bundle identity, and complete tester-facing release
+communication.
+
+Release start and coordination:
+
+- PR #46 squash-merged to `main` as `d76133e245ee76247fa3f120ff2f7f01a8e20261`.
+- Exact `origin/main` now has the installed display name `rec.me`, canonical
+  lowercase user-facing copy, and the simplified no-pencil production icon.
+- Latest completed TestFlight release is build 78. This explicit release bumps
+  exactly once to build 79; marketing version remains `0.1`.
+- Stable identity remains `com.grayline.wander`, `PRODUCT_NAME=Wander`, and the
+  existing public TestFlight link. No auth, Supabase, notification, tester-data,
+  local persistence, or account migration is included.
+- App Store Connect app/listing is `PREPARE_FOR_SUBMISSION`, so the existing
+  localized name, subtitle, beta description, and beta-group name are editable.
+  The required privacy/support URLs remain blank and are a separate blocker for
+  a future production App Store submission, not for this TestFlight cutover.
+
+Release validation checkpoint, 2026-07-18 18:34 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 78 to 79 in
+  `project.yml` and the generated Xcode project; marketing version remains
+  `0.1`.
+- Ran XcodeGen and reduced its unrelated project-default churn, leaving the
+  generated project diff at exactly the two required build-number values.
+- Exact build-79 source passed the complete iPhone 16 Plus / iOS 18.6 suite:
+  408 passed, 0 failed, 0 skipped. Result bundle was
+  `/private/tmp/DerivedData-build79/Logs/Test/Test-Wander-2026.07.18_18-21-23--0700.xcresult`.
+- A clean generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`.
+  Two earlier generic attempts exhausted the nearly full data volume only at
+  final universal-binary assembly; task-owned simulator caches were removed
+  after their test results were recorded, and the clean rerun completed.
+- `node scripts/testflight-release.mjs --dry-run` resolves app id `6776850787`,
+  build 79, group `rec.me Alpha`, and the existing public TestFlight link.
+- `git diff --check` and `plutil -lint` pass. Release-branch scope remains only
+  `project.yml`, the two generated project build-number settings, and this log.
+
+Release completion, 2026-07-18 18:56 PDT:
+
+- Release PR #119 squash-merged to `main` as
+  `be535faef4a2b3529f49cf2048a05772d002d2c1`:
+  https://github.com/joelipshutz/wander/pull/119. Build 79 was archived from
+  that exact detached source at `/private/tmp/Wander-0.1-build79.xcarchive`.
+  Archive metadata confirms marketing version `0.1`, build `79`, bundle
+  `com.grayline.wander`, team `Y7TVK75RZ8`, and installed display name
+  `rec.me`.
+- Local pre-export signature inspection could not establish certificate trust
+  and reported an invalid entitlement blob. This was not treated as a pass.
+  The authoritative App Store export then re-signed and analyzed the package,
+  completed successfully, and reported `Upload succeeded`; archive distribution
+  metadata independently records uploaded build number `79`.
+- App Store Connect build id `354f7df5-b746-473c-ab8e-c4f78df90d2c` reached
+  `VALID`. The release helper set `usesNonExemptEncryption=false`, published
+  the `en-US` What to Test copy, attached build 79 to `rec.me Alpha`, submitted
+  external beta review, and confirmed review state `APPROVED`. Public link:
+  https://testflight.apple.com/join/knEhRa6t.
+- Renamed the existing App Store Connect app localization and public beta group
+  in place to `rec.me` and `rec.me Alpha`. Added the subtitle, beta description,
+  App Store description, keywords, and promotional text. The public-link and
+  feedback flags remain enabled; bundle id, accounts, tester data, local saves,
+  and the public link are unchanged.
+- Posted the required tester-facing build-79 note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784426121646939.
+- Linear `REC-84` has the merged PRs, validation, build, TestFlight, and Slack
+  details and is `Done`.
+- Production App Store submission is intentionally not claimed complete. App
+  Store Connect still lacks approved privacy-policy and support URLs, and the
+  final screenshots/listing assets must be completed before submission. The
+  prepared App Store version is `1.0`, while released TestFlight build 79 has
+  marketing version `0.1`; Apple associates uploaded builds to version records
+  using the binary's embedded version, so the production candidate must also
+  use marketing version `1.0`.
+- No code, schema, auth, data, or additional build-number change follows this
+  completion record. This append-only docs update is release bookkeeping only.

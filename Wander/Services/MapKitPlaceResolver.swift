@@ -14,7 +14,7 @@ extension PlaceResolutionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .locationDenied:
-            "Location is off for Wander. Turn it on or add the place manually."
+            "Location is off for \(AppBrand.displayName). Turn it on or add the place manually."
         case .locationUnavailable:
             "Could not find where you are right now. Try adding the place manually."
         case .noCandidates:

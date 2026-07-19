@@ -1,10 +1,10 @@
-# Design System - Wander
+# Design System - rec.me
 
 Status: Draft
 Created: 2026-06-01
 Skill: design-consultation
 
-This is the project-level design source of truth for Wander. Read it before making visual or UI decisions.
+This is the project-level design source of truth for rec.me. Read it before making visual or UI decisions.
 
 ## Sources
 
@@ -20,12 +20,12 @@ This is the project-level design source of truth for Wander. Read it before maki
 
 ## Product Context
 
-- **What this is:** Wander is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+- **What this is:** rec.me is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 - **Who it is for:** People who save places from daily life, travel, people they follow, TikTok/Instagram links, photos, and memory, then want useful answers later.
 - **Space/industry:** Social maps, place memory, trusted recommendations, lightweight local/travel discovery.
 - **Project type:** Native iOS app, map-first, SwiftUI, iPhone-first for v0.1.
-- **North Star:** When I need a place, Wander shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
-- **Wedge:** Wander turns trusted people's place memories into a searchable map you can actually use.
+- **North Star:** When I need a place, rec.me shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
+- **Wedge:** rec.me turns trusted people's place memories into a searchable map you can actually use.
 
 ## Aesthetic Direction
 
