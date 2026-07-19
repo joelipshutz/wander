@@ -546,6 +546,14 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertGreaterThan(fixtures.placeVisits.count, 1_200)
         XCTAssertEqual(fixtures.placeLists.count, 72)
         XCTAssertEqual(fixtures.placeListItems.count, 2_016)
+        XCTAssertEqual(
+            fixtures.userPlaces.prefix(3).map { "\($0.localID)|\($0.userID)" },
+            [
+                "perf_user_place_001_0000_0|perf_user_001",
+                "perf_user_place_000_0000_1|perf_user_000",
+                "perf_user_place_020_0000_2|perf_user_020"
+            ]
+        )
 
         let storeStart = CFAbsoluteTimeGetCurrent()
         let store = WanderStore(fixtures: fixtures)
@@ -610,7 +618,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertGreaterThan(visibleListItemCount, 1_500)
         XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
         XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
-        XCTAssertLessThan(storeElapsed, 2.0, "High-data store initialization took \(storeElapsed)s")
+        XCTAssertLessThan(storeElapsed, 0.5, "High-data store initialization took \(storeElapsed)s")
         XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
         XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
         XCTAssertLessThan(listProjectionElapsed, 0.5, "High-data list projection took \(listProjectionElapsed)s")
