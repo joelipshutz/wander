@@ -13254,3 +13254,24 @@ REC-105 signed archive checkpoint, 2026-07-18 22:37 PDT:
 - Ready PR #127 contains the source-only REC-105 fix and full validation:
   https://github.com/joelipshutz/wander/pull/127. It remains unmerged for
   separate review and does not authorize another TestFlight release.
+
+REC-105 completion, 2026-07-18 22:43 PDT:
+
+- Ready PR #127 passed review and squash-merged to `main` as
+  `96698798f30d6db4c7fcf1cb70416712f7a18a85`:
+  https://github.com/joelipshutz/wander/pull/127.
+- Linear REC-105 contains the implementation and validation evidence and is
+  `Done`: https://linear.app/recme/issue/REC-105/fix-build-80-release-archive-swift-concurrency-failure.
+- Final validation remains: focused fixture regression 1/1 passed; complete
+  suite 436/436 passed; Release whole-module generic-device build passed; and
+  the signed Xcode 26.6 validation archive passed with `rec.me` `0.1 (80)`.
+  `xcodegen generate` produced no project diff and `git diff --check` passed.
+- The validation archive at
+  `/private/tmp/Wander-0.1-build80-rec105-validation.xcarchive` was not exported
+  or uploaded. No duplicate build or tester announcement was created.
+- TestFlight build 80 remains the sole uploaded build 80, live and externally
+  approved. Its binary contains REC-99, REC-101, and REC-104. REC-105 landed
+  afterward as a source-only fix for reproducible future Release archives and
+  is not represented in the build-80 binary.
+- REC-103 remains the known deferred limitation: failed first-sync social saves
+  from some full-form flows can remain locally queued instead of retrying.
