@@ -22,6 +22,12 @@ protocol PlaceImportResolving {
 
 @MainActor
 final class DevicePlaceImportResolver: PlaceImportResolving {
+    private struct SocialMediaRecognition {
+        let recognizedTexts: [String]
+        let attemptedCount: Int
+        let emptyOrFailedCount: Int
+    }
+
     private let placeResolver: any PlaceCandidateResolving
     private let metadataProvider: any SocialImportMetadataProviding
     private let googleListLoader: any GoogleMapsSharedListLoading
@@ -76,7 +82,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .needsHelp(message)
             }
         case .tiktok, .instagram:
-            return await socialResolution(url: sourceURL, source: source, seed: seed)
+            return try await socialResolution(url: sourceURL, source: source, seed: seed)
         case .textNotes:
             return .needsHelp("Add a place name and nearby city to match this line.")
         }
@@ -86,42 +92,69 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         url: URL,
         source: PlaceImportSource,
         seed: PlaceImportSeed
-    ) async -> PlaceImportResolution {
-        guard let metadata = await metadataProvider.metadata(for: url, source: source) else {
+    ) async throws -> PlaceImportResolution {
+        let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
+        try Task.checkCancellation()
+        guard let metadata = fetchedMetadata else {
             return .needsHelp(
                 "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
             )
         }
-        let recognizedText: String? = if let thumbnailURL = metadata.thumbnailURL {
-            await thumbnailRecognizer.recognizedText(at: thumbnailURL)
-        } else {
-            nil
-        }
+        let recognition = try await recognizeSocialMedia(in: metadata)
         let hints = SocialPlaceHintExtractor.hints(
             from: metadata,
-            recognizedText: recognizedText,
-            limit: 8
+            recognizedTexts: recognition.recognizedTexts,
+            limit: 24
         )
 
-        var resolvedEntries: [PlaceImportResolvedEntry] = []
-        var plausibleEntries: [PlaceImportResolvedEntry] = []
+        var entries: [PlaceImportResolvedEntry] = []
         var seenResolvedCandidates = Set<String>()
         var seenPlausibleHints = Set<String>()
         var strongest: PlaceImportCandidateMatch?
+        var resolvedCount = 0
+        var unresolvedCount = 0
+        var noCandidateCount = 0
+        var lowConfidenceCount = 0
+        var rejectedHintCount = 0
+        var lookupFailureCount = 0
         for hint in hints {
-            guard let candidates = try? await placeResolver.resolveManualEntry(
-                ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
-            ), !candidates.isEmpty else { continue }
+            try Task.checkCancellation()
+            let candidates: [PlaceCandidate]
+            do {
+                candidates = try await placeResolver.resolveManualEntry(
+                    ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
+                )
+            } catch {
+                try Task.checkCancellation()
+                lookupFailureCount += 1
+                continue
+            }
+            try Task.checkCancellation()
+            guard !candidates.isEmpty else {
+                noCandidateCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
+                }
+                continue
+            }
             let match = PlaceImportCandidateMatcher.match(
                 candidates,
                 nameHint: hint.name,
-                areaHint: hint.area
+                areaHint: hint.area,
+                allowNearSpellingMatch: hint.evidence == .imageText
             )
             if let selectedCandidateID = match.selectedCandidateID,
                let selectedCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
                 let identity = candidateIdentity(selectedCandidate)
                 if seenResolvedCandidates.insert(identity).inserted {
-                    resolvedEntries.append(
+                    entries.append(
                         PlaceImportResolvedEntry(
                             seed: socialSeed(from: seed, hint: hint, candidate: selectedCandidate),
                             candidates: match.candidates,
@@ -129,13 +162,16 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                             helpMessage: nil
                         )
                     )
+                    resolvedCount += 1
+                } else {
+                    rejectedHintCount += 1
                 }
                 continue
             }
             if match.candidates.count > 1, match.bestScore >= 0.7 {
                 let identity = hintIdentity(hint)
                 if seenPlausibleHints.insert(identity).inserted {
-                    plausibleEntries.append(
+                    entries.append(
                         PlaceImportResolvedEntry(
                             seed: socialSeed(from: seed, hint: hint, candidate: nil),
                             candidates: match.candidates,
@@ -143,6 +179,19 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                             helpMessage: "Choose the matching venue from this post."
                         )
                     )
+                    unresolvedCount += 1
+                }
+            } else {
+                lowConfidenceCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
                 }
             }
             if match.bestScore > (strongest?.bestScore ?? 0) {
@@ -150,9 +199,22 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         }
 
-        let entries = resolvedEntries + plausibleEntries
+        let discoveredMediaCount = metadata.mediaItems.isEmpty
+            ? (metadata.thumbnailURL == nil ? 0 : 1)
+            : metadata.mediaItems.count
+        WanderDebugLog.imports.notice(
+            "social import resolution source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) resolved_count=\(resolvedCount, privacy: .public) unresolved_count=\(unresolvedCount, privacy: .public) no_candidate_count=\(noCandidateCount, privacy: .public) low_confidence_count=\(lowConfidenceCount, privacy: .public) lookup_failure_count=\(lookupFailureCount, privacy: .public) rejected_hint_count=\(rejectedHintCount, privacy: .public)"
+        )
+        if lookupFailureCount > 0 {
+            return .needsHelp(
+                "Apple Maps matching was temporarily unavailable. Your previous import results were kept; retry later."
+            )
+        }
         if entries.count == 1, let entry = entries.first {
-            return .candidates(entry.candidates, selectedCandidateID: entry.selectedCandidateID)
+            if entry.selectedCandidateID != nil {
+                return .candidates(entry.candidates, selectedCandidateID: entry.selectedCandidateID)
+            }
+            return .expandedResolved(entries, sourceName: nil)
         }
         if entries.count > 1 {
             return .expandedResolved(entries, sourceName: nil)
@@ -163,6 +225,67 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
         )
+    }
+
+    private func recognizeSocialMedia(in metadata: SocialImportMetadata) async throws -> SocialMediaRecognition {
+        var seenURLs = Set<String>()
+        var urls = metadata.mediaItems.compactMap(\.imageURL).filter {
+            seenURLs.insert($0.absoluteString).inserted
+        }
+        if urls.isEmpty, let thumbnailURL = metadata.thumbnailURL {
+            urls = [thumbnailURL]
+        }
+        guard !urls.isEmpty else {
+            return SocialMediaRecognition(recognizedTexts: [], attemptedCount: 0, emptyOrFailedCount: 0)
+        }
+
+        var recognized = Array<String?>(repeating: nil, count: urls.count)
+        let maximumConcurrentRecognitions = 4
+        for chunkStart in stride(from: 0, to: urls.count, by: maximumConcurrentRecognitions) {
+            let chunkEnd = min(chunkStart + maximumConcurrentRecognitions, urls.count)
+            try await withThrowingTaskGroup(of: (Int, String?).self) { group in
+                for index in chunkStart..<chunkEnd {
+                    let url = urls[index]
+                    group.addTask { [thumbnailRecognizer] in
+                        try Task.checkCancellation()
+                        let text = await thumbnailRecognizer.recognizedText(at: url)
+                        try Task.checkCancellation()
+                        return (index, text)
+                    }
+                }
+                for try await (index, text) in group {
+                    recognized[index] = text
+                }
+            }
+        }
+
+        let recognizedTexts = recognized.compactMap { normalized($0) }
+        return SocialMediaRecognition(
+            recognizedTexts: recognizedTexts,
+            attemptedCount: urls.count,
+            emptyOrFailedCount: recognized.filter { normalized($0) == nil }.count
+        )
+    }
+
+    @discardableResult
+    private func appendUnresolvedSocialHint(
+        _ hint: SocialPlaceSearchHint,
+        originalSeed: PlaceImportSeed,
+        to entries: inout [PlaceImportResolvedEntry],
+        seenHints: inout Set<String>
+    ) -> Bool {
+        guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
+        let identity = hintIdentity(hint)
+        guard seenHints.insert(identity).inserted else { return false }
+        entries.append(
+            PlaceImportResolvedEntry(
+                seed: socialSeed(from: originalSeed, hint: hint, candidate: nil),
+                candidates: [],
+                selectedCandidateID: nil,
+                helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+            )
+        )
+        return true
     }
 
     private func manualResolution(
@@ -392,6 +515,11 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
 
 @MainActor
 final class PlaceImportStore: ObservableObject {
+    private struct LoadedItemUpgrade {
+        let items: [PlaceImportItem]
+        let replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
+    }
+
     @Published private(set) var batches: [PlaceImportBatch]
     @Published private(set) var items: [PlaceImportItem]
     @Published private(set) var persistenceError: String?
@@ -399,6 +527,7 @@ final class PlaceImportStore: ObservableObject {
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
     private var processingTasks: [String: Task<Void, Never>] = [:]
+    private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
     init(
         persistence: any PlaceImportPersisting = FilePlaceImportPersistence(),
@@ -408,21 +537,32 @@ final class PlaceImportStore: ObservableObject {
         self.resolver = resolver
         do {
             let snapshot = try persistence.load()
+            let upgrade = Self.upgradedLoadedItems(snapshot.items)
             batches = snapshot.batches
-            items = Self.upgradedLoadedItems(snapshot.items)
+            items = upgrade.items
+            replacedSocialItemsByPlaceholderID = upgrade.replacedSocialItemsByPlaceholderID
             persistenceError = nil
         } catch {
             batches = []
             items = []
+            replacedSocialItemsByPlaceholderID = [:]
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
     }
 
-    private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> [PlaceImportItem] {
+    private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> LoadedItemUpgrade {
         var seenSocialSources = Set<String>()
+        let socialItemsBySource = Dictionary(grouping: loadedItems.filter { item in
+            shouldUpgradeResolution(for: item)
+                && [.instagram, .tiktok].contains(item.source)
+                && item.seed.sourceURLString != nil
+        }) { item in
+            "\(item.batchID)|\(item.seed.sourceURLString ?? "")"
+        }
+        var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]] = [:]
 
-        return loadedItems.compactMap { item in
+        let upgradedItems = loadedItems.compactMap { item -> PlaceImportItem? in
             guard shouldUpgradeResolution(for: item) else {
                 var resumed = item
                 if item.state == .resolving {
@@ -436,6 +576,7 @@ final class PlaceImportStore: ObservableObject {
                let sourceURLString = item.seed.sourceURLString {
                 let sourceKey = "\(item.batchID)|\(sourceURLString)"
                 guard seenSocialSources.insert(sourceKey).inserted else { return nil }
+                replacedSocialItemsByPlaceholderID[item.id] = socialItemsBySource[sourceKey] ?? [item]
                 upgraded.seed = PlaceImportSeed(
                     id: item.seed.id,
                     rawText: sourceURLString,
@@ -454,6 +595,10 @@ final class PlaceImportStore: ObservableObject {
             upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
             return upgraded
         }
+        return LoadedItemUpgrade(
+            items: upgradedItems,
+            replacedSocialItemsByPlaceholderID: replacedSocialItemsByPlaceholderID
+        )
     }
 
     var primaryBatch: PlaceImportBatch? {
@@ -505,12 +650,15 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func items(for batchID: String) -> [PlaceImportItem] {
-        items.filter { $0.batchID == batchID }.sorted {
-            if $0.seed.sourceLine == $1.seed.sourceLine {
-                return $0.createdAt < $1.createdAt
+        items.enumerated()
+            .filter { $0.element.batchID == batchID }
+            .sorted {
+                if $0.element.seed.sourceLine == $1.element.seed.sourceLine {
+                    return $0.offset < $1.offset
+                }
+                return $0.element.seed.sourceLine < $1.element.seed.sourceLine
             }
-            return $0.seed.sourceLine < $1.seed.sourceLine
-        }
+            .map(\.element)
     }
 
     func item(id: String) -> PlaceImportItem? {
@@ -593,6 +741,13 @@ final class PlaceImportStore: ObservableObject {
     func cancel(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        let upgradePlaceholderIDs = replacedSocialItemsByPlaceholderID.compactMap { placeholderID, oldItems in
+            oldItems.first?.batchID == batchID ? placeholderID : nil
+        }
+        for placeholderID in upgradePlaceholderIDs {
+            guard let index = items.firstIndex(where: { $0.id == placeholderID }) else { continue }
+            restoreReplacedSocialItems(placeholderID: placeholderID, at: index)
+        }
         for index in items.indices where items[index].batchID == batchID && [.queued, .resolving].contains(items[index].state) {
             items[index].state = .dismissed
             items[index].updatedAt = .now
@@ -607,6 +762,9 @@ final class PlaceImportStore: ObservableObject {
     func deleteBatch(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
+            $0.value.first?.batchID != batchID
+        }
         items.removeAll(where: { $0.batchID == batchID })
         batches.removeAll(where: { $0.id == batchID })
         persist()
@@ -617,6 +775,7 @@ final class PlaceImportStore: ObservableObject {
             task.cancel()
         }
         processingTasks.removeAll()
+        replacedSocialItemsByPlaceholderID.removeAll()
         items.removeAll()
         batches.removeAll()
         persist()
@@ -679,27 +838,46 @@ final class PlaceImportStore: ObservableObject {
             let itemID = items[index].id
             let seed = items[index].seed
             let source = items[index].source
-            synchronizeBatch(batchID)
+            let isSocialUpgrade = replacedSocialItemsByPlaceholderID[itemID] != nil
+            // Keep the pre-upgrade snapshot durable until its network-dependent refresh succeeds.
+            synchronizeBatch(batchID, persist: !isSocialUpgrade)
 
             do {
                 let resolution = try await resolver.resolve(seed: seed, source: source)
                 guard !Task.isCancelled,
                       let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
-                apply(resolution, at: resolvedIndex)
+                if case .needsHelp = resolution,
+                   restoreReplacedSocialItems(placeholderID: itemID, at: resolvedIndex) {
+                    // A transient metadata failure must not erase previously useful rows.
+                } else {
+                    replacedSocialItemsByPlaceholderID[itemID] = nil
+                    apply(resolution, at: resolvedIndex)
+                }
             } catch {
                 guard !Task.isCancelled,
                       let failedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
-                items[failedIndex].state = .failed
-                items[failedIndex].helpMessage = error.localizedDescription
-                items[failedIndex].updatedAt = .now
+                if !restoreReplacedSocialItems(placeholderID: itemID, at: failedIndex) {
+                    items[failedIndex].state = .failed
+                    items[failedIndex].helpMessage = error.localizedDescription
+                    items[failedIndex].updatedAt = .now
+                }
             }
             synchronizeBatch(batchID)
             await Task.yield()
         }
         processingTasks[batchID] = nil
         synchronizeBatch(batchID)
+    }
+
+    @discardableResult
+    private func restoreReplacedSocialItems(placeholderID: String, at index: Int) -> Bool {
+        guard let replacedItems = replacedSocialItemsByPlaceholderID.removeValue(forKey: placeholderID) else {
+            return false
+        }
+        items.replaceSubrange(index...index, with: replacedItems)
+        return true
     }
 
     private func apply(_ resolution: PlaceImportResolution, at index: Int) {
@@ -808,7 +986,13 @@ final class PlaceImportStore: ObservableObject {
 
     private func persist() {
         do {
-            try persistence.save(PlaceImportSnapshot(batches: batches, items: items))
+            // A resolver upgrade is intentionally staged in memory. Persist each group's
+            // previous rows until its network-dependent refresh commits so an unrelated
+            // save or app termination cannot make a temporary placeholder durable.
+            let durableItems = items.flatMap { item in
+                replacedSocialItemsByPlaceholderID[item.id] ?? [item]
+            }
+            try persistence.save(PlaceImportSnapshot(batches: batches, items: durableItems))
             persistenceError = nil
         } catch {
             persistenceError = "Import progress could not be saved. Keep rec.me open and try again."
@@ -843,7 +1027,8 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private static func shouldUpgradeResolution(for item: PlaceImportItem) -> Bool {
-        guard (item.resolverVersion ?? 0) < PlaceImportItem.currentResolverVersion,
+        let requiredVersion = item.source == .googleMaps ? 4 : PlaceImportItem.currentResolverVersion
+        guard (item.resolverVersion ?? 0) < requiredVersion,
               [.googleMaps, .instagram, .tiktok].contains(item.source),
               [.ready, .ambiguous, .needsHelp, .failed].contains(item.state)
         else { return false }

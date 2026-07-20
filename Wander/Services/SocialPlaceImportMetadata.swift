@@ -1,16 +1,79 @@
 import Foundation
 import ImageIO
-import NaturalLanguage
 import UIKit
 import Vision
 
-struct SocialImportMetadata: Equatable {
+struct SocialImportMediaEvidence: Equatable, Sendable {
+    let accessibilityText: String?
+    let imageURL: URL?
+}
+
+enum SocialMediaURLPolicy {
+    static func isInstagramPageURL(_ url: URL) -> Bool {
+        guard isHTTPS(url), let host = url.host?.lowercased() else { return false }
+        return host == "instagram.com" || host.hasSuffix(".instagram.com")
+    }
+
+    static func isInstagramMediaURL(_ url: URL) -> Bool {
+        guard isHTTPS(url), let host = url.host?.lowercased() else { return false }
+        return isHost(host, in: ["cdninstagram.com", "fbcdn.net"])
+    }
+
+    static func isTikTokMediaURL(_ url: URL) -> Bool {
+        guard isHTTPS(url), let host = url.host?.lowercased() else { return false }
+        return isHost(
+            host,
+            in: ["tiktokcdn.com", "tiktokcdn-us.com", "ibytedtos.com", "byteoversea.com", "muscdn.com"]
+        )
+    }
+
+    static func isTrustedSocialMediaURL(_ url: URL) -> Bool {
+        isInstagramMediaURL(url) || isTikTokMediaURL(url)
+    }
+
+    static func permitsMediaRedirect(from originalURL: URL, to finalURL: URL) -> Bool {
+        guard isTrustedSocialMediaURL(originalURL), isTrustedSocialMediaURL(finalURL),
+              let originalHost = originalURL.host?.lowercased(),
+              let finalHost = finalURL.host?.lowercased()
+        else { return false }
+        if originalHost == finalHost { return true }
+        if isInstagramMediaURL(originalURL), isInstagramMediaURL(finalURL) { return true }
+        let tiktokMediaDomains = ["tiktokcdn.com", "tiktokcdn-us.com", "ibytedtos.com", "byteoversea.com"]
+        return isHost(originalHost, in: tiktokMediaDomains)
+            && isHost(finalHost, in: tiktokMediaDomains)
+    }
+
+    private static func isHTTPS(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https" && url.host?.isEmpty == false
+    }
+
+    private static func isHost(_ host: String, in domains: [String]) -> Bool {
+        domains.contains { host == $0 || host.hasSuffix(".\($0)") }
+    }
+}
+
+struct SocialImportMetadata: Equatable, Sendable {
     let title: String?
     let caption: String?
     let authorName: String?
     let thumbnailURL: URL?
+    let mediaItems: [SocialImportMediaEvidence]
 
-    var evidenceText: String {
+    init(
+        title: String?,
+        caption: String?,
+        authorName: String?,
+        thumbnailURL: URL?,
+        mediaItems: [SocialImportMediaEvidence] = []
+    ) {
+        self.title = title
+        self.caption = caption
+        self.authorName = authorName
+        self.thumbnailURL = thumbnailURL
+        self.mediaItems = mediaItems
+    }
+
+    var primaryEvidenceText: String {
         var seen = Set<String>()
         return [caption, title]
             .compactMap { value -> String? in
@@ -22,6 +85,11 @@ struct SocialImportMetadata: Equatable {
             }
             .joined(separator: "\n")
     }
+}
+
+private struct ParsedInstagramPage: Sendable {
+    let openGraph: SocialImportMetadata?
+    let embedded: InstagramEmbeddedPostEvidence?
 }
 
 @MainActor
@@ -85,11 +153,14 @@ final class PublicSocialImportMetadataProvider: SocialImportMetadataProviding {
             title: payload.title?.trimmedNil,
             caption: payload.title?.trimmedNil,
             authorName: payload.authorName?.trimmedNil,
-            thumbnailURL: payload.thumbnailURL
+            thumbnailURL: payload.thumbnailURL.flatMap { thumbnailURL in
+                SocialMediaURLPolicy.isTikTokMediaURL(thumbnailURL) ? thumbnailURL : nil
+            }
         )
     }
 
     private func instagramMetadata(for url: URL) async -> SocialImportMetadata? {
+        guard let shortcode = InstagramEmbeddedPostParser.shortcode(from: url) else { return nil }
         var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
@@ -98,10 +169,47 @@ final class PublicSocialImportMetadataProvider: SocialImportMetadataProviding {
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         guard let response = try? await httpClient.response(for: request),
               (200..<300).contains(response.statusCode),
+              SocialMediaURLPolicy.isInstagramPageURL(response.finalURL),
               response.data.count <= 5_000_000,
               let html = String(data: response.data, encoding: .utf8)
         else { return nil }
-        return PublicSocialHTMLMetadataParser.metadata(from: html)
+        let parsingTask = Task.detached(priority: .userInitiated) {
+            ParsedInstagramPage(
+                openGraph: PublicSocialHTMLMetadataParser.metadata(from: html),
+                embedded: InstagramEmbeddedPostParser.evidence(
+                    from: html,
+                    expectedCode: shortcode
+                )
+            )
+        }
+        let parsed = await withTaskCancellationHandler {
+            await parsingTask.value
+        } onCancel: {
+            parsingTask.cancel()
+        }
+        let openGraph = parsed.openGraph.map { metadata in
+            SocialImportMetadata(
+                title: metadata.title,
+                caption: metadata.caption,
+                authorName: metadata.authorName,
+                thumbnailURL: metadata.thumbnailURL.flatMap { imageURL in
+                    SocialMediaURLPolicy.isInstagramMediaURL(imageURL) ? imageURL : nil
+                }
+            )
+        }
+        guard let embedded = parsed.embedded else { return openGraph }
+
+        let trustedOpenGraphImage = openGraph?.thumbnailURL.flatMap { imageURL in
+            SocialMediaURLPolicy.isInstagramMediaURL(imageURL) ? imageURL : nil
+        }
+
+        return SocialImportMetadata(
+            title: openGraph?.title,
+            caption: embedded.caption ?? openGraph?.caption,
+            authorName: openGraph?.authorName,
+            thumbnailURL: trustedOpenGraphImage ?? embedded.mediaItems.first?.imageURL,
+            mediaItems: embedded.mediaItems
+        )
     }
 
     private func expandedURL(for url: URL) async -> URL? {
@@ -135,17 +243,19 @@ enum PublicSocialHTMLMetadataParser {
             pattern: #"<meta\b[^>]*>"#,
             options: [.caseInsensitive]
         ) else { return nil }
-        let acceptedKeys = Set(keys.map { $0.lowercased() })
         let range = NSRange(html.startIndex..<html.endIndex, in: html)
 
-        for tagMatch in tagExpression.matches(in: html, range: range) {
-            guard let tagRange = Range(tagMatch.range, in: html) else { continue }
-            let attributes = metaAttributes(in: String(html[tagRange]))
-            guard let metadataKey = (attributes["property"] ?? attributes["name"])?.lowercased(),
-                  acceptedKeys.contains(metadataKey),
-                  let content = attributes["content"]
-            else { continue }
-            return decodeHTMLEntities(content)
+        let tags = tagExpression.matches(in: html, range: range).compactMap { match -> [String: String]? in
+            guard let tagRange = Range(match.range, in: html) else { return nil }
+            return metaAttributes(in: String(html[tagRange]))
+        }
+        for key in keys.map({ $0.lowercased() }) {
+            for attributes in tags {
+                guard (attributes["property"] ?? attributes["name"])?.lowercased() == key,
+                      let content = attributes["content"]
+                else { continue }
+                return decodeHTMLEntities(content)
+            }
         }
         return nil
     }
@@ -195,8 +305,189 @@ enum PublicSocialHTMLMetadataParser {
     }
 }
 
+struct InstagramEmbeddedPostEvidence: Equatable, Sendable {
+    let caption: String?
+    let mediaItems: [SocialImportMediaEvidence]
+}
+
+enum InstagramEmbeddedPostParser {
+    private static let maximumScriptBytes = 1_500_000
+    private static let maximumVisitedNodes = 100_000
+    private static let maximumTotalVisitedNodes = 300_000
+    private static let maximumDepth = 40
+
+    static func shortcode(from url: URL) -> String? {
+        guard SocialMediaURLPolicy.isInstagramPageURL(url) else { return nil }
+        let components = url.pathComponents.filter { $0 != "/" }
+        guard components.count >= 2,
+              ["p", "reel", "tv"].contains(components[0].lowercased())
+        else { return nil }
+        let value = components[1]
+        guard value.range(of: #"^[A-Za-z0-9_-]{5,30}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return value
+    }
+
+    static func evidence(
+        from html: String,
+        expectedCode: String,
+        maxMediaItems: Int = 16
+    ) -> InstagramEmbeddedPostEvidence? {
+        guard !html.isEmpty, maxMediaItems > 0,
+              let scriptExpression = try? NSRegularExpression(
+                pattern: #"<script\b([^>]*)>(.*?)</script>"#,
+                options: [.caseInsensitive, .dotMatchesLineSeparators]
+              )
+        else { return nil }
+
+        let htmlRange = NSRange(html.startIndex..<html.endIndex, in: html)
+        var bestEvidence: InstagramEmbeddedPostEvidence?
+        var totalRemainingNodes = maximumTotalVisitedNodes
+        for match in scriptExpression.matches(in: html, range: htmlRange) {
+            guard !Task.isCancelled, totalRemainingNodes > 0 else { break }
+            guard match.numberOfRanges == 3,
+                  let attributesRange = Range(match.range(at: 1), in: html),
+                  let bodyRange = Range(match.range(at: 2), in: html),
+                  isJSONScriptAttributes(String(html[attributesRange]))
+            else { continue }
+
+            let body = String(html[bodyRange])
+            guard body.utf8.count <= maximumScriptBytes,
+                  let data = body.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data)
+            else { continue }
+            var remainingNodes = min(maximumVisitedNodes, totalRemainingNodes)
+            let startingNodes = remainingNodes
+            collectBestMatchingEvidence(
+                in: root,
+                expectedCode: expectedCode,
+                maxMediaItems: maxMediaItems,
+                depth: 0,
+                remainingNodes: &remainingNodes,
+                bestEvidence: &bestEvidence
+            )
+            totalRemainingNodes -= startingNodes - remainingNodes
+        }
+        return bestEvidence
+    }
+
+    private static func isJSONScriptAttributes(_ attributes: String) -> Bool {
+        attributes.range(
+            of: #"\btype\s*=\s*([\"'])application/json\1"#,
+            options: [.caseInsensitive, .regularExpression]
+        ) != nil
+    }
+
+    private static func collectBestMatchingEvidence(
+        in value: Any,
+        expectedCode: String,
+        maxMediaItems: Int,
+        depth: Int,
+        remainingNodes: inout Int,
+        bestEvidence: inout InstagramEmbeddedPostEvidence?
+    ) {
+        guard !Task.isCancelled, depth <= maximumDepth, remainingNodes > 0 else { return }
+        remainingNodes -= 1
+
+        if let dictionary = value as? [String: Any] {
+            if dictionary["code"] as? String == expectedCode,
+               dictionary["carousel_media"] is [Any],
+               let evidence = postEvidence(from: dictionary, maxMediaItems: maxMediaItems),
+               isBetter(evidence, than: bestEvidence) {
+                bestEvidence = evidence
+            }
+            for child in dictionary.values {
+                collectBestMatchingEvidence(
+                    in: child,
+                    expectedCode: expectedCode,
+                    maxMediaItems: maxMediaItems,
+                    depth: depth + 1,
+                    remainingNodes: &remainingNodes,
+                    bestEvidence: &bestEvidence
+                )
+            }
+        } else if let array = value as? [Any] {
+            for child in array {
+                collectBestMatchingEvidence(
+                    in: child,
+                    expectedCode: expectedCode,
+                    maxMediaItems: maxMediaItems,
+                    depth: depth + 1,
+                    remainingNodes: &remainingNodes,
+                    bestEvidence: &bestEvidence
+                )
+            }
+        }
+    }
+
+    private static func isBetter(
+        _ candidate: InstagramEmbeddedPostEvidence,
+        than current: InstagramEmbeddedPostEvidence?
+    ) -> Bool {
+        guard let current else { return true }
+        let candidateImageCount = candidate.mediaItems.lazy.compactMap(\.imageURL).count
+        let currentImageCount = current.mediaItems.lazy.compactMap(\.imageURL).count
+        if candidateImageCount != currentImageCount {
+            return candidateImageCount > currentImageCount
+        }
+        if candidate.mediaItems.count != current.mediaItems.count {
+            return candidate.mediaItems.count > current.mediaItems.count
+        }
+        return (candidate.caption?.count ?? 0) > (current.caption?.count ?? 0)
+    }
+
+    private static func postEvidence(
+        from post: [String: Any],
+        maxMediaItems: Int
+    ) -> InstagramEmbeddedPostEvidence? {
+        let caption = ((post["caption"] as? [String: Any])?["text"] as? String)?.trimmedNil
+        let children = post["carousel_media"] as? [Any] ?? []
+        var seenURLs = Set<String>()
+        let mediaItems = children.prefix(maxMediaItems).compactMap { child -> SocialImportMediaEvidence? in
+            guard let dictionary = child as? [String: Any] else { return nil }
+            let accessibilityText = (dictionary["accessibility_caption"] as? String)?.trimmedNil
+            let imageURL = imageURL(from: dictionary).flatMap { url -> URL? in
+                guard seenURLs.insert(url.absoluteString).inserted else { return nil }
+                return url
+            }
+            guard accessibilityText != nil || imageURL != nil else { return nil }
+            return SocialImportMediaEvidence(
+                accessibilityText: accessibilityText,
+                imageURL: imageURL
+            )
+        }
+        guard caption != nil || !mediaItems.isEmpty else { return nil }
+        return InstagramEmbeddedPostEvidence(caption: caption, mediaItems: mediaItems)
+    }
+
+    private static func imageURL(from media: [String: Any]) -> URL? {
+        if let url = validatedHTTPSURL(media["display_uri"]) {
+            return url
+        }
+        guard let versions = media["image_versions2"] as? [String: Any],
+              let candidates = versions["candidates"] as? [Any]
+        else { return nil }
+        for candidate in candidates {
+            guard let dictionary = candidate as? [String: Any],
+                  let url = validatedHTTPSURL(dictionary["url"])
+            else { continue }
+            return url
+        }
+        return nil
+    }
+
+    private static func validatedHTTPSURL(_ value: Any?) -> URL? {
+        guard let rawValue = value as? String,
+              let url = URL(string: rawValue),
+              SocialMediaURLPolicy.isInstagramMediaURL(url)
+        else { return nil }
+        return url
+    }
+}
+
 @MainActor
-protocol SocialThumbnailTextRecognizing {
+protocol SocialThumbnailTextRecognizing: Sendable {
     func recognizedText(at url: URL) async -> String?
 }
 
@@ -209,17 +500,22 @@ final class VisionSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing 
     }
 
     func recognizedText(at url: URL) async -> String? {
+        guard SocialMediaURLPolicy.isTrustedSocialMediaURL(url) else { return nil }
         var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
         request.setValue("image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
         guard let response = try? await httpClient.response(for: request),
               (200..<300).contains(response.statusCode),
+              SocialMediaURLPolicy.permitsMediaRedirect(from: url, to: response.finalURL),
               response.data.count <= 10_000_000,
               response.mimeType?.hasPrefix("image/") != false
         else { return nil }
 
         let data = response.data
-        return await Task.detached(priority: .userInitiated) {
-            guard let image = UIImage(data: data), let cgImage = image.cgImage else { return nil }
+        let recognitionTask = Task.detached(priority: .userInitiated) { () -> String? in
+            guard !Task.isCancelled,
+                  let image = UIImage(data: data),
+                  let cgImage = image.cgImage
+            else { return nil }
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
@@ -229,38 +525,67 @@ final class VisionSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing 
                 options: [:]
             )
             try? handler.perform([request])
+            guard !Task.isCancelled else { return nil }
             let text = (request.results ?? [])
                 .compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: "\n")
             return text.trimmedNil
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await recognitionTask.value
+        } onCancel: {
+            recognitionTask.cancel()
+        }
     }
 }
 
 struct SocialPlaceSearchHint: Equatable {
+    enum Evidence: Equatable {
+        case explicitLocation
+        case itineraryPhrase
+        case imageText
+        case namedEntity
+        case itineraryHandle
+        case socialHandle
+
+        var shouldRemainVisibleWithoutCandidates: Bool {
+            switch self {
+            case .explicitLocation, .itineraryPhrase, .imageText:
+                true
+            case .namedEntity, .itineraryHandle, .socialHandle:
+                false
+            }
+        }
+    }
+
     let name: String
     let area: String?
+    let evidence: Evidence
 }
 
 enum SocialPlaceHintExtractor {
     static func hints(
         from metadata: SocialImportMetadata,
-        recognizedText: String?,
+        recognizedTexts: [String],
         limit: Int = 12
     ) -> [SocialPlaceSearchHint] {
-        let evidence = metadata.evidenceText
+        let primaryEvidence = metadata.primaryEvidenceText
         var results: [SocialPlaceSearchHint] = []
 
-        appendExplicitLocationHints(from: evidence, to: &results)
-        appendHandles(from: evidence, to: &results)
-        appendPhraseHints(from: evidence, to: &results)
-        appendNamedEntities(from: evidence, to: &results)
-
-        if let recognizedText {
-            for query in PhotoPlaceTextExtractor.searchQueries(from: recognizedText, limit: 6) {
-                append(parsedHint(from: query), to: &results)
-            }
+        // Keep each carousel slide isolated. Combining OCR across slides can attach an
+        // address or slogan from one image to a place name from another.
+        for recognizedText in recognizedTexts {
+            appendMediaTextHints(from: recognizedText, to: &results)
         }
+
+        // Creator-authored copy is higher trust than Instagram's generated accessibility
+        // captions. It can safely produce durable itinerary rows when MapKit has no match.
+        appendExplicitLocationHints(from: primaryEvidence, to: &results)
+        appendPhraseHints(from: primaryEvidence, to: &results)
+
+        // Raw account handles are useful fallbacks, but remain non-durable and last in
+        // the bounded search budget so they cannot crowd out named destinations.
+        appendHandles(from: primaryEvidence, to: &results)
 
         return Array(results.prefix(limit))
     }
@@ -276,7 +601,7 @@ enum SocialPlaceHintExtractor {
         ]
         for pattern in patterns {
             for value in captures(pattern: pattern, in: text) {
-                append(parsedHint(from: value), to: &output)
+                append(parsedHint(from: value, evidence: .explicitLocation), to: &output)
             }
         }
     }
@@ -285,63 +610,126 @@ enum SocialPlaceHintExtractor {
         for handle in captures(pattern: #"@([A-Za-z0-9._]{3,40})"#, in: text) {
             let name = readableHandle(handle)
             guard !isGenericSocialTerm(name) else { continue }
-            append(SocialPlaceSearchHint(name: name, area: nil), to: &output)
+            append(
+                SocialPlaceSearchHint(name: name, area: nil, evidence: .socialHandle),
+                to: &output
+            )
         }
 
         for hashtag in captures(pattern: #"#([A-Za-z][A-Za-z0-9_]{3,40})"#, in: text) {
             let name = readableHandle(hashtag)
             guard !isGenericSocialTerm(name), containsBusinessToken(name) else { continue }
-            append(SocialPlaceSearchHint(name: name, area: nil), to: &output)
+            append(
+                SocialPlaceSearchHint(name: name, area: nil, evidence: .socialHandle),
+                to: &output
+            )
         }
     }
 
     private static func appendPhraseHints(from text: String, to output: inout [SocialPlaceSearchHint]) {
-        let pattern = #"(?i)\b(?:called|at|from|visited|visit|trying|place is)\s+@?([^#\n.!?]{3,90})"#
-        for value in captures(pattern: pattern, in: text) {
+        for value in captures(pattern: itineraryPattern, in: text) {
             let cleaned = trimPhrase(value)
-            append(parsedHint(from: cleaned), to: &output)
+            let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
+                ? .itineraryHandle
+                : .itineraryPhrase
+            append(parsedHint(from: cleaned, evidence: evidence), to: &output)
         }
     }
 
-    private static func appendNamedEntities(from text: String, to output: inout [SocialPlaceSearchHint]) {
-        guard !text.isEmpty else { return }
-        let tagger = NLTagger(tagSchemes: [.nameType])
-        tagger.string = text
-        let options: NLTagger.Options = [.omitPunctuation, .omitWhitespace, .joinNames]
-        var organizations: [String] = []
-        var places: [String] = []
-        tagger.enumerateTags(
-            in: text.startIndex..<text.endIndex,
-            unit: .word,
-            scheme: .nameType,
-            options: options
-        ) { tag, range in
-            let value = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if tag == .organizationName {
-                organizations.append(value)
-            } else if tag == .placeName {
-                places.append(value)
-            }
-            return true
+    private static func appendMediaTextHints(
+        from text: String,
+        to output: inout [SocialPlaceSearchHint]
+    ) {
+        for value in captures(pattern: itineraryPattern, in: text) {
+            let cleaned = trimPhrase(value)
+            guard let hint = parsedHint(from: cleaned, evidence: .imageText),
+                  isStrongMediaPlaceName(hint.name)
+            else { continue }
+            append(hint, to: &output)
         }
 
-        let area = places.first(where: { !$0.isEmpty })
-        for organization in organizations where !isGenericSocialTerm(organization) {
-            append(SocialPlaceSearchHint(name: organization, area: area), to: &output)
+        for query in adjacentNameLineQueries(from: text)
+            + PhotoPlaceTextExtractor.searchQueries(from: text, limit: 12) {
+            guard let hint = parsedHint(from: query, evidence: .imageText),
+                  isStrongMediaPlaceName(hint.name)
+            else { continue }
+            append(hint, to: &output)
         }
     }
 
-    private static func parsedHint(from rawValue: String) -> SocialPlaceSearchHint? {
+    private static func adjacentNameLineQueries(from text: String) -> [String] {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard lines.count >= 2 else { return [] }
+
+        return (0..<(lines.count - 1)).compactMap { index in
+            let first = lines[index]
+            let second = lines[index + 1]
+            guard isShortNameFragment(first), isShortNameFragment(second) else { return nil }
+            return "\(first) \(second)"
+        }
+    }
+
+    private static func isShortNameFragment(_ value: String) -> Bool {
+        let words = mediaWords(in: value)
+        guard (1...4).contains(words.count), value.count <= 40 else { return false }
+        let letters = value.filter(\.isLetter)
+        guard !letters.isEmpty else { return false }
+        return value == value.uppercased()
+            || value.split(separator: " ").allSatisfy { $0.first?.isUppercase == true }
+    }
+
+    private static func isStrongMediaPlaceName(_ value: String) -> Bool {
+        let words = mediaWords(in: value)
+        guard (2...6).contains(words.count) else { return false }
+        let loweredWords = words.map { $0.lowercased() }
+        guard mediaActionWords.isDisjoint(with: Set(loweredWords)) else { return false }
+
+        let strongDesignatorCount = loweredWords.filter { strongPlaceDesignators.contains($0) }.count
+        let weakDesignatorCount = loweredWords.filter { weakPlaceDesignators.contains($0) }.count
+        let distinctiveCount = loweredWords.filter {
+            !mediaGenericWords.contains($0)
+                && !strongPlaceDesignators.contains($0)
+                && !weakPlaceDesignators.contains($0)
+        }.count
+        if strongDesignatorCount > 0 {
+            return distinctiveCount > 0
+        }
+        return weakDesignatorCount > 0 && distinctiveCount >= 2
+    }
+
+    private static func mediaWords(in value: String) -> [String] {
+        value.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private static func parsedHint(
+        from rawValue: String,
+        evidence: SocialPlaceSearchHint.Evidence
+    ) -> SocialPlaceSearchHint? {
         var value = rawValue
             .replacingOccurrences(of: "&quot;", with: "\"")
             .trimmingCharacters(in: CharacterSet(charactersIn: " \t\n\r\"'()[]"))
         guard !value.isEmpty else { return nil }
 
+        if value.hasPrefix("@") {
+            let handleEnd = value.firstIndex(where: { $0.isWhitespace }) ?? value.endIndex
+            let handle = readableHandle(String(value[value.index(after: value.startIndex)..<handleEnd]))
+            let remainder = String(value[handleEnd...])
+            if let areaRange = remainder.range(of: " in ", options: [.caseInsensitive, .backwards]),
+               let area = String(remainder[areaRange.upperBound...]).trimmedNil {
+                value = "\(handle) in \(area)"
+            } else {
+                value = handle
+            }
+        }
+
         if let range = value.range(of: " in ", options: [.caseInsensitive, .backwards]) {
             let name = String(value[..<range.lowerBound]).trimmedNil
             let area = String(value[range.upperBound...]).trimmedNil
             if let name, !isGenericSocialTerm(name) {
-                return SocialPlaceSearchHint(name: name, area: area)
+                return SocialPlaceSearchHint(name: name, area: area, evidence: evidence)
             }
         }
 
@@ -349,7 +737,7 @@ enum SocialPlaceHintExtractor {
               !isGenericSocialTerm(hint.name)
         else { return nil }
         value = hint.name
-        return SocialPlaceSearchHint(name: value, area: hint.area)
+        return SocialPlaceSearchHint(name: value, area: hint.area, evidence: evidence)
     }
 
     private static func append(
@@ -457,6 +845,31 @@ enum SocialPlaceHintExtractor {
         "a", "an", "and", "at", "best", "cafe", "coffee", "coffeehouse", "food",
         "for", "in", "instagram", "local", "new", "of", "place", "restaurant",
         "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
+    ]
+
+    private static let itineraryPattern = #"(?i)\b(?:called|at|from|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|[#\n.!?]|$)"#
+
+    private static let strongPlaceDesignators: Set<String> = [
+        "aquarium", "bakery", "beach", "brewery", "brewing", "falls", "farms",
+        "gallery", "garden", "gardens", "gorge", "hotel", "inn", "lake", "lakes",
+        "lodge", "market", "mercantile", "mountain", "mountains", "museum", "observatory",
+        "overlook", "park", "petroglyph", "petroglyphs", "plaza", "range", "resort",
+        "river", "shrine", "springs", "store", "supply", "temple", "theater", "theatre",
+        "tower", "trail", "zoo"
+    ]
+
+    private static let weakPlaceDesignators: Set<String> = [
+        "bar", "cafe", "coffee", "deli", "eatery", "grill", "kitchen", "restaurant"
+    ]
+
+    private static let mediaActionWords: Set<String> = [
+        "admiring", "adventure", "at", "because", "finish", "fishing", "grab", "hike",
+        "make", "may", "off", "road", "stay", "through", "trip", "you", "your"
+    ]
+
+    private static let mediaGenericWords: Set<String> = [
+        "a", "an", "and", "big", "coffee", "cream", "food", "gourmet", "home", "ice",
+        "local", "new", "of", "place", "shop", "spot", "the"
     ]
 
     private static func normalized(_ value: String) -> String {

@@ -14332,3 +14332,108 @@ Build-82 smoke/release completion, 2026-07-20 15:16 PDT:
   ran the committed 23-assertion Discover pgTAP contract; future parity can add
   its extra ACL plus blocked/self/unauthenticated follow cases to that pgTAP
   file. This does not block the already-approved build or REC-90 behavior.
+
+## 2026-07-20 15:36 PDT - Codex - REC-106 Instagram carousel import investigation
+
+Agent: Codex using the Linear, `recme-linear-log-triage`, and `investigate`
+workflows
+Branch: `codex/rec-106-instagram-carousel`
+Worktree: `/private/tmp/recme-rec106-instagram-carousel`
+Linear: `REC-106` (`In Progress`)
+
+Goal: reproduce why the supplied 12-slide Instagram post yields only Fremont
+Lake, Half Moon Lake Lodge, and Pine Coffee Supply despite its caption and
+slides naming at least nine candidate places; confirm the failing layer, add a
+regression test, implement the smallest verified fix, and leave an Xcode-ready
+branch for Ryan.
+
+Starting state and coordination:
+
+- Created REC-106 as a High-priority Bug assigned to Ryan, related it to
+  REC-97, linked the exact Instagram post, and attached the observed Import
+  Review plus all nine supplied source-carousel screenshots.
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` `339cba2e0`. The root checkout remains on unrelated stale
+  `codex/rec-88-visit-friends-mockup` with untracked `.pnpm-store/`; it will not
+  be modified. No active worktree or latest agent-log entry declares overlap
+  with REC-106.
+- Current status is clean. Expected scope is the Instagram/import extraction
+  adapter and focused tests, plus `docs/agent-log.md`; exact source files will
+  be narrowed after tracing extraction, resolution, persistence, and recent
+  REC-97 history. No build-number bump, TestFlight release, hosted data reset,
+  or unrelated UI work is in scope.
+
+Checkpoint, 2026-07-20 16:04 PDT:
+
+- Confirmed this Profile import flow is entirely device-local: the public page
+  is fetched on-device, candidates are resolved with MapKit, and batches/items
+  live only in `place-imports-v1.json`. PostHog/Supabase cannot explain this
+  incident because the flow currently emits no hosted rows or import events.
+- Reproduced the exact caption failure before production edits on the installed
+  iPhone 17 Pro / iOS 26.5 simulator: the new focused regression returned only
+  Fremont Lake, Half Moon Lake Lodge, White Mountain Petroglyphs, and Pine
+  Coffee Supply instead of the expected eight (`exit 65`, one assertion
+  failure). The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not
+  installed on this machine, so all executable validation uses the available
+  iOS 26.5 runtime and records that environment difference.
+- Root cause: the production resolver capped social hints at eight while the
+  extractor inserted five account handles before itinerary phrases; a greedy
+  phrase match also swallowed Green River Lakes, failed/weak MapKit hints were
+  silently discarded, and only the single Open Graph cover was OCR'd.
+- The live public page exposes full caption text plus a bounded, parseable
+  embedded JSON object for the exact shortcode with 12 ordered carousel
+  children and 12 HTTPS cover frames. Expanded the fix accordingly: bounded
+  exact-shortcode carousel parsing, four-at-a-time Vision OCR, caption/slide
+  hint prioritization up to 24, independent continuation after failed slides,
+  honest unresolved rows, privacy-safe count/rejection diagnostics, and
+  resolver version 5 so existing three-row results automatically requeue.
+- Focused post-fix validation passed 4/4 tests: exact eight-place caption,
+  12-slide parser, unresolved-place retention, and store persistence of nine
+  destinations with three simulated slide OCR failures. A broader 28-test
+  import run found one existing handle-query normalization regression; restored
+  exact handle extraction and its focused test now passes. `xcodegen generate`
+  completed without project-file churn; `git diff --check` is clean.
+
+Completion checkpoint, 2026-07-20 16:50 PDT:
+
+- Live-source verification fetched the exact supplied post successfully
+  (HTTP 200; 632,907 bytes), selected the exact `Dak2JCClKkF` embedded object
+  rather than decoys/partial duplicates, and found all 12 ordered carousel
+  frames. Every extracted Meta CDN image returned HTTP 200 `image/jpeg`.
+  Captured live OCR/accessibility strings drive the end-to-end regression,
+  which now produces these nine ordered destinations: Fremont Lake, Green
+  River Lakes, Half Moon Lake Lodge, White Mountain Petroglyphs, Flaming
+  Gorge, Wind River Range, Skyline Drive Overlook, Pine Coffee Supply, and
+  Farson Mercantile.
+- Final implementation parses a bounded exact-shortcode carousel, rejects
+  untrusted source/redirect/media hosts, OCRs unique slides concurrently in
+  bounded groups, preserves per-slide provenance, prioritizes destination
+  phrases before raw handles, retains explicitly named unmatched places for
+  review, and emits privacy-safe import counts. Existing social imports below
+  resolver v5 are reprocessed atomically; metadata failure, cancellation, a
+  total MapKit outage, or a mid-import MapKit outage restores every prior row.
+- Independent review caught and drove five final hardening changes: OCR's
+  one-character correction is opt-in only for image-text hints, any MapKit
+  lookup error aborts a source refresh, duplicate payload ranking prefers
+  usable image URLs, and persisted carousel order uses the stored array ordinal
+  as an explicit tiebreaker. In addition, snapshot writes substitute the old
+  rows for every still-pending resolver upgrade, so completing one import cannot
+  strand another import's temporary placeholder across app termination. The
+  five original targeted review regressions passed 5/5; a three-test
+  persistence/relaunch gate, including the new two-group interruption case,
+  passed 3/3.
+- Validation is green on the installed iPhone 17 Pro / iOS 26.5 simulator:
+  import suites passed 43/43 and the full Wander suite passed 484/484. The
+  required generic iOS Simulator build succeeded; `xcodegen generate`
+  succeeded with no project-file diff; `git diff --check` is clean. The
+  repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed here, so
+  that exact destination remains an environment gap for Ryan's local Xcode
+  check, not an asserted pass.
+- Files changed: `Wander/Models/PlaceImportModels.swift`,
+  `Wander/Services/PlaceImportCandidateMatcher.swift`,
+  `Wander/Services/PlaceImportStore.swift`,
+  `Wander/Services/SocialPlaceImportMetadata.swift`,
+  `Wander/Services/WanderDebugLog.swift`, `WanderTests/PlaceImportTests.swift`,
+  and this log. No schema/data mutation, build-number bump, TestFlight upload,
+  or tester announcement occurred. Ready to commit, publish a ready PR, link it
+  to REC-106, and move the issue to `In Review` for Ryan's device/Xcode test.

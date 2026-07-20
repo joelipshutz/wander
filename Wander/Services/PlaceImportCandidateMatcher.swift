@@ -13,7 +13,8 @@ enum PlaceImportCandidateMatcher {
         nameHint: String?,
         areaHint: String?,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        allowNearSpellingMatch: Bool = false
     ) -> PlaceImportCandidateMatch {
         guard !candidates.isEmpty else {
             return PlaceImportCandidateMatch(candidates: [], selectedCandidateID: nil, bestScore: 0)
@@ -51,13 +52,18 @@ enum PlaceImportCandidateMatcher {
         let exactName = normalized(best.candidate.name) == normalized(nameHint)
         let exactCoreName = coreTokens(best.candidate.name) == coreTokens(nameHint)
             && !coreTokens(nameHint).isEmpty
+        let nearSpellingName = allowNearSpellingMatch
+            && isNearSpellingMatch(best.candidate.name, nameHint)
         let exactEquivalentCount = scored.filter { scoredCandidate in
             normalized(scoredCandidate.candidate.name) == normalized(nameHint)
                 || (coreTokens(scoredCandidate.candidate.name) == coreTokens(nameHint)
                     && !coreTokens(nameHint).isEmpty)
+                || (allowNearSpellingMatch
+                    && isNearSpellingMatch(scoredCandidate.candidate.name, nameHint))
         }.count
         let hasClearLead = best.score - runnerUpScore >= 0.08
-        let isUniqueExactMatch = (exactName || exactCoreName) && exactEquivalentCount == 1
+        let isUniqueExactMatch = (exactName || exactCoreName || nearSpellingName)
+            && exactEquivalentCount == 1
         let selectedID = (isUniqueExactMatch || (best.score >= 0.82 && hasClearLead))
             ? best.candidate.id
             : nil
@@ -150,5 +156,38 @@ enum PlaceImportCandidateMatcher {
     private static func normalized(_ value: String) -> String {
         value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .filter { $0.isLetter || $0.isNumber }
+    }
+
+    private static func isNearSpellingMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsCharacters = Array(normalized(lhs))
+        let rhsCharacters = Array(normalized(rhs))
+        guard min(lhsCharacters.count, rhsCharacters.count) >= 8,
+              abs(lhsCharacters.count - rhsCharacters.count) <= 1
+        else { return false }
+
+        var lhsIndex = 0
+        var rhsIndex = 0
+        var edits = 0
+        while lhsIndex < lhsCharacters.count, rhsIndex < rhsCharacters.count {
+            if lhsCharacters[lhsIndex] == rhsCharacters[rhsIndex] {
+                lhsIndex += 1
+                rhsIndex += 1
+                continue
+            }
+            edits += 1
+            guard edits <= 1 else { return false }
+            if lhsCharacters.count > rhsCharacters.count {
+                lhsIndex += 1
+            } else if rhsCharacters.count > lhsCharacters.count {
+                rhsIndex += 1
+            } else {
+                lhsIndex += 1
+                rhsIndex += 1
+            }
+        }
+        if lhsIndex < lhsCharacters.count || rhsIndex < rhsCharacters.count {
+            edits += 1
+        }
+        return edits == 1
     }
 }
