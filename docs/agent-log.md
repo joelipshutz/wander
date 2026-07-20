@@ -13776,3 +13776,36 @@ REC-17 production implementation checkpoint, 2026-07-20 12:48 PDT:
   iPhone 16e, complete suite, review, ready PR #118, and squash merge. Per the
   explicit release boundary, no build-number bump, archive, TestFlight upload,
   hosted data change, or tester Slack post is in scope.
+
+REC-17 final validation and landing gate, 2026-07-20 14:05 PDT:
+
+- Production resting-state visual QA passed on iPhone 16 Plus / iOS 18.6: the
+  Add launcher presents as the approved low 300pt warm sheet over the current
+  tab with the compact smart field, two action rows, drag affordance, and close
+  control. Temporary XCUITest-only target/source artifacts were removed before
+  the final project generation and are not part of the shipping diff.
+- Keyboard QA initially exposed a focus race when detent expansion happened in
+  the same focus transaction. The production fix now lets the keyboard establish
+  focus, waits 120ms, and then expands with the snappy detent animation; losing
+  focus returns an otherwise idle launcher to the resting detent. The corrected
+  source compiled and passed the complete suite. A final screenshot attempt was
+  blocked by a stalled Xcode UI-test worker, so the corrected keyboard transition
+  has compile/regression evidence but not a retained post-fix screenshot artifact.
+- Restored the production-only Xcode project with `xcodegen generate` and
+  confirmed there are no `WanderUITests` references in `project.yml` or the
+  generated project. `git diff --check origin/main` passes; the final branch diff
+  is limited to Add/root/Map flow implementation, matching regression tests, and
+  this append-only coordination log.
+- Focused REC-17 regression gate passed 4/4 on iPhone 16 Plus / iOS 18.6:
+  canonical Add-to-Map ownership, compact Wanna defaults, canonical persistence,
+  and decimal/cardinal coordinate parsing. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_13-58-01--0700.xcresult`.
+- Complete repo-prescribed suite passed 458/458 with 0 failures on iPhone 16
+  Plus / iOS 18.6. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_14-03-08--0700.xcresult`.
+- Final code review found no blocking correctness, persistence, privacy,
+  navigation, accessibility, or scope issue. Next: commit the keyboard polish and
+  validation record, publish the validated branch, mark PR #118 ready, update
+  Linear REC-17 to In Review, and squash-merge. This remains a source-only ship;
+  no build-number bump, TestFlight upload, hosted data mutation, or Slack release
+  announcement is authorized.

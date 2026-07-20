@@ -73,10 +73,16 @@ struct AddScreen: View {
                 reset()
             }
             .onChange(of: isQuickAddFocused) { _, isFocused in
-                withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
-                    selectedDetent = isFocused || shouldStayExpanded
-                        ? .large
-                        : AddSheetLayout.restingDetent
+                if isFocused {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 120_000_000)
+                        guard isQuickAddFocused else { return }
+                        expandSheet()
+                    }
+                } else if !shouldStayExpanded {
+                    withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
+                        selectedDetent = AddSheetLayout.restingDetent
+                    }
                 }
             }
             .onChange(of: selectedDetent) { _, detent in
