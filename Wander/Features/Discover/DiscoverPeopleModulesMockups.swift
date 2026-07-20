@@ -205,9 +205,9 @@ private struct DiscoverPeopleMockupCard: View {
     let isFollowing: Bool
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: WanderTheme.spacing1) {
             Button(action: {}) {
-                VStack(spacing: 5) {
+                VStack(spacing: WanderTheme.spacing1) {
                     WanderAvatar(
                         initials: person.initials,
                         size: 48,
@@ -257,8 +257,8 @@ private struct DiscoverPeopleMockupCard: View {
             .clipShape(Capsule())
             .accessibilityLabel(isFollowing ? "Following \(person.name)" : "Follow \(person.name)")
         }
-        .padding(10)
-        .frame(width: 166, height: 220)
+        .padding(WanderTheme.spacing3)
+        .frame(width: 168, height: 224)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
