@@ -477,7 +477,7 @@ private struct SmartInputDirection: View {
 private struct ActionDockDirection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            AddLauncherSearchField(placeholder: "search for a place")
+            AddLauncherSearchField(placeholder: "Search, paste a link, or add coordinates")
 
             VStack(spacing: 0) {
                 AddLauncherDockRow(
@@ -488,9 +488,9 @@ private struct ActionDockDirection: View {
                 )
                 Divider().background(WanderTheme.borderHairline.color)
                 AddLauncherDockRow(
-                    title: "Paste link or coordinates",
-                    subtitle: "we'll figure out the format",
-                    systemImage: "doc.on.clipboard",
+                    title: "From a photo",
+                    subtitle: "scan a place from a photo",
+                    systemImage: "photo.fill",
                     isPrimary: false
                 )
             }
@@ -498,25 +498,6 @@ private struct ActionDockDirection: View {
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
-
-            Button {} label: {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 14, weight: .black))
-                    Text("From a photo")
-                        .font(.system(size: 14, weight: .bold))
-                    Spacer()
-                    Text("scan text")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-                .foregroundStyle(WanderTheme.textInk.color)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceSand.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-            .buttonStyle(.plain)
         }
     }
 }

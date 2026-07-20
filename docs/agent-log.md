@@ -12591,3 +12591,25 @@ Mock publishing handoff, 2026-07-18 16:51 PDT:
 - Committed the mock gallery as `53c573f` (`feat: add SwiftUI Add launcher mockups`), pushed `codex/rec-17-add-save-flow`, and opened draft PR #118 for design selection: https://github.com/joelipshutz/wander/pull/118.
 - Moved Linear REC-17 to `In Review`, attached the draft PR, and added validation/recommendation comment `a92619c9-8b55-4a4c-a960-49420df18249`.
 - The PR is intentionally draft and mock-only. Do not merge it as the production fix; first incorporate Joe's reference screenshot and selected direction, then restore or replace the shelved production save-flow work with matching tests.
+
+## 2026-07-20 10:10 PDT - Codex - REC-17 selected Add launcher refinement
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+
+Goal: refine the selected direction toward D Action Dock while removing its separate Paste link or coordinates CTA. The primary input ghost text must explicitly communicate that it accepts place search, pasted links, and coordinates; the only secondary actions should be I'm here now and From a photo, presented with matching affordances.
+
+Starting status and coordination:
+
+- Fetched origin and confirmed the isolated worktree is clean at `8a83d44`, matching the draft PR branch. Current `origin/main` is `469d198`; this mock-only iteration will remain narrowly scoped and will be updated from latest main before any merge or production implementation.
+- No active worktree overlaps `Wander/Features/Add/AddLauncherMockups.swift`. The production Add/save draft remains shelved in `stash@{0}` and will not be restored during this mock refinement.
+- Expected changes are `Wander/Features/Add/AddLauncherMockups.swift`, a refreshed simulator screenshot/design report outside the repo, and this log. No production Add behavior, persistence, schema, tests, build number, TestFlight, merge, or Slack work is in scope.
+
+Selected-direction refinement result, 2026-07-20 10:14 PDT:
+
+- Refined D Action Dock so the primary field ghost text reads `Search, paste a link, or add coordinates`, explicitly covering all three input formats handled by that field.
+- Removed the redundant Paste link or coordinates CTA. I'm here now and From a photo are now the only secondary actions and share the same dock-row structure, subtitle treatment, trailing chevron, hit target, and enclosing surface.
+- The arm64 simulator build passed on iPhone 16 Plus / iOS 18.6, and `git diff --check` passed. Fresh renders on iPhone 16 Plus and iPhone 16e confirm the full ghost text and both action labels fit without truncation.
+- Updated the private design report and baseline to mark refined D as the selected implementation direction. Production behavior remains unchanged and the shelved save-flow draft remains untouched. Next: publish this mock refinement to draft PR #118 and return REC-17 to review.
