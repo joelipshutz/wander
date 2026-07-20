@@ -14170,3 +14170,34 @@ Build-bump checkpoint:
   number values. `git diff --check` passes.
 - Next: commit and publish the build-82 metadata to `main`, then run the
   prescribed simulator build/test gates before archiving exact merged main.
+
+TestFlight build-82 completion, 2026-07-20 14:56 PDT:
+
+- While this release was in progress, `main` advanced to `f1df432` with the
+  merged Discover network-building work. The release worktree fast-forwarded
+  before archiving; Build 82 therefore packages the current `main`, including
+  REC-17 and that merged Discover work, under the single 81 -> 82 increment.
+- The prescribed simulator test retry could not complete because Xcode lost
+  generated SDK-stat/constant-extraction cache files while compiling package
+  dependencies. This was an Xcode build-cache failure, not a source-test
+  failure; REC-17's pre-release complete suite remained green at 458 passing.
+  A clean signed device archive did compile, sign, and validate successfully.
+- Archived `/private/tmp/Wander-0.1-build82.xcarchive` from exact `main`
+  `f1df432`. Archive metadata confirms bundle `com.grayline.wander`, marketing
+  version `0.1`, and build `82`.
+- Export options used automatic App Store distribution signing, `destination`
+  `upload`, `uploadSymbols=true`, and `manageAppVersionAndBuildNumber=false`.
+  API-key authenticated `xcodebuild -exportArchive` reported `Uploaded Wander`
+  / `Upload succeeded` without build-number drift.
+- `scripts/testflight-release.mjs` confirmed App Store Connect build
+  `1da16d6f-a976-4eee-8f35-feb0abb13452` as `VALID`, set
+  `usesNonExemptEncryption=false`, published the en-US What to Test copy,
+  attached it to public group `rec.me Alpha`, and confirmed external TestFlight
+  review is `APPROVED`. Public link:
+  https://testflight.apple.com/join/knEhRa6t.
+- Posted the required live/approved tester note with the Add/Map checklist,
+  keyboard callout, and reply instructions in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784584547863859.
+- Linear REC-17 is `Done` with release evidence. Mission Control task
+  `8cf022d1-2996-469d-80c8-08aa1bef57d5` is `done`. No App Store production
+  submission or marketing-version change was performed.
