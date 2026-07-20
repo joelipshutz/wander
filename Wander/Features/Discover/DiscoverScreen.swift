@@ -22,6 +22,8 @@ struct DiscoverScreen: View {
     @State private var activityLoadState: DiscoverActivityLoadState = .loading
     @State private var followInFlightProfileIDs: Set<String> = []
     @State private var followFailedProfileIDs: Set<String> = []
+    @State private var lastHandledAuthState: Bool?
+    @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
 
@@ -45,22 +47,22 @@ struct DiscoverScreen: View {
             .map(store.shell(for:))
     }
 
-    private var visiblePlaceSignature: String {
-        store.visiblePlaces()
-            .map { visiblePlace in
-                [
-                    visiblePlace.id,
-                    visiblePlace.owner.id,
-                    visiblePlace.owner.avatarURL ?? "",
-                    visiblePlace.userPlace.status.rawValue,
-                    visiblePlace.userPlace.visibility.rawValue
-                ].joined(separator: ":")
-            }
-            .joined(separator: "|")
+    private var visiblePlaceSignature: [DiscoverVisiblePlaceSignature] {
+        store.visiblePlaces().map(DiscoverVisiblePlaceSignature.init)
     }
 
     private var placeGroups: [VisiblePlaceGroup] {
         VisiblePlaceGrouping.groups(from: filteredPlaceResults, currentUserID: store.currentUser.id)
+    }
+
+    private var currentUserSavedPlaceAliases: Set<String> {
+        Set(
+            VisiblePlaceGrouping.groups(
+                from: store.currentUserVisiblePlaces,
+                currentUserID: store.currentUser.id
+            )
+            .flatMap(\.aliases)
+        )
     }
 
     private var filteredPlaceResults: [VisiblePlace] {
@@ -110,10 +112,9 @@ struct DiscoverScreen: View {
         return friendProfiles.first { $0.id == selectedOwnerCandidateID }
     }
 
-    private var resultExplanation: String {
-        let count = placeGroups.count
-        if let selectedOwnerCandidate {
-            return "\(count) \(count == 1 ? "place" : "places") filtered from \(selectedOwnerCandidate.displayName)"
+    private func resultExplanation(groupCount count: Int, selectedOwner: ProfileShell?) -> String {
+        if let selectedOwner {
+            return "\(count) \(count == 1 ? "place" : "places") filtered from \(selectedOwner.displayName)"
         }
         if let owner = store.lastDiscoverFilters.ownerQuery,
            !owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -149,29 +150,57 @@ struct DiscoverScreen: View {
             .wanderScreen()
             .task {
                 applyRequestedSection()
+                activityLoadState = .loading
                 await refreshDiscoverDefaultContent()
+                lastHandledAuthState = auth.isSignedIn
+                lastHandledVisiblePlaceSignature = visiblePlaceSignature
             }
-            .onChange(of: auth.isSignedIn) { _, _ in
-                Task {
-                    activityLoadState = .loading
-                    await refreshDiscoverDefaultContent(forceRecommendations: true)
+            .task(id: auth.isSignedIn) {
+                let requestedAuthState = auth.isSignedIn
+                let previousAuthState = lastHandledAuthState
+                lastHandledAuthState = requestedAuthState
+                guard !Task.isCancelled,
+                      auth.isSignedIn == requestedAuthState
+                else {
+                    return
                 }
+                guard let previousAuthState,
+                      previousAuthState != requestedAuthState
+                else {
+                    return
+                }
+                activityLoadState = .loading
+                await refreshDiscoverDefaultContent(forceRecommendations: true)
+                guard !Task.isCancelled,
+                      auth.isSignedIn == requestedAuthState
+                else {
+                    return
+                }
+                await refreshPlaces(query: placesQuery)
+                guard !Task.isCancelled else { return }
+                await refreshMembers(query: memberQuery)
+            }
+            .task(id: placesQuery) {
+                selectedOwnerCandidateID = nil
+                await refreshPlaces(query: placesQuery, debounce: true)
+            }
+            .task(id: memberQuery) {
+                await refreshMembers(query: memberQuery, debounce: true)
             }
             .onChange(of: requestedSection) { _, _ in
                 applyRequestedSection()
             }
-            .onChange(of: placesQuery) { _, _ in
-                selectedOwnerCandidateID = nil
-                Task { await refreshPlaces() }
-            }
-            .onChange(of: memberQuery) { _, _ in
-                Task { await refreshMembers() }
-            }
-            .onChange(of: visiblePlaceSignature) { _, _ in
-                Task {
-                    await refreshPlaces()
-                    await refreshMembers()
+            .task(id: visiblePlaceSignature) {
+                let signature = visiblePlaceSignature
+                guard let previousSignature = lastHandledVisiblePlaceSignature else {
+                    lastHandledVisiblePlaceSignature = signature
+                    return
                 }
+                guard previousSignature != signature else { return }
+                lastHandledVisiblePlaceSignature = signature
+                await refreshPlaces(query: placesQuery)
+                guard !Task.isCancelled else { return }
+                await refreshMembers(query: memberQuery)
             }
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
@@ -294,10 +323,11 @@ struct DiscoverScreen: View {
 
     @ViewBuilder
     private var placesContent: some View {
-        if !ambiguousOwnerCandidates.isEmpty {
+        let candidates = ambiguousOwnerCandidates
+        if !candidates.isEmpty {
             OwnerDisambiguationSection(
-                candidates: ambiguousOwnerCandidates,
-                recCount: recCount(for:)
+                candidates: candidates,
+                recommendationCounts: store.visiblePlaceCountsByOwnerID()
             ) { profile in
                 selectedOwnerCandidateID = profile.id
             }
@@ -310,32 +340,37 @@ struct DiscoverScreen: View {
     }
 
     private var placeResultsSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let groups = placeGroups
+        let selectedOwner = selectedOwnerCandidate
+        let savedAliases = currentUserSavedPlaceAliases
+        return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(placeResultTitle)
                     .font(.system(size: 24, weight: .black, design: .rounded))
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                Text(resultExplanation)
+                Text(resultExplanation(groupCount: groups.count, selectedOwner: selectedOwner))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            if placeGroups.isEmpty {
+            if groups.isEmpty {
                 EmptyPanel(title: "No matching places yet", action: "try another person, place type, or area")
             } else {
-                ForEach(placeGroups) { group in
+                ForEach(groups) { group in
+                    let primary = group.primary
                     DiscoverPlaceResultCard(
                         group: group,
-                        isSavedByCurrentUser: isSavedByCurrentUser(group.primary),
-                        matchedOwnerName: selectedOwnerCandidate?.displayName ?? group.primary.owner.displayName,
+                        isSavedByCurrentUser: primary.owner.id == store.currentUser.id
+                            || !group.aliases.isDisjoint(with: savedAliases),
+                        matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName,
                         currentUserID: store.currentUser.id
                     ) {
-                        selectedPlace = SelectedDiscoverPlace(visiblePlace: group.primary)
+                        selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
                     } save: {
-                        beginSaveDiscoverPlace(group.primary)
+                        beginSaveDiscoverPlace(primary)
                     } edit: {
-                        beginAddVisitDiscoverPlace(group.primary)
+                        beginAddVisitDiscoverPlace(primary)
                     }
                 }
             }
@@ -343,8 +378,15 @@ struct DiscoverScreen: View {
     }
 
     private var latestActivitySection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("Activity")
+        let activity = latestActivityPlaces
+        return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack {
+                SectionTitle("Activity")
+                Spacer()
+                Text("Network")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
 
             switch activityLoadState {
             case .loading:
@@ -364,7 +406,7 @@ struct DiscoverScreen: View {
                     searchFieldFocused = false
                 }
             case .loaded:
-                ForEach(latestActivityPlaces) { visiblePlace in
+                ForEach(activity) { visiblePlace in
                     LatestActivityRow(
                         visiblePlace: visiblePlace,
                         openPlace: { selectedPlace = SelectedDiscoverPlace(visiblePlace: visiblePlace) },
@@ -453,16 +495,21 @@ struct DiscoverScreen: View {
     }
 
     private var memberSearchResultsSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let results = profileResults
+        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             SectionTitle("Member results")
 
-            if profileResults.isEmpty {
+            if results.isEmpty {
                 EmptyPanel(title: "No members found", action: "try a handle or full first name")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: WanderTheme.spacing3) {
-                        ForEach(profileResults) { profile in
-                            MemberResultTile(profile: profile, recCount: recCount(for: profile)) {
+                    LazyHStack(spacing: WanderTheme.spacing3) {
+                        ForEach(results) { profile in
+                            MemberResultTile(
+                                profile: profile,
+                                recCount: recommendationCounts[profile.id, default: 0]
+                            ) {
                                 selectedProfile = SelectedProfile(id: profile.id)
                             }
                         }
@@ -474,20 +521,25 @@ struct DiscoverScreen: View {
     }
 
     private var peopleSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let friends = friendProfiles
+        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
+        return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 SectionTitle("People")
                 Spacer()
-                Text("\(friendProfiles.count)")
+                Text("\(friends.count)")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            if friendProfiles.isEmpty {
+            if friends.isEmpty {
                 EmptyPanel(title: "No one followed yet", action: "search or follow someone above")
             } else {
-                ForEach(friendProfiles) { profile in
-                    FriendListRow(profile: profile, recCount: recCount(for: profile)) {
+                ForEach(friends) { profile in
+                    FriendListRow(
+                        profile: profile,
+                        recCount: recommendationCounts[profile.id, default: 0]
+                    ) {
                         selectedProfile = SelectedProfile(id: profile.id)
                     }
                 }
@@ -561,8 +613,8 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await refreshPlaces()
-            await refreshMembers()
+            await refreshPlaces(query: placesQuery)
+            await refreshMembers(query: memberQuery)
             savedMessage = result.syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -581,8 +633,8 @@ struct DiscoverScreen: View {
                 store: store,
                 backend: visitBackend
             )
-            await refreshPlaces()
-            await refreshMembers()
+            await refreshPlaces(query: placesQuery)
+            await refreshMembers(query: memberQuery)
             savedMessage = scopedDiscoverMessage(for: submission.context, syncState: result.syncState)
             if !auth.isSignedIn {
                 auth.presentGate(for: .syncPlace)
@@ -614,8 +666,8 @@ struct DiscoverScreen: View {
             guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
                 return false
             }
-            await refreshPlaces()
-            await refreshMembers()
+            await refreshPlaces(query: placesQuery)
+            await refreshMembers(query: memberQuery)
             savedMessage = "Visit deleted."
             return true
         case .editWant(let visiblePlace):
@@ -623,8 +675,8 @@ struct DiscoverScreen: View {
                 return false
             }
 
-            await refreshPlaces()
-            await refreshMembers()
+            await refreshPlaces(query: placesQuery)
+            await refreshMembers(query: memberQuery)
             selectedPlace = nil
             savedMessage = "Want removed."
             return true
@@ -690,23 +742,41 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func refreshPlaces() async {
-        guard isPlacesSearchActive else {
+    private func refreshPlaces(query: String, debounce: Bool = false) async {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
             placeResults = DiscoverResults(places: [], profiles: [])
             selectedOwnerCandidateID = nil
             return
         }
 
-        placeResults = await store.discover(query: placesQuery, scope: .everyone, backend: backend)
+        guard await waitForSearchDebounceIfNeeded(debounce) else { return }
+        let results = await store.discover(query: query, scope: .everyone, backend: backend)
+        guard !Task.isCancelled, query == placesQuery else { return }
+        placeResults = results
     }
 
-    private func refreshMembers() async {
-        guard isMemberSearchActive else {
+    private func refreshMembers(query: String, debounce: Bool = false) async {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
             memberResults = []
             return
         }
 
-        memberResults = await store.discoverMembers(query: memberQuery, backend: backend)
+        guard await waitForSearchDebounceIfNeeded(debounce) else { return }
+        let results = await store.discoverMembers(query: query, backend: backend)
+        guard !Task.isCancelled, query == memberQuery else { return }
+        memberResults = results
+    }
+
+    private func waitForSearchDebounceIfNeeded(_ debounce: Bool) async -> Bool {
+        guard debounce else { return !Task.isCancelled }
+        do {
+            try await Task.sleep(for: .milliseconds(225))
+            return !Task.isCancelled
+        } catch {
+            return false
+        }
     }
 
     private func handleMemberBlocked(profileID: String) {
@@ -720,8 +790,6 @@ struct DiscoverScreen: View {
         let didLoadActivity = await refreshRemotePlacesIfNeeded()
         await refreshRecommendationsIfNeeded(force: forceRecommendations)
         activityLoadState = didLoadActivity ? .loaded : .failed
-        await refreshPlaces()
-        await refreshMembers()
     }
 
     private func refreshActivity() async {
@@ -763,10 +831,6 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func recCount(for profile: ProfileShell) -> Int {
-        store.visiblePlaces(for: profile.id).count
-    }
-
     private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
         guard let localProfile = store.profiles.first(where: { $0.id == profile.id }) else {
             return profile
@@ -775,6 +839,22 @@ struct DiscoverScreen: View {
         return store.shell(for: localProfile)
     }
 
+}
+
+private struct DiscoverVisiblePlaceSignature: Equatable {
+    let id: String
+    let ownerID: String
+    let ownerAvatarURL: String?
+    let status: PlaceStatus
+    let visibility: PlaceVisibility
+
+    init(_ visiblePlace: VisiblePlace) {
+        id = visiblePlace.id
+        ownerID = visiblePlace.owner.id
+        ownerAvatarURL = visiblePlace.owner.avatarURL
+        status = visiblePlace.userPlace.status
+        visibility = visiblePlace.userPlace.visibility
+    }
 }
 
 private enum DiscoverMode: String, CaseIterable, Identifiable {
@@ -1350,7 +1430,7 @@ private struct LatestActivityRow: View {
 
 private struct OwnerDisambiguationSection: View {
     let candidates: [ProfileShell]
-    let recCount: (ProfileShell) -> Int
+    let recommendationCounts: [String: Int]
     let select: (ProfileShell) -> Void
 
     var body: some View {
@@ -1383,7 +1463,7 @@ private struct OwnerDisambiguationSection: View {
                             Text("@\(profile.handle)")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
-                            Text("\(recCount(profile)) rec matches")
+                            Text("\(recommendationCounts[profile.id, default: 0]) rec matches")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }

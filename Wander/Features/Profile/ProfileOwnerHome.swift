@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 enum ProfileHomeMode: Equatable {
     case owner
@@ -690,31 +691,11 @@ private struct ProfileMapSection: View {
                 }
             }
 
-            Map(
-                initialPosition: .camera(
-                    MapCamera(
-                        centerCoordinate: CLLocationCoordinate2D(latitude: 18, longitude: -55),
-                        distance: 38_000_000,
-                        heading: 0,
-                        pitch: 0
-                    )
-                ),
-                interactionModes: []
-            ) {
-                ForEach(insights.mapPoints) { point in
-                    Annotation(point.name, coordinate: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)) {
-                        Circle()
-                            .fill(WanderTheme.terracotta.color)
-                            .frame(width: 7, height: 7)
-                            .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 1))
-                    }
-                    .annotationTitles(.hidden)
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            ProfileMapSnapshotView(points: insights.mapPoints)
             .frame(height: 205)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Map of \(ownerLabel) Been places")
 
             Picker("Map summary", selection: $selectedSummary) {
@@ -770,6 +751,180 @@ private struct ProfileMapSection: View {
         case .places: "\(ownerLabel.capitalized) Been places will appear here."
         case .cities: "Cities appear after \(ownerLabel) Been places have location details."
         case .countries: "Countries appear after \(ownerLabel) Been places have location details."
+        }
+    }
+}
+
+private struct ProfileMapSnapshotView: View {
+    let points: [ProfileMapPoint]
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    @State private var renderedSnapshot: ProfileMapRenderedSnapshot?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let request = ProfileMapSnapshotRequest(
+                points: points,
+                size: geometry.size,
+                displayScale: displayScale,
+                colorScheme: colorScheme
+            )
+
+            Group {
+                if let renderedSnapshot, renderedSnapshot.key == request.cacheKey {
+                    Image(uiImage: renderedSnapshot.image)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFill()
+                } else {
+                    WanderTheme.surfaceSand.color
+                        .overlay {
+                            Image(systemName: "map")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+                }
+            }
+            .clipped()
+            .task(id: request.cacheKey) {
+                guard request.isRenderable else { return }
+                guard let image = await ProfileMapSnapshotCache.shared.image(for: request) else { return }
+                guard !Task.isCancelled else { return }
+                renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)
+            }
+        }
+    }
+}
+
+private struct ProfileMapRenderedSnapshot {
+    let key: String
+    let image: UIImage
+}
+
+private struct ProfileMapSnapshotRequest {
+    struct Coordinate: Hashable {
+        let latitude: Double
+        let longitude: Double
+
+        var mapCoordinate: CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+    }
+
+    let coordinates: [Coordinate]
+    let size: CGSize
+    let displayScale: CGFloat
+    let userInterfaceStyle: UIUserInterfaceStyle
+    let cacheKey: String
+
+    var isRenderable: Bool {
+        size.width > 0 && size.height > 0 && displayScale > 0
+    }
+
+    init(points: [ProfileMapPoint], size: CGSize, displayScale: CGFloat, colorScheme: ColorScheme) {
+        let scale = max(displayScale, 1)
+        let pixelWidth = max(Int((size.width * scale).rounded()), 1)
+        let pixelHeight = max(Int((size.height * scale).rounded()), 1)
+        let normalizedSize = CGSize(
+            width: CGFloat(pixelWidth) / scale,
+            height: CGFloat(pixelHeight) / scale
+        )
+        let coordinates = points.compactMap { point -> Coordinate? in
+            let coordinate = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+            guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+            return Coordinate(latitude: point.latitude, longitude: point.longitude)
+        }
+        .sorted { lhs, rhs in
+            if lhs.latitude != rhs.latitude {
+                return lhs.latitude < rhs.latitude
+            }
+            return lhs.longitude < rhs.longitude
+        }
+        let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        let coordinateKey = coordinates.map { coordinate in
+            "\(coordinate.latitude.bitPattern):\(coordinate.longitude.bitPattern)"
+        }
+        .joined(separator: ",")
+
+        self.coordinates = coordinates
+        self.size = normalizedSize
+        self.displayScale = scale
+        self.userInterfaceStyle = style
+        self.cacheKey = "\(pixelWidth)x\(pixelHeight)@\(Double(scale).bitPattern)|\(style.rawValue)|\(coordinateKey)"
+    }
+}
+
+@MainActor
+private final class ProfileMapSnapshotCache {
+    static let shared = ProfileMapSnapshotCache()
+
+    private let images: NSCache<NSString, UIImage>
+
+    private init() {
+        let images = NSCache<NSString, UIImage>()
+        images.countLimit = 6
+        images.totalCostLimit = 18 * 1_024 * 1_024
+        self.images = images
+    }
+
+    func image(for request: ProfileMapSnapshotRequest) async -> UIImage? {
+        let key = request.cacheKey as NSString
+        if let cached = images.object(forKey: key) {
+            return cached
+        }
+
+        do {
+            let image = try await render(request)
+            guard !Task.isCancelled else { return nil }
+            let pixelWidth = Int((request.size.width * request.displayScale).rounded())
+            let pixelHeight = Int((request.size.height * request.displayScale).rounded())
+            images.setObject(image, forKey: key, cost: pixelWidth * pixelHeight * 4)
+            return image
+        } catch {
+            return nil
+        }
+    }
+
+    private func render(_ request: ProfileMapSnapshotRequest) async throws -> UIImage {
+        let options = MKMapSnapshotter.Options()
+        options.camera = MKMapCamera(
+            lookingAtCenter: CLLocationCoordinate2D(latitude: 18, longitude: -55),
+            fromDistance: 38_000_000,
+            pitch: 0,
+            heading: 0
+        )
+        options.size = request.size
+        options.traitCollection = UITraitCollection(mutations: { traits in
+            traits.displayScale = request.displayScale
+            traits.userInterfaceStyle = request.userInterfaceStyle
+        })
+
+        let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+        configuration.pointOfInterestFilter = .excludingAll
+        options.preferredConfiguration = configuration
+
+        let snapshot = try await MKMapSnapshotter(options: options).start()
+        try Task.checkCancellation()
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = request.displayScale
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: request.size, format: format).image { context in
+            snapshot.image.draw(in: CGRect(origin: .zero, size: request.size))
+
+            let fillColor = UIColor(WanderTheme.terracotta.color).cgColor
+            let strokeColor = UIColor(WanderTheme.surfaceRaised.color).cgColor
+            context.cgContext.setFillColor(fillColor)
+            context.cgContext.setStrokeColor(strokeColor)
+            context.cgContext.setLineWidth(1)
+
+            for coordinate in request.coordinates {
+                let point = snapshot.point(for: coordinate.mapCoordinate)
+                let markerRect = CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7)
+                guard markerRect.intersects(CGRect(origin: .zero, size: request.size)) else { continue }
+                context.cgContext.fillEllipse(in: markerRect)
+                context.cgContext.strokeEllipse(in: markerRect)
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
-# Wander
+# rec.me
 
-Wander is a native iOS social map concept for remembering places worth returning to and discovering places through trusted people.
+rec.me, formerly Wander, is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
 This repo contains the product spec, design system, research, planning-grade mocks, and the native iOS implementation.
 

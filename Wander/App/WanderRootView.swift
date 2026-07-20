@@ -10,6 +10,7 @@ struct WanderRootView: View {
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
+    @State private var addSheetDetent = AddSheetLayout.restingDetent
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var discoverSection: DiscoverSection?
     @State private var sharedProfile: SharedProfileRoute?
@@ -37,8 +38,8 @@ struct WanderRootView: View {
         _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
-            wrappedValue: WanderStore(
-                fixtures: Self.resolvedFixtures(mode: fixtureMode),
+            wrappedValue: Self.makeStore(
+                fixtureMode: fixtureMode,
                 parser: parser,
                 analytics: analytics,
                 persistence: persistence
@@ -93,11 +94,19 @@ struct WanderRootView: View {
         }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             addTabResetToken = UUID()
+            addSheetDetent = AddSheetLayout.restingDetent
         }) {
-            AddScreen(resetToken: addTabResetToken)
+            AddScreen(resetToken: addTabResetToken, selectedDetent: $addSheetDetent) {
+                isPresentingAdd = false
+            }
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
+                .presentationDetents(AddSheetLayout.detents, selection: $addSheetDetent)
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+                .presentationBackground(WanderTheme.surfaceBone.color)
+                .presentationContentInteraction(.resizes)
         }
         .sheet(item: $auth.activeGate) { request in
             AuthGateSheet(request: request)
@@ -193,6 +202,7 @@ struct WanderRootView: View {
         } set: { newTab in
             if newTab == .add {
                 addTabResetToken = UUID()
+                addSheetDetent = AddSheetLayout.restingDetent
                 isPresentingAdd = true
             } else {
                 selectedTab = newTab
@@ -426,7 +436,10 @@ struct WanderRootView: View {
     }
 
     static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {
-        arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
+        if arguments.contains("-WanderUsePerformanceFixtures") {
+            return .performance
+        }
+        return arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
     }
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {
@@ -439,13 +452,38 @@ struct WanderRootView: View {
             WanderFixtures.empty()
         case .demo:
             WanderFixtures.seed()
+        case .performance:
+            WanderFixtures.performanceScale()
         }
+    }
+
+    private static func makeStore(
+        fixtureMode: WanderFixtureMode,
+        parser: any LLMFilterParser,
+        analytics: AnalyticsClient,
+        persistence: WanderStorePersistence?
+    ) -> WanderStore {
+        let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
+        let fixtures = resolvedFixtures(mode: fixtureMode)
+        let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
+        let store = WanderStore(
+            fixtures: fixtures,
+            parser: parser,
+            analytics: analytics,
+            persistence: persistence
+        )
+        let storeFinishedAt = CFAbsoluteTimeGetCurrent()
+        WanderDebugLog.performance.notice(
+            "root initialization fixture_mode=\(String(describing: fixtureMode), privacy: .public) fixture_ms=\((fixturesFinishedAt - fixturesStartedAt) * 1_000, privacy: .public) store_ms=\((storeFinishedAt - fixturesFinishedAt) * 1_000, privacy: .public)"
+        )
+        return store
     }
 }
 
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
+    case performance
 }
 
 enum WanderInitialPresentation: String, Identifiable {

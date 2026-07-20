@@ -1,5 +1,6 @@
 @preconcurrency import MapKit
 import SwiftUI
+import UIKit
 
 struct ListsScreen: View {
     @EnvironmentObject private var store: WanderStore
@@ -7,6 +8,7 @@ struct ListsScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     private let scenario: ListsScreenScenario
+    private let scenarioList: PlaceListMock
     private let editorStartsWithFriendSearch: Bool
     private let editorStartsWithDeleteConfirmation: Bool
     @State private var selectedScopeID: String
@@ -19,9 +21,10 @@ struct ListsScreen: View {
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
+        let featuredList = PlaceListMock.fixture(for: scenario)
+        self.scenarioList = featuredList
         self.editorStartsWithFriendSearch = scenario == .createCollaboratorsSearch
         self.editorStartsWithDeleteConfirmation = scenario == .editDeleteConfirm || scenario == .collabEditDeleteConfirm
-        let featuredList = PlaceListMock.featuredDetail
         let initialEditorPresentation: ListEditorPresentation? = switch scenario {
         case .create, .createCollaboratorsSearch:
             .create
@@ -33,7 +36,7 @@ struct ListsScreen: View {
             nil
         }
         let initialCollaboratorList: PlaceListMock? = scenario == .collaboratorsSheet ? featuredList : nil
-        let initialMapList: PlaceListMock? = scenario == .mapPreview || scenario == .mapSelectedPlace ? featuredList : nil
+        let initialMapList: PlaceListMock? = scenario.opensMapOnLaunch ? featuredList : nil
 
         _selectedScopeID = State(initialValue: scenario.initialScope.rawValue)
         _editorPresentation = State(initialValue: initialEditorPresentation)
@@ -45,7 +48,10 @@ struct ListsScreen: View {
         NavigationStack {
             Group {
                 if scenario.showsDetailRoot {
-                    detailScreen(for: PlaceListMock.featuredDetail, initialSelectedPlace: scenario == .placeDetail ? PlaceListMock.featuredDetail.places.first : nil)
+                    detailScreen(
+                        for: scenarioList,
+                        initialSelectedPlace: scenario == .placeDetail ? scenarioList.places.first : nil
+                    )
                 } else {
                     homeScreen
                 }
@@ -79,7 +85,7 @@ struct ListsScreen: View {
             .fullScreenCover(item: $mapList) { list in
                 ListMapFullScreen(
                     list: list,
-                    initialSelectedPlaceID: scenario == .mapSelectedPlace ? list.places.first?.id : nil
+                    initialSelectedPlaceID: scenario.startsWithFocusedMapPlace ? list.mappedPlaces.first?.id : nil
                 )
             }
             .fullScreenCover(isPresented: profileDestinationBinding) {
@@ -238,15 +244,17 @@ struct ListsScreen: View {
     }
 
     private var homeScreen: some View {
-        ScrollView {
+        let renderedLists = activeLists
+
+        return ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 header
                 scopeSwitch
 
-                if activeLists.isEmpty {
+                if renderedLists.isEmpty {
                     emptyState
                 } else {
-                    listGrid
+                    listGrid(lists: renderedLists)
                 }
             }
             .padding(WanderTheme.spacing4)
@@ -391,7 +399,7 @@ struct ListsScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
-    private var listGrid: some View {
+    private func listGrid(lists: [PlaceListMock]) -> some View {
         LazyVGrid(
             columns: [
                 GridItem(.flexible(), spacing: WanderTheme.spacing3),
@@ -400,7 +408,7 @@ struct ListsScreen: View {
             alignment: .leading,
             spacing: WanderTheme.spacing6
         ) {
-            ForEach(activeLists) { list in
+            ForEach(lists) { list in
                 Button {
                     selectedList = list
                 } label: {
@@ -426,8 +434,8 @@ struct ListsScreen: View {
         let storeLists = sourceLists
             .map { list in
                 PlaceListMock(
-                    list: list,
-                    visiblePlaces: visiblePlacesByListID[list.id] ?? [],
+                    summary: list,
+                    visiblePlaces: Array(visiblePlacesByListID[list.id, default: []].prefix(4)),
                     store: store
                 )
             }
@@ -492,6 +500,16 @@ enum ListsScreenScenario: String {
     case collaboratorsSheet
     case mapPreview
     case mapSelectedPlace
+    case mapEmpty
+    case mapSingle
+    case mapClustered
+    case mapDispersed
+    case mapPartial
+    case mapUnresolved
+    case mapUnmapped
+    case mapError
+    case mapOffline
+    case mapLongNames
     case placeDetail
 
     var initialScope: ListsScope {
@@ -507,11 +525,29 @@ enum ListsScreenScenario: String {
 
     var showsDetailRoot: Bool {
         switch self {
-        case .detail, .edit, .collaboratorsSheet, .mapPreview, .mapSelectedPlace, .placeDetail:
+        case .detail, .edit, .collaboratorsSheet, .mapPreview, .mapSelectedPlace,
+             .mapEmpty, .mapSingle, .mapClustered, .mapDispersed, .mapPartial,
+             .mapUnresolved, .mapUnmapped, .mapError, .mapOffline, .mapLongNames,
+             .placeDetail:
             true
         default:
             false
         }
+    }
+
+    var opensMapOnLaunch: Bool {
+        switch self {
+        case .mapPreview, .mapSelectedPlace, .mapEmpty, .mapSingle, .mapClustered,
+             .mapDispersed, .mapPartial, .mapUnresolved, .mapError, .mapOffline,
+             .mapUnmapped, .mapLongNames:
+            true
+        default:
+            false
+        }
+    }
+
+    var startsWithFocusedMapPlace: Bool {
+        self == .mapSelectedPlace
     }
 
     var usesMockData: Bool {
@@ -703,11 +739,13 @@ private struct ListDetailScreen: View {
     }
 
     var body: some View {
+        let renderedList = displayList
+
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                detailHeader
-                mapPreview
-                placeRows
+                detailHeader(for: renderedList)
+                mapPreview(for: renderedList)
+                placeRows(for: renderedList)
                 suggestionsSection
             }
             .padding(WanderTheme.spacing4)
@@ -735,7 +773,7 @@ private struct ListDetailScreen: View {
 
                 if canManageList {
                     Button {
-                        onEdit(displayList)
+                        onEdit(renderedList)
                     } label: {
                         Image(systemName: "pencil")
                             .font(.system(size: 14, weight: .black))
@@ -812,24 +850,24 @@ private struct ListDetailScreen: View {
         }
     }
 
-    private var detailHeader: some View {
+    private func detailHeader(for renderedList: PlaceListMock) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
-                        Text(displayList.name)
+                        Text(renderedList.name)
                             .font(.system(size: 30, weight: .black, design: .rounded))
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
 
-                        if displayList.isStealth {
+                        if renderedList.isStealth {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 14, weight: .black))
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
                     }
 
-                    Text(displayList.description)
+                    Text(renderedList.description)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -838,7 +876,7 @@ private struct ListDetailScreen: View {
             }
 
             HStack(spacing: WanderTheme.spacing2) {
-                if let owner = listOwnerProfile {
+                if let owner = listOwnerProfile(for: renderedList) {
                     Button {
                         onOpenProfile(owner.id)
                     } label: {
@@ -858,16 +896,16 @@ private struct ListDetailScreen: View {
                     .accessibilityLabel("Open \(owner.displayName)'s profile")
                 }
                 FacePileView(
-                    collaborators: displayList.collaborators,
+                    collaborators: renderedList.collaborators,
                     size: 30,
                     onSelect: onOpenProfile
                 )
-                Text(displayList.collaboratorSummary)
+                Text(renderedList.collaboratorSummary)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                 if canManageList {
                     Button {
-                        onCollaborators(displayList)
+                        onCollaborators(renderedList)
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .black))
@@ -877,12 +915,12 @@ private struct ListDetailScreen: View {
                             .clipShape(Circle())
                     }
                     .accessibilityLabel("Manage collaborators")
-                    .disabled(!canManageCollaborators)
-                    .opacity(canManageCollaborators ? 1 : 0.48)
-                    .accessibilityHint(collaboratorAccessibilityHint)
+                    .disabled(!canManageCollaborators(for: renderedList))
+                    .opacity(canManageCollaborators(for: renderedList) ? 1 : 0.48)
+                    .accessibilityHint(collaboratorAccessibilityHint(for: renderedList))
                 }
                 Spacer()
-                Text("\(displayList.itemCount) places")
+                Text("\(renderedList.itemCount) places")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.terracottaDark.color)
             }
@@ -890,23 +928,27 @@ private struct ListDetailScreen: View {
         }
     }
 
-    private var mapPreview: some View {
-        Button {
-            onOpenMap(displayList)
-        } label: {
-            ListMapPreview(list: displayList, height: 168, label: "open list map")
+    private func mapPreview(for renderedList: PlaceListMock) -> some View {
+        ListMapPreview(
+            list: renderedList,
+            height: 168,
+            label: "View map"
+        ) {
+            onOpenMap(renderedList)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open map preview for \(displayList.name)")
     }
 
-    private var placeRows: some View {
+    @ViewBuilder
+    private func placeRows(for renderedList: PlaceListMock) -> some View {
+        let outlineCatalog = savedPlaceOutlineCatalog
+        let visiblePlaces = visiblePlaces(in: renderedList)
+
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("places")
                 .font(.system(size: 18, weight: .black))
 
             if visiblePlaces.isEmpty {
-                Text(displayList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
+                Text(renderedList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -917,6 +959,10 @@ private struct ListDetailScreen: View {
                 ForEach(visiblePlaces) { place in
                     ListPlaceRow(
                         place: place,
+                        outlines: savedPlaceOutlines(
+                            for: place,
+                            outlineCatalog: outlineCatalog
+                        ),
                         canRemove: canManageList,
                         onOpen: {
                             selectedPlace = place
@@ -936,20 +982,25 @@ private struct ListDetailScreen: View {
             ListSuggestionsSection(
                 suggestions: suggestions,
                 isLoading: isLoadingSuggestions,
+                outlineCatalog: savedPlaceOutlineCatalog,
+                currentUserID: store.currentUser.id,
                 onAdd: { suggestion in
                     Task {
                         await addSuggestion(suggestion)
                     }
                 },
                 onOpen: { suggestion in
-                    selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                    selectedPlace = ListPlaceMock(
+                        visiblePlace: suggestion.visiblePlace,
+                        currentUserID: store.currentUser.id
+                    )
                 }
             )
         }
     }
 
-    private var visiblePlaces: [ListPlaceMock] {
-        displayList.places.filter { !removedPlaceIDs.contains($0.id) }
+    private func visiblePlaces(in renderedList: PlaceListMock) -> [ListPlaceMock] {
+        renderedList.places.filter { !removedPlaceIDs.contains($0.id) }
     }
 
     private var sourceList: LocalPlaceList? {
@@ -963,12 +1014,19 @@ private struct ListDetailScreen: View {
         sourceList.map { PlaceListMock(list: $0, store: store) } ?? list
     }
 
-    private var listOwnerProfile: LocalProfile? {
-        guard !displayList.isOwnedByCurrentUser else { return nil }
+    private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
+        MapPinOutlineBuilder.outlineCatalog(
+            for: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
+    }
+
+    private func listOwnerProfile(for renderedList: PlaceListMock) -> LocalProfile? {
+        guard !renderedList.isOwnedByCurrentUser else { return nil }
         return store.profiles.first { profile in
-            profile.id == displayList.ownerUserID
-                || profile.handle.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
-                || profile.displayName.caseInsensitiveCompare(displayList.ownerName) == .orderedSame
+            profile.id == renderedList.ownerUserID
+                || profile.handle.caseInsensitiveCompare(renderedList.ownerName) == .orderedSame
+                || profile.displayName.caseInsensitiveCompare(renderedList.ownerName) == .orderedSame
         }
     }
 
@@ -977,7 +1035,7 @@ private struct ListDetailScreen: View {
     }
 
     private var canAddPlaces: Bool {
-        sourceList.map(store.canAddPlaces(to:)) ?? displayList.canAddPlaces
+        sourceList.map(store.canAddPlaces(to:)) ?? list.canAddPlaces
     }
 
     @MainActor
@@ -1036,19 +1094,19 @@ private struct ListDetailScreen: View {
         }
     }
 
-    private var canManageCollaborators: Bool {
-        guard displayList.isOwnedByCurrentUser else { return false }
-        return !store.isPrivateProfile || displayList.isCollaborative
+    private func canManageCollaborators(for renderedList: PlaceListMock) -> Bool {
+        guard renderedList.isOwnedByCurrentUser else { return false }
+        return !store.isPrivateProfile || renderedList.isCollaborative
     }
 
-    private var collaboratorAccessibilityHint: String {
-        if !displayList.isOwnedByCurrentUser {
+    private func collaboratorAccessibilityHint(for renderedList: PlaceListMock) -> String {
+        if !renderedList.isOwnedByCurrentUser {
             return "Only the list owner can manage collaborators"
         }
 
         guard store.isPrivateProfile else { return "" }
 
-        if !displayList.isCollaborative {
+        if !renderedList.isCollaborative {
             return "New collaborative lists are unavailable while Private Profile is on"
         }
 
@@ -1059,6 +1117,8 @@ private struct ListDetailScreen: View {
 private struct ListSuggestionsSection: View {
     let suggestions: [ListPlaceSuggestion]
     let isLoading: Bool
+    let outlineCatalog: [String: [MapPinOutline]]
+    let currentUserID: String
     let onAdd: (ListPlaceSuggestion) -> Void
     let onOpen: (ListPlaceSuggestion) -> Void
 
@@ -1087,6 +1147,12 @@ private struct ListSuggestionsSection: View {
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
+                            outlines: savedPlaceOutlines(
+                                for: suggestion.visiblePlace,
+                                outlineCatalog: outlineCatalog,
+                                currentUserID: currentUserID
+                            ),
+                            currentUserID: currentUserID,
                             onOpen: {
                                 onOpen(suggestion)
                             },
@@ -1178,6 +1244,8 @@ private struct ListAddPlacesScreen: View {
 
     @ViewBuilder
     private var suggestionsContent: some View {
+        let outlineCatalog = savedPlaceOutlineCatalog
+
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
                 .font(.system(size: 18, weight: .black))
@@ -1198,8 +1266,17 @@ private struct ListAddPlacesScreen: View {
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
+                            outlines: savedPlaceOutlines(
+                                for: suggestion.visiblePlace,
+                                outlineCatalog: outlineCatalog,
+                                currentUserID: store.currentUser.id
+                            ),
+                            currentUserID: store.currentUser.id,
                             onOpen: {
-                                selectedPlace = ListPlaceMock(visiblePlace: suggestion.visiblePlace)
+                                selectedPlace = ListPlaceMock(
+                                    visiblePlace: suggestion.visiblePlace,
+                                    currentUserID: store.currentUser.id
+                                )
                             },
                             onAdd: {
                                 Task {
@@ -1253,6 +1330,13 @@ private struct ListAddPlacesScreen: View {
 
     private var addableSuggestions: [ListPlaceSuggestion] {
         suggestions.filter { !store.hasPlace($0.visiblePlace, in: list) }
+    }
+
+    private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
+        MapPinOutlineBuilder.outlineCatalog(
+            for: store.visiblePlaces(),
+            currentUserID: store.currentUser.id
+        )
     }
 
     private var addableSearchCandidates: [PlaceCandidate] {
@@ -1430,23 +1514,29 @@ private struct ListPlaceSearchField: View {
 private struct ListVisiblePlaceAddRow: View {
     let visiblePlace: VisiblePlace
     let supportingText: String
+    let outlines: [MapPinOutline]
+    let currentUserID: String
     let onOpen: () -> Void
     let onAdd: () -> Void
 
     private var place: ListPlaceMock {
-        ListPlaceMock(visiblePlace: visiblePlace)
+        ListPlaceMock(
+            visiblePlace: visiblePlace,
+            currentUserID: currentUserID
+        )
     }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             Button(action: onOpen) {
                 HStack(spacing: WanderTheme.spacing3) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                            .fill(place.tint)
-                        WanderCategoryEmoji(emoji: place.emoji, size: 18)
-                    }
-                    .frame(width: 48, height: 48)
+                    ListSavedPlaceIcon(
+                        emoji: place.emoji,
+                        outlines: outlines,
+                        frameSize: 48,
+                        diameter: 38,
+                        emojiSize: 16
+                    )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name)
@@ -1560,72 +1650,203 @@ private struct ListLoadingRow: View {
 }
 
 private struct ListMapPreview: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let list: PlaceListMock
     let height: CGFloat
     let label: String
+    let onOpen: () -> Void
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            WanderTheme.skyTint.color,
-                            WanderTheme.surfaceBone.color,
-                            WanderTheme.sunTint.color
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+        VStack(spacing: 0) {
+            ZStack {
+                Map(
+                    position: .constant(.region(list.mapRegion)),
+                    interactionModes: []
+                ) {
+                    ForEach(previewClusters) { cluster in
+                        Annotation("", coordinate: cluster.coordinate) {
+                            if cluster.isCluster {
+                                ListMapClusterMarker(
+                                    count: cluster.memberIDs.count,
+                                    outlines: outlines(for: cluster),
+                                    isSelected: false,
+                                    compact: true
+                                )
+                                .accessibilityHidden(true)
+                            } else if let place = place(for: cluster) {
+                                ListMapMarker(
+                                    place: place,
+                                    outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                                    isSelected: false,
+                                    compact: true
+                                )
+                                .accessibilityHidden(true)
+                            }
+                        }
+                    }
+                }
+                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
 
-            GeometryReader { proxy in
-                ForEach(Array(list.places.prefix(5).enumerated()), id: \.offset) { index, place in
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: index == 0 ? 34 : 26, weight: .black))
-                        .foregroundStyle(index == 0 ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color)
-                        .position(scaledPosition(for: place, in: proxy.size))
+                if list.mappedPlaces.isEmpty {
+                    VStack(spacing: WanderTheme.spacing2) {
+                        Image(systemName: list.mapAvailability == .loading ? "arrow.triangle.2.circlepath" : "map")
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                        Text(previewStateTitle)
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text(previewStateMessage)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.94))
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .padding(.horizontal, WanderTheme.spacing4)
+                }
+
+                VStack(spacing: 0) {
+                    Button(action: onOpen) {
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(list.totalItemCount == 0)
+                    .accessibilityHidden(true)
+
+                    // Keep MapKit's attribution visible and independently
+                    // tappable while the rest of the map preview opens the map.
+                    Color.clear
+                        .frame(height: 32)
+                        .allowsHitTesting(false)
                 }
             }
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? max(height, 196) : height)
 
-            VStack {
-                Spacer()
-                HStack {
+            Button(action: onOpen) {
+                HStack(spacing: WanderTheme.spacing2) {
                     Label(label, systemImage: "map.fill")
-                        .font(.system(size: 12, weight: .black))
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(minHeight: 34)
-                        .background(WanderTheme.surfaceRaised.color.opacity(0.90))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .clipShape(Capsule())
-                    Spacer()
+                        .font(.subheadline.weight(.black))
+                    Spacer(minLength: WanderTheme.spacing2)
+                    Text(list.mapContentState.countLabel)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.black))
                 }
-                .padding(WanderTheme.spacing3)
+                .foregroundStyle(
+                    list.totalItemCount == 0
+                        ? WanderTheme.textMuted.color
+                        : WanderTheme.textInk.color
+                )
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(WanderTheme.surfaceRaised.color)
             }
+            .buttonStyle(.plain)
+            .disabled(list.totalItemCount == 0)
+            .accessibilityLabel(
+                list.totalItemCount == 0
+                    ? "\(list.name), no places to map yet"
+                    : "View map for \(list.name), \(list.mapContentState.countLabel)"
+            )
         }
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
     }
 
-    private func scaledPosition(for place: ListPlaceMock, in size: CGSize) -> CGPoint {
-        let baseWidth: CGFloat = 340
-        let baseHeight: CGFloat = 168
-        let x = place.pinPosition.x / baseWidth * size.width
-        let y = place.pinPosition.y / baseHeight * size.height
-
-        return CGPoint(
-            x: min(max(x, 24), max(size.width - 24, 24)),
-            y: min(max(y, 24), max(size.height - 24, 24))
+    private var previewClusters: [ListMapCluster] {
+        ListMapClusterer.clusters(
+            for: list.mappedPlaces.map {
+                ListMapCoordinate(id: $0.id, coordinate: $0.coordinate)
+            },
+            in: list.mapRegion,
+            viewportSize: CGSize(width: 340, height: height),
+            minimumScreenDistance: 40
         )
+    }
+
+    private func place(for cluster: ListMapCluster) -> ListPlaceMock? {
+        guard let placeID = cluster.memberIDs.first else { return nil }
+        return list.places.first { $0.id == placeID }
+    }
+
+    private func outlines(for cluster: ListMapCluster) -> [MapPinOutline] {
+        let memberIDs = Set(cluster.memberIDs)
+        return MapPinOutlineBuilder.outlines(
+            for: list.places
+                .filter { memberIDs.contains($0.id) }
+                .flatMap(\.saveStates)
+        )
+    }
+
+    private var previewStateTitle: String {
+        switch list.mapAvailability {
+        case .loading:
+            "Loading places…"
+        case .error:
+            "Map places unavailable"
+        case .offline:
+            "You’re offline"
+        case .ready:
+            list.totalItemCount == 0 ? "No places to map yet" : "Places aren’t mapped yet"
+        }
+    }
+
+    private var previewStateMessage: String {
+        switch list.mapAvailability {
+        case .loading:
+            "This map will fill in as places arrive."
+        case .error:
+            "The list is still safe. Try again from list detail."
+        case .offline:
+            "Reconnect to load places that aren’t saved here."
+        case .ready:
+            list.totalItemCount == 0 ? "Add a place to start this map." : "The list still shows every resolved place below."
+        }
+    }
+}
+
+private struct ListSavedPlaceIcon: View {
+    let emoji: String
+    let outlines: [MapPinOutline]
+    let frameSize: CGFloat
+    let diameter: CGFloat
+    let emojiSize: CGFloat
+
+    var body: some View {
+        WanderCategoryEmoji(emoji: emoji, size: emojiSize)
+            .frame(width: diameter, height: diameter)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(Circle())
+            .overlay(outlineLayer)
+            .frame(width: frameSize, height: frameSize)
+    }
+
+    private var outlineLayer: some View {
+        ForEach(Array(outlines.indices), id: \.self) { index in
+            MapPinOutlineStroke(
+                outline: outlines[index],
+                lineWidth: outlines.count > 1 ? 2.5 : 3
+            )
+            .padding(outlinePadding(for: index))
+        }
+    }
+
+    private func outlinePadding(for index: Int) -> CGFloat {
+        guard outlines.count > 1 else { return 0 }
+        return index == 0 ? 0 : -5
     }
 }
 
 private struct ListPlaceRow: View {
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
     var canRemove: Bool = true
     let onOpen: () -> Void
     let onRemove: () -> Void
@@ -1634,13 +1855,13 @@ private struct ListPlaceRow: View {
         HStack(spacing: WanderTheme.spacing3) {
             Button(action: onOpen) {
                 HStack(spacing: WanderTheme.spacing3) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                            .fill(place.tint)
-
-                        WanderCategoryEmoji(emoji: place.emoji, size: 20)
-                    }
-                    .frame(width: 56, height: 56)
+                    ListSavedPlaceIcon(
+                        emoji: place.emoji,
+                        outlines: outlines,
+                        frameSize: 56,
+                        diameter: 40,
+                        emojiSize: 17
+                    )
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(place.name)
@@ -2057,96 +2278,218 @@ private struct PrivateProfileCollaborationUnavailable: View {
     }
 }
 
+private struct ListMapHeaderHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ListMapBottomHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ListMapBottomTopPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct ListMapFullScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let list: PlaceListMock
     @State private var position: MapCameraPosition
-    @State private var selectedPlace: ListPlaceMock?
+    @State private var visibleRegion: MKCoordinateRegion
+    @State private var interactionState: ListMapInteractionState
     @State private var profilePlace: ListPlaceMock?
+    @State private var headerOverlayHeight: CGFloat = 0
+    @State private var bottomOverlayHeight: CGFloat = 0
+    @State private var mapViewportHeight: CGFloat = 0
 
     init(list: PlaceListMock, initialSelectedPlaceID: String? = nil) {
         self.list = list
         _position = State(initialValue: .region(list.mapRegion))
-        _selectedPlace = State(initialValue: list.places.first { $0.id == initialSelectedPlaceID })
+        _visibleRegion = State(initialValue: list.mapRegion)
+        _interactionState = State(
+            initialValue: ListMapInteractionState(
+                focusedPlaceID: initialSelectedPlaceID.flatMap { selectedID in
+                    list.places.first { $0.id == selectedID }?.id
+                }
+            )
+        )
     }
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
-                Map(position: $position) {
-                    ForEach(list.places) { place in
-                        Annotation(place.name, coordinate: place.coordinate) {
-                            Button {
-                                selectedPlace = place
-                            } label: {
-                                ListMapMarker(place: place, isSelected: selectedPlace?.id == place.id)
+            GeometryReader { proxy in
+                let mapViewportSize = CGSize(
+                    width: proxy.size.width,
+                    height: max(mapViewportHeight > 0 ? mapViewportHeight : proxy.size.height, 1)
+                )
+                let clusters = clusters(in: mapViewportSize)
+
+                ZStack(alignment: .bottom) {
+                    Map(position: $position) {
+                        ForEach(clusters) { cluster in
+                            Annotation("", coordinate: cluster.coordinate) {
+                                if cluster.isCluster {
+                                    Button {
+                                        zoom(to: cluster)
+                                    } label: {
+                                        ListMapClusterMarker(
+                                            count: cluster.memberIDs.count,
+                                            outlines: outlines(for: cluster),
+                                            isSelected: false
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(
+                                        "\(cluster.memberIDs.count) places close together"
+                                    )
+                                    .accessibilityHint("Zooms in")
+                                } else if let place = place(for: cluster) {
+                                    Button {
+                                        focus(place)
+                                    } label: {
+                                        ListMapMarker(
+                                            place: place,
+                                            outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                                            isSelected: interactionState.focusedPlaceID == place.id
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(place.accessibilitySummary)
+                                    .accessibilityHint("Shows this place in the list rail")
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
+                    .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .onMapCameraChange(frequency: .onEnd) { context in
+                        visibleRegion = context.region
+                    }
+                    .padding(.bottom, bottomOverlayHeight)
+                    .ignoresSafeArea()
+
+                    VStack(spacing: 0) {
+                        mapHeader
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.top, WanderTheme.spacing2)
+                            .background {
+                                GeometryReader { headerProxy in
+                                    Color.clear.preference(
+                                        key: ListMapHeaderHeightPreferenceKey.self,
+                                        value: headerProxy.frame(in: .global).maxY
+                                    )
+                                }
+                            }
+                        Spacer(minLength: 0)
+                        mapBottomOverlay(bottomInset: proxy.safeAreaInsets.bottom)
+                            .background {
+                                GeometryReader { bottomProxy in
+                                    Color.clear.preference(
+                                        key: ListMapBottomHeightPreferenceKey.self,
+                                        value: bottomProxy.size.height
+                                    )
+                                    .preference(
+                                        key: ListMapBottomTopPreferenceKey.self,
+                                        value: bottomProxy.frame(in: .global).minY
+                                    )
+                                }
+                            }
+                    }
+                    .ignoresSafeArea(edges: .bottom)
                 }
-                .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-                .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    HStack(spacing: WanderTheme.spacing3) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .black))
-                                .frame(width: 44, height: 44)
-                                .background(WanderTheme.surfaceRaised.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close list map")
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(list.name)
-                                .font(.system(size: 18, weight: .black, design: .rounded))
-                                .lineLimit(1)
-                            Text("\(list.places.count) places")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color.opacity(0.92))
-                    .clipShape(Capsule())
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 16, x: 0, y: 8)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .padding(.top, WanderTheme.spacing2)
-
-                    Spacer()
+                .onPreferenceChange(ListMapHeaderHeightPreferenceKey.self) { height in
+                    headerOverlayHeight = height
+                    applyInitialViewportFit(
+                        visibleMapHeight: mapViewportHeight,
+                        headerHeight: height
+                    )
                 }
-
-                if let selectedPlace {
-                    PlaceProfileMapSurface(
-                        place: PlaceSheetPlace(listPlace: selectedPlace),
-                        saves: [],
-                        tasteSaves: [],
-                        currentUserID: "you",
-                        action: .none,
-                        onOpen: {
-                            profilePlace = selectedPlace
-                        }
-                    ) {}
-                    .zIndex(20)
-                } else {
-                    ListMapPlaceRail(list: list) { place in
-                        profilePlace = place
-                    }
-                    .zIndex(10)
+                .onPreferenceChange(ListMapBottomHeightPreferenceKey.self) { height in
+                    bottomOverlayHeight = height
+                    applyInitialViewportFit(
+                        visibleMapHeight: mapViewportHeight,
+                        bottomHeight: height
+                    )
+                }
+                .onPreferenceChange(ListMapBottomTopPreferenceKey.self) { minY in
+                    mapViewportHeight = minY
+                    applyInitialViewportFit(visibleMapHeight: minY)
                 }
             }
             .background(WanderTheme.canvasWarm.color)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: profilePlaceDestinationBinding) {
                 profilePlaceDestination
             }
+        }
+    }
+
+    private var mapHeader: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .black))
+                    .frame(width: 44, height: 44)
+                    .background(WanderTheme.surfaceRaised.color.opacity(0.97))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                    .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close list map")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(list.name)
+                    .font(.system(.headline, design: .rounded, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: WanderTheme.spacing1) {
+                    if list.mapAvailability == .loading {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(WanderTheme.terracotta.color)
+                    }
+                    Text(list.mapContentState.countLabel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .padding(.vertical, 9)
+            .frame(
+                maxWidth: dynamicTypeSize.isAccessibilitySize ? 300 : 276,
+                minHeight: 44,
+                alignment: .leading
+            )
+            .background(WanderTheme.surfaceRaised.color.opacity(0.95))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, x: 0, y: 5)
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -2156,8 +2499,177 @@ private struct ListMapFullScreen: View {
             set: { isPresented in
                 if !isPresented {
                     profilePlace = nil
+                    interactionState.openPlaceID = nil
                 }
             }
+        )
+    }
+
+    private var focusedPlaceIDBinding: Binding<String?> {
+        Binding(
+            get: { interactionState.focusedPlaceID },
+            set: { placeID in
+                interactionState.handle(
+                    .focus(placeID),
+                    validPlaceIDs: Set(list.places.map(\.id))
+                )
+            }
+        )
+    }
+
+    private func clusters(in viewportSize: CGSize) -> [ListMapCluster] {
+        ListMapClusterer.clusters(
+            for: list.mappedPlaces.map {
+                ListMapCoordinate(id: $0.id, coordinate: $0.coordinate)
+            },
+            in: visibleRegion,
+            viewportSize: viewportSize
+        )
+    }
+
+    private func place(for cluster: ListMapCluster) -> ListPlaceMock? {
+        guard let placeID = cluster.memberIDs.first else { return nil }
+        return list.places.first { $0.id == placeID }
+    }
+
+    private func outlines(for cluster: ListMapCluster) -> [MapPinOutline] {
+        let memberIDs = Set(cluster.memberIDs)
+        return MapPinOutlineBuilder.outlines(
+            for: list.places
+                .filter { memberIDs.contains($0.id) }
+                .flatMap(\.saveStates)
+        )
+    }
+
+    private func focus(_ place: ListPlaceMock) {
+        guard interactionState.focusedPlaceID != place.id else { return }
+        if reduceMotion {
+            interactionState.handle(.focus(place.id), validPlaceIDs: validPlaceIDs)
+        } else {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                interactionState.handle(.focus(place.id), validPlaceIDs: validPlaceIDs)
+            }
+        }
+    }
+
+    private func open(_ place: ListPlaceMock) {
+        interactionState.handle(.open(place.id), validPlaceIDs: validPlaceIDs)
+        guard interactionState.openPlaceID == place.id else { return }
+        profilePlace = place
+    }
+
+    private var validPlaceIDs: Set<String> {
+        Set(list.places.map(\.id))
+    }
+
+    @ViewBuilder
+    private func mapBottomOverlay(bottomInset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            if list.mapAvailability == .offline && !list.places.isEmpty {
+                ListMapAvailabilityNotice(
+                    systemImage: "wifi.slash",
+                    message: "Offline · showing saved places"
+                )
+                .padding(.bottom, WanderTheme.spacing2)
+            } else if list.mapAvailability == .error && !list.places.isEmpty {
+                ListMapAvailabilityNotice(
+                    systemImage: "exclamationmark.triangle.fill",
+                    message: "Couldn’t refresh · showing saved places"
+                )
+                .padding(.bottom, WanderTheme.spacing2)
+            } else if list.mappedPlaces.isEmpty && !list.places.isEmpty {
+                ListMapAvailabilityNotice(
+                    systemImage: "mappin.slash",
+                    message: "No map location · browse below"
+                )
+                .padding(.bottom, WanderTheme.spacing2)
+            }
+
+            if list.places.isEmpty {
+                ListMapStatePanel(list: list, bottomInset: bottomInset)
+            } else {
+                ListMapPlaceRail(
+                    list: list,
+                    focusedPlaceID: focusedPlaceIDBinding,
+                    bottomInset: bottomInset
+                ) { place in
+                    open(place)
+                }
+            }
+        }
+    }
+
+    private func applyInitialViewportFit(
+        visibleMapHeight: CGFloat,
+        headerHeight: CGFloat? = nil,
+        bottomHeight: CGFloat? = nil
+    ) {
+        let resolvedHeaderHeight = headerHeight ?? headerOverlayHeight
+        let resolvedBottomHeight = bottomHeight ?? bottomOverlayHeight
+        guard visibleMapHeight > resolvedHeaderHeight,
+              resolvedHeaderHeight > 0,
+              resolvedBottomHeight > 0
+        else { return }
+
+        let region = viewportAdjustedRegion(
+            list.mapRegion,
+            viewportHeight: visibleMapHeight,
+            headerHeight: resolvedHeaderHeight,
+            bottomHeight: 0
+        )
+        mapViewportHeight = visibleMapHeight
+        position = .region(region)
+        visibleRegion = region
+    }
+
+    private func zoom(to cluster: ListMapCluster) {
+        let memberIDs = Set(cluster.memberIDs)
+        let coordinates = list.mappedPlaces
+            .filter { memberIDs.contains($0.id) }
+            .map(\.coordinate)
+        let minimumSpan = max(
+            min(visibleRegion.span.latitudeDelta, visibleRegion.span.longitudeDelta) * 0.32,
+            0.0015
+        )
+        guard let region = MapRegionFitter.region(
+            fitting: coordinates,
+            minimumSpan: minimumSpan,
+            paddingMultiplier: 1.75
+        ) else { return }
+        let adjustedRegion = viewportAdjustedRegion(
+            region,
+            viewportHeight: mapViewportHeight,
+            headerHeight: headerOverlayHeight,
+            bottomHeight: 0
+        )
+
+        if reduceMotion {
+            position = .region(adjustedRegion)
+        } else {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                position = .region(adjustedRegion)
+            }
+        }
+    }
+
+    private func viewportAdjustedRegion(
+        _ region: MKCoordinateRegion,
+        viewportHeight: CGFloat,
+        headerHeight: CGFloat,
+        bottomHeight: CGFloat
+    ) -> MKCoordinateRegion {
+        guard viewportHeight > 0,
+              headerHeight >= 0,
+              bottomHeight >= 0,
+              headerHeight + bottomHeight > 0
+        else {
+            return region
+        }
+        return MapRegionFitter.region(
+            region,
+            accountingForViewportHeight: viewportHeight,
+            obscuredTopHeight: headerHeight,
+            obscuredBottomHeight: bottomHeight
         )
     }
 
@@ -2172,90 +2684,352 @@ private struct ListMapFullScreen: View {
 }
 
 private struct ListMapMarker: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
     let isSelected: Bool
+    var compact = false
 
     var body: some View {
-        WanderCategoryEmoji(emoji: place.emoji, size: isSelected ? 17 : 16)
-            .frame(width: isSelected ? 44 : 40, height: isSelected ? 44 : 40)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(Circle())
-            .overlay(
+        ZStack {
+            if isSelected {
                 Circle()
-                    .stroke(place.status == .wannaGo ? WanderTheme.pinSocial.color : WanderTheme.pinYou.color, style: StrokeStyle(lineWidth: isSelected ? 4 : 3, dash: place.status == .wannaGo ? [5, 4] : []))
+                    .fill(WanderTheme.surfaceRaised.color)
+                    .overlay(
+                        Circle()
+                            .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                    )
+                    .frame(width: compact ? 40 : 50, height: compact ? 40 : 50)
+            }
+
+            ListSavedPlaceIcon(
+                emoji: place.emoji,
+                outlines: outlines,
+                frameSize: compact ? 34 : (isSelected ? 44 : 40),
+                diameter: compact ? 34 : (isSelected ? 44 : 40),
+                emojiSize: compact ? 14 : (isSelected ? 17 : 16)
             )
+        }
+            .frame(width: compact ? 40 : 52, height: compact ? 40 : 52)
+            .contentShape(Circle())
             .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: isSelected ? 9 : 6, x: 0, y: 2)
             .scaleEffect(isSelected ? 1.08 : 1)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82),
+                value: isSelected
+            )
             .accessibilityLabel("\(place.name) on list map")
     }
 }
 
+private struct ListMapClusterMarker: View {
+    let count: Int
+    let outlines: [MapPinOutline]
+    let isSelected: Bool
+    var compact = false
+
+    var body: some View {
+        Text("\(count)")
+            .font(.system(size: compact ? 12 : 14, weight: .black, design: .rounded))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .frame(width: compact ? 34 : 42, height: compact ? 34 : 42)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(Circle())
+            .overlay {
+                ForEach(Array(outlines.indices), id: \.self) { index in
+                    MapPinOutlineStroke(
+                        outline: outlines[index],
+                        lineWidth: outlines.count > 1 ? 2.5 : 3
+                    )
+                    .padding(outlines.count > 1 && index > 0 ? -5 : 0)
+                }
+            }
+            .overlay {
+                if isSelected {
+                    Circle()
+                        .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                        .padding(-5)
+                }
+            }
+            .frame(width: compact ? 40 : 52, height: compact ? 40 : 52)
+            .shadow(color: WanderTheme.textInk.color.opacity(0.20), radius: 7, x: 0, y: 2)
+    }
+}
+
 private struct ListMapPlaceRail: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var railViewportHeight: CGFloat = 102
     let list: PlaceListMock
+    @Binding var focusedPlaceID: String?
+    let bottomInset: CGFloat
     let onSelect: (ListPlaceMock) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
-                Text("places in this list")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text(list.mapContentState.countLabel)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(WanderTheme.textInk.color)
                 Spacer()
+                if list.places.count > 1 {
+                    Text("Swipe to browse")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
             }
             .padding(.horizontal, WanderTheme.spacing3)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing3) {
+                LazyHStack(spacing: WanderTheme.spacing3) {
                     ForEach(list.places) { place in
-                        ListMapPlaceTile(place: place) {
+                        ListMapPlaceTile(
+                            place: place,
+                            outlines: MapPinOutlineBuilder.outlines(for: place.saveStates),
+                            isFocused: focusedPlaceID == place.id
+                        ) {
                             onSelect(place)
                         }
+                        .id(place.id)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $focusedPlaceID, anchor: .center)
+            .frame(height: max(102, railViewportHeight))
+        }
+        .padding(.top, WanderTheme.spacing3)
+        .padding(.bottom, max(bottomInset, WanderTheme.spacing2))
+        .background(WanderTheme.surfaceRaised.color.opacity(0.97))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(WanderTheme.borderHairline.color)
+                .frame(height: 1)
+        }
+        .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, x: 0, y: -5)
+        .onAppear {
+            if focusedPlaceID == nil {
+                focusedPlaceID = list.places.first?.id
             }
         }
-        .padding(.vertical, WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 24, x: 0, y: 12)
-        .padding(.horizontal, WanderTheme.spacing3)
-        .padding(.bottom, WanderTheme.spacing3)
     }
 }
 
 private struct ListMapPlaceTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let place: ListPlaceMock
+    let outlines: [MapPinOutline]
+    let isFocused: Bool
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .fill(place.tint)
-                    WanderCategoryEmoji(emoji: place.emoji, size: 22)
-                }
-                .frame(width: 62, height: 62)
+            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                ListMapCompactMedia(
+                    place: place,
+                    outlines: outlines
+                )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(place.name)
-                        .font(.system(size: 16, weight: .black))
+                        .font(.headline.weight(.black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                    Text(place.metadata)
-                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                        .multilineTextAlignment(.leading)
+                    Text(place.detailsLine)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    Text(place.contextLine)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 }
-                .frame(width: 178, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .frame(width: 20, height: 44)
             }
             .padding(WanderTheme.spacing3)
             .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(
+                        isFocused ? WanderTheme.textInk.color : WanderTheme.borderHairline.color,
+                        lineWidth: isFocused ? 2 : 1
+                    )
+            )
+            .shadow(
+                color: WanderTheme.textInk.color.opacity(isFocused ? 0.16 : 0.08),
+                radius: isFocused ? 10 : 5,
+                x: 0,
+                y: 3
+            )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open \(place.name)")
+        .containerRelativeFrame(.horizontal) { length, _ in
+            if dynamicTypeSize.isAccessibilitySize {
+                min(354, max(300, length - 28))
+            } else {
+                min(306, max(248, length - 52))
+            }
+        }
+        .accessibilityLabel(place.accessibilitySummary)
+        .accessibilityHint("Opens place")
+    }
+}
+
+private struct ListMapCompactMedia: View {
+    let place: ListPlaceMock
+    let outlines: [MapPinOutline]
+    @State private var localImage: UIImage?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .fill(place.tint)
+            WanderCategoryEmoji(emoji: place.emoji, size: 22)
+
+            if let localImage {
+                Image(uiImage: localImage)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            }
+        }
+        .frame(width: 62, height: 62)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .overlay(alignment: .bottomTrailing) {
+            ListSavedPlaceIcon(
+                emoji: place.emoji,
+                outlines: outlines,
+                frameSize: 25,
+                diameter: 25,
+                emojiSize: 10
+            )
+            .offset(x: 4, y: 4)
+        }
+        .accessibilityHidden(true)
+        .task(id: place.compactPhotoAssetRef) {
+            guard let assetRef = place.compactPhotoAssetRef else {
+                localImage = nil
+                return
+            }
+            let image = VisitPhotoLocalFileStore.image(from: assetRef)
+            withAnimation(.easeOut(duration: 0.2)) {
+                localImage = image
+            }
+        }
+    }
+}
+
+private struct ListMapAvailabilityNotice: View {
+    let systemImage: String
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: systemImage)
+            .font(.caption.weight(.black))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: 36)
+            .background(WanderTheme.surfaceRaised.color.opacity(0.96))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(0.10), radius: 8, x: 0, y: 3)
+    }
+}
+
+private struct ListMapStatePanel: View {
+    let list: PlaceListMock
+    let bottomInset: CGFloat
+
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Group {
+                if list.mapAvailability == .loading {
+                    ProgressView()
+                        .tint(WanderTheme.terracotta.color)
+                } else {
+                    Image(systemName: stateIcon)
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                }
+            }
+            .frame(width: 36, height: 36)
+            .background(WanderTheme.terracottaTint.color)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(stateTitle)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(stateMessage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(WanderTheme.spacing4)
+        .padding(.bottom, max(bottomInset, WanderTheme.spacing2))
+        .background(WanderTheme.surfaceRaised.color.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(WanderTheme.borderHairline.color)
+                .frame(height: 1)
+        }
+    }
+
+    private var stateIcon: String {
+        switch list.mapAvailability {
+        case .error:
+            "exclamationmark.triangle.fill"
+        case .offline:
+            "wifi.slash"
+        case .ready, .loading:
+            "map"
+        }
+    }
+
+    private var stateTitle: String {
+        switch list.mapAvailability {
+        case .loading:
+            "Loading places…"
+        case .error:
+            "Couldn’t load these places"
+        case .offline:
+            "Places aren’t available offline"
+        case .ready:
+            list.totalItemCount == 0 ? "No places to map yet" : "Places aren’t mapped yet"
+        }
+    }
+
+    private var stateMessage: String {
+        switch list.mapAvailability {
+        case .loading:
+            "You can close the map while this list catches up."
+        case .error:
+            "Close the map and pull to refresh the list."
+        case .offline:
+            "Reconnect to load places that aren’t saved on this device."
+        case .ready:
+            list.totalItemCount == 0
+                ? "Add a place from list detail to start this map."
+                : "Resolved places still appear in the list below."
+        }
     }
 }
 
@@ -2265,10 +3039,10 @@ private struct ListPlaceProfileDestination: View {
 
     var body: some View {
         PlaceProfileFullScreen(
-            place: PlaceSheetPlace(listPlace: place),
-            saves: [],
-            tasteSaves: [],
-            currentUserID: "you",
+            place: place.canonicalProfilePlace,
+            saves: place.saves,
+            tasteSaves: place.tasteSaves,
+            currentUserID: place.currentUserID,
             action: .none,
             onBack: onBack
         ) {}
@@ -2742,14 +3516,30 @@ private struct PlaceListMock: Identifiable, Hashable {
     var ownerUserID: String = "you"
     var canManage: Bool = true
     var canAddPlaces: Bool = true
+    var mapAvailability: ListMapAvailability = .ready
 
     var previewPlaces: [ListPlaceMock] { places }
     var itemCount: Int { itemCountOverride ?? places.count }
+    var totalItemCount: Int { max(itemCount, places.count) }
+    var resolvedPlaceCount: Int { places.count }
+    var mappedPlaces: [ListPlaceMock] { places.filter(\.isMappable) }
+    var mappedPlaceCount: Int { mappedPlaces.count }
+    var mapContentState: ListMapContentState {
+        ListMapContentState(
+            totalItemCount: totalItemCount,
+            resolvedPlaceCount: resolvedPlaceCount,
+            mappedPlaceCount: mappedPlaceCount
+        )
+    }
     var isOwnedByCurrentUser: Bool { ownerName == "You" }
     var isCollaborative: Bool { !collaborators.isEmpty }
 
     var mapRegion: MKCoordinateRegion {
-        MapRegionFitter.region(fitting: places.map(\.coordinate)) ?? MKCoordinateRegion(
+        MapRegionFitter.region(
+            fitting: mappedPlaces.map(\.coordinate),
+            minimumSpan: 0.012,
+            paddingMultiplier: 1.65
+        ) ?? MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
             span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
         )
@@ -2784,11 +3574,7 @@ private struct PlaceListMock: Identifiable, Hashable {
 
 @MainActor
 private extension PlaceListMock {
-    init(list: LocalPlaceList, store: WanderStore) {
-        self.init(list: list, visiblePlaces: store.visiblePlaces(in: list), store: store)
-    }
-
-    init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
+    init(summary list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
         self.id = list.id
         self.name = list.name
@@ -2796,12 +3582,90 @@ private extension PlaceListMock {
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = visiblePlaces.map(ListPlaceMock.init(visiblePlace:))
+        self.places = visiblePlaces.map {
+            ListPlaceMock(cover: $0, currentUserID: store.currentUser.id)
+        }
         self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
         self.canAddPlaces = store.canAddPlaces(to: list)
+        self.mapAvailability = .ready
+    }
+
+    init(list: LocalPlaceList, store: WanderStore) {
+        self.init(list: list, visiblePlaces: store.visiblePlaces(in: list), store: store)
+    }
+
+    init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
+        let owner = store.profiles.first { $0.id == list.ownerUserID }
+        let context = ListPlaceProjectionContext(store: store)
+        self.id = list.id
+        self.name = list.name
+        self.description = list.description
+        self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
+        self.isStealth = list.isStealth
+        self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
+        self.places = visiblePlaces.map { visiblePlace in
+            let saves = context.savesByVisiblePlaceID[visiblePlace.id] ?? [
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: visiblePlace.attributes
+                )
+            ]
+            let compactPhotoAssetRef = context
+                .firstVisitPhotoByPlaceID[visiblePlace.place.id]?
+                .localAssetRef
+
+            return ListPlaceMock(
+                visiblePlace: visiblePlace,
+                saves: saves,
+                tasteSaves: context.tasteSaves,
+                currentUserID: context.currentUserID,
+                compactPhotoAssetRef: compactPhotoAssetRef
+            )
+        }
+        self.itemCountOverride = list.cachedItemCount
+        self.sourceListID = list.id
+        self.ownerUserID = list.ownerUserID
+        self.canManage = store.canManage(list)
+        self.canAddPlaces = store.canAddPlaces(to: list)
+        // The store currently has no list-scoped request state. A cached count
+        // without hydrated places is unresolved content, not proof that a
+        // request is actively loading.
+        self.mapAvailability = .ready
+    }
+}
+
+@MainActor
+private struct ListPlaceProjectionContext {
+    let currentUserID: String
+    let tasteSaves: [PlaceSaveSummary]
+    let savesByVisiblePlaceID: [String: [PlaceSaveSummary]]
+    let firstVisitPhotoByPlaceID: [String: LocalVisitPhoto]
+
+    init(store: WanderStore) {
+        currentUserID = store.currentUser.id
+        tasteSaves = store.currentUserVisiblePlaces.map {
+            PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes)
+        }
+        firstVisitPhotoByPlaceID = store.firstVisitPhotosByPlaceID()
+
+        let groups = VisiblePlaceGrouping.groups(
+            from: store.visiblePlaces(),
+            currentUserID: currentUserID
+        )
+        var summariesByVisiblePlaceID: [String: [PlaceSaveSummary]] = [:]
+        summariesByVisiblePlaceID.reserveCapacity(groups.reduce(0) { $0 + $1.places.count })
+        for group in groups {
+            let summaries = group.places.map {
+                PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes)
+            }
+            for visiblePlace in group.places {
+                summariesByVisiblePlaceID[visiblePlace.id] = summaries
+            }
+        }
+        savesByVisiblePlaceID = summariesByVisiblePlaceID
     }
 }
 
@@ -2816,9 +3680,18 @@ private struct ListPlaceMock: Identifiable {
     let latitude: Double
     let longitude: Double
     let status: PlaceStatus
+    let saveOwnership: MapPinSaveOwnership
     let note: String?
     let placeID: String?
     let visiblePlaceID: String?
+    let locality: String?
+    let ownerName: String
+    let profilePlace: PlaceSheetPlace?
+    let saves: [PlaceSaveSummary]
+    let tasteSaves: [PlaceSaveSummary]
+    let currentUserID: String
+    let compactPhotoAssetRef: String?
+    let saveStates: [MapPinSaveState]
 
     init(
         id: String,
@@ -2831,9 +3704,18 @@ private struct ListPlaceMock: Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         status: PlaceStatus = .wannaGo,
+        saveOwnership: MapPinSaveOwnership = .currentUser,
         note: String? = nil,
         placeID: String? = nil,
-        visiblePlaceID: String? = nil
+        visiblePlaceID: String? = nil,
+        locality: String? = nil,
+        ownerName: String = "You",
+        profilePlace: PlaceSheetPlace? = nil,
+        saves: [PlaceSaveSummary] = [],
+        tasteSaves: [PlaceSaveSummary] = [],
+        currentUserID: String = "you",
+        compactPhotoAssetRef: String? = nil,
+        saveStates: [MapPinSaveState]? = nil
     ) {
         self.id = id
         self.name = name
@@ -2845,24 +3727,104 @@ private struct ListPlaceMock: Identifiable {
         self.latitude = latitude ?? 34.075 + (84 - pinPosition.y) * 0.00042
         self.longitude = longitude ?? -118.285 + (pinPosition.x - 170) * 0.00055
         self.status = status
+        self.saveOwnership = saveOwnership
         self.note = note
         self.placeID = placeID
         self.visiblePlaceID = visiblePlaceID
+        self.locality = locality
+        self.ownerName = ownerName
+        self.profilePlace = profilePlace
+        self.saves = saves
+        self.tasteSaves = tasteSaves
+        self.currentUserID = currentUserID
+        self.compactPhotoAssetRef = compactPhotoAssetRef
+        self.saveStates = saveStates ?? [
+            MapPinSaveState(ownership: saveOwnership, status: status)
+        ]
     }
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
+    var isMappable: Bool {
+        ListMapCoordinate(id: id, coordinate: coordinate).isMappable
+    }
+
+    var canonicalProfilePlace: PlaceSheetPlace {
+        profilePlace ?? PlaceSheetPlace(listPlace: self)
+    }
+
+    var detailsLine: String {
+        let categoryDisplay = WanderPlaceCategory.display(
+            for: WanderPlaceCategory.assignment(forRawCategory: category)
+        )
+        let categoryTitle = categoryDisplay.subcategory ?? categoryDisplay.category
+        let parts = [categoryTitle, locality]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return parts.isEmpty ? metadata : parts.joined(separator: " · ")
+    }
+
+    var contextLine: String {
+        let visibleSaves = saves.map(\.visiblePlace)
+        let hasOwnSave = visibleSaves.contains { $0.owner.id == currentUserID }
+        let socialOwners = visibleSaves
+            .filter { $0.owner.id != currentUserID }
+            .map(\.owner.displayName)
+        let uniqueSocialOwners = socialOwners.reduce(into: [String]()) { result, name in
+            if !result.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+                result.append(name)
+            }
+        }
+
+        let ownershipSummary: String
+        if visibleSaves.isEmpty {
+            ownershipSummary = ownerName
+        } else if hasOwnSave && uniqueSocialOwners.isEmpty {
+            ownershipSummary = "You"
+        } else if hasOwnSave {
+            ownershipSummary = "You + \(uniqueSocialOwners.count)"
+        } else if uniqueSocialOwners.count > 1, let firstOwner = uniqueSocialOwners.first {
+            ownershipSummary = "\(firstOwner) + \(uniqueSocialOwners.count - 1)"
+        } else {
+            ownershipSummary = uniqueSocialOwners.first ?? ownerName
+        }
+
+        let statuses = visibleSaves.isEmpty ? [status] : visibleSaves.map(\.userPlace.status)
+        let hasBeen = statuses.contains(.been)
+        let hasWanna = statuses.contains(.wannaGo)
+        let statusSummary = hasBeen && hasWanna
+            ? "Been + Wanna go"
+            : (hasBeen ? PlaceStatus.been.displayTitle : PlaceStatus.wannaGo.displayTitle)
+
+        return "\(ownershipSummary) · \(statusSummary)"
+    }
+
+    var accessibilitySummary: String {
+        [name, detailsLine, contextLine]
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
     var dedupeKey: String {
         "\(name.normalizedListLookupKey)|\(category.normalizedListLookupKey)"
     }
 
-    init(visiblePlace: VisiblePlace) {
+    init(
+        visiblePlace: VisiblePlace,
+        saves: [PlaceSaveSummary] = [],
+        tasteSaves: [PlaceSaveSummary] = [],
+        currentUserID: String,
+        compactPhotoAssetRef: String? = nil
+    ) {
         let place = visiblePlace.place
+        let categoryPresentation = visiblePlace.categoryPresentation
+        let category = categoryPresentation.assignment.primaryCategory
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
+            categoryPresentation.display.compactTitle,
             place.locality
         ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2871,17 +3833,58 @@ private struct ListPlaceMock: Identifiable {
         self.init(
             id: "saved-\(visiblePlace.id)",
             name: place.canonicalName,
-            category: visiblePlace.effectiveCategory,
-            emoji: visiblePlace.categoryEmoji,
+            category: category,
+            emoji: categoryPresentation.emoji,
             metadata: metadataParts.joined(separator: " - "),
-            tint: Self.tint(for: visiblePlace.effectiveCategory),
+            tint: Self.tint(for: category),
             pinPosition: Self.previewPinPosition(for: place.id),
             latitude: place.latitude,
             longitude: place.longitude,
             status: visiblePlace.userPlace.status,
+            saveOwnership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
             note: visiblePlace.userPlace.note,
             placeID: place.id,
-            visiblePlaceID: visiblePlace.id
+            visiblePlaceID: visiblePlace.id,
+            locality: place.locality,
+            ownerName: visiblePlace.owner.id == currentUserID ? "You" : visiblePlace.owner.displayName,
+            profilePlace: PlaceSheetPlace(visiblePlace: visiblePlace),
+            saves: saves,
+            tasteSaves: tasteSaves,
+            currentUserID: currentUserID,
+            compactPhotoAssetRef: compactPhotoAssetRef,
+            saveStates: saves.isEmpty
+                ? nil
+                : saves.map { save in
+                    MapPinSaveState(
+                        ownership: save.visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                        status: save.visiblePlace.userPlace.status
+                    )
+                }
+        )
+    }
+
+    init(cover visiblePlace: VisiblePlace, currentUserID: String) {
+        let place = visiblePlace.place
+        let categoryPresentation = visiblePlace.categoryPresentation
+        let category = categoryPresentation.assignment.primaryCategory
+
+        self.init(
+            id: "saved-\(visiblePlace.id)",
+            name: place.canonicalName,
+            category: category,
+            emoji: categoryPresentation.emoji,
+            metadata: categoryPresentation.display.compactTitle,
+            tint: Self.tint(for: category),
+            pinPosition: Self.previewPinPosition(for: place.id),
+            latitude: place.latitude,
+            longitude: place.longitude,
+            status: visiblePlace.userPlace.status,
+            saveOwnership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+            placeID: place.id,
+            visiblePlaceID: visiblePlace.id,
+            locality: place.locality,
+            ownerName: visiblePlace.owner.id == currentUserID ? "You" : visiblePlace.owner.displayName,
+            currentUserID: currentUserID
         )
     }
 
@@ -2907,6 +3910,37 @@ private struct ListPlaceMock: Identifiable {
             y: CGFloat(46 + (seed / 5) % 88)
         )
     }
+}
+
+private func savedPlaceOutlines(
+    for visiblePlace: VisiblePlace,
+    outlineCatalog: [String: [MapPinOutline]],
+    currentUserID: String
+) -> [MapPinOutline] {
+    if let outlines = outlineCatalog[visiblePlace.id] {
+        return outlines
+    }
+
+    return MapPinOutlineBuilder.outlines(
+        for: [
+            MapPinSaveState(
+                ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                status: visiblePlace.userPlace.status
+            )
+        ]
+    )
+}
+
+private func savedPlaceOutlines(
+    for place: ListPlaceMock,
+    outlineCatalog: [String: [MapPinOutline]]
+) -> [MapPinOutline] {
+    if let visiblePlaceID = place.visiblePlaceID,
+       let outlines = outlineCatalog[visiblePlaceID] {
+        return outlines
+    }
+
+    return MapPinOutlineBuilder.outlines(for: place.saveStates)
 }
 
 private struct ListCollaboratorMock: Identifiable {
@@ -2951,6 +3985,7 @@ private struct ListCollaboratorMock: Identifiable {
     }
 }
 
+@MainActor
 private extension PlaceListMock {
     static let joe = ListCollaboratorMock(id: "joe", name: "Joe", initials: "J", color: WanderTheme.terracotta.color)
     static let maya = ListCollaboratorMock(id: "maya", name: "Maya", initials: "M", color: WanderTheme.avatarSofia.color)
@@ -2977,6 +4012,126 @@ private extension PlaceListMock {
         ListPlaceMock(id: "fern-dell", name: "Fern Dell", category: "hike", metadata: "hike - coffee nearby", tint: WanderTheme.terracottaTint.color, pinPosition: CGPoint(x: 278, y: 70))
     ]
 
+    static let clusteredPlaces = [
+        ListPlaceMock(
+            id: "cluster-circuit",
+            name: "Circuit Coffee",
+            category: "coffee",
+            metadata: "coffee - outlets - quiet",
+            tint: WanderTheme.skyTint.color,
+            pinPosition: CGPoint(x: 108, y: 86),
+            latitude: 34.07720,
+            longitude: -118.26045,
+            status: .wannaGo,
+            saveOwnership: .currentUser,
+            ownerName: "You"
+        ),
+        ListPlaceMock(
+            id: "cluster-woodcat",
+            name: "Woodcat Coffee",
+            category: "coffee",
+            metadata: "coffee - window table",
+            tint: WanderTheme.sunTint.color,
+            pinPosition: CGPoint(x: 132, y: 92),
+            latitude: 34.07728,
+            longitude: -118.26037,
+            status: .been,
+            saveOwnership: .social,
+            ownerName: "Maya"
+        ),
+        ListPlaceMock(
+            id: "cluster-fern",
+            name: "Fern Desk Coffee",
+            category: "coffee",
+            metadata: "coffee - wifi solid",
+            tint: WanderTheme.terracottaTint.color,
+            pinPosition: CGPoint(x: 150, y: 98),
+            latitude: 34.07734,
+            longitude: -118.26030,
+            status: .wannaGo,
+            saveOwnership: .social,
+            ownerName: "Ryan"
+        ),
+        ListPlaceMock(
+            id: "cluster-park",
+            name: "Elysian Picnic Steps",
+            category: "park",
+            metadata: "park - sunset backup",
+            tint: WanderTheme.categorySage.color.opacity(0.36),
+            pinPosition: CGPoint(x: 250, y: 132),
+            latitude: 34.08365,
+            longitude: -118.24255,
+            status: .been,
+            saveOwnership: .currentUser,
+            ownerName: "You"
+        )
+    ]
+
+    static let dispersedPlaces = [
+        ListPlaceMock(
+            id: "dispersed-la",
+            name: "Circuit Coffee",
+            category: "coffee",
+            metadata: "Los Angeles",
+            tint: WanderTheme.skyTint.color,
+            pinPosition: CGPoint(x: 80, y: 80),
+            latitude: 34.0772,
+            longitude: -118.2604
+        ),
+        ListPlaceMock(
+            id: "dispersed-sf",
+            name: "Sightglass Coffee",
+            category: "coffee",
+            metadata: "San Francisco",
+            tint: WanderTheme.terracottaTint.color,
+            pinPosition: CGPoint(x: 160, y: 100),
+            latitude: 37.7764,
+            longitude: -122.4086,
+            status: .been
+        ),
+        ListPlaceMock(
+            id: "dispersed-nyc",
+            name: "Devoción",
+            category: "coffee",
+            metadata: "Brooklyn",
+            tint: WanderTheme.sunTint.color,
+            pinPosition: CGPoint(x: 260, y: 110),
+            latitude: 40.7164,
+            longitude: -73.9583,
+            status: .been,
+            saveOwnership: .social,
+            ownerName: "Sofia"
+        )
+    ]
+
+    static let longNamePlaces = [
+        ListPlaceMock(
+            id: "long-name",
+            name: "The Extremely Thoughtful Neighborhood Coffee Shop With the Window Table Everyone Keeps Recommending",
+            category: "coffee",
+            metadata: "coffee - Highland Park - outlets and a very calm back patio",
+            tint: WanderTheme.terracottaTint.color,
+            pinPosition: CGPoint(x: 150, y: 94),
+            latitude: 34.1110,
+            longitude: -118.1926,
+            status: .been,
+            saveOwnership: .social,
+            locality: "Highland Park",
+            ownerName: "Maya"
+        ),
+        ListPlaceMock(
+            id: "long-name-two",
+            name: "A Small Park for Long Conversations After a Very Late Lunch",
+            category: "park",
+            metadata: "park - Mount Washington",
+            tint: WanderTheme.categorySage.color.opacity(0.36),
+            pinPosition: CGPoint(x: 238, y: 126),
+            latitude: 34.1002,
+            longitude: -118.2213,
+            locality: "Mount Washington"
+        )
+    ]
+
     static let mine = [
         PlaceListMock(id: "laptop", name: "LA laptop mornings", description: "Quiet tables, outlets, and coffee that does not turn into a scene.", ownerName: "You", isStealth: false, collaborators: [], places: laptopPlaces),
         PlaceListMock(id: "date", name: "Date night short list", description: "Warm rooms where conversation is easy.", ownerName: "You", isStealth: false, collaborators: [maya], places: dinnerPlaces),
@@ -2998,12 +4153,142 @@ private extension PlaceListMock {
     ]
 
     static let featuredDetail = mine[0]
+
+    static func fixture(for scenario: ListsScreenScenario) -> PlaceListMock {
+        switch scenario {
+        case .mapEmpty:
+            PlaceListMock(
+                id: "map-empty",
+                name: "New neighborhood ideas",
+                description: "A quiet place to collect the next good find.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [],
+                places: [],
+                itemCountOverride: 0
+            )
+        case .mapSingle:
+            PlaceListMock(
+                id: "map-single",
+                name: "One reliable coffee",
+                description: "The place that always works.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [],
+                places: [laptopPlaces[0]],
+                itemCountOverride: 1
+            )
+        case .mapClustered:
+            PlaceListMock(
+                id: "map-clustered",
+                name: "Echo Park coffee walk",
+                description: "Several good options close enough to browse on foot.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [maya],
+                places: clusteredPlaces
+            )
+        case .mapDispersed:
+            PlaceListMock(
+                id: "map-dispersed",
+                name: "Coffee worth crossing a time zone for",
+                description: "Saved from trusted people in a few different cities.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [sofia],
+                places: dispersedPlaces
+            )
+        case .mapPartial:
+            PlaceListMock(
+                id: "map-partial",
+                name: "Partially cached weekend",
+                description: "Some places are ready here and the rest are still resolving.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [ryan],
+                places: Array(clusteredPlaces.prefix(2)),
+                itemCountOverride: 5
+            )
+        case .mapUnresolved:
+            PlaceListMock(
+                id: "map-unresolved",
+                name: "Loading saved places",
+                description: "The list is here while its place details arrive.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [],
+                places: [],
+                itemCountOverride: 4,
+                mapAvailability: .loading
+            )
+        case .mapUnmapped:
+            PlaceListMock(
+                id: "map-unmapped",
+                name: "Saved without a map location",
+                description: "The place is still useful even before coordinates arrive.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [],
+                places: [
+                    ListPlaceMock(
+                        id: "unmapped-place",
+                        name: "A friend’s neighborhood recommendation",
+                        category: "restaurant",
+                        metadata: "restaurant · location unavailable",
+                        tint: WanderTheme.sunTint.color,
+                        pinPosition: CGPoint(x: 170, y: 90),
+                        latitude: 0,
+                        longitude: 0,
+                        status: .been,
+                        saveOwnership: .social,
+                        ownerName: "Maya"
+                    )
+                ],
+                itemCountOverride: 1
+            )
+        case .mapError:
+            PlaceListMock(
+                id: "map-error",
+                name: "Weekend backups",
+                description: "The list remains available even when map details fail.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [],
+                places: [],
+                itemCountOverride: 4,
+                mapAvailability: .error
+            )
+        case .mapOffline:
+            PlaceListMock(
+                id: "map-offline",
+                name: "Saved for the flight",
+                description: "Cached places remain useful without a connection.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [maya],
+                places: clusteredPlaces,
+                mapAvailability: .offline
+            )
+        case .mapLongNames:
+            PlaceListMock(
+                id: "map-long-names",
+                name: "Places for the Saturday when nobody wants to decide where the afternoon should go next",
+                description: "Long names should stay readable on a small phone and at larger text sizes.",
+                ownerName: "You",
+                isStealth: false,
+                collaborators: [maya, ryan],
+                places: longNamePlaces
+            )
+        default:
+            featuredDetail
+        }
+    }
 }
 
 private extension PlaceSheetPlace {
     init(listPlace: ListPlaceMock) {
         let assignment = WanderPlaceCategory.assignment(forRawCategory: listPlace.category)
-        self.id = listPlace.id
+        self.id = listPlace.placeID ?? listPlace.id
         self.name = listPlace.name
         self.category = assignment.legacyCategory
         self.primaryCategory = assignment.primaryCategory
@@ -3013,8 +4298,8 @@ private extension PlaceSheetPlace {
         self.rawProviderType = assignment.rawProviderType
         self.cuisine = nil
         self.address = nil
-        self.locality = "Los Angeles"
-        self.region = "CA"
+        self.locality = listPlace.locality
+        self.region = nil
         self.latitude = listPlace.latitude
         self.longitude = listPlace.longitude
         self.websiteURLString = nil
@@ -3024,10 +4309,10 @@ private extension PlaceSheetPlace {
         self.sourceProviderPlaceID = nil
         self.compactSubtitleOverride = listPlace.metadata
         self.status = listPlace.status
-        self.visibility = .followers
+        self.visibility = nil
         self.note = listPlace.note
-        self.noteOwnerID = "you"
-        self.noteOwnerName = "You"
+        self.noteOwnerID = listPlace.currentUserID
+        self.noteOwnerName = listPlace.ownerName
     }
 }
 

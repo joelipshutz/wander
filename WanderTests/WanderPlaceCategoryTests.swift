@@ -3,6 +3,69 @@ import MapKit
 import XCTest
 @testable import Wander
 
+private final class SnapshotWriteProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private let releaseFirstWrite = DispatchSemaphore(value: 0)
+    private var startedWriteCount = 0
+    private var completedSnapshots: [WanderStoreSnapshot] = []
+    private var mainThreadFlags: [Bool] = []
+    private var didStartFirstWrite = false
+    private var firstWriteContinuation: CheckedContinuation<Void, Never>?
+
+    func write(_ snapshot: WanderStoreSnapshot) {
+        lock.lock()
+        startedWriteCount += 1
+        let isFirstWrite = startedWriteCount == 1
+        mainThreadFlags.append(Thread.isMainThread)
+        if isFirstWrite {
+            didStartFirstWrite = true
+        }
+        let continuation = isFirstWrite ? firstWriteContinuation : nil
+        if isFirstWrite {
+            firstWriteContinuation = nil
+        }
+        lock.unlock()
+
+        if isFirstWrite {
+            continuation?.resume()
+            _ = releaseFirstWrite.wait(timeout: .now() + 5)
+        }
+
+        lock.lock()
+        completedSnapshots.append(snapshot)
+        lock.unlock()
+    }
+
+    func waitForFirstWrite() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didStartFirstWrite {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                firstWriteContinuation = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func release() {
+        releaseFirstWrite.signal()
+    }
+
+    var completed: [WanderStoreSnapshot] {
+        lock.lock()
+        defer { lock.unlock() }
+        return completedSnapshots
+    }
+
+    var wroteOnMainThread: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return mainThreadFlags.contains(true)
+    }
+}
+
 final class WanderPlaceCategoryTests: XCTestCase {
     func testMapKitParksStayParks() {
         XCTAssertEqual(WanderPlaceCategory.primary(for: .park), WanderPlaceCategory.outdoorsNature)
@@ -386,6 +449,16 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Thai")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🇹🇭")
+
+        cuisine.valueJSON = "\"Italian\""
+        XCTAssertEqual(visiblePlace.restaurantCuisine, "Italian")
+        XCTAssertEqual(visiblePlace.categoryEmoji, "🍝")
+
+        userPlace.categoryOverride = WanderPlaceCategory.wellnessFitness
+        userPlace.subcategoryOverride = "Gym"
+        userPlace.categoryOverrideSource = PlaceCategorySource.user.rawValue
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.wellnessFitness)
+        XCTAssertEqual(visiblePlace.categoryEmoji, "💪")
     }
 
     func testEveryRestaurantCuisineHasDishOrRegionalEmoji() {
@@ -405,33 +478,332 @@ final class WanderPlaceCategoryTests: XCTestCase {
     }
 
     func testEmojiResolutionHotPathStaysCheapAcrossRepeatedListRendering() {
-        let assignment = PlaceCategoryAssignment(
+        let owner = LocalProfile(
+            localID: "perf-owner",
+            handle: "perf-owner",
+            displayName: "Performance Owner"
+        )
+        let restaurant = LocalPlace(
+            localID: "perf-restaurant",
+            canonicalName: "Repeated Thai Restaurant",
+            category: WanderPlaceCategory.restaurantsFood,
             primaryCategory: WanderPlaceCategory.restaurantsFood,
             subcategory: "Restaurant",
-            source: PlaceCategorySource.provider.rawValue,
-            rawProviderType: "restaurant"
+            rawProviderType: "restaurant",
+            latitude: 34,
+            longitude: -118
         )
-        let cuisines = ["Thai", "South American", "Japanese BBQ", "Italian", "American"]
+        let userPlace = LocalUserPlace(
+            localID: "perf-user-place",
+            userID: owner.id,
+            placeID: restaurant.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let cuisine = LocalPlaceAttribute(
+            localID: "perf-cuisine",
+            userPlaceID: userPlace.id,
+            questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+            valueType: "single_choice",
+            valueJSON: "\"Thai\""
+        )
+        let visiblePlace = VisiblePlace(
+            id: userPlace.id,
+            place: restaurant,
+            userPlace: userPlace,
+            owner: owner,
+            attributes: [cuisine]
+        )
 
-        _ = WanderPlaceCategory.emoji(for: assignment, cuisine: cuisines[0], name: "Warmup")
+        _ = visiblePlace.categoryEmoji
 
         let start = Date()
         var checksum = 0
-        for index in 0..<2_000 {
-            checksum += WanderPlaceCategory.emoji(
-                for: assignment,
-                cuisine: cuisines[index % cuisines.count],
-                name: "Repeated list place \(index)"
-            ).utf8.count
+        for _ in 0..<2_000 {
+            checksum += visiblePlace.categoryEmoji.utf8.count
         }
         let elapsed = Date().timeIntervalSince(start)
 
         XCTAssertGreaterThan(checksum, 0)
         XCTAssertLessThan(
             elapsed,
-            2,
-            "Emoji resolution took \(elapsed)s for 2,000 list-style renders; rendering must not rebuild the cuisine catalog"
+            0.1,
+            "Visible-place category presentation took \(elapsed)s for 2,000 redraws; rendering must reuse derived cuisine and emoji work"
         )
+    }
+
+    @MainActor
+    func testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget() {
+        let fixtureStart = CFAbsoluteTimeGetCurrent()
+        let fixtures = WanderFixtures.performanceScale()
+        let fixtureElapsed = CFAbsoluteTimeGetCurrent() - fixtureStart
+
+        XCTAssertEqual(fixtures.profiles.count, 64)
+        XCTAssertEqual(fixtures.places.count, 900)
+        XCTAssertEqual(fixtures.userPlaces.count, 1_620)
+        XCTAssertEqual(fixtures.placeAttributes.count, 3_240)
+        XCTAssertGreaterThan(fixtures.placeVisits.count, 1_200)
+        XCTAssertEqual(fixtures.placeLists.count, 72)
+        XCTAssertEqual(fixtures.placeListItems.count, 2_016)
+        XCTAssertEqual(
+            fixtures.userPlaces.prefix(3).map { "\($0.localID)|\($0.userID)" },
+            [
+                "perf_user_place_001_0000_0|perf_user_001",
+                "perf_user_place_000_0000_1|perf_user_000",
+                "perf_user_place_020_0000_2|perf_user_020"
+            ]
+        )
+
+        let storeStart = CFAbsoluteTimeGetCurrent()
+        let store = WanderStore(fixtures: fixtures)
+        let storeElapsed = CFAbsoluteTimeGetCurrent() - storeStart
+
+        let coldProjectionStart = CFAbsoluteTimeGetCurrent()
+        let visiblePlaces = store.visiblePlaces()
+        let coldProjectionElapsed = CFAbsoluteTimeGetCurrent() - coldProjectionStart
+        XCTAssertGreaterThan(visiblePlaces.count, 1_400)
+
+        let warmProjectionStart = CFAbsoluteTimeGetCurrent()
+        var checksum = 0
+        for _ in 0..<20 {
+            checksum += store.visiblePlaces().count
+            checksum += store.visiblePlaceCountsByOwnerID().count
+        }
+        let warmProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmProjectionStart
+
+        let visibleLists = store.visiblePlaceLists
+        let listProjectionStart = CFAbsoluteTimeGetCurrent()
+        let visiblePlacesByListID = store.visiblePlacesByListID(in: visibleLists)
+        let listProjectionElapsed = CFAbsoluteTimeGetCurrent() - listProjectionStart
+        let visibleListItemCount = visiblePlacesByListID.values.reduce(0) { $0 + $1.count }
+
+        let warmListProjectionStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += store.visiblePlacesByListID(in: visibleLists).count
+        }
+        let warmListProjectionElapsed = CFAbsoluteTimeGetCurrent() - warmListProjectionStart
+
+        let insightsCache = ProfileInsightsCache()
+        let insightsStart = CFAbsoluteTimeGetCurrent()
+        let insights = insightsCache.present(
+            ownerID: store.currentUser.id,
+            userPlaces: store.userPlaces,
+            visits: store.placeVisits,
+            places: store.places,
+            month: Date(timeIntervalSince1970: 1_735_689_600),
+            dataRevision: store.presentationRevision
+        )
+        let insightsElapsed = CFAbsoluteTimeGetCurrent() - insightsStart
+        XCTAssertGreaterThan(insights.mapPoints.count, 250)
+
+        let warmInsightsStart = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<20 {
+            checksum += insightsCache.present(
+                ownerID: store.currentUser.id,
+                userPlaces: store.userPlaces,
+                visits: store.placeVisits,
+                places: store.places,
+                month: Date(timeIntervalSince1970: 1_735_689_600),
+                dataRevision: store.presentationRevision
+            ).mapPoints.count
+        }
+        let warmInsightsElapsed = CFAbsoluteTimeGetCurrent() - warmInsightsStart
+
+        let snapshotStart = CFAbsoluteTimeGetCurrent()
+        let snapshot = WanderStoreSnapshot(store: store)
+        let snapshotElapsed = CFAbsoluteTimeGetCurrent() - snapshotStart
+
+        XCTAssertGreaterThan(checksum, 0)
+        XCTAssertGreaterThan(visibleListItemCount, 1_500)
+        XCTAssertEqual(snapshot.userPlaces.count, fixtures.userPlaces.count)
+        XCTAssertLessThan(fixtureElapsed, 2.5, "Performance fixture construction took \(fixtureElapsed)s")
+        XCTAssertLessThan(storeElapsed, 0.5, "High-data store initialization took \(storeElapsed)s")
+        XCTAssertLessThan(coldProjectionElapsed, 0.5, "Cold visible-place projection took \(coldProjectionElapsed)s")
+        XCTAssertLessThan(warmProjectionElapsed, 0.1, "Warm visible-place reads took \(warmProjectionElapsed)s")
+        XCTAssertLessThan(listProjectionElapsed, 0.5, "High-data list projection took \(listProjectionElapsed)s")
+        XCTAssertLessThan(warmListProjectionElapsed, 0.1, "Warm high-data list reads took \(warmListProjectionElapsed)s")
+        XCTAssertLessThan(insightsElapsed, 0.5, "Cold Profile insights took \(insightsElapsed)s")
+        XCTAssertLessThan(warmInsightsElapsed, 0.15, "Warm Profile insight reads took \(warmInsightsElapsed)s")
+        XCTAssertLessThan(snapshotElapsed, 0.5, "Main-actor snapshot creation took \(snapshotElapsed)s")
+    }
+
+    @MainActor
+    func testVisiblePlaceProjectionIsReusedUntilStoreMutation() {
+        let store = WanderStore(fixtures: .seed())
+        let filters = PlaceFilters(ownerScopes: ["you"])
+
+        let first = store.visiblePlaces(filters: filters)
+        let initialBuildCount = store.visiblePlaceProjectionBuildCount
+        let second = store.visiblePlaces(filters: filters)
+
+        XCTAssertEqual(first.map(\.id), second.map(\.id))
+        XCTAssertEqual(store.visiblePlaceProjectionBuildCount, initialBuildCount)
+
+        store.defaultVisibility = .mutuals
+        _ = store.visiblePlaces(filters: filters)
+
+        XCTAssertEqual(store.visiblePlaceProjectionBuildCount, initialBuildCount + 1)
+    }
+
+    @MainActor
+    func testVisiblePlaceOwnerCountsAreBuiltOnceAndReusedAcrossDiscoverRows() {
+        let store = WanderStore(fixtures: .seed())
+
+        let first = store.visiblePlaceCountsByOwnerID()
+        let initialBuildCount = store.visiblePlaceOwnerCountBuildCount
+        let second = store.visiblePlaceCountsByOwnerID()
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(store.visiblePlaceOwnerCountBuildCount, initialBuildCount)
+        XCTAssertEqual(first.values.reduce(0, +), store.visiblePlaces().count)
+
+        store.defaultVisibility = .mutuals
+        _ = store.visiblePlaceCountsByOwnerID()
+
+        XCTAssertEqual(store.visiblePlaceOwnerCountBuildCount, initialBuildCount + 1)
+    }
+
+    @MainActor
+    func testVisiblePlaceProjectionPreservesFirstMatchForDuplicateEffectiveIDs() {
+        let firstOwner = LocalProfile(
+            localID: "first-owner",
+            serverID: "shared-owner",
+            handle: "first",
+            displayName: "First Owner"
+        )
+        let laterOwner = LocalProfile(
+            localID: "later-owner",
+            serverID: "shared-owner",
+            handle: "later",
+            displayName: "Later Owner"
+        )
+        let firstPlace = LocalPlace(
+            localID: "first-place",
+            serverID: "shared-place",
+            canonicalName: "First Place",
+            category: "coffee",
+            latitude: 34,
+            longitude: -118
+        )
+        let laterPlace = LocalPlace(
+            localID: "later-place",
+            serverID: "shared-place",
+            canonicalName: "Later Place",
+            category: "restaurant",
+            latitude: 35,
+            longitude: -119
+        )
+        let userPlace = LocalUserPlace(
+            localID: "duplicate-id-user-place",
+            userID: firstOwner.id,
+            placeID: firstPlace.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures(
+                currentUser: firstOwner,
+                profiles: [firstOwner, laterOwner],
+                places: [firstPlace, laterPlace],
+                userPlaces: [userPlace],
+                placeAttributes: [],
+                follows: [],
+                blocks: [],
+                placeLists: [],
+                placeListMembers: [],
+                placeListItems: [],
+                contactProvider: FakeContactProvider(seededMatches: [])
+            )
+        )
+
+        let visiblePlace = store.visiblePlaces().first
+
+        XCTAssertTrue(visiblePlace?.place === firstPlace)
+        XCTAssertTrue(visiblePlace?.owner === firstOwner)
+    }
+
+    @MainActor
+    func testCoalescedPersistenceWritesOnlyLatestPendingSnapshotOffMainThread() async {
+        let store = WanderStore(fixtures: .seed())
+        let first = WanderStoreSnapshot(store: store)
+        store.defaultVisibility = .mutuals
+        let second = WanderStoreSnapshot(store: store)
+        store.defaultVisibility = .selfOnly
+        let latest = WanderStoreSnapshot(store: store)
+        let probe = SnapshotWriteProbe()
+        let persistence = WanderStorePersistence.coalescing(
+            load: { nil },
+            write: probe.write
+        )
+
+        persistence.save(first)
+        await probe.waitForFirstWrite()
+        persistence.save(second)
+        persistence.save(latest)
+        probe.release()
+        persistence.flush()
+
+        XCTAssertEqual(probe.completed.count, 2)
+        XCTAssertEqual(probe.completed.last, latest)
+        XCTAssertFalse(probe.wroteOnMainThread)
+    }
+
+    @MainActor
+    func testRepeatedSignedInSessionDoesNotRebuildOrRepersistTheSameUser() {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: .empty(), persistence: persistence)
+        let session = AuthSession(
+            userID: "performance-user",
+            displayName: "Performance User",
+            handle: "performance-user"
+        )
+
+        store.apply(authState: .signedIn(session))
+        XCTAssertEqual(snapshots.count, 1)
+        let signedInProfile = store.currentUser
+
+        store.apply(authState: .signedIn(session))
+
+        XCTAssertEqual(store.currentUser.id, session.userID)
+        XCTAssertTrue(store.currentUser === signedInProfile)
+        XCTAssertEqual(snapshots.count, 1)
+    }
+
+    @MainActor
+    func testSignedOutSessionPersistsGuestProfileAndInvalidatesProjectionCache() {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: .empty(), persistence: persistence)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(
+                    userID: "performance-user",
+                    displayName: "Performance User",
+                    handle: "performance-user"
+                )
+            )
+        )
+        _ = store.visiblePlaces()
+        let signedInProjectionBuildCount = store.visiblePlaceProjectionBuildCount
+
+        store.apply(authState: .signedOut)
+        _ = store.visiblePlaces()
+
+        XCTAssertEqual(snapshots.count, 2)
+        XCTAssertNil(snapshots.last?.currentUser.serverID)
+        XCTAssertEqual(snapshots.last?.currentUser.handle, "you")
+        XCTAssertEqual(store.currentUser.handle, "you")
+        XCTAssertEqual(store.visiblePlaceProjectionBuildCount, signedInProjectionBuildCount + 1)
     }
 
     func testKnownSubcategoriesResolveAndEachBroadCategoryHasUsefulVariety() {
