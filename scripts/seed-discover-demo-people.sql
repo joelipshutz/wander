@@ -11,6 +11,7 @@ do $$
 declare
   unexpected_smoke_profile_count integer;
   required_place_count integer;
+  joe_profile_count integer;
 begin
   select count(*)
   into unexpected_smoke_profile_count
@@ -66,6 +67,18 @@ begin
 
   if required_place_count <> 18 then
     raise exception 'Expected 18 existing seed places, found %; refusing partial seed', required_place_count;
+  end if;
+
+  select count(*)
+  into joe_profile_count
+  from public.profiles
+  where id = 'user_3EhATWssjvHxwGiUaoWR5VTgeoy'
+    and handle = 'jolipshutz'
+    and deleted_at is null
+    and not is_private_profile;
+
+  if joe_profile_count <> 1 then
+    raise exception 'Expected exact public Joe test profile; refusing follow seed';
   end if;
 end
 $$;
@@ -184,11 +197,36 @@ on conflict (user_id, place_id) do update set
   updated_at = now(),
   deleted_at = null;
 
+-- Populate Joe's existing-follow shelf without changing Ryan or any other
+-- tester's graph. The demo-to-demo edges give the remaining profiles honest,
+-- deterministic shared-follow/popularity signals for the recommendation shelf.
+insert into public.follows (
+  follower_user_id,
+  followed_user_id,
+  source,
+  created_at,
+  updated_at
+)
+values
+  ('user_3EhATWssjvHxwGiUaoWR5VTgeoy', 'user_recme_demo_maya_chen', 'profile', '2026-07-20 17:20:00+00', now()),
+  ('user_3EhATWssjvHxwGiUaoWR5VTgeoy', 'user_recme_demo_marcus_reed', 'profile', '2026-07-20 17:19:00+00', now()),
+  ('user_3EhATWssjvHxwGiUaoWR5VTgeoy', 'user_recme_demo_priya_shah', 'profile', '2026-07-20 17:18:00+00', now()),
+  ('user_recme_demo_maya_chen', 'user_recme_demo_elena_torres', 'profile', '2026-07-20 17:17:00+00', now()),
+  ('user_recme_demo_marcus_reed', 'user_recme_demo_elena_torres', 'profile', '2026-07-20 17:16:00+00', now()),
+  ('user_recme_demo_priya_shah', 'user_recme_demo_elena_torres', 'profile', '2026-07-20 17:15:00+00', now()),
+  ('user_recme_demo_maya_chen', 'user_recme_demo_theo_brooks', 'profile', '2026-07-20 17:14:00+00', now()),
+  ('user_recme_demo_priya_shah', 'user_recme_demo_theo_brooks', 'profile', '2026-07-20 17:13:00+00', now()),
+  ('user_recme_demo_marcus_reed', 'user_recme_demo_samira_patel', 'profile', '2026-07-20 17:12:00+00', now()),
+  ('user_recme_demo_priya_shah', 'user_recme_demo_samira_patel', 'profile', '2026-07-20 17:11:00+00', now())
+on conflict (follower_user_id, followed_user_id) do nothing;
+
 do $$
 declare
   remaining_codex_profiles integer;
   seeded_profiles integer;
   seeded_reviews integer;
+  joe_demo_follows integer;
+  seeded_graph_edges integer;
 begin
   select count(*) into remaining_codex_profiles
   from public.profiles
@@ -221,8 +259,33 @@ begin
   )
     and deleted_at is null;
 
-  if remaining_codex_profiles <> 0 or seeded_profiles <> 6 or seeded_reviews <> 24 then
-    raise exception 'Postcondition failed: codex=%, demo_profiles=%, demo_reviews=%', remaining_codex_profiles, seeded_profiles, seeded_reviews;
+  select count(*) into joe_demo_follows
+  from public.follows
+  where follower_user_id = 'user_3EhATWssjvHxwGiUaoWR5VTgeoy'
+    and followed_user_id in (
+      'user_recme_demo_maya_chen',
+      'user_recme_demo_marcus_reed',
+      'user_recme_demo_priya_shah'
+    );
+
+  select count(*) into seeded_graph_edges
+  from public.follows
+  where (follower_user_id, followed_user_id) in (
+    ('user_recme_demo_maya_chen', 'user_recme_demo_elena_torres'),
+    ('user_recme_demo_marcus_reed', 'user_recme_demo_elena_torres'),
+    ('user_recme_demo_priya_shah', 'user_recme_demo_elena_torres'),
+    ('user_recme_demo_maya_chen', 'user_recme_demo_theo_brooks'),
+    ('user_recme_demo_priya_shah', 'user_recme_demo_theo_brooks'),
+    ('user_recme_demo_marcus_reed', 'user_recme_demo_samira_patel'),
+    ('user_recme_demo_priya_shah', 'user_recme_demo_samira_patel')
+  );
+
+  if remaining_codex_profiles <> 0
+     or seeded_profiles <> 6
+     or seeded_reviews <> 24
+     or joe_demo_follows <> 3
+     or seeded_graph_edges <> 7 then
+    raise exception 'Postcondition failed: codex=%, demo_profiles=%, demo_reviews=%, joe_follows=%, graph_edges=%', remaining_codex_profiles, seeded_profiles, seeded_reviews, joe_demo_follows, seeded_graph_edges;
   end if;
 end
 $$;
@@ -233,9 +296,11 @@ select
   profile.id,
   profile.handle,
   profile.display_name,
-  count(user_place.id) filter (where user_place.deleted_at is null) as review_count
+  count(distinct user_place.id) filter (where user_place.deleted_at is null) as review_count,
+  count(distinct follow.follower_user_id) as follower_count
 from public.profiles profile
 left join public.user_places user_place on user_place.user_id = profile.id
+left join public.follows follow on follow.followed_user_id = profile.id
 where profile.id in (
   'user_recme_demo_maya_chen',
   'user_recme_demo_elena_torres',

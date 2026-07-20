@@ -12745,3 +12745,32 @@ REC-90 final integrated handoff, 2026-07-18 15:57 PDT:
 - Committed the validated latest-main integration as merge commit `2199fc1` and pushed it to `codex/rec-90-discover-plan`.
 - GitHub now reports ready PR #97 `MERGEABLE` against exact base `02b812fc8`; Linear REC-90 remains `In Review` with the full hosted-data and validation evidence attached.
 - The REC-90 worktree is clean and handed off. Work now moves to the separate latest-main Add-flow worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; no Discover files will be edited from that task.
+
+## 2026-07-20 10:20 PDT - Codex - REC-90 approved people data follow-up
+
+Agent: Codex
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`In Progress`)
+
+Goal: after Joe approved the modular People simulator direction, make the hosted populated state useful by placing rich synthetic profiles in Joe's existing-follow section while preserving separate unfollowed candidates for People worth following, and audit the exact completion state of Places.
+
+Start state and evidence:
+
+- Refetched `origin`, inspected the clean REC-90 and mock worktrees, existing PRs, and the recent coordination log. PR #97 contains the production null/default-state work but is currently behind/conflicting with newer `main`; dependent mock PR #131 is clean and remains debug-only.
+- Read-only hosted verification confirms six synthetic public profiles are live. Each has a specific bio and home area plus four active Been places, four ratings, and four detailed notes. All six currently have zero followers and no avatar URL.
+- The operational seed intentionally created no follow edges, so those profiles can appear in People worth following but not Joe's populated People section. This pass will add only exact, auditable Joe-to-demo follow edges for Maya Chen, Marcus Reed, and Priya Shah; Elena Torres, Theo Brooks, and Samira Patel remain unfollowed candidates. Ryan, private users, and unrelated graph rows are out of scope.
+- Places audit: newest-first privacy-visible Activity, including loading/error/empty/populated presentation, is implemented and validated in PR #97. The separate Places you may have been recovery shelf and its candidate/dismissal algorithms were explicitly deferred and are not implemented.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` remains unavailable. Linear REC-90 is the active tracker.
+
+Expected files are the existing idempotent operational seed and this append-only log. No schema/RPC, app UI, private-profile state, Ryan/tester graph, build number, TestFlight release, or Slack action is in scope for this data follow-up.
+
+Hosted follow-data completion, 2026-07-20 10:31 PDT:
+
+- Extended `scripts/seed-discover-demo-people.sql` with an exact public-profile precondition for Joe and ten idempotent follow edges. Joe now follows Maya Chen, Marcus Reed, and Priya Shah; no Ryan/private/unrelated user graph row is touched. Seven demo-to-demo edges give Elena Torres, Theo Brooks, and Samira Patel deterministic shared-follow/popularity evidence.
+- The first rollback-only hosted execution passed every profile/place/graph guard and persisted nothing. The committed hosted apply then passed its postconditions with six demo profiles, 24 detailed rated reviews, three exact Joe-to-demo follows, and seven exact demo graph edges. A second rollback-only execution passed, proving the applied seed is idempotent.
+- Post-apply authenticated Joe verification shows the remaining recommendation profiles exactly as intended: Elena with three shared follows, Theo with two, and Samira with two. The three existing-follow profiles are excluded from recommendations and present in Joe's follows.
+- Production RLS/RPC verification returned four visible Been places with four ratings for each of Maya, Marcus, and Priya: 12 followed-person place memories are now available to the Activity/profile hydration path.
+- `git diff --check` passes. No Xcode build/test was run because this delta changes only the audited operational data seed and documentation; the production UI/test evidence on PR #97 is unchanged.
+- Places remains partially complete: the branch implements newest-first Activity and its full loading/error/empty/populated contract, and Joe's hosted graph can now populate it. `Places you may have been` recovery, including candidate generation and dismiss/undo, remains unbuilt and requires its own reviewed engineering slice.
+- PR #97 remains the production handoff and currently needs integration with newer `main`, which has overlapping Discover/performance work. This data-only commit will be pushed without attempting an unsafe blind merge; latest-main reconciliation and complete regression validation remain required before REC-90 can merge.
