@@ -57,7 +57,8 @@ async function main() {
       await runOwnPlaceSmokeChecks(client, smokeUserID);
       await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
       await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
-      console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, and photo visibility are valid.");
+      await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
+      console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, photo visibility, and Discover profile recommendations are valid.");
     } finally {
       await client.query("rollback");
     }
@@ -130,8 +131,11 @@ Notes:
 function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
+  const discoverSmokeSQL = loadStrictPgTapSQL(
+    new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
+  );
   try {
-    writeFileSync(filePath, buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID), {
+    writeFileSync(filePath, `${buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID)}\n${discoverSmokeSQL}`, {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -147,10 +151,35 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
         .join("\n");
       throw new Error(details || "linked Supabase query failed");
     }
-    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, and Shared Visits contracts are valid.");
+    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, and Discover profile recommendation contracts are valid.");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+function loadStrictPgTapSQL(fileURL) {
+  const source = readFileSync(fileURL, "utf8");
+  const finishStatement = "select * from finish();";
+  if (!source.includes(finishStatement)) {
+    throw new Error(`pgTAP smoke file is missing its finish statement: ${fileURL.pathname}`);
+  }
+
+  return source.replace(
+    finishStatement,
+    `do $strict_pgtap$
+declare
+  diagnostics text;
+begin
+  select string_agg(result.message, E'\\n')
+  into diagnostics
+  from finish() as result(message);
+
+  if diagnostics is not null then
+    raise exception 'pgTAP smoke failures: %', diagnostics;
+  end if;
+end;
+$strict_pgtap$;`,
+  );
 }
 
 function buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID) {
@@ -1055,6 +1084,343 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
     (result) => result.rows[0]?.count === 0,
   );
 
+  await client.query("reset role");
+}
+
+async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) {
+  const fixture = {
+    viewer: smokeUserID,
+    followsViewer: "user_codex_discover_smoke_follows_viewer",
+    bridge: "user_codex_discover_smoke_bridge",
+    shared: "user_codex_discover_smoke_shared",
+    followed: "user_codex_discover_smoke_followed",
+    private: "user_codex_discover_smoke_private",
+    blocked: "user_codex_discover_smoke_blocked",
+    blocker: "user_codex_discover_smoke_blocker",
+    fallback: "user_codex_discover_smoke_fallback",
+  };
+  const fixtureIDs = Object.values(fixture);
+
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "create rolled-back Discover profile fixtures",
+    `
+      insert into public.profiles (
+        id,
+        handle,
+        display_name,
+        bio,
+        home_area,
+        default_visibility,
+        is_private_profile,
+        created_at,
+        deleted_at
+      )
+      values
+        ($1, 'codex_discover_viewer', 'Discover Smoke Viewer', null, 'Test', 'followers', false, '2024-01-01T00:00:00Z', null),
+        ($2, 'codex_discover_follows', 'Discover Follows Viewer', null, 'Test', 'followers', false, '2024-02-01T00:00:00Z', null),
+        ($3, 'codex_discover_bridge', 'Discover Bridge', null, 'Test', 'followers', false, '2024-03-01T00:00:00Z', null),
+        ($4, 'codex_discover_shared', 'Discover Shared Follow', null, 'Test', 'followers', false, '2024-04-01T00:00:00Z', null),
+        ($5, 'codex_discover_followed', 'Discover Already Followed', null, 'Test', 'followers', false, '2024-05-01T00:00:00Z', null),
+        ($6, 'codex_discover_private', 'Discover Private', null, 'Test', 'followers', true, '2100-03-01T00:00:00Z', null),
+        ($7, 'codex_discover_blocked', 'Discover Blocked', null, 'Test', 'followers', false, '2100-04-01T00:00:00Z', null),
+        ($8, 'codex_discover_blocker', 'Discover Blocker', null, 'Test', 'followers', false, '2100-05-01T00:00:00Z', null),
+        ($9, 'codex_discover_fallback', 'Discover Suggested', null, 'Test', 'followers', false, '2100-06-01T00:00:00Z', null)
+      on conflict (id) do update
+      set
+        handle = excluded.handle,
+        display_name = excluded.display_name,
+        bio = excluded.bio,
+        home_area = excluded.home_area,
+        default_visibility = excluded.default_visibility,
+        is_private_profile = excluded.is_private_profile,
+        created_at = excluded.created_at,
+        deleted_at = null,
+        updated_at = now()
+      returning id
+    `,
+    fixtureIDs,
+    (result) => result.rows.length === fixtureIDs.length
+      && result.rows.every((row) => fixtureIDs.includes(row.id)),
+  );
+
+  await client.query(
+    `
+      delete from public.follows
+      where follower_user_id = any($1::text[])
+         or followed_user_id = any($1::text[])
+    `,
+    [fixtureIDs],
+  );
+  await client.query(
+    `
+      delete from public.blocks
+      where blocker_user_id = any($1::text[])
+         or blocked_user_id = any($1::text[])
+    `,
+    [fixtureIDs],
+  );
+  await expectQuery(
+    client,
+    "create rolled-back Discover follow graph",
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values
+        ($1, $2, 'profile'),
+        ($2, $3, 'profile'),
+        ($3, $4, 'profile'),
+        ($2, $5, 'profile'),
+        ($6, $9, 'profile'),
+        ($9, $6, 'profile'),
+        ($6, $5, 'profile')
+      on conflict (follower_user_id, followed_user_id) do update
+      set source = excluded.source, updated_at = now()
+      returning follower_user_id, followed_user_id
+    `,
+    [
+      fixture.followsViewer,
+      fixture.viewer,
+      fixture.bridge,
+      fixture.shared,
+      fixture.followed,
+      fixture.private,
+      fixture.blocked,
+      fixture.blocker,
+      fixture.fallback,
+    ],
+    (result) => result.rows.length === 7,
+  );
+  await expectQuery(
+    client,
+    "create rolled-back Discover block graph",
+    `
+      insert into public.blocks (blocker_user_id, blocked_user_id)
+      values
+        ($1, $2),
+        ($3, $1)
+      on conflict (blocker_user_id, blocked_user_id) do nothing
+      returning blocker_user_id, blocked_user_id
+    `,
+    [fixture.viewer, fixture.blocked, fixture.blocker],
+    (result) => result.rows.length === 2,
+  );
+
+  const publicSignatures = [
+    "public.discover_profile_recommendations(integer)",
+    "public.search_profiles_by_handle(text)",
+    "public.profile_following(text)",
+    "public.profile_followers(text)",
+    "public.follow_user(text,text)",
+  ];
+  const appSignatures = publicSignatures.map((signature) => signature.replace("public.", "app."));
+
+  await expectQuery(
+    client,
+    "Discover RPC grants match the authenticated iOS boundary",
+    `
+      select
+        count(*)::integer as count,
+        bool_and(has_function_privilege('authenticated', signature, 'execute')) as authenticated_execute,
+        bool_and(not has_function_privilege('anon', signature, 'execute')) as anon_denied
+      from unnest($1::text[]) as rpc_signatures(signature)
+    `,
+    [publicSignatures.concat(appSignatures)],
+    (result) => result.rows[0]?.count === publicSignatures.length + appSignatures.length
+      && result.rows[0]?.authenticated_execute === true
+      && result.rows[0]?.anon_denied === true,
+  );
+  await expectQuery(
+    client,
+    "app Discover RPCs remain security invoker with pinned search paths",
+    `
+      select count(*)::integer as count
+      from unnest($1::text[]) as rpc_signatures(signature)
+      join pg_proc proc on proc.oid = to_regprocedure(rpc_signatures.signature)
+      where not proc.prosecdef
+        and 'search_path=public, app' = any(coalesce(proc.proconfig, array[]::text[]))
+    `,
+    [appSignatures],
+    (result) => result.rows[0]?.count === appSignatures.length,
+  );
+  await expectQuery(
+    client,
+    "public Discover RPCs remain security invoker with pinned search paths",
+    `
+      select count(*)::integer as count
+      from unnest($1::text[]) as rpc_signatures(signature)
+      join pg_proc proc on proc.oid = to_regprocedure(rpc_signatures.signature)
+      where not proc.prosecdef
+        and 'search_path=app, public' = any(coalesce(proc.proconfig, array[]::text[]))
+    `,
+    [publicSignatures],
+    (result) => result.rows[0]?.count === publicSignatures.length,
+  );
+
+  await setAuthenticatedUser(client, fixture.viewer);
+  await expectQuery(
+    client,
+    "authenticated Discover recommendations enforce eligibility and ranking",
+    `
+      select id, reason_kind, shared_follow_count, result_rank
+      from public.discover_profile_recommendations(50)
+      where id = any($1::text[])
+      order by result_rank
+    `,
+    [fixtureIDs],
+    (result) => {
+      const rows = result.rows;
+      return rows.length === 3
+        && rows[0]?.id === fixture.followsViewer
+        && rows[0]?.reason_kind === "follows_you"
+        && rows[0]?.result_rank === 1
+        && rows[1]?.id === fixture.shared
+        && rows[1]?.reason_kind === "shared_follows"
+        && rows[1]?.shared_follow_count === 1
+        && rows[1]?.result_rank === 2
+        && rows[2]?.id === fixture.fallback
+        && rows[2]?.reason_kind === "suggested"
+        && rows[2]?.result_rank === 3;
+    },
+  );
+  await expectQuery(
+    client,
+    "Discover recommendation limits are honored and safely clamped",
+    `
+      select
+        (select count(*)::integer from public.discover_profile_recommendations(2)) as requested_count,
+        (select count(*)::integer from public.discover_profile_recommendations(1000)) as clamped_count
+    `,
+    [],
+    (result) => result.rows[0]?.requested_count === 2
+      && result.rows[0]?.clamped_count > 0
+      && result.rows[0]?.clamped_count <= 50,
+  );
+  await expectQuery(
+    client,
+    "member search excludes private profiles and the current viewer",
+    `
+      select
+        (select count(*)::integer
+         from public.search_profiles_by_handle('codex_discover_private')
+         where id = $1) as private_count,
+        (select count(*)::integer
+         from public.search_profiles_by_handle('codex_discover_viewer')
+         where id = $2) as self_count
+    `,
+    [fixture.private, fixture.viewer],
+    (result) => result.rows[0]?.private_count === 0 && result.rows[0]?.self_count === 0,
+  );
+  await expectQuery(
+    client,
+    "social graph RPCs hide private owners and profiles",
+    `
+      select
+        (select count(*)::integer
+         from public.profile_following($1)) as private_owner_graph_count,
+        (select count(*)::integer
+         from public.profile_following($2)
+         where id = $1) as private_following_count,
+        (select count(*)::integer
+         from public.profile_followers($3)
+         where id = $1) as private_follower_count
+    `,
+    [fixture.private, fixture.fallback, fixture.followed],
+    (result) => result.rows[0]?.private_owner_graph_count === 0
+      && result.rows[0]?.private_following_count === 0
+      && result.rows[0]?.private_follower_count === 0,
+  );
+
+  await setAuthenticatedUser(client, fixture.private);
+  await expectQuery(
+    client,
+    "private profile owners can still read their own public following graph",
+    `
+      select array_agg(id order by id) as ids
+      from public.profile_following($1)
+    `,
+    [fixture.private],
+    (result) => Array.isArray(result.rows[0]?.ids)
+      && result.rows[0].ids.length === 2
+      && result.rows[0].ids.includes(fixture.fallback)
+      && result.rows[0].ids.includes(fixture.followed),
+  );
+
+  await setAuthenticatedUser(client, fixture.viewer);
+  await expectQueryFailure(
+    client,
+    "direct follow rejects a private profile",
+    "select public.follow_user($1, 'profile')",
+    [fixture.private],
+    /profile_not_followable/,
+  );
+  await expectQueryFailure(
+    client,
+    "direct follow does not disclose a missing profile",
+    "select public.follow_user($1, 'profile')",
+    ["user_codex_discover_smoke_missing"],
+    /profile_not_followable/,
+  );
+  await expectQuery(
+    client,
+    "authenticated direct follow accepts a public profile",
+    "select public.follow_user($1, 'profile') as result",
+    [fixture.fallback],
+    (result) => result.rows.length === 1,
+  );
+  await expectQuery(
+    client,
+    "direct follow is caller-scoped and removes the target from recommendations",
+    `
+      select
+        (select count(*)::integer
+         from public.follows
+         where follower_user_id = $1 and followed_user_id = $2) as follow_count,
+        (select count(*)::integer
+         from public.discover_profile_recommendations(50)
+         where id = $2) as recommendation_count
+    `,
+    [fixture.viewer, fixture.fallback],
+    (result) => result.rows[0]?.follow_count === 1
+      && result.rows[0]?.recommendation_count === 0,
+  );
+
+  await client.query("set local role anon");
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call Discover recommendations",
+    "select * from public.discover_profile_recommendations(20)",
+    [],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot search profiles",
+    "select * from public.search_profiles_by_handle('codex')",
+    [],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot enumerate profile following",
+    "select * from public.profile_following($1)",
+    [fixture.viewer],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot enumerate profile followers",
+    "select * from public.profile_followers($1)",
+    [fixture.viewer],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot follow profiles",
+    "select public.follow_user($1, 'profile')",
+    [fixture.fallback],
+    /permission denied/,
+  );
   await client.query("reset role");
 }
 

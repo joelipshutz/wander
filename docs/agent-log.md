@@ -14171,6 +14171,43 @@ Build-bump checkpoint:
 - Next: commit and publish the build-82 metadata to `main`, then run the
   prescribed simulator build/test gates before archiving exact merged main.
 
+## 2026-07-20 14:55 PDT - Codex - Build 82 release resume and REC-90 smoke gate
+
+Agent: Codex using `recme-pr-review-merge-release` and
+`recme-linear-log-triage`
+Branch: `codex/testflight-build-82-resume`
+Worktree: `/private/tmp/recme-build82-resume`
+Linear: `REC-17` and `REC-90`
+
+Goal: resume the incomplete build-82 lane without creating build 83, package
+latest `main`, close the required hosted RPC smoke-coverage gap introduced by
+the newly merged REC-90 work, then upload and complete the TestFlight release.
+
+Starting state and coordination:
+
+- The root checkout remains a stale dirty unrelated worktree and is untouched.
+  This isolated worktree started clean at the build-82 bump `f115a3ef5`, then
+  fast-forwarded to exact `origin/main` `f1df43290` after PR #97 merged during
+  the release gate. Current status was clean before this log entry.
+- App Store Connect had no build 82 in two read-only checks, and independent
+  process/GitHub inspection found no competing archive, upload, helper, branch,
+  or completion PR. Build 81 remains the last completed release.
+- Exact `f115a3ef5` passed a generic simulator build and 458/458 tests. Exact
+  latest main `f1df43290`, including REC-17 and REC-90, then passed 465/465
+  tests on the installed iPhone 17 Pro / iOS 26.5 Simulator. The signed Release
+  archive succeeded at `/private/tmp/Wander-0.1-build82.xcarchive`; upload is
+  intentionally held.
+- REC-90's migration `20260717180000` is already applied to the linked hosted
+  project with aligned migration ledger, security metadata checks, and a
+  rollback pgTAP run passing 23/23. Release review found that the required
+  `scripts/supabase-smoke-test.mjs` does not exercise the new recommendation
+  RPC or the private-profile search/graph/follow paths it replaced.
+- Expected repository changes are limited to
+  `scripts/supabase-smoke-test.mjs` and this append-only log. No app source,
+  schema migration, hosted fixture persistence, build number, marketing
+  version, or production App Store submission is in scope. All smoke mutations
+  must remain inside the script's rolled-back hosted transaction.
+
 TestFlight build-82 completion, 2026-07-20 14:56 PDT:
 
 - While this release was in progress, `main` advanced to `f1df432` with the
@@ -14214,3 +14251,54 @@ Post-release validation, 2026-07-20 15:03 PDT:
   expired, export compliance is set to non-exempt encryption false, it is
   attached to `rec.me Alpha`, and external TestFlight review remains
   `APPROVED`. No second archive or binary upload was made.
+
+REC-90 release smoke checkpoint, 2026-07-20 15:04 PDT:
+
+- Extended the normal hosted smoke path with dedicated rollback-only Discover
+  fixtures and assertions for the app/public recommendation, member-search,
+  following, followers, and direct-follow RPCs. Coverage includes invoker and
+  pinned-search-path metadata, authenticated/anonymous grants and actual calls,
+  eligibility/ranking/limit behavior, private/blocked/current/already-followed
+  exclusions, graph privacy, private-owner access, and caller-scoped follow
+  mutation.
+- Extended the existing `--linked` management-API path to execute the committed
+  23-assertion Discover pgTAP contract after the shared smoke transaction. The
+  runner replaces pgTAP's passive `finish()` output with a strict exception so
+  any failed assertion makes the smoke command fail instead of returning a
+  successful SQL exit status.
+- Installed the exact `scripts/package-lock.json` dependency set with a
+  temporary Node-compatible npm CLI: 14 packages, zero reported
+  vulnerabilities. Absolute Node `v24.14.0` syntax validation and
+  `git diff --check` pass.
+- The standard direct-Postgres smoke command stopped before connecting because
+  Ryan's credential file has no `WANDER_SUPABASE_DB_URL`, project password, or
+  equivalent DB secret; no transaction began. Reused the repo's ignored linked
+  Supabase metadata instead. `supabase migration list --linked` confirms every
+  local/remote migration is aligned through `20260717180000`.
+- The strict linked shared smoke passed against hosted rec.me Supabase. Both its
+  existing profile/save/list/photo/Shared Visits transaction and the appended
+  Discover 23-assertion transaction rolled back successfully; no fixture or
+  behavior mutation persisted.
+- The signed archive remains held from upload. Its metadata is verified as
+  display name `rec.me`, marketing version `0.1`, build `82`, bundle
+  `com.grayline.wander`, with a 132 MiB archive and `Wander.app.dSYM` present.
+  Next: publish and squash-merge this test/log-only gate, recheck latest `main`
+  and App Store Connect for a collision, then continue the existing build-82
+  upload if no app source changed.
+
+Parallel release reconciliation, 2026-07-20 15:07 PDT:
+
+- Before any export or upload from this lane, `origin/main` advanced with Joe's
+  build-82 completion and post-release validation records. Independent App
+  Store Connect verification confirms build id
+  `1da16d6f-a976-4eee-8f35-feb0abb13452`, rec.me `0.1 (82)`, uploaded from exact
+  app commit `f1df43290`, is `VALID`, not expired, has export compliance set,
+  is attached to `rec.me Alpha`, and is externally `APPROVED`.
+- Joe's release record includes the required tester announcement at
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784584547863859 and a
+  post-release 465/465 iPhone 16 Plus / iOS 18.6 pass. This lane will not export,
+  upload, process, attach, or announce a duplicate build.
+- The smoke hardening remains worth landing as a test-only policy correction.
+  It changes no app binary or hosted schema/data. REC-90 remains `In Progress`
+  until that ready PR is squash-merged, after which its successful TestFlight
+  and strict hosted smoke evidence can be reconciled to `Done`.
