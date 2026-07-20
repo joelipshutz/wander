@@ -9,7 +9,7 @@ const DEFAULTS = {
   appId: "6776850787",
   bundleId: "com.grayline.wander",
   envPath: "/Users/joelipshutz/.openclaw/workspace/.env.keys",
-  groupName: "Wander Alpha",
+  groupName: "rec.me Alpha",
   pollSeconds: 30,
   projectPath: "project.yml",
   publicLink: "https://testflight.apple.com/join/knEhRa6t",
@@ -474,15 +474,26 @@ async function setWhatToTest(api, build, locale, whatsNew) {
 }
 
 async function getBetaGroup(api, appId, groupName) {
-  const params = new URLSearchParams({
-    "filter[app]": appId,
-    "filter[name]": groupName,
-    limit: "1",
-  });
-  const body = await api(`/betaGroups?${params.toString()}`);
-  const group = body.data?.[0];
+  const findGroup = async (name) => {
+    const params = new URLSearchParams({
+      "filter[app]": appId,
+      "filter[name]": name,
+      limit: "1",
+    });
+    const body = await api(`/betaGroups?${params.toString()}`);
+    return body.data?.[0] ?? null;
+  };
+
+  let resolvedName = groupName;
+  let group = await findGroup(groupName);
+  if (!group && groupName === "rec.me Alpha") {
+    resolvedName = "Wander Alpha";
+    group = await findGroup(resolvedName);
+    if (group) console.log("Using legacy Wander Alpha group; finish the App Store brand cutover.");
+  }
   if (!group) throw new Error(`Missing beta group: ${groupName}`);
-  console.log(`Beta group ${groupName} id=${group.id}`);
+  console.log(`Beta group ${resolvedName} id=${group.id}`);
+  group.resolvedName = resolvedName;
   return group;
 }
 
@@ -589,7 +600,7 @@ async function main() {
   await setExportCompliance(api, build);
   await setWhatToTest(api, build, options.locale, whatToTest);
   const group = await getBetaGroup(api, options.appId, options.groupName);
-  await attachBuildToGroup(api, build, group, options.groupName);
+  await attachBuildToGroup(api, build, group, group.resolvedName ?? options.groupName);
   await submitForReview(api, build);
 
   const summary = await getBuildSummary(api, build.id);

@@ -94,27 +94,51 @@ final class WanderStore: ObservableObject {
     )?
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
-    @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = []
-    @Published private(set) var lastRemoteError: String?
-    @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
-    @Published var defaultVisibility: PlaceVisibility {
+    @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = [] {
         didSet {
+            invalidatePresentationCaches()
+        }
+    }
+    private(set) var lastRemoteError: String? = nil {
+        willSet {
+            guard newValue != lastRemoteError else { return }
+            objectWillChange.send()
+        }
+    }
+    @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
+    var defaultVisibility: PlaceVisibility {
+        willSet {
+            guard newValue != defaultVisibility else { return }
+            objectWillChange.send()
+        }
+        didSet {
+            guard oldValue != defaultVisibility else { return }
             currentUser.defaultVisibilityRaw = defaultVisibility.rawValue
             currentUser.updatedAt = .now
             currentUser.localUpdatedAt = .now
             persist()
         }
     }
-    @Published var isPrivateProfile: Bool {
+    var isPrivateProfile: Bool {
+        willSet {
+            guard newValue != isPrivateProfile else { return }
+            objectWillChange.send()
+        }
         didSet {
+            guard oldValue != isPrivateProfile else { return }
             currentUser.isPrivateProfile = isPrivateProfile
             currentUser.updatedAt = .now
             currentUser.localUpdatedAt = .now
             persist()
         }
     }
-    @Published var autoSaveListAddsToWant: Bool {
+    var autoSaveListAddsToWant: Bool {
+        willSet {
+            guard newValue != autoSaveListAddsToWant else { return }
+            objectWillChange.send()
+        }
         didSet {
+            guard oldValue != autoSaveListAddsToWant else { return }
             persist()
         }
     }
@@ -128,6 +152,108 @@ final class WanderStore: ObservableObject {
     private let persistence: WanderStorePersistence?
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
+    private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
+    private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
+    private var visiblePlacesByListIDCache: (listIDs: [String], placesByListID: [String: [VisiblePlace]])?
+    private(set) var presentationRevision: UInt64 = 0
+
+    private struct RankedVisiblePlace {
+        let index: Int
+        let visiblePlace: VisiblePlace
+    }
+
+    private struct VisiblePlaceListLookup {
+        var byUserPlaceID: [String: RankedVisiblePlace]
+        var byPlaceID: [String: RankedVisiblePlace]
+        let knownPlaceIDs: Set<String>
+    }
+
+    private struct LocalVisiblePlaceProjection {
+        let places: [VisiblePlace]
+        let listLookup: VisiblePlaceListLookup
+    }
+
+    private struct VisitReconciliationIndex {
+        private let canonicalUserPlaceIDByReferenceID: [String: String]
+        private var visitsByCanonicalUserPlaceID: [String: [LocalPlaceVisit]]
+        private let attributesByCanonicalUserPlaceID: [String: [LocalPlaceAttribute]]
+
+        init(
+            userPlaces: [LocalUserPlace],
+            visits: [LocalPlaceVisit],
+            attributes: [LocalPlaceAttribute]
+        ) {
+            var canonicalUserPlaceIDByReferenceID: [String: String] = [:]
+            canonicalUserPlaceIDByReferenceID.reserveCapacity(userPlaces.count * 2)
+            for userPlace in userPlaces {
+                var referenceIDs = [userPlace.id, userPlace.localID]
+                if let serverID = userPlace.serverID {
+                    referenceIDs.append(serverID)
+                }
+                let canonicalID = referenceIDs.compactMap { canonicalUserPlaceIDByReferenceID[$0] }.first
+                    ?? userPlace.id
+                for referenceID in referenceIDs where canonicalUserPlaceIDByReferenceID[referenceID] == nil {
+                    canonicalUserPlaceIDByReferenceID[referenceID] = canonicalID
+                }
+            }
+
+            self.canonicalUserPlaceIDByReferenceID = canonicalUserPlaceIDByReferenceID
+
+            var visitsByCanonicalUserPlaceID: [String: [LocalPlaceVisit]] = [:]
+            visitsByCanonicalUserPlaceID.reserveCapacity(userPlaces.count)
+            for visit in visits {
+                let canonicalID = canonicalUserPlaceIDByReferenceID[visit.userPlaceID] ?? visit.userPlaceID
+                visitsByCanonicalUserPlaceID[canonicalID, default: []].append(visit)
+            }
+            self.visitsByCanonicalUserPlaceID = visitsByCanonicalUserPlaceID
+
+            var attributesByCanonicalUserPlaceID: [String: [LocalPlaceAttribute]] = [:]
+            attributesByCanonicalUserPlaceID.reserveCapacity(userPlaces.count)
+            for attribute in attributes {
+                let canonicalID = canonicalUserPlaceIDByReferenceID[attribute.userPlaceID] ?? attribute.userPlaceID
+                attributesByCanonicalUserPlaceID[canonicalID, default: []].append(attribute)
+            }
+            self.attributesByCanonicalUserPlaceID = attributesByCanonicalUserPlaceID
+        }
+
+        func visits(for userPlace: LocalUserPlace) -> [LocalPlaceVisit] {
+            visitsByCanonicalUserPlaceID[canonicalID(for: userPlace), default: []]
+        }
+
+        func activeVisits(for userPlace: LocalUserPlace) -> [LocalPlaceVisit] {
+            visits(for: userPlace).filter { $0.deletedAt == nil }
+        }
+
+        func attributeDrafts(for userPlace: LocalUserPlace) -> [PlaceAttributeDraft] {
+            attributesByCanonicalUserPlaceID[canonicalID(for: userPlace), default: []]
+                .sorted { $0.questionKey < $1.questionKey }
+                .map { attribute in
+                    PlaceAttributeDraft(
+                        questionKey: attribute.questionKey,
+                        valueType: attribute.valueType,
+                        valueJSON: attribute.valueJSON
+                    )
+                }
+        }
+
+        mutating func append(_ visit: LocalPlaceVisit) {
+            let canonicalID = canonicalUserPlaceIDByReferenceID[visit.userPlaceID] ?? visit.userPlaceID
+            visitsByCanonicalUserPlaceID[canonicalID, default: []].append(visit)
+        }
+
+        private func canonicalID(for userPlace: LocalUserPlace) -> String {
+            canonicalUserPlaceIDByReferenceID[userPlace.id]
+                ?? canonicalUserPlaceIDByReferenceID[userPlace.localID]
+                ?? userPlace.id
+        }
+    }
+
+    private var visiblePlaceListLookupCache: VisiblePlaceListLookup?
+    private var visibleListFallbackResolutionCount = 0
+    #if DEBUG
+    private(set) var visiblePlaceProjectionBuildCount = 0
+    private(set) var visiblePlaceOwnerCountBuildCount = 0
+    #endif
     private var discoverParseCache: [String: DiscoverFilters] = [:]
     private(set) var providerCategoryEnrichmentAttemptedAtByKey: [String: Date] = [:]
     private static let defaultRemoteViewport = MapViewport(
@@ -208,8 +334,19 @@ final class WanderStore: ObservableObject {
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
         self.currentUser.defaultVisibilityRaw = self.defaultVisibility.rawValue
-        backfillMissingLegacyVisits()
-        refreshAllVisitDerivedState()
+        let reconciliationStartedAt = CFAbsoluteTimeGetCurrent()
+        var reconciliationIndex = VisitReconciliationIndex(
+            userPlaces: userPlaces,
+            visits: placeVisits,
+            attributes: placeAttributes
+        )
+        backfillMissingLegacyVisits(using: &reconciliationIndex)
+        let backfillFinishedAt = CFAbsoluteTimeGetCurrent()
+        refreshAllVisitDerivedState(using: reconciliationIndex)
+        let reconciliationFinishedAt = CFAbsoluteTimeGetCurrent()
+        WanderDebugLog.performance.notice(
+            "store reconciliation user_places=\(self.userPlaces.count, privacy: .public) visits=\(self.placeVisits.count, privacy: .public) attributes=\(self.placeAttributes.count, privacy: .public) backfill_ms=\((backfillFinishedAt - reconciliationStartedAt) * 1_000, privacy: .public) refresh_ms=\((reconciliationFinishedAt - backfillFinishedAt) * 1_000, privacy: .public)"
+        )
 
         if shouldPersistAfterRestore {
             persist()
@@ -217,6 +354,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        invalidatePresentationCaches()
         guard let persistence else { return }
 
         if persistenceDeferralDepth > 0 {
@@ -225,6 +363,14 @@ final class WanderStore: ObservableObject {
         }
 
         persistence.save(WanderStoreSnapshot(store: self))
+    }
+
+    private func invalidatePresentationCaches() {
+        visiblePlacesCache.removeAll(keepingCapacity: true)
+        visiblePlaceCountsByOwnerIDCache = nil
+        visiblePlacesByListIDCache = nil
+        visiblePlaceListLookupCache = nil
+        presentationRevision &+= 1
     }
 
     @discardableResult
@@ -796,19 +942,37 @@ final class WanderStore: ObservableObject {
 
     func visiblePlaces(in list: LocalPlaceList) -> [VisiblePlace] {
         let candidates = visiblePlaces()
+        let lookup = visiblePlaceListLookupCache ?? visiblePlaceListLookup(candidates: candidates)
         return listItems(for: list).compactMap { item in
-            visiblePlace(for: item, candidates: candidates)
+            visiblePlace(for: item, lookup: lookup)
         }
     }
 
     func visiblePlacesByListID(in lists: [LocalPlaceList]) -> [String: [VisiblePlace]] {
+        let listIDs = lists.map(\.id)
+        if let cached = visiblePlacesByListIDCache, cached.listIDs == listIDs {
+            return cached.placesByListID
+        }
+
+        let startedAt = CFAbsoluteTimeGetCurrent()
         let candidates = visiblePlaces()
-        return Dictionary(uniqueKeysWithValues: lists.map { list in
-            let visiblePlaces = listItems(for: list).compactMap { item in
-                visiblePlace(for: item, candidates: candidates)
+        let lookup = visiblePlaceListLookupCache ?? visiblePlaceListLookup(candidates: candidates)
+        let candidatesReadyAt = CFAbsoluteTimeGetCurrent()
+        let itemsByListID = visibleListItemsByListID(in: lists)
+        let itemsReadyAt = CFAbsoluteTimeGetCurrent()
+        visibleListFallbackResolutionCount = 0
+        let placesByListID = Dictionary(uniqueKeysWithValues: lists.map { list in
+            let visiblePlaces = itemsByListID[list.id, default: []].compactMap { item in
+                visiblePlace(for: item, lookup: lookup)
             }
             return (list.id, visiblePlaces)
         })
+        visiblePlacesByListIDCache = (listIDs, placesByListID)
+        let finishedAt = CFAbsoluteTimeGetCurrent()
+        WanderDebugLog.performance.notice(
+            "list projection lists=\(lists.count, privacy: .public) candidates=\(candidates.count, privacy: .public) items=\(self.placeListItems.count, privacy: .public) fallbacks=\(self.visibleListFallbackResolutionCount, privacy: .public) candidate_ms=\((candidatesReadyAt - startedAt) * 1_000, privacy: .public) item_ms=\((itemsReadyAt - candidatesReadyAt) * 1_000, privacy: .public) resolve_ms=\((finishedAt - itemsReadyAt) * 1_000, privacy: .public)"
+        )
+        return placesByListID
     }
 
     func hasPlace(_ visiblePlace: VisiblePlace, in list: LocalPlaceList) -> Bool {
@@ -1494,13 +1658,92 @@ final class WanderStore: ObservableObject {
         Set([list.id, list.localID, list.serverID].compactMap { $0 })
     }
 
-    private func visiblePlace(for item: LocalPlaceListItem, candidates: [VisiblePlace]) -> VisiblePlace? {
-        if let matched = candidates.first(where: { visiblePlace in
-            listItem(item, matches: visiblePlace)
-        }) {
-            return matched
+    private func visibleListItemsByListID(in lists: [LocalPlaceList]) -> [String: [LocalPlaceListItem]] {
+        var canonicalListIDByReferenceID: [String: String] = [:]
+        canonicalListIDByReferenceID.reserveCapacity(lists.count * 2)
+        for list in lists {
+            for referenceID in listReferenceIDs(for: list) {
+                canonicalListIDByReferenceID[referenceID] = list.id
+            }
         }
 
+        var itemsByListID: [String: [LocalPlaceListItem]] = [:]
+        itemsByListID.reserveCapacity(lists.count)
+        for item in placeListItems where item.deletedAt == nil {
+            guard let canonicalListID = canonicalListIDByReferenceID[item.listID] else { continue }
+            itemsByListID[canonicalListID, default: []].append(item)
+        }
+        for listID in itemsByListID.keys {
+            itemsByListID[listID]?.sort { $0.createdAt < $1.createdAt }
+        }
+        return itemsByListID
+    }
+
+    private func visiblePlaceListLookup(candidates: [VisiblePlace]) -> VisiblePlaceListLookup {
+        var lookup = VisiblePlaceListLookup(
+            byUserPlaceID: [:],
+            byPlaceID: [:],
+            knownPlaceIDs: Set(
+                places.flatMap { place in
+                    [place.id, place.localID] + [place.serverID].compactMap { $0 }
+                }
+            )
+        )
+        lookup.byUserPlaceID.reserveCapacity(candidates.count * 2)
+        lookup.byPlaceID.reserveCapacity(candidates.count * 2)
+
+        for (index, candidate) in candidates.enumerated() {
+            indexVisiblePlace(candidate, userPlaceID: candidate.id, placeID: candidate.place.id, at: index, in: &lookup)
+        }
+
+        return lookup
+    }
+
+    private func indexVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        userPlaceID: String,
+        placeID: String,
+        at index: Int,
+        in lookup: inout VisiblePlaceListLookup
+    ) {
+        let ranked = RankedVisiblePlace(index: index, visiblePlace: visiblePlace)
+        let userPlaceIDs = Set(
+            [userPlaceID, visiblePlace.id, visiblePlace.userPlace.id, visiblePlace.userPlace.localID]
+                + [visiblePlace.userPlace.serverID].compactMap { $0 }
+        )
+        for referenceID in userPlaceIDs where lookup.byUserPlaceID[referenceID] == nil {
+            lookup.byUserPlaceID[referenceID] = ranked
+        }
+
+        let placeIDs = Set(
+            [placeID, visiblePlace.place.id, visiblePlace.place.localID]
+                + [visiblePlace.place.serverID].compactMap { $0 }
+        )
+        for referenceID in placeIDs where lookup.byPlaceID[referenceID] == nil {
+            lookup.byPlaceID[referenceID] = ranked
+        }
+    }
+
+    private func visiblePlace(for item: LocalPlaceListItem, lookup: VisiblePlaceListLookup) -> VisiblePlace? {
+        if let ownerUserPlaceID = item.ownerUserPlaceID,
+           let ownerMatch = lookup.byUserPlaceID[ownerUserPlaceID] {
+            return ownerMatch.visiblePlace
+        }
+
+        if let sourceUserPlaceID = item.sourceUserPlaceID,
+           let sourceMatch = lookup.byUserPlaceID[sourceUserPlaceID] {
+            return sourceMatch.visiblePlace
+        }
+
+        if let samePlaceMatch = lookup.byPlaceID[item.placeID] {
+            return samePlaceMatch.visiblePlace
+        }
+
+        // A canonical place with no indexed candidate is not visible to the current user.
+        // Only pay for the compatibility scan when the item may use a legacy/local alias.
+        guard !lookup.knownPlaceIDs.contains(item.placeID) else { return nil }
+
+        visibleListFallbackResolutionCount += 1
         return fallbackVisiblePlace(for: item)
     }
 
@@ -1550,20 +1793,6 @@ final class WanderStore: ObservableObject {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-    }
-
-    private func listItem(_ item: LocalPlaceListItem, matches visiblePlace: VisiblePlace) -> Bool {
-        let userPlaceIDs = Set([item.ownerUserPlaceID, item.sourceUserPlaceID].compactMap { $0 })
-        if userPlaceIDs.contains(visiblePlace.userPlace.id)
-            || userPlaceIDs.contains(visiblePlace.userPlace.localID)
-            || visiblePlace.userPlace.serverID.map(userPlaceIDs.contains) == true {
-            return true
-        }
-
-        let placeIDs = matchingPlaceIDs(item.placeID)
-        return placeIDs.contains(visiblePlace.place.id)
-            || placeIDs.contains(visiblePlace.place.localID)
-            || visiblePlace.place.serverID.map(placeIDs.contains) == true
     }
 
     private func fallbackVisiblePlace(for item: LocalPlaceListItem) -> VisiblePlace? {
@@ -1654,16 +1883,70 @@ final class WanderStore: ObservableObject {
     }
 
     func visiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
-        mergeVisiblePlaces(localVisiblePlaces(filters: filters) + remoteVisiblePlaces(filters: filters))
+        if let cached = visiblePlacesCache.first(where: { $0.filters == filters }) {
+            return cached.places
+        }
+
+        #if DEBUG
+        visiblePlaceProjectionBuildCount += 1
+        #endif
+        let localProjection = localVisiblePlaces(filters: filters)
+        let remoteProjection = remoteVisiblePlaces(filters: filters)
+        let projected = mergeVisiblePlaces(localProjection.places + remoteProjection)
+        if filters == PlaceFilters() {
+            var lookup = localProjection.listLookup
+            for (offset, visiblePlace) in remoteProjection.enumerated() {
+                indexVisiblePlace(
+                    visiblePlace,
+                    userPlaceID: visiblePlace.id,
+                    placeID: visiblePlace.place.id,
+                    at: localProjection.places.count + offset,
+                    in: &lookup
+                )
+            }
+            visiblePlaceListLookupCache = lookup
+        }
+        if visiblePlacesCache.count >= 16 {
+            visiblePlacesCache.removeFirst()
+        }
+        visiblePlacesCache.append((filters: filters, places: projected))
+        return projected
     }
 
-    private func localVisiblePlaces(filters: PlaceFilters = PlaceFilters()) -> [VisiblePlace] {
+    private func localVisiblePlaces(filters: PlaceFilters = PlaceFilters()) -> LocalVisiblePlaceProjection {
         let attributesByUserPlaceID = Dictionary(grouping: placeAttributes, by: \.userPlaceID)
-        return userPlaces.compactMap { userPlace -> VisiblePlace? in
+        let placesByID = places.reduce(into: [String: LocalPlace]()) { result, place in
+            if result[place.id] == nil {
+                result[place.id] = place
+            }
+        }
+        let profilesByID = profiles.reduce(into: [String: LocalProfile]()) { result, profile in
+            if result[profile.id] == nil {
+                result[profile.id] = profile
+            }
+        }
+        let normalizedCategories = filters.normalizedCategories
+        var visiblePlaces: [VisiblePlace] = []
+        visiblePlaces.reserveCapacity(userPlaces.count)
+        var listLookup = VisiblePlaceListLookup(
+            byUserPlaceID: [:],
+            byPlaceID: [:],
+            knownPlaceIDs: Set(
+                places.flatMap { place in
+                    [place.id, place.localID] + [place.serverID].compactMap { $0 }
+                }
+            )
+        )
+        listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
+        listLookup.byPlaceID.reserveCapacity(places.count)
+
+        for userPlace in userPlaces {
+            let userPlaceID = userPlace.id
+            let placeID = userPlace.placeID
             guard userPlace.deletedAt == nil,
-                  let place = places.first(where: { $0.id == userPlace.placeID }),
-                  let owner = profiles.first(where: { $0.id == userPlace.userID })
-            else { return nil }
+                  let place = placesByID[placeID],
+                  let owner = profilesByID[userPlace.userID]
+            else { continue }
 
             let relationship = relationship(to: owner.id)
             let blocked = isBlockedBetweenCurrentUser(and: owner.id)
@@ -1673,23 +1956,22 @@ final class WanderStore: ObservableObject {
                 visibility: userPlace.visibility,
                 relationship: relationship,
                 isBlocked: blocked
-            ) else { return nil }
+            ) else { continue }
 
             let userPlaceIDs = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
             let visibleAttributes = userPlaceIDs
                 .flatMap { attributesByUserPlaceID[$0] ?? [] }
                 .sorted { $0.questionKey < $1.questionKey }
             let visiblePlace = VisiblePlace(
-                id: userPlace.id,
+                id: userPlaceID,
                 place: place,
                 userPlace: userPlace,
                 owner: owner,
                 attributes: visibleAttributes
             )
-            guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { return nil }
-            let normalizedCategories = filters.normalizedCategories
-            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return nil }
-            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { return nil }
+            guard filters.statuses.isEmpty || filters.statuses.contains(userPlace.status) else { continue }
+            guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { continue }
+            guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(owner.id) else { continue }
 
             if !filters.ownerScopes.isEmpty {
                 let isMine = owner.id == currentUser.id
@@ -1699,11 +1981,15 @@ final class WanderStore: ObservableObject {
                     || (filters.ownerScopes.contains("friends") && isFriend)
                     || (filters.ownerScopes.contains("following") && isFollowing && !isMine)
                     || (filters.ownerScopes.contains("social") && !isMine)
-                guard allowed else { return nil }
+                guard allowed else { continue }
             }
 
-            return visiblePlace
+            let index = visiblePlaces.count
+            visiblePlaces.append(visiblePlace)
+            indexVisiblePlace(visiblePlace, userPlaceID: userPlaceID, placeID: placeID, at: index, in: &listLookup)
         }
+
+        return LocalVisiblePlaceProjection(places: visiblePlaces, listLookup: listLookup)
     }
 
     private func remoteVisiblePlaces(filters: PlaceFilters) -> [VisiblePlace] {
@@ -1756,6 +2042,21 @@ final class WanderStore: ObservableObject {
 
     func visiblePlaces(for profileID: String) -> [VisiblePlace] {
         visiblePlaces().filter { $0.owner.id == profileID }
+    }
+
+    func visiblePlaceCountsByOwnerID() -> [String: Int] {
+        if let visiblePlaceCountsByOwnerIDCache {
+            return visiblePlaceCountsByOwnerIDCache
+        }
+
+        #if DEBUG
+        visiblePlaceOwnerCountBuildCount += 1
+        #endif
+        let counts = visiblePlaces().reduce(into: [String: Int]()) { result, visiblePlace in
+            result[visiblePlace.owner.id, default: 0] += 1
+        }
+        visiblePlaceCountsByOwnerIDCache = counts
+        return counts
     }
 
     func profile(for profileID: String) -> LocalProfile? {
@@ -1995,6 +2296,69 @@ final class WanderStore: ObservableObject {
                 return lhs.id < rhs.id
             }
             .first
+    }
+
+    func firstVisitPhotosByPlaceID() -> [String: LocalVisitPhoto] {
+        var placeReferencesByAlias: [String: Set<String>] = [:]
+        placeReferencesByAlias.reserveCapacity(places.count * 2)
+        for place in places {
+            let references = Set([place.id, place.localID, place.serverID].compactMap { $0 })
+            for reference in references {
+                placeReferencesByAlias[reference] = references
+            }
+        }
+
+        var placeReferencesByUserPlaceID: [String: Set<String>] = [:]
+        placeReferencesByUserPlaceID.reserveCapacity(userPlaces.count * 2)
+        for userPlace in userPlaces
+        where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
+            let placeReferences = placeReferencesByAlias[userPlace.placeID] ?? [userPlace.placeID]
+            let userPlaceIDs = [userPlace.id, userPlace.localID]
+                + [userPlace.serverID].compactMap { $0 }
+            for userPlaceID in userPlaceIDs {
+                placeReferencesByUserPlaceID[userPlaceID] = placeReferences
+            }
+        }
+
+        var placeReferencesByVisitID: [String: Set<String>] = [:]
+        placeReferencesByVisitID.reserveCapacity(placeVisits.count * 2)
+        for visit in placeVisits where visit.deletedAt == nil {
+            guard let placeReferences = placeReferencesByUserPlaceID[visit.userPlaceID] else { continue }
+            let visitIDs = [visit.id, visit.localID]
+                + [visit.serverID].compactMap { $0 }
+            for visitID in visitIDs {
+                placeReferencesByVisitID[visitID] = placeReferences
+            }
+        }
+
+        let eligiblePhotos = visitPhotos
+            .filter { photo in
+                guard photo.deletedAt == nil, placeReferencesByVisitID[photo.visitID] != nil else { return false }
+                if let localAssetRef = photo.localAssetRef, !localAssetRef.isEmpty { return true }
+                return photo.uploadState == .uploaded && photo.storagePath?.isEmpty == false
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt < rhs.createdAt
+                }
+                if lhs.sortOrder != rhs.sortOrder {
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+                return lhs.id < rhs.id
+            }
+
+        var firstPhotoByPlaceID: [String: LocalVisitPhoto] = [:]
+        firstPhotoByPlaceID.reserveCapacity(eligiblePhotos.count)
+        var resolvedPlaceIDs = Set<String>()
+        for photo in eligiblePhotos {
+            guard let placeReferences = placeReferencesByVisitID[photo.visitID] else { continue }
+            for placeID in placeReferences where !resolvedPlaceIDs.contains(placeID) {
+                resolvedPlaceIDs.insert(placeID)
+                firstPhotoByPlaceID[placeID] = photo
+            }
+        }
+
+        return firstPhotoByPlaceID
     }
 
     @discardableResult
@@ -2617,9 +2981,12 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
+                try Task.checkCancellation()
                 upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
+            } catch is CancellationError {
+                return profiles
             } catch {
                 lastRemoteError = remoteErrorMessage(error)
             }
@@ -2640,7 +3007,10 @@ final class WanderStore: ObservableObject {
     func parseDiscover(query: String) async -> DiscoverFilters {
         let cacheKey = normalizedParseCacheKey(query)
         if let cached = discoverParseCache[cacheKey] {
-            lastDiscoverFilters = cached
+            guard !Task.isCancelled else { return cached }
+            if lastDiscoverFilters != cached {
+                lastDiscoverFilters = cached
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
@@ -2654,8 +3024,11 @@ final class WanderStore: ObservableObject {
 
         do {
             let filters = try await parser.parse(query: query, schema: schema)
+            try Task.checkCancellation()
             discoverParseCache[cacheKey] = filters
-            lastDiscoverFilters = filters
+            if lastDiscoverFilters != filters {
+                lastDiscoverFilters = filters
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
@@ -2663,9 +3036,13 @@ final class WanderStore: ObservableObject {
                 )
             )
             return filters
+        } catch is CancellationError {
+            return DiscoverFilters(query: query)
         } catch {
             let fallback = DiscoverFilters(query: query)
-            lastDiscoverFilters = fallback
+            if lastDiscoverFilters != fallback {
+                lastDiscoverFilters = fallback
+            }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverParseFailed,
@@ -2678,6 +3055,9 @@ final class WanderStore: ObservableObject {
 
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
+        guard !Task.isCancelled else {
+            return DiscoverResults(places: [], profiles: [])
+        }
         var placeFilters = PlaceFilters()
         placeFilters.statuses = filters.statuses
         placeFilters.categories = Set(filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
@@ -2708,9 +3088,12 @@ final class WanderStore: ObservableObject {
         if normalizedProfileQuery.count >= 2, let backend {
             do {
                 let remoteProfiles = try await backend.searchProfiles(handleQuery: normalizedProfileQuery)
+                try Task.checkCancellation()
                 upsertRemoteProfileShells(remoteProfiles, preserveExistingProfileMetadataWhenMissing: true)
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
+            } catch is CancellationError {
+                return DiscoverResults(places: places, profiles: profiles)
             } catch {
                 lastRemoteError = remoteErrorMessage(error)
             }
@@ -3826,20 +4209,84 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async {
-        guard backend != nil else {
-            return
+        guard let backend else { return }
+        let requestUserID = currentUser.id
+        guard !Task.isCancelled else { return }
+
+        let locallyFollowedProfileIDs = Set(following(of: requestUserID).map(\.id))
+        var remoteFollowing: [ProfileShell]?
+        var remoteFollowers: [ProfileShell]?
+        var viewportPlaces: [VisiblePlace]?
+        var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
+        var relationshipsByOwnerID: [String: ViewerRelationship] = [:]
+        var firstRefreshError: Error?
+
+        if backend.followRepository != nil {
+            do {
+                remoteFollowing = try await backend.following(userID: requestUserID)
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+                remoteFollowers = try await backend.followers(userID: requestUserID)
+            } catch {
+                firstRefreshError = firstRefreshError ?? error
+            }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        }
+        if backend.placeRepository != nil {
+            do {
+                viewportPlaces = try await backend.visiblePlaces(in: viewport)
+            } catch {
+                firstRefreshError = firstRefreshError ?? error
+            }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        }
+        let followedProfileIDs = locallyFollowedProfileIDs
+            .union(remoteFollowing?.map(\.id) ?? [])
+            .subtracting([requestUserID])
+            .sorted()
+
+        for profileID in followedProfileIDs {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            if backend.userPlaceRepository != nil {
+                do {
+                    visiblePlacesByOwnerID[profileID] = try await backend.userPlaces(for: profileID)
+                } catch {
+                    firstRefreshError = firstRefreshError ?? error
+                }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            }
+            if backend.followRepository != nil {
+                do {
+                    relationshipsByOwnerID[profileID] = try await backend.relationship(to: profileID)
+                } catch {
+                    firstRefreshError = firstRefreshError ?? error
+                }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            }
         }
 
-        let locallyFollowedProfileIDs = Set(following(of: currentUser.id).map(\.id))
-        await refreshRemoteSocialGraph(backend: backend)
-        await refreshRemoteVisiblePlaces(in: viewport, backend: backend)
-
-        let followedProfileIDs = locallyFollowedProfileIDs
-            .union(following(of: currentUser.id).map(\.id))
-            .subtracting([currentUser.id])
-            .sorted()
-        for profileID in followedProfileIDs {
-            await refreshRemoteProfileVisiblePlaces(profileID: profileID, backend: backend)
+        guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        withDeferredPersistence {
+            if let remoteFollowing, let remoteFollowers {
+                upsertRemoteSocialGraph(
+                    userID: requestUserID,
+                    following: remoteFollowing,
+                    followers: remoteFollowers
+                )
+            }
+            if let viewportPlaces {
+                remoteVisiblePlaceCache = viewportPlaces
+                hydrateRemoteVisiblePlaceMetadata(viewportPlaces)
+            }
+            for profileID in followedProfileIDs {
+                if let visiblePlaces = visiblePlacesByOwnerID[profileID] {
+                    applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: profileID)
+                }
+                if let relationship = relationshipsByOwnerID[profileID] {
+                    applyRemoteRelationship(profileID: profileID, relationship: relationship)
+                }
+            }
+            lastRemoteError = firstRefreshError.map(remoteErrorMessage)
+            persist()
         }
     }
 
@@ -4194,6 +4641,8 @@ final class WanderStore: ObservableObject {
 
     private func apply(session: AuthSession) {
         let previousCurrentUser = currentUser
+        guard previousCurrentUser.id != session.userID else { return }
+
         if let previousUserID = previousCurrentUser.serverID, previousUserID != session.userID {
             providerCategoryEnrichmentAttemptedAtByKey = [:]
             cancelSharedVisitInboxTask()
@@ -4206,12 +4655,9 @@ final class WanderStore: ObservableObject {
             sharedVisitInboxUserID = nil
             sharedVisitCompanionsByVisitID = [:]
         }
-        let isSameUser = previousCurrentUser.id == session.userID
         let sessionHandle = normalizedSessionHandle(from: session)
-        let handle = isSameUser ? previousCurrentUser.handle : sessionHandle
-        let displayName = isSameUser
-            ? previousCurrentUser.displayName
-            : normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
+        let handle = sessionHandle
+        let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
         let preferredVisibility = defaultVisibility
         let preferredPrivateProfile = isPrivateProfile
@@ -4229,12 +4675,13 @@ final class WanderStore: ObservableObject {
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
-        currentUser = profile
-        profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
-        profiles.insert(profile, at: 0)
-        claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
-        defaultVisibility = preferredVisibility
-        isPrivateProfile = preferredPrivateProfile
+        withDeferredPersistence {
+            currentUser = profile
+            profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
+            profiles.insert(profile, at: 0)
+            claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
+            persist()
+        }
     }
 
     private func claimGuestRowsIfNeeded(from previousProfile: LocalProfile, to signedInProfile: LocalProfile) {
@@ -4300,11 +4747,14 @@ final class WanderStore: ObservableObject {
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
-        currentUser = profile
-        profiles.removeAll { $0.localID == localID }
-        profiles.insert(profile, at: 0)
-        defaultVisibility = preferredVisibility
-        isPrivateProfile = preferredPrivateProfile
+        withDeferredPersistence {
+            currentUser = profile
+            profiles.removeAll { $0.localID == localID }
+            profiles.insert(profile, at: 0)
+            defaultVisibility = preferredVisibility
+            isPrivateProfile = preferredPrivateProfile
+            persist()
+        }
     }
 
     private func cancelSharedVisitInboxTask() {
@@ -4525,28 +4975,48 @@ final class WanderStore: ObservableObject {
         userPlace.historicalWantedAt = wantedAt
     }
 
-    private func backfillMissingLegacyVisits() {
+    private func backfillMissingLegacyVisits(using index: inout VisitReconciliationIndex) {
         for userPlace in userPlaces where userPlace.userID == currentUser.id && userPlace.deletedAt == nil {
-            if userPlace.status == .been, visits(for: userPlace.id).isEmpty {
-                syncBackfilledVisit(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
+            let matchingVisits = index.visits(for: userPlace)
+            if userPlace.status == .been, !matchingVisits.contains(where: { $0.deletedAt == nil }) {
+                let previousVisitCount = placeVisits.count
+                syncBackfilledVisit(
+                    for: userPlace,
+                    attributes: index.attributeDrafts(for: userPlace),
+                    matchingVisits: matchingVisits
+                )
+                if placeVisits.count > previousVisitCount, let appendedVisit = placeVisits.last {
+                    index.append(appendedVisit)
+                }
             } else if userPlace.status != .been {
-                softDeleteBackfilledVisits(for: userPlace.id, at: .now)
+                let now = Date.now
+                for visit in matchingVisits where visit.backfilledFromUserPlace && visit.deletedAt == nil {
+                    softDelete(visit, at: now)
+                }
             }
         }
     }
 
-    private func syncBackfilledVisit(for userPlace: LocalUserPlace, attributes: [PlaceAttributeDraft]? = nil) {
+    private func syncBackfilledVisit(
+        for userPlace: LocalUserPlace,
+        attributes: [PlaceAttributeDraft]? = nil,
+        matchingVisits: [LocalPlaceVisit]? = nil
+    ) {
         let now = Date.now
         guard userPlace.deletedAt == nil, userPlace.status == .been else {
             softDeleteBackfilledVisits(for: userPlace.id, at: now)
             return
         }
 
-        let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
-        let hasExplicitVisit = placeVisits.contains { visit in
-            userPlaceIDs.contains(visit.userPlaceID)
-                && !visit.backfilledFromUserPlace
-                && visit.deletedAt == nil
+        let candidateVisits: [LocalPlaceVisit]
+        if let matchingVisits {
+            candidateVisits = matchingVisits
+        } else {
+            let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
+            candidateVisits = placeVisits.filter { userPlaceIDs.contains($0.userPlaceID) }
+        }
+        let hasExplicitVisit = candidateVisits.contains { visit in
+            !visit.backfilledFromUserPlace && visit.deletedAt == nil
         }
         if hasExplicitVisit {
             return
@@ -4556,9 +5026,7 @@ final class WanderStore: ObservableObject {
         let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: drafts)
         let tags = VisitAttributeAnswers.tags(from: drafts)
 
-        if let existing = placeVisits.first(where: { visit in
-            visit.backfilledFromUserPlace && userPlaceIDs.contains(visit.userPlaceID)
-        }) {
+        if let existing = candidateVisits.first(where: { $0.backfilledFromUserPlace }) {
             existing.userPlaceID = userPlace.id
             existing.visitedAt = userPlace.visitedAt ?? userPlace.savedAt
             existing.note = userPlace.note
@@ -4594,12 +5062,12 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    private func refreshAllVisitDerivedState() {
+    private func refreshAllVisitDerivedState(using index: VisitReconciliationIndex) {
         for visit in placeVisits {
             visit.setDerivedTags(VisitAttributeAnswers.tags(fromAttributeAnswersJSON: visit.attributeAnswersJSON))
         }
         for userPlace in userPlaces where userPlace.userID == currentUser.id {
-            refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            updateVisitSummary(for: userPlace, activeVisits: index.activeVisits(for: userPlace))
         }
     }
 
@@ -4610,6 +5078,10 @@ final class WanderStore: ObservableObject {
             return
         }
 
+        updateVisitSummary(for: userPlace, activeVisits: visits(for: userPlace.id))
+    }
+
+    private func updateVisitSummary(for userPlace: LocalUserPlace, activeVisits: [LocalPlaceVisit]) {
         guard userPlace.deletedAt == nil, userPlace.status == .been else {
             userPlace.ratingScore = nil
             userPlace.recommendedScore = nil
@@ -4617,7 +5089,6 @@ final class WanderStore: ObservableObject {
             return
         }
 
-        let activeVisits = visits(for: userPlace.id)
         let ratings = activeVisits.compactMap { PlaceRating.normalized($0.ratingScore) }
         if ratings.isEmpty {
             userPlace.ratingScore = nil
@@ -5283,52 +5754,58 @@ final class WanderStore: ObservableObject {
     }
 
     private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {
-        objectWillChange.send()
+        withDeferredPersistence {
+            objectWillChange.send()
 
-        let now = Date()
-        let currentLocalID = currentUser.localID
-        let currentProfileID = remoteProfile.id
-        let becamePrivate = !isPrivateProfile && remoteProfile.isPrivateProfile
+            let now = Date()
+            let currentLocalID = currentUser.localID
+            let currentProfileID = remoteProfile.id
+            let becamePrivate = !isPrivateProfile && remoteProfile.isPrivateProfile
 
-        currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
-        currentUser.handle = remoteProfile.handle
-        currentUser.searchHandle = remoteProfile.handle.lowercased()
-        currentUser.displayName = remoteProfile.displayName
-        currentUser.avatarURL = currentProfileAvatarURL(
-            incoming: remoteProfile.avatarURL,
-            existing: currentUser.avatarURL
-        )
-        currentUser.bio = remoteProfile.bio
-        currentUser.homeArea = remoteProfile.homeArea
-        currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
-        currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
-        currentUser.createdAt = remoteProfile.createdAt
-        currentUser.syncStateRaw = SyncState.synced.rawValue
-        currentUser.serverUpdatedAt = now
-        currentUser.updatedAt = now
+            currentUser.serverID = remoteProfile.serverID ?? remoteProfile.localID
+            currentUser.handle = remoteProfile.handle
+            currentUser.searchHandle = remoteProfile.handle.lowercased()
+            currentUser.displayName = remoteProfile.displayName
+            currentUser.avatarURL = currentProfileAvatarURL(
+                incoming: remoteProfile.avatarURL,
+                existing: currentUser.avatarURL
+            )
+            currentUser.bio = remoteProfile.bio
+            currentUser.homeArea = remoteProfile.homeArea
+            currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
+            currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
+            currentUser.createdAt = remoteProfile.createdAt
+            currentUser.syncStateRaw = SyncState.synced.rawValue
+            currentUser.serverUpdatedAt = now
+            currentUser.updatedAt = now
 
-        for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
-            profile.serverID = currentUser.serverID
-            profile.handle = currentUser.handle
-            profile.searchHandle = currentUser.searchHandle
-            profile.displayName = currentUser.displayName
-            profile.avatarURL = currentUser.avatarURL
-            profile.bio = currentUser.bio
-            profile.homeArea = currentUser.homeArea
-            profile.isPrivateProfile = currentUser.isPrivateProfile
-            profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
-            profile.createdAt = currentUser.createdAt
-            profile.syncStateRaw = SyncState.synced.rawValue
-            profile.serverUpdatedAt = now
-            profile.updatedAt = now
+            for profile in profiles where profile.localID == currentLocalID || profile.id == currentProfileID {
+                profile.serverID = currentUser.serverID
+                profile.handle = currentUser.handle
+                profile.searchHandle = currentUser.searchHandle
+                profile.displayName = currentUser.displayName
+                profile.avatarURL = currentUser.avatarURL
+                profile.bio = currentUser.bio
+                profile.homeArea = currentUser.homeArea
+                profile.isPrivateProfile = currentUser.isPrivateProfile
+                profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
+                profile.createdAt = currentUser.createdAt
+                profile.syncStateRaw = SyncState.synced.rawValue
+                profile.serverUpdatedAt = now
+                profile.updatedAt = now
+            }
+
+            if defaultVisibility != remoteProfile.defaultVisibility {
+                defaultVisibility = remoteProfile.defaultVisibility
+            }
+            if isPrivateProfile != remoteProfile.isPrivateProfile {
+                isPrivateProfile = remoteProfile.isPrivateProfile
+            }
+            if becamePrivate {
+                makeCurrentUserContentPrivate()
+            }
+            persist()
         }
-
-        defaultVisibility = remoteProfile.defaultVisibility
-        isPrivateProfile = remoteProfile.isPrivateProfile
-        if becamePrivate {
-            makeCurrentUserContentPrivate()
-        }
-        persist()
     }
 
     private func upsertRemoteAttributes(from visiblePlaces: [VisiblePlace]) {

@@ -173,6 +173,360 @@ struct WanderFixtures {
             contactProvider: contacts
         )
     }
+
+    /// A deterministic power-user dataset for simulator profiling. This is only
+    /// selected through `-WanderUsePerformanceFixtures`; production launches
+    /// continue to restore the persisted account or use the empty fixture.
+    @MainActor
+    static func performanceScale() -> WanderFixtures {
+        let referenceDate = Date(timeIntervalSince1970: 1_735_689_600)
+        let currentUser = LocalProfile(
+            localID: "perf_profile_000",
+            serverID: "perf_user_000",
+            handle: "joe_perf",
+            displayName: "Joe Performance",
+            bio: "A realistic power-user account for simulator profiling.",
+            homeArea: "Los Angeles",
+            syncState: .synced,
+            createdAt: referenceDate.addingTimeInterval(-1_200 * 86_400),
+            updatedAt: referenceDate
+        )
+
+        var profiles = [currentUser]
+        for index in 1..<64 {
+            let suffix = String(format: "%03d", index)
+            profiles.append(
+                LocalProfile(
+                    localID: "perf_profile_\(suffix)",
+                    serverID: "perf_user_\(suffix)",
+                    handle: "friend_\(suffix)",
+                    displayName: "Friend \(suffix)",
+                    homeArea: performanceLocations[index % performanceLocations.count].locality,
+                    syncState: .synced,
+                    createdAt: referenceDate.addingTimeInterval(-Double(200 + index * 11) * 86_400),
+                    updatedAt: referenceDate
+                )
+            )
+        }
+
+        let categoryInputs: [(category: String, subcategory: String)] = [
+            ("restaurant", "Restaurant"),
+            ("coffee", "Coffee Shop"),
+            ("bakery", "Bakery"),
+            ("bar", "Bar"),
+            ("park", "Park"),
+            ("museum", "Museum"),
+            ("gym", "Gym"),
+            ("hike", "Hiking Trail")
+        ]
+        let cuisines = ["Italian", "Thai", "Japanese", "Mexican", "French", "Korean"]
+        var places: [LocalPlace] = []
+        places.reserveCapacity(900)
+        for index in 0..<900 {
+            let suffix = String(format: "%04d", index)
+            let location = performanceLocations[index % performanceLocations.count]
+            let category = categoryInputs[index % categoryInputs.count]
+            let row = Double((index / performanceLocations.count) % 20)
+            let column = Double(index % 20)
+            places.append(
+                LocalPlace(
+                    localID: "perf_place_\(suffix)",
+                    serverID: "perf_place_server_\(suffix)",
+                    canonicalName: "\(category.subcategory) \(suffix)",
+                    category: category.category,
+                    subcategory: category.subcategory,
+                    rawProviderType: category.category,
+                    address: "\(100 + index) Fixture Avenue",
+                    locality: location.locality,
+                    region: location.region,
+                    country: location.country,
+                    latitude: location.latitude + row * 0.002,
+                    longitude: location.longitude + column * 0.002,
+                    sourceProvider: "mapkit",
+                    sourceProviderPlaceID: "perf_provider_\(suffix)",
+                    websiteURLString: "https://example.com/places/\(suffix)",
+                    timeZoneIdentifier: location.timeZoneIdentifier,
+                    syncState: .synced,
+                    createdAt: referenceDate.addingTimeInterval(-Double(index % 700) * 86_400),
+                    updatedAt: referenceDate
+                )
+            )
+        }
+
+        var userPlaces: [LocalUserPlace] = []
+        var placeAttributes: [LocalPlaceAttribute] = []
+        var placeVisits: [LocalPlaceVisit] = []
+        var savesByPlaceID: [String: [LocalUserPlace]] = [:]
+        userPlaces.reserveCapacity(1_620)
+        placeAttributes.reserveCapacity(3_240)
+        placeVisits.reserveCapacity(1_300)
+
+        func appendSave(
+            ownerIndex: Int,
+            place: LocalPlace,
+            placeIndex: Int,
+            variant: Int
+        ) {
+            let owner = profiles[ownerIndex]
+            let placeSuffix = String(format: "%04d", placeIndex)
+            let ownerSuffix = String(format: "%03d", ownerIndex)
+            let suffix = "\(ownerSuffix)_\(placeSuffix)_\(variant)"
+            let isBeen = (placeIndex + variant) % 4 != 0
+            let status: PlaceStatus = isBeen ? .been : .wannaGo
+            let userPlace = LocalUserPlace(
+                localID: "perf_user_place_\(suffix)",
+                serverID: "perf_user_place_server_\(suffix)",
+                userID: owner.id,
+                placeID: place.id,
+                status: status,
+                visibility: owner === currentUser || placeIndex % 5 != 0 ? .followers : .mutuals,
+                note: "Realistic saved-place note \(placeSuffix) from \(owner.displayName).",
+                ratingScore: isBeen ? Double(3 + ((placeIndex + variant) % 3)) : nil,
+                recommendedScore: isBeen ? 3.5 + Double((placeIndex + variant) % 4) * 0.4 : nil,
+                recommendedCount: isBeen ? 1 + ((placeIndex + variant) % 5) : 0,
+                nearbyConfirmed: isBeen,
+                visitedAt: isBeen
+                    ? referenceDate.addingTimeInterval(-Double((placeIndex + variant * 17) % 720) * 86_400)
+                    : nil,
+                savedAt: referenceDate.addingTimeInterval(-Double((placeIndex + variant * 13) % 850) * 86_400),
+                sourceType: owner === currentUser ? "manual" : "social_seed",
+                syncState: .synced,
+                createdAt: referenceDate.addingTimeInterval(-Double((placeIndex + variant * 13) % 850) * 86_400),
+                updatedAt: referenceDate
+            )
+            userPlaces.append(userPlace)
+            savesByPlaceID[place.id, default: []].append(userPlace)
+
+            let attributePrefix = "perf_attribute_\(suffix)"
+            placeAttributes.append(
+                LocalPlaceAttribute(
+                    localID: "\(attributePrefix)_tags",
+                    serverID: "\(attributePrefix)_tags_server",
+                    userPlaceID: userPlace.id,
+                    questionKey: "place_tags",
+                    valueType: "multi_tag",
+                    valueJSON: "[\"trusted\",\"useful\",\"fixture-\((placeIndex + variant) % 12)\"]",
+                    syncState: .synced,
+                    createdAt: userPlace.createdAt,
+                    updatedAt: referenceDate
+                )
+            )
+            let isRestaurant = place.primaryCategory == WanderPlaceCategory.restaurantsFood
+            placeAttributes.append(
+                LocalPlaceAttribute(
+                    localID: "\(attributePrefix)_detail",
+                    serverID: "\(attributePrefix)_detail_server",
+                    userPlaceID: userPlace.id,
+                    questionKey: isRestaurant ? PlaceMemoryAttributeKeys.restaurantCuisine : "occasion",
+                    valueType: "single_choice",
+                    valueJSON: isRestaurant
+                        ? "\"\(cuisines[(placeIndex + variant) % cuisines.count])\""
+                        : "\"everyday\"",
+                    syncState: .synced,
+                    createdAt: userPlace.createdAt,
+                    updatedAt: referenceDate
+                )
+            )
+
+            guard isBeen else { return }
+            let visitDate = userPlace.visitedAt ?? referenceDate
+            placeVisits.append(
+                LocalPlaceVisit(
+                    localID: "perf_visit_\(suffix)_0",
+                    serverID: "perf_visit_server_\(suffix)_0",
+                    userPlaceID: userPlace.id,
+                    visitedAt: visitDate,
+                    note: "Visit memory for \(place.canonicalName).",
+                    ratingScore: userPlace.ratingScore,
+                    tags: ["trusted", "memory"],
+                    syncState: .synced,
+                    createdAt: visitDate,
+                    updatedAt: referenceDate
+                )
+            )
+            if (placeIndex + variant) % 12 == 0 {
+                placeVisits.append(
+                    LocalPlaceVisit(
+                        localID: "perf_visit_\(suffix)_1",
+                        serverID: "perf_visit_server_\(suffix)_1",
+                        userPlaceID: userPlace.id,
+                        visitedAt: visitDate.addingTimeInterval(-45 * 86_400),
+                        note: "A repeat visit used to exercise visit history.",
+                        ratingScore: userPlace.ratingScore,
+                        tags: ["repeat"],
+                        syncState: .synced,
+                        createdAt: visitDate.addingTimeInterval(-45 * 86_400),
+                        updatedAt: referenceDate
+                    )
+                )
+            }
+        }
+
+        for (index, place) in places.enumerated() {
+            let primaryOwnerIndex = 1 + (index % (profiles.count - 1))
+            appendSave(
+                ownerIndex: primaryOwnerIndex,
+                place: place,
+                placeIndex: index,
+                variant: 0
+            )
+            if index < 420 {
+                appendSave(
+                    ownerIndex: 0,
+                    place: place,
+                    placeIndex: index,
+                    variant: 1
+                )
+            }
+            if index % 3 == 0 {
+                let secondaryOwnerIndex = 1 + ((index + 19) % (profiles.count - 1))
+                appendSave(
+                    ownerIndex: secondaryOwnerIndex,
+                    place: place,
+                    placeIndex: index,
+                    variant: 2
+                )
+            }
+        }
+
+        var follows: [LocalFollow] = []
+        for index in 1..<profiles.count {
+            let suffix = String(format: "%03d", index)
+            let profile = profiles[index]
+            follows.append(
+                LocalFollow(
+                    localID: "perf_follow_out_\(suffix)",
+                    serverID: "perf_follow_out_server_\(suffix)",
+                    followerUserID: currentUser.id,
+                    followedUserID: profile.id,
+                    source: .profile,
+                    syncState: .synced
+                )
+            )
+            if index % 3 == 0 {
+                follows.append(
+                    LocalFollow(
+                        localID: "perf_follow_in_\(suffix)",
+                        serverID: "perf_follow_in_server_\(suffix)",
+                        followerUserID: profile.id,
+                        followedUserID: currentUser.id,
+                        source: .profile,
+                        syncState: .synced
+                    )
+                )
+            }
+        }
+
+        var placeLists: [LocalPlaceList] = []
+        var placeListMembers: [LocalPlaceListMember] = []
+        var placeListItems: [LocalPlaceListItem] = []
+        placeLists.reserveCapacity(72)
+        placeListItems.reserveCapacity(2_016)
+        for listIndex in 0..<72 {
+            let listSuffix = String(format: "%03d", listIndex)
+            let owner = listIndex < 24
+                ? currentUser
+                : profiles[1 + ((listIndex - 24) % (profiles.count - 1))]
+            let list = LocalPlaceList(
+                localID: "perf_list_\(listSuffix)",
+                serverID: "perf_list_server_\(listSuffix)",
+                ownerUserID: owner.id,
+                name: "Realistic list \(listSuffix)",
+                description: "A high-data fixture list with enough places to exercise scrolling and projection work.",
+                visibility: listIndex % 7 == 0 ? .stealth : .followers,
+                syncState: .synced,
+                cachedItemCount: 28,
+                createdAt: referenceDate.addingTimeInterval(-Double(listIndex * 5) * 86_400),
+                updatedAt: referenceDate
+            )
+            placeLists.append(list)
+
+            if listIndex % 5 == 0 {
+                for memberOffset in 1...2 {
+                    let member = profiles[1 + ((listIndex + memberOffset) % (profiles.count - 1))]
+                    placeListMembers.append(
+                        LocalPlaceListMember(
+                            localID: "perf_list_member_\(listSuffix)_\(memberOffset)",
+                            serverID: "perf_list_member_server_\(listSuffix)_\(memberOffset)",
+                            listID: list.id,
+                            userID: member.id,
+                            role: .collaborator,
+                            createdAt: list.createdAt
+                        )
+                    )
+                }
+            }
+
+            for itemIndex in 0..<28 {
+                let placeIndex = (listIndex * 13 + itemIndex * 17) % places.count
+                let place = places[placeIndex]
+                guard let sourceSave = savesByPlaceID[place.id]?.first else { continue }
+                let itemSuffix = String(format: "%02d", itemIndex)
+                placeListItems.append(
+                    LocalPlaceListItem(
+                        localID: "perf_list_item_\(listSuffix)_\(itemSuffix)",
+                        serverID: "perf_list_item_server_\(listSuffix)_\(itemSuffix)",
+                        listID: list.id,
+                        placeID: place.id,
+                        ownerUserPlaceID: sourceSave.userID == currentUser.id ? sourceSave.id : nil,
+                        sourceUserPlaceID: sourceSave.id,
+                        addedByUserID: owner.id,
+                        syncState: .synced,
+                        createdAt: list.createdAt.addingTimeInterval(Double(itemIndex) * 3_600),
+                        updatedAt: referenceDate
+                    )
+                )
+            }
+        }
+
+        let contacts = FakeContactProvider(
+            seededMatches: profiles.dropFirst().prefix(12).map { profile in
+                ContactMatch(
+                    id: "perf_contact_\(profile.id)",
+                    displayName: profile.displayName,
+                    handle: profile.handle,
+                    userID: profile.id,
+                    isAlreadyFollowing: true,
+                    followsCurrentUser: follows.contains {
+                        $0.followerUserID == profile.id && $0.followedUserID == currentUser.id
+                    }
+                )
+            }
+        )
+
+        return WanderFixtures(
+            currentUser: currentUser,
+            profiles: profiles,
+            places: places,
+            userPlaces: userPlaces,
+            placeAttributes: placeAttributes,
+            placeVisits: placeVisits,
+            follows: follows,
+            blocks: [],
+            placeLists: placeLists,
+            placeListMembers: placeListMembers,
+            placeListItems: placeListItems,
+            contactProvider: contacts
+        )
+    }
+
+    private static let performanceLocations: [PerformanceFixtureLocation] = [
+        PerformanceFixtureLocation(locality: "Los Angeles", region: "CA", country: "United States", latitude: 34.0522, longitude: -118.2437, timeZoneIdentifier: "America/Los_Angeles"),
+        PerformanceFixtureLocation(locality: "New York", region: "NY", country: "United States", latitude: 40.7128, longitude: -74.0060, timeZoneIdentifier: "America/New_York"),
+        PerformanceFixtureLocation(locality: "San Francisco", region: "CA", country: "United States", latitude: 37.7749, longitude: -122.4194, timeZoneIdentifier: "America/Los_Angeles"),
+        PerformanceFixtureLocation(locality: "Chicago", region: "IL", country: "United States", latitude: 41.8781, longitude: -87.6298, timeZoneIdentifier: "America/Chicago"),
+        PerformanceFixtureLocation(locality: "London", region: "England", country: "United Kingdom", latitude: 51.5072, longitude: -0.1276, timeZoneIdentifier: "Europe/London"),
+        PerformanceFixtureLocation(locality: "Tokyo", region: "Tokyo", country: "Japan", latitude: 35.6762, longitude: 139.6503, timeZoneIdentifier: "Asia/Tokyo")
+    ]
+}
+
+private struct PerformanceFixtureLocation {
+    let locality: String
+    let region: String
+    let country: String
+    let latitude: Double
+    let longitude: Double
+    let timeZoneIdentifier: String
 }
 
 enum WanderModelContainer {

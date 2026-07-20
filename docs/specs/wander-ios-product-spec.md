@@ -1,4 +1,8 @@
-# Wander iOS Product Spec
+# rec.me iOS Product Spec
+
+Public product name: `rec.me`. Internal repo paths and historical product
+language may still use `Wander` where changing them would create migration or
+coordination risk.
 
 Date: 2026-05-29
 Status: Draft v0.1
@@ -24,15 +28,15 @@ Project root: `/Users/joelipshutz/Developer/Wander (nametbd)`
 
 ## Executive Summary
 
-Wander is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
+rec.me is a native iOS social map for remembering places worth returning to and discovering places through trusted people.
 
 North Star:
 
-> When I need a place, Wander shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
+> When I need a place, rec.me shows me where my trusted people have actually been, what they thought, and whether it fits the moment.
 
 Sharper wedge:
 
-> Wander turns trusted people's place memories into a searchable map you can actually use.
+> rec.me turns trusted people's place memories into a searchable map you can actually use.
 
 Positioning:
 

@@ -1246,10 +1246,12 @@ final class WanderStoreTests: XCTestCase {
         let placeID = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.place.id
 
         XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, first?.id)
+        XCTAssertEqual(store.firstVisitPhotosByPlaceID()[placeID ?? ""]?.id, first?.id)
         XCTAssertNotEqual(first?.id, second?.id)
 
         _ = store.deleteVisitPhoto(photoID: first?.id ?? "")
         XCTAssertEqual(store.firstVisitPhoto(forPlaceID: placeID ?? "")?.id, second?.id)
+        XCTAssertEqual(store.firstVisitPhotosByPlaceID()[placeID ?? ""]?.id, second?.id)
     }
 
     func testMultipleVisitsAverageRatings() {
@@ -1279,6 +1281,78 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.ratingScore, 4)
         XCTAssertEqual(saved?.userPlace.recommendedScore, 4)
         XCTAssertEqual(saved?.userPlace.recommendedCount, 3)
+    }
+
+    func testStoreInitializationReconcilesLocalAndServerVisitAliasesWithoutBackfill() throws {
+        let currentUser = LocalProfile(
+            localID: "local_profile_alias",
+            serverID: "user_alias",
+            handle: "alias",
+            displayName: "Alias User",
+            syncState: .synced
+        )
+        let place = LocalPlace(
+            localID: "local_place_alias",
+            serverID: "place_alias",
+            canonicalName: "Alias Cafe",
+            category: "coffee",
+            latitude: 34.0,
+            longitude: -118.0,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_alias",
+            serverID: "up_alias",
+            userID: currentUser.id,
+            placeID: place.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let visits = [
+            LocalPlaceVisit(
+                localID: "local_visit_alias_local",
+                userPlaceID: userPlace.localID,
+                visitedAt: Date(timeIntervalSince1970: 100),
+                ratingScore: 3,
+                backfilledFromUserPlace: false,
+                syncState: .synced
+            ),
+            LocalPlaceVisit(
+                localID: "local_visit_alias_server",
+                serverID: "visit_alias_server",
+                userPlaceID: userPlace.id,
+                visitedAt: Date(timeIntervalSince1970: 200),
+                ratingScore: 5,
+                backfilledFromUserPlace: false,
+                syncState: .synced
+            )
+        ]
+        let fixtures = WanderFixtures(
+            currentUser: currentUser,
+            profiles: [currentUser],
+            places: [place],
+            userPlaces: [userPlace],
+            placeAttributes: [],
+            placeVisits: visits,
+            follows: [],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        )
+
+        let store = WanderStore(fixtures: fixtures)
+        let saved = try XCTUnwrap(store.currentUserVisiblePlaces.first?.userPlace)
+
+        XCTAssertEqual(store.visits(for: userPlace.id).count, 2)
+        XCTAssertFalse(store.visits(for: userPlace.id).contains(where: \.backfilledFromUserPlace))
+        XCTAssertEqual(saved.ratingScore, 4)
+        XCTAssertEqual(saved.recommendedScore, 4)
+        XCTAssertEqual(saved.recommendedCount, 2)
+        XCTAssertEqual(saved.visitedAt, Date(timeIntervalSince1970: 200))
     }
 
     func testBackfilledVisitDoesNotMutateAfterExplicitVisitExists() {
@@ -3081,8 +3155,14 @@ final class WanderStoreTests: XCTestCase {
     }
 
     func testRemoteSocialSurfacesHydrateFollowedUsersAndTheirPlaces() async {
-        let store = WanderStore(fixtures: WanderFixtures.empty())
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
         let mayaAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_maya/avatar.jpg?v=2"
         let ryanAvatarURL = "https://example.supabase.co/storage/v1/object/public/profile-avatars/user_ryan/avatar.jpg?v=2"
         let maya = ProfileShell(id: "user_maya", handle: "maya", displayName: "Maya", avatarURL: mayaAvatarURL, bio: nil, relationship: .follower)
@@ -3181,6 +3261,90 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(followRepository.followingUserIDs, ["user_live"])
         XCTAssertEqual(placeRepository.viewports.count, 1)
         XCTAssertEqual(userPlaceRepository.userPlaceRequests.map(\.userID), ["user_maya", "user_ryan"])
+        XCTAssertEqual(snapshots.count, 1, "A logical social refresh should materialize one store snapshot")
+    }
+
+    func testRemoteSocialSurfacesDiscardCompletionFromPreviousAccount() async {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
+        let maya = ProfileShell(
+            id: "user_maya",
+            handle: "maya",
+            displayName: "Maya",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(following: [maya])
+        followRepository.shouldSuspendFollowing = true
+        let backend = WanderBackend(followRepository: followRepository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshRemoteSocialSurfaces(backend: backend)
+        }
+        while !followRepository.hasSuspendedFollowingRequest {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(AuthSession(userID: "user_sarah", displayName: "Sarah", handle: "sarah")))
+        snapshots.removeAll()
+        followRepository.resumeFollowing()
+        await refreshTask.value
+
+        XCTAssertEqual(store.currentUser.id, "user_sarah")
+        XCTAssertFalse(store.profiles.contains { $0.id == "user_maya" })
+        XCTAssertFalse(store.follows.contains {
+            $0.followerUserID == "user_sarah" && $0.followedUserID == "user_maya"
+        })
+        XCTAssertEqual(followRepository.followingUserIDs, ["user_joe"])
+        XCTAssertTrue(followRepository.followersUserIDs.isEmpty)
+        XCTAssertTrue(snapshots.isEmpty, "The stale refresh must not persist into the new account")
+    }
+
+    func testCancelledRemoteSocialSurfacesRefreshDoesNotMutateStore() async {
+        var snapshots: [WanderStoreSnapshot] = []
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { snapshots.append($0) }
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")))
+        snapshots.removeAll()
+        let maya = ProfileShell(
+            id: "user_maya",
+            handle: "maya",
+            displayName: "Maya",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let followRepository = FakeFollowRepository(following: [maya])
+        followRepository.shouldSuspendFollowing = true
+        let backend = WanderBackend(followRepository: followRepository)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshRemoteSocialSurfaces(backend: backend)
+        }
+        while !followRepository.hasSuspendedFollowingRequest {
+            await Task.yield()
+        }
+
+        refreshTask.cancel()
+        followRepository.resumeFollowing()
+        await refreshTask.value
+
+        XCTAssertFalse(store.profiles.contains { $0.id == "user_maya" })
+        XCTAssertFalse(store.follows.contains {
+            $0.followerUserID == "user_joe" && $0.followedUserID == "user_maya"
+        })
+        XCTAssertTrue(followRepository.followersUserIDs.isEmpty)
+        XCTAssertTrue(snapshots.isEmpty, "A cancelled refresh must not publish or persist staged results")
     }
 
     func testRemoteSocialSaveMarksLocalCopySynced() async {
@@ -4369,6 +4533,11 @@ final class WanderStoreTests: XCTestCase {
             $0.place.canonicalName == "Griffith Observatory Trail"
                 && $0.userPlace.status == .wannaGo
         })
+        let projectedPlace = store.visiblePlaces(in: list).first {
+            $0.place.canonicalName == "Griffith Observatory Trail"
+        }
+        XCTAssertEqual(projectedPlace?.owner.id, store.currentUser.id)
+        XCTAssertEqual(projectedPlace?.userPlace.status, .wannaGo)
     }
 
     func testNonMemberCannotAddPlaceToSomeoneElsesList() async {
@@ -4467,6 +4636,28 @@ final class WanderStoreTests: XCTestCase {
                 "Batched projection changed the visible places for \(list.id)"
             )
         }
+    }
+
+    func testListProjectionPrefersExactSocialSourceSaveOverEarlierCurrentUserSave() throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_demo_laptop" })
+        let item = try XCTUnwrap(
+            store.placeListItems.first { $0.id == "list_item_demo_laptop_circuit" }
+        )
+        let matchingCandidates = store.visiblePlaces().filter {
+            $0.place.id == "place_circuit_coffee"
+        }
+
+        XCTAssertEqual(matchingCandidates.first?.userPlace.id, "up_joe_circuit_coffee")
+        XCTAssertEqual(item.sourceUserPlaceID, "up_maya_circuit_coffee")
+
+        let projectedPlace = try XCTUnwrap(
+            store.visiblePlaces(in: list).first { $0.place.id == "place_circuit_coffee" }
+        )
+
+        XCTAssertEqual(projectedPlace.userPlace.id, item.sourceUserPlaceID)
+        XCTAssertEqual(projectedPlace.owner.id, "user_maya")
+        XCTAssertEqual(projectedPlace.userPlace.note, "Quiet enough for heads-down work.")
     }
 
     func testRemotePlaceListsHydrateVisibleScopesCountsAndItems() async {
@@ -5202,6 +5393,10 @@ private final class FakeFollowRepository: FollowRepository {
     private(set) var followersUserIDs: [String] = []
     private(set) var followingUserIDs: [String] = []
     private(set) var relationshipUserIDs: [String] = []
+    var shouldSuspendFollowing = false
+    private var followingContinuation: CheckedContinuation<[ProfileShell], Error>?
+
+    var hasSuspendedFollowingRequest: Bool { followingContinuation != nil }
 
     init(
         error: Error? = nil,
@@ -5236,12 +5431,22 @@ private final class FakeFollowRepository: FollowRepository {
 
     func following(userID: String) async throws -> [ProfileShell] {
         followingUserIDs.append(userID)
+        if shouldSuspendFollowing {
+            return try await withCheckedThrowingContinuation { continuation in
+                followingContinuation = continuation
+            }
+        }
         return followingResult
     }
 
     func relationship(to userID: String) async throws -> ViewerRelationship {
         relationshipUserIDs.append(userID)
         return relationships[userID] ?? .nonFollower
+    }
+
+    func resumeFollowing() {
+        followingContinuation?.resume(returning: followingResult)
+        followingContinuation = nil
     }
 }
 

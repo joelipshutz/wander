@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-15
 
-Durable product and engineering decisions for Wander. See the product spec and engineering plan for fuller rationale.
+Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
 ## Product Decisions
 
