@@ -14201,3 +14201,16 @@ TestFlight build-82 completion, 2026-07-20 14:56 PDT:
 - Linear REC-17 is `Done` with release evidence. Mission Control task
   `8cf022d1-2996-469d-80c8-08aa1bef57d5` is `done`. No App Store production
   submission or marketing-version change was performed.
+
+Post-release validation, 2026-07-20 15:03 PDT:
+
+- After clearing only the old, already-uploaded BondAi2 Xcode archives with
+  explicit approval, reran the full repo-prescribed iPhone 16 Plus / iOS 18.6
+  suite against the exact released `main` commit `f1df432`.
+- The suite passed 465/465 with zero failures, zero skips, and zero build
+  errors. Result bundle:
+  `/private/tmp/build82-postrelease-validation.xcresult`.
+- Rechecked App Store Connect build `0.1 (82)`: it remains `VALID`, not
+  expired, export compliance is set to non-exempt encryption false, it is
+  attached to `rec.me Alpha`, and external TestFlight review remains
+  `APPROVED`. No second archive or binary upload was made.
