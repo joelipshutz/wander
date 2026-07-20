@@ -12761,3 +12761,16 @@ Start state and coordination:
 - Expected files are a debug-only Discover people-modules mock, the debug launch-argument route in `Wander/App/WanderApp.swift`, regenerated project membership if required, simulator screenshots outside the repo, and this append-only log.
 - No production recommendation query, Supabase RPC, hosted data, auth, schema, follow behavior, or TestFlight build will change in this mock pass.
 - Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` is unavailable. Linear REC-90 is the live tracker for this pass.
+
+Simulator mock completion, 2026-07-20 10:09 PDT:
+
+- Added a debug-only native SwiftUI route for `-WanderDiscoverPeopleModulesMockup populated`, leaving the production Discover repository, hosted data, ranking queries, and follow behavior unchanged.
+- The approved candidate structure puts `People you may know` first, sourced from contacts/follow-graph reasons, followed by `People worth following`, sourced from popular public accounts in Los Angeles. Both are horizontal shelves with compact 168 x 224 pt cards, 48 pt avatars, 44 pt follow controls, and visible continuation affordance.
+- Used realistic fixture identities and explicit provenance reasons. Initials are intentional because the existing hosted seeded profiles expose no avatar URLs; real profile photography remains the highest-leverage production polish.
+- Captured and visually reviewed native simulator screens on iPhone 16 Plus and iPhone 16e, both running iOS 18.6:
+  - `/Users/joelipshutz/.codex/visualizations/2026/07/14/019f5e13-20e5-7071-9606-6d5cae15923d/rec90-people-modules-iphone-16-plus.png`
+  - `/Users/joelipshutz/.codex/visualizations/2026/07/14/019f5e13-20e5-7071-9606-6d5cae15923d/rec90-people-modules-iphone-16e.png`
+- Focused launch-route test passed 1/1 at `/private/tmp/DerivedData-rec90-people-modules-mock/Logs/Test/Test-Wander-2026.07.20_10-00-17--0700.xcresult`; the exact final source also passed the iPhone 16 Plus simulator build after the spacing correction. The task-owned DerivedData was then removed to recover disk space; screenshots and source remain intact.
+- The first test attempt was blocked only by a full temp volume. Removed only obsolete caches created by this REC-90 work, reran successfully, and did not touch unrelated agent caches or source.
+- Saved the required iOS design-review report to `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-20.md`. No scored category fell below 7/10.
+- This remains a mock awaiting Joe's visual approval. Next: approve or revise module naming/order/card treatment, then design the two production algorithms as separate, testable ranking modules before implementation.
