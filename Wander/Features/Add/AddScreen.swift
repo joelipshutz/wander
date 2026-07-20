@@ -1,74 +1,50 @@
+import CoreLocation
 import PhotosUI
 import SwiftUI
 import UIKit
 import Vision
+
+enum AddSheetLayout {
+    static let restingDetent = PresentationDetent.height(300)
+    static let detents: Set<PresentationDetent> = [restingDetent, .large]
+}
 
 struct AddScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let resetToken: UUID
+    @Binding private var selectedDetent: PresentationDetent
+    let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
     @State private var selectedCandidateID: String?
-    @State private var selectedStatus: PlaceStatus = .been
-    @State private var selectedVisibility: PlaceVisibility = .followers
-    @State private var selectedRatingScore = PlaceRating.defaultScore
     @State private var selectedSource: AddSourceType = .manual
-    @State private var note = ""
     @State private var manualName = ""
-    @State private var manualArea = ""
-    @State private var manualCategory = "coffee"
     @State private var linkInput = ""
     @State private var quickAddQuery = ""
     @State private var isShowingInlineCandidateResults = false
-    @State private var selectedAnswers: [String: Set<String>] = [:]
-    @State private var savedResult: SaveResult?
     @State private var draft: UnresolvedDraft?
     @State private var isResolvingCandidates = false
     @State private var resolutionMessage: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
-    @State private var saveToast: SaveSyncFeedback?
+    @State private var addSaveFlow: MapPlaceSaveContext?
+    @FocusState private var isQuickAddFocused: Bool
 
-    init(resetToken: UUID = UUID()) {
+    init(
+        resetToken: UUID = UUID(),
+        selectedDetent: Binding<PresentationDetent>,
+        onClose: @escaping () -> Void
+    ) {
         self.resetToken = resetToken
+        _selectedDetent = selectedDetent
+        self.onClose = onClose
     }
 
     private var selectedCandidate: PlaceCandidate? {
         candidates.first { $0.id == selectedCandidateID } ?? candidates.first
-    }
-
-    private var saveVisibility: PlaceVisibility {
-        store.isPrivateProfile ? .selfOnly : selectedVisibility
-    }
-
-    private var selectedVisibilityForStealthToggle: Binding<PlaceVisibility> {
-        Binding(
-            get: { store.isPrivateProfile ? .selfOnly : selectedVisibility },
-            set: { newVisibility in
-                selectedVisibility = store.isPrivateProfile ? .selfOnly : newVisibility
-            }
-        )
-    }
-
-    private var currentQuestionBlocks: [AddQuestionBlock] {
-        if let selectedCandidate {
-            return AddQuestionTemplates.blocks(
-                primaryCategory: selectedCandidate.primaryCategory,
-                subcategory: selectedCandidate.subcategory,
-                cuisine: WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.rawProviderType)
-                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.subcategory)
-                    ?? WanderPlaceCategory.cuisineGuess(forRawValue: selectedCandidate.category),
-                status: selectedStatus
-            )
-        }
-
-        return AddQuestionTemplates.blocks(
-            category: manualCategory,
-            status: selectedStatus
-        )
     }
 
     var body: some View {
@@ -80,18 +56,10 @@ struct AddScreen: View {
                     switch step {
                     case .source:
                         sourcePicker
-                    case .link:
-                        linkForm
-                    case .manual:
-                        manualForm
                     case .photo:
                         photoForm
                     case .confirm:
                         confirmPlace
-                    case .details:
-                        detailsForm
-                    case .saved:
-                        savedView
                     case .draft:
                         draftView
                     }
@@ -101,54 +69,68 @@ struct AddScreen: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
-            .overlay(alignment: .bottom) {
-                if let saveToast {
-                    AddSaveToastView(
-                        toast: saveToast,
-                        signInAction: {
-                            auth.presentGate(for: .syncPlace)
-                        },
-                        dismissAction: {
-                            self.saveToast = nil
-                        }
-                    )
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.bottom, WanderTheme.spacing8 + WanderTheme.spacing3)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(response: 0.36, dampingFraction: 0.86), value: saveToast)
             .onChange(of: resetToken) { _, _ in
                 reset()
             }
-            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
-                if isPrivateProfile {
-                    selectedVisibility = .selfOnly
+            .onChange(of: isQuickAddFocused) { _, isFocused in
+                withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
+                    selectedDetent = isFocused || shouldStayExpanded
+                        ? .large
+                        : AddSheetLayout.restingDetent
                 }
+            }
+            .onChange(of: selectedDetent) { _, detent in
+                guard detent == AddSheetLayout.restingDetent, isQuickAddFocused else { return }
+                isQuickAddFocused = false
+            }
+            .sheet(item: $addSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveSharedSubmission(submission)
+                } onRemove: { _ in
+                    false
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             if step.canGoBack {
-                Button {
-                    goBack()
-                } label: {
-                    Label("back", systemImage: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
+                Button(action: goBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .black))
                         .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, WanderTheme.spacing1)
+                .accessibilityLabel("Back")
             }
 
-            Text("add a place")
-                .font(.system(size: 28, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-            Text(step.subtitle)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("add a place")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(step.subtitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Spacer()
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(width: 30, height: 30)
+                    .background(WanderTheme.surfaceSand.color)
+                    .clipShape(Circle())
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close add place")
         }
     }
 
@@ -157,7 +139,10 @@ struct AddScreen: View {
             AddSearchField(
                 query: $quickAddQuery,
                 isLoading: isResolvingCandidates,
+                isFocused: $isQuickAddFocused,
                 submit: {
+                    expandSheet()
+                    isQuickAddFocused = false
                     Task {
                         await resolveQuickAddQuery()
                     }
@@ -181,105 +166,43 @@ struct AddScreen: View {
                     InlineMessage(text: resolutionMessage)
                 }
             } else {
-                SourceRow(
-                    title: isResolvingCandidates ? "finding nearby places..." : AddSourceType.currentLocation.title,
-                    subtitle: "asks once, suggests places nearby",
-                    systemImage: "location.fill",
-                    isPrimary: true,
-                    isDisabled: isResolvingCandidates
-                ) {
-                    Task {
-                        await resolveCurrentLocationCandidates()
+                VStack(spacing: 0) {
+                    SourceRow(
+                        title: isResolvingCandidates ? "finding nearby places..." : "I'm here now",
+                        subtitle: "find nearby places",
+                        systemImage: "location.fill",
+                        isPrimary: true,
+                        isDisabled: isResolvingCandidates
+                    ) {
+                        expandSheet()
+                        Task {
+                            await resolveCurrentLocationCandidates()
+                        }
+                    }
+                    Divider().background(WanderTheme.borderHairline.color)
+                    SourceRow(
+                        title: "From a photo",
+                        subtitle: "scan a place from a photo",
+                        systemImage: "photo.fill",
+                        isDisabled: isResolvingCandidates
+                    ) {
+                        resolutionMessage = nil
+                        selectedSource = .photo
+                        step = .photo
+                        expandSheet()
                     }
                 }
-                SourceRow(title: AddSourceType.link.title, subtitle: "paste a map or location link", systemImage: "link", isDisabled: isResolvingCandidates) {
-                    resolutionMessage = nil
-                    selectedSource = .link
-                    step = .link
-                }
-                SourceRow(title: AddSourceType.manual.title, subtitle: "search by name or neighborhood", systemImage: "square.and.pencil", isDisabled: isResolvingCandidates) {
-                    resolutionMessage = nil
-                    selectedSource = .manual
-                    step = .manual
-                }
-                SourceRow(title: AddSourceType.photo.title, subtitle: "scan text in a photo for a place", systemImage: "photo", isDisabled: isResolvingCandidates) {
-                    resolutionMessage = nil
-                    selectedSource = .photo
-                    step = .photo
-                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
 
                 if let resolutionMessage {
                     InlineMessage(text: resolutionMessage)
                         .padding(.top, WanderTheme.spacing2)
                 }
 
-                Text("location finds nearby places only · it never broadcasts you")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, WanderTheme.spacing2)
             }
-        }
-    }
-
-    private var linkForm: some View {
-        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("link")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("paste a Google Maps, Apple Maps, or location link", text: $linkInput, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .onSubmit {
-                        guard !linkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                              !isResolvingCandidates
-                        else { return }
-                        Task {
-                            await resolveLinkCandidates()
-                        }
-                    }
-                    .lineLimit(2, reservesSpace: true)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-
-            Text("Some map links can turn into place candidates now. Short links that do not expand become drafts.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            if let resolutionMessage {
-                InlineMessage(text: resolutionMessage)
-            }
-
-            WanderPrimaryButton(
-                title: isResolvingCandidates ? "checking link..." : "find place from link",
-                systemImage: "magnifyingglass",
-                isDisabled: linkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isResolvingCandidates
-            ) {
-                Task {
-                    await resolveLinkCandidates()
-                }
-            }
-
-            Button {
-                saveLinkDraft()
-            } label: {
-                Label("save link as draft", systemImage: "tray.and.arrow.down")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(linkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(linkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
         }
     }
 
@@ -323,48 +246,10 @@ struct AddScreen: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            WanderPrimaryButton(title: "add manually instead", systemImage: "square.and.pencil") {
-                selectedSource = .manual
-                step = .manual
-            }
-        }
-    }
-
-    private var manualForm: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            LabeledField(label: "place name", placeholder: "Larchmont Noodles", text: $manualName)
-            LabeledField(label: "area", placeholder: "arts district", text: $manualArea)
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("category")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(["coffee", "restaurant", "hike", "bar", "park"], id: \.self) { category in
-                            Button {
-                                manualCategory = category
-                            } label: {
-                                WanderChip(title: category, isSelected: manualCategory == category)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-
-            if let resolutionMessage {
-                InlineMessage(text: resolutionMessage)
-            }
-
-            WanderPrimaryButton(
-                title: isResolvingCandidates ? "finding..." : "find this place",
-                systemImage: "magnifyingglass",
-                isDisabled: manualName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isResolvingCandidates
-            ) {
-                Task {
-                    await resolveManualCandidates()
-                }
+            WanderPrimaryButton(title: "search by name instead", systemImage: "magnifyingglass") {
+                step = .source
+                expandSheet()
+                isQuickAddFocused = true
             }
         }
     }
@@ -379,142 +264,10 @@ struct AddScreen: View {
                 }
             }
 
-            PickerBlock(title: "save as") {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ChoicePill(title: "been", isSelected: selectedStatus == .been) { selectedStatus = .been }
-                    ChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) { selectedStatus = .wannaGo }
-                }
-            }
-
-            WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
-                prepareDetails()
+            WanderPrimaryButton(title: "continue", systemImage: "arrow.right") {
+                openSharedSaveFlow()
             }
         }
-    }
-
-    private var detailsForm: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            if let selectedCandidate {
-                HStack {
-                    CategoryIcon(category: selectedCandidate.category)
-                    VStack(alignment: .leading) {
-                        Text(selectedCandidate.name)
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text(selectedStatus.displayTitle)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-                    Spacer()
-                }
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-
-            if selectedStatus == .been {
-                ratingSection
-            }
-
-            ForEach(currentQuestionBlocks) { block in
-                QuestionBlock(title: block.title, tag: block.tag) {
-                    SelectableQuestionOptions(
-                        block: block,
-                        selectedValues: selectedAnswers[block.key] ?? Set(block.defaultValues)
-                    ) { option in
-                        toggleAnswer(option, in: block)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("a note for future you")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                TextField("best table, what to order, who told you...", text: $note, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .lineLimit(3, reservesSpace: true)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            }
-
-            PlaceVisibilityStealthToggle(
-                title: store.isPrivateProfile ? "stealth mode locked on" : "stealth mode",
-                visibility: selectedVisibilityForStealthToggle,
-                helperCopy: { visibility in
-                    store.isPrivateProfile
-                        ? "Locked on by Private Profile. This place stays hidden while your profile is private."
-                        : visibility.stealthModeHelperCopy
-                }
-            )
-            .disabled(store.isPrivateProfile)
-
-            WanderPrimaryButton(title: "save to my map", systemImage: "checkmark") {
-                Task {
-                    await saveSelectedCandidate()
-                }
-            }
-        }
-    }
-
-    private var ratingSection: some View {
-        QuestionBlock(title: "rating", tag: "required") {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("how was it?")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                PlaceRatingSlider(score: $selectedRatingScore)
-            }
-        }
-    }
-
-    private var savedView: some View {
-        VStack(spacing: WanderTheme.spacing4) {
-            Image(systemName: selectedStatus == .been ? "mappin.circle.fill" : "mappin.circle")
-                .font(.system(size: 64, weight: .black))
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .accessibilityHidden(true)
-
-            VStack(spacing: WanderTheme.spacing2) {
-                Text("it's on your map")
-                    .font(.system(size: 26, weight: .black))
-                Text(selectedVisibility.isStealthModeEnabled ? "saved as \(selectedStatus.displayTitle) in stealth mode." : "saved as \(selectedStatus.displayTitle).")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .multilineTextAlignment(.center)
-            }
-
-            if let savedResult {
-                VStack(spacing: WanderTheme.spacing2) {
-                    Text(syncStatusTitle(for: savedResult.syncState))
-                        .font(.system(size: 13, weight: .bold))
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing2)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
-
-                    if savedResult.syncState == .pendingCreate && !auth.isSignedIn {
-                        Button {
-                            auth.presentGate(for: .syncPlace)
-                        } label: {
-                            Text("sign in to sync")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            WanderPrimaryButton(title: "add another place", systemImage: "plus") {
-                reset()
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, WanderTheme.spacing8)
     }
 
     private var draftView: some View {
@@ -529,8 +282,10 @@ struct AddScreen: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            WanderPrimaryButton(title: "add manually instead", systemImage: "square.and.pencil") {
-                step = .manual
+            WanderPrimaryButton(title: "try another search", systemImage: "magnifyingglass") {
+                step = .source
+                expandSheet()
+                isQuickAddFocused = true
             }
         }
         .padding(WanderTheme.spacing4)
@@ -542,45 +297,30 @@ struct AddScreen: View {
         step = .source
         candidates = []
         selectedCandidateID = nil
-        selectedStatus = .been
-        selectedVisibility = store.effectiveDefaultVisibility
-        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
-        note = ""
         manualName = ""
-        manualArea = ""
-        manualCategory = "coffee"
         linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
-        selectedAnswers = [:]
-        savedResult = nil
         draft = nil
         resolutionMessage = nil
         isResolvingCandidates = false
         selectedPhotoItem = nil
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
-        saveToast = nil
+        addSaveFlow = nil
+        selectedDetent = AddSheetLayout.restingDetent
     }
 
     private func resetAfterSave() {
         step = .source
         candidates = []
         selectedCandidateID = nil
-        selectedStatus = .been
-        selectedVisibility = store.effectiveDefaultVisibility
-        selectedRatingScore = PlaceRating.defaultScore
         selectedSource = .manual
-        note = ""
         manualName = ""
-        manualArea = ""
-        manualCategory = "coffee"
         linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
-        selectedAnswers = [:]
-        savedResult = nil
         draft = nil
         resolutionMessage = nil
         isResolvingCandidates = false
@@ -589,129 +329,68 @@ struct AddScreen: View {
         isImportingPhoto = false
     }
 
-    private func showSaveToast(for result: SaveResult?) {
-        let toast = SaveSyncFeedback(syncState: result?.syncState ?? .localOnly, canSignIn: !auth.isSignedIn)
-        saveToast = toast
-
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(toast.usesWarningHaptic ? .warning : .success)
-
-        Task {
-            try? await Task.sleep(nanoseconds: toast.dismissDelayNanoseconds)
-            await MainActor.run {
-                if saveToast?.id == toast.id {
-                    saveToast = nil
-                }
-            }
-        }
-    }
-
     private func goBack() {
         resolutionMessage = nil
 
         switch step {
-        case .link:
-            step = .source
         case .photo:
             step = .source
-        case .manual:
-            step = .source
         case .confirm:
-            if selectedSource == .manual {
-                step = .manual
-            } else if selectedSource == .link {
-                step = .link
-            } else {
-                step = .source
-            }
-        case .details:
-            step = isShowingInlineCandidateResults ? .source : .confirm
+            step = .source
         case .draft:
             step = .source
-        case .source, .saved:
+        case .source:
             break
         }
+
+        if step == .source {
+            selectedDetent = AddSheetLayout.restingDetent
+        }
     }
 
-    private func prepareDetails() {
-        let blocks = currentQuestionBlocks
-        var nextAnswers = selectedAnswers
-
-        for block in blocks {
-            var values = nextAnswers[block.key] ?? []
-            if values.isEmpty {
-                values = Set(block.defaultValues)
-            } else if block.kind == .multiTag {
-                values.formUnion(block.defaultValues)
-            }
-            nextAnswers[block.key] = values
-        }
-
-        selectedAnswers = nextAnswers
-        step = .details
+    private var shouldStayExpanded: Bool {
+        step != .source
+            || isShowingInlineCandidateResults
+            || isResolvingCandidates
+            || !quickAddQuery.isEmpty
     }
 
-    private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
-        var values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-
-        switch block.kind {
-        case .singleChoice:
-            values = [option]
-        case .multiTag:
-            if values.contains(option) {
-                values.remove(option)
-            } else {
-                values.insert(option)
-            }
+    private func expandSheet() {
+        withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
+            selectedDetent = .large
         }
-
-        selectedAnswers[block.key] = values
     }
 
-    private func attributeDrafts() -> [PlaceAttributeDraft] {
-        currentQuestionBlocks.compactMap { block in
-            let values = orderedSelections(for: block)
-            guard !values.isEmpty else { return nil }
+    private func openSharedSaveFlow() {
+        guard let selectedCandidate else { return }
 
-            switch block.kind {
-            case .singleChoice:
-                return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValue: values[0])
-            case .multiTag:
-                return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValues: values)
-            }
-        }
+        addSaveFlow = MapPlaceSaveContext.addCandidate(
+            selectedCandidate,
+            sourceType: selectedSource,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            initialPhotoAttachments: pendingVisitPhotoAttachments
+        )
     }
 
     @MainActor
-    private func saveSelectedCandidate() async {
-        guard let selectedCandidate else { return }
-
-        savedResult = await store.saveCandidate(
-            selectedCandidate,
-            status: selectedStatus,
-            visibility: saveVisibility,
-            note: note.isEmpty ? nil : note,
-            sourceType: selectedSource,
-            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
-            attributes: attributeDrafts(),
+    private func saveSharedSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        guard let result = await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
             backend: auth.isSignedIn ? backend : nil
-        )
+        ) else { return nil }
 
-        if selectedStatus == .been,
-           let savedResult {
-            await persistVisitPhotoAttachments(
-                pendingVisitPhotoAttachments,
-                to: store.visits(for: savedResult.userPlaceID).first,
-                store: store,
-                backend: auth.isSignedIn ? backend : nil
-            )
-        }
-
-        if !auth.isSignedIn {
-            auth.presentGate(for: .syncPlace)
-        }
-        showSaveToast(for: savedResult)
+        let needsSignIn = !auth.isSignedIn
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()
+        onClose()
+        if needsSignIn {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                auth.presentGate(for: .syncPlace)
+            }
+        }
+        return result
     }
 
     @MainActor
@@ -725,7 +404,6 @@ struct AddScreen: View {
         do {
             candidates = try await store.currentLocationCandidates()
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -750,11 +428,10 @@ struct AddScreen: View {
         do {
             candidates = try await store.manualCandidates(
                 name: manualName,
-                areaHint: manualArea,
-                category: manualCategory
+                areaHint: nil,
+                category: nil
             )
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -779,7 +456,6 @@ struct AddScreen: View {
         do {
             candidates = try await store.linkCandidates(linkInput)
             selectedCandidateID = candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             guard !candidates.isEmpty else {
                 resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
                 return
@@ -806,33 +482,55 @@ struct AddScreen: View {
         }
     }
 
-    private func saveLinkDraft() {
-        Task {
-            await saveLinkDraftAsync()
-        }
-    }
-
     @MainActor
     private func resolveQuickAddQuery() async {
         let query = quickAddQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
-        if Self.looksLikeLink(query) {
+        if let coordinate = Self.coordinate(from: query) {
+            await resolveCoordinateCandidates(coordinate)
+        } else if Self.looksLikeLink(query) {
             linkInput = query
             await resolveLinkCandidates(inline: true)
         } else {
             manualName = query
-            manualArea = ""
             await resolveManualCandidates(inline: true)
+        }
+    }
+
+    @MainActor
+    private func resolveCoordinateCandidates(_ coordinate: CLLocationCoordinate2D) async {
+        selectedSource = .manual
+        resolutionMessage = nil
+        isShowingInlineCandidateResults = false
+        isResolvingCandidates = true
+        defer { isResolvingCandidates = false }
+
+        do {
+            candidates = try await store.photoLocationCandidates(near: coordinate)
+            selectedCandidateID = candidates.first?.id
+            guard !candidates.isEmpty else {
+                resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
+                return
+            }
+            isShowingInlineCandidateResults = true
+            step = .source
+        } catch {
+            candidates = []
+            selectedCandidateID = nil
+            resolutionMessage = resolutionCopy(for: error)
         }
     }
 
     private func clearInlineCandidateResults() {
         candidates = []
         selectedCandidateID = nil
-        selectedAnswers = [:]
         resolutionMessage = nil
         isShowingInlineCandidateResults = false
+        quickAddQuery = ""
+        withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
+            selectedDetent = AddSheetLayout.restingDetent
+        }
     }
 
     private static func looksLikeLink(_ value: String) -> Bool {
@@ -844,24 +542,21 @@ struct AddScreen: View {
             || normalized.contains("maps.app.goo.gl")
     }
 
-    @MainActor
-    private func saveLinkDraftAsync() async {
-        selectedSource = .link
-        resolutionMessage = nil
-        draft = await store.createUnresolvedDraft(
-            sourceType: .link,
-            originalInput: linkInput,
-            backend: auth.isSignedIn ? backend : nil
-        )
-
-        if auth.isSignedIn,
-           let draft,
-           let result = await store.processExtractionJob(for: draft, backend: backend),
-           applyExtractionResult(result, source: .link) {
-            return
+    static func coordinate(from value: String) -> CLLocationCoordinate2D? {
+        let pattern = #"[-+]?\d{1,3}(?:\.\d+)?"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        let values = expression.matches(in: value, range: range).compactMap { match -> Double? in
+            guard let swiftRange = Range(match.range, in: value) else { return nil }
+            return Double(value[swiftRange])
         }
+        guard values.count == 2 else { return nil }
 
-        step = .draft
+        let uppercased = value.uppercased()
+        let latitude = uppercased.contains("S") ? -abs(values[0]) : values[0]
+        let longitude = uppercased.contains("W") ? -abs(values[1]) : values[1]
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
     @MainActor
@@ -919,7 +614,7 @@ struct AddScreen: View {
 
             step = .draft
         } catch {
-            resolutionMessage = "Could not import that photo. Try another one or add manually."
+            resolutionMessage = "Could not import that photo. Try another one or search by name."
         }
     }
 
@@ -931,21 +626,20 @@ struct AddScreen: View {
 
             selectedSource = .photo
             manualName = resolution.manualName ?? resolution.candidates.first?.name ?? ""
-            manualArea = ""
             candidates = resolution.candidates
             selectedCandidateID = resolution.candidates.first?.id
-            selectedVisibility = store.effectiveDefaultVisibility
             resolutionMessage = resolution.message
             step = .confirm
             return true
         case .manualRescue:
             selectedSource = .manual
             manualName = resolution.manualName ?? ""
-            manualArea = ""
+            quickAddQuery = manualName
             candidates = []
             selectedCandidateID = nil
             resolutionMessage = resolution.message
-            step = .manual
+            step = .source
+            expandSheet()
             return true
         case .draft:
             resolutionMessage = resolution.message
@@ -988,7 +682,6 @@ struct AddScreen: View {
         selectedSource = source
         candidates = resolvedCandidates
         selectedCandidateID = resolvedCandidates.first?.id
-        selectedVisibility = store.effectiveDefaultVisibility
         resolutionMessage = nil
         step = .confirm
         return true
@@ -1003,33 +696,6 @@ struct AddScreen: View {
         return "Could not find matching places. Try a more specific name or add a nearby area."
     }
 
-    private func syncStatusTitle(for syncState: SyncState) -> String {
-        switch syncState {
-        case .synced:
-            "synced"
-        case .failed:
-            "sync failed"
-        case .pendingCreate, .pendingUpdate, .pendingDelete:
-            "sync queued"
-        case .localOnly:
-            "saved here"
-        case .serverDenied:
-            "needs review"
-        case .tombstoned:
-            "removed"
-        }
-    }
-
-    private func orderedSelections(for block: AddQuestionBlock) -> [String] {
-        let values = selectedAnswers[block.key] ?? Set(block.defaultValues)
-        let optionSelections = block.options.filter { values.contains($0) }
-        let customSelections = values
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-        return optionSelections + customSelections
-    }
 }
 
 private extension CGImagePropertyOrientation {
@@ -1077,96 +743,33 @@ enum ExtractionCandidateFilter {
 
 private enum AddStep {
     case source
-    case link
-    case manual
     case photo
     case confirm
-    case details
-    case saved
     case draft
 
     var subtitle: String {
         switch self {
-        case .source: "Start with where you are, a name, a link, or a photo."
-        case .link: "Paste the link; we'll look for the place."
-        case .manual: "Name is enough; area helps."
+        case .source: "pick the fastest way"
         case .photo: "Choose a photo; we'll look for a place."
-        case .confirm: "Pick the place and status."
-        case .details: "optional taps for future you."
-        case .saved: "it is ready on your map."
+        case .confirm: "Pick the right place, then save it."
         case .draft: "we could not find enough place info yet."
         }
     }
 
     var canGoBack: Bool {
         switch self {
-        case .link, .manual, .photo, .confirm, .details, .draft:
+        case .photo, .confirm, .draft:
             true
-        case .source, .saved:
+        case .source:
             false
         }
-    }
-}
-
-private struct AddSaveToastView: View {
-    let toast: SaveSyncFeedback
-    let signInAction: () -> Void
-    let dismissAction: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: toast.systemImage)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(width: 34, height: 34)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(toast.title)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                    Text(toast.message)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-
-                Spacer()
-
-                Button(action: dismissAction) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .frame(width: 30, height: 30)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            if toast.canSignIn {
-                Button(action: signInAction) {
-                    Text("sign in to sync")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
     }
 }
 
 private struct AddSearchField: View {
     @Binding var query: String
     let isLoading: Bool
+    let isFocused: FocusState<Bool>.Binding
     let submit: () -> Void
 
     var body: some View {
@@ -1175,11 +778,17 @@ private struct AddSearchField: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            TextField("search by name or add a link", text: $query)
+            TextField(
+                "",
+                text: $query,
+                prompt: Text("Search, paste a link, or add coordinates")
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            )
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
-                .textInputAutocapitalization(.never)
+                .focused(isFocused)
+                .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit(submit)
@@ -1200,9 +809,17 @@ private struct AddSearchField: View {
         .frame(minHeight: 48)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .overlay(
+            Capsule().stroke(
+                isFocused.wrappedValue
+                    ? WanderTheme.terracotta.color.opacity(0.7)
+                    : WanderTheme.borderHairline.color,
+                lineWidth: isFocused.wrappedValue ? 1.5 : 1
+            )
+        )
+        .animation(.easeOut(duration: 0.16), value: isFocused.wrappedValue)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Search by name or add a link")
+        .accessibilityLabel("Search, paste a link, or add coordinates")
         .disabled(isLoading)
         .opacity(isLoading ? 0.78 : 1)
     }
@@ -1221,27 +838,26 @@ private struct SourceRow: View {
             HStack(spacing: WanderTheme.spacing3) {
                 Image(systemName: systemImage)
                     .font(.system(size: 17, weight: .bold))
-                    .frame(width: 40, height: 40)
-                    .background(isPrimary ? WanderTheme.terracottaDark.color.opacity(0.18) : WanderTheme.surfaceSand.color)
+                    .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.terracottaDark.color)
+                    .frame(width: 34, height: 34)
+                    .background(isPrimary ? WanderTheme.terracotta.color : WanderTheme.terracottaTint.color)
                     .clipShape(Circle())
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(title)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
                     Text(subtitle)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color.opacity(0.82) : WanderTheme.textMuted.color)
+                        .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.textFaint.color)
+                    .foregroundStyle(WanderTheme.textFaint.color)
             }
-            .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-            .frame(minHeight: 62)
-            .padding(WanderTheme.spacing3)
-            .background(isPrimary ? WanderTheme.terracotta.color : WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .frame(minHeight: 54)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -1320,258 +936,6 @@ private struct LabeledField: View {
                 .padding(WanderTheme.spacing3)
                 .background(WanderTheme.surfaceRaised.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        }
-    }
-}
-
-private struct PickerBlock<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(title)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-            content
-        }
-    }
-}
-
-private struct ChoicePill: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .frame(minHeight: WanderTheme.tapMinimum)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)
-                .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct QuestionBlock<Content: View>: View {
-    let title: String
-    let tag: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                Spacer()
-                Text(tag)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-            content
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-}
-
-private struct SelectableQuestionOptions: View {
-    let block: AddQuestionBlock
-    let selectedValues: Set<String>
-    let onSelect: (String) -> Void
-    @State private var isAddingCustomTag = false
-    @State private var customTagText = ""
-    @FocusState private var isCustomTagFocused: Bool
-
-    var body: some View {
-        WrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(displayOptions, id: \.self) { option in
-                Button {
-                    onSelect(option)
-                } label: {
-                    WanderChip(title: option, isSelected: selectedValues.contains(option))
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .buttonStyle(.plain)
-            }
-
-            if block.kind == .multiTag {
-                customTagControl
-            }
-        }
-    }
-
-    private var displayOptions: [String] {
-        let customOptions = selectedValues
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-
-        return block.options + customOptions
-    }
-
-    @ViewBuilder
-    private var customTagControl: some View {
-        if isAddingCustomTag {
-            HStack(spacing: WanderTheme.spacing1) {
-                TextField("tag", text: $customTagText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .tint(WanderTheme.terracotta.color)
-                    .frame(width: 86)
-                    .submitLabel(.done)
-                    .focused($isCustomTagFocused)
-                    .onSubmit(addCustomTag)
-
-                Button(action: addCustomTag) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Save custom tag")
-            }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            .fixedSize(horizontal: true, vertical: false)
-            .onAppear {
-                isCustomTagFocused = true
-            }
-        } else {
-            Button {
-                isAddingCustomTag = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .black))
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Add custom tag")
-        }
-    }
-
-    private func addCustomTag() {
-        let tag = customTagText
-            .lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !tag.isEmpty else {
-            isAddingCustomTag = false
-            customTagText = ""
-            return
-        }
-
-        if let existing = displayOptions.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
-            if !selectedValues.contains(existing) {
-                onSelect(existing)
-            }
-        } else {
-            onSelect(tag)
-        }
-
-        customTagText = ""
-        isAddingCustomTag = false
-    }
-}
-
-private struct WrappingChipLayout: Layout {
-    var horizontalSpacing: CGFloat
-    var verticalSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = rows(for: subviews, maxWidth: proposal.width ?? .greatestFiniteMagnitude)
-        return CGSize(width: proposal.width ?? rows.width, height: rows.height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = rows(for: subviews, maxWidth: bounds.width)
-        var y = bounds.minY
-
-        for row in rows.items {
-            var x = bounds.minX
-            for item in row.items {
-                subviews[item.index].place(
-                    at: CGPoint(x: x, y: y),
-                    proposal: ProposedViewSize(width: item.size.width, height: item.size.height)
-                )
-                x += item.size.width + horizontalSpacing
-            }
-            y += row.height + verticalSpacing
-        }
-    }
-
-    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> ChipRows {
-        var rows: [ChipRow] = []
-        var currentItems: [ChipItem] = []
-        var currentWidth: CGFloat = 0
-        var currentHeight: CGFloat = 0
-        let effectiveMaxWidth = max(1, maxWidth)
-
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let nextWidth = currentItems.isEmpty ? size.width : currentWidth + horizontalSpacing + size.width
-
-            if nextWidth > effectiveMaxWidth, !currentItems.isEmpty {
-                rows.append(ChipRow(items: currentItems, width: currentWidth, height: currentHeight))
-                currentItems = [ChipItem(index: index, size: size)]
-                currentWidth = size.width
-                currentHeight = size.height
-            } else {
-                currentItems.append(ChipItem(index: index, size: size))
-                currentWidth = nextWidth
-                currentHeight = max(currentHeight, size.height)
-            }
-        }
-
-        if !currentItems.isEmpty {
-            rows.append(ChipRow(items: currentItems, width: currentWidth, height: currentHeight))
-        }
-
-        return ChipRows(items: rows, horizontalSpacing: horizontalSpacing, verticalSpacing: verticalSpacing)
-    }
-
-    private struct ChipItem {
-        let index: Int
-        let size: CGSize
-    }
-
-    private struct ChipRow {
-        let items: [ChipItem]
-        let width: CGFloat
-        let height: CGFloat
-    }
-
-    private struct ChipRows {
-        let items: [ChipRow]
-        let horizontalSpacing: CGFloat
-        let verticalSpacing: CGFloat
-
-        var width: CGFloat {
-            items.map(\.width).max() ?? 0
-        }
-
-        var height: CGFloat {
-            guard !items.isEmpty else { return 0 }
-            return items.reduce(0) { $0 + $1.height } + verticalSpacing * CGFloat(max(0, items.count - 1))
         }
     }
 }

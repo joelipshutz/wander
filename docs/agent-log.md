@@ -13742,3 +13742,37 @@ TestFlight build-81 completion, 2026-07-19 01:38 PDT:
 - Known deferred limitation remains REC-103: if the first sync of a new social
   save fails in some full-form flows, it may remain queued locally instead of
   retrying automatically. App Store production submission was not performed.
+
+REC-17 production implementation checkpoint, 2026-07-20 12:48 PDT:
+
+- Integrated exact current `origin/main` `469d198` into the isolated branch and
+  resolved the generated-project and append-only log conflicts without dropping
+  any mainline history. The existing REC-17 implementation stash remains
+  preserved as `stash@{0}` after its contents were applied and adapted.
+- Replaced the debug-only Add launcher gallery with the approved production
+  launcher: a 300pt resting sheet over the current tab, upper-right close,
+  compact smart field with the exact ghost text `Search, paste a link, or add
+  coordinates`, and only `I'm here now` plus `From a photo` action rows. Search
+  focus/keyboard expands to the large detent; interactive keyboard dismissal
+  and returning to the idle source state settle back to the lower detent.
+- Add now presents the canonical Map save sheet and persists through the shared
+  Map save helper instead of calling `store.saveCandidate` directly. New Wanna
+  saves lead with place/category and note; status, tags/labels, and privacy are
+  collapsed and unselected by default behind `more options`. Link, name, and
+  decimal/cardinal coordinate input all enter through the smart field.
+- Removed the obsolete manual-add surface, parallel Add details form, unused Add
+  save toast, debug mock launch route, and `AddLauncherMockups.swift`; regenerated
+  the Xcode project with XcodeGen.
+- A generic simulator build of the production implementation passed before the
+  mock source removal. A later incremental build was interrupted only because
+  the machine volume filled while compiling localized dependency resources; the
+  same-task DerivedData was cleaned and rebuilt successfully by the focused test
+  gate.
+- Focused final regression gate passed 4/4 on iPhone 16 Plus / iOS 18.6: canonical
+  Add-to-Map save ownership, compact Wanna defaults, canonical persistence, and
+  decimal/cardinal coordinate parsing. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_12-44-16--0700.xcresult`.
+- Next: production visual QA at rest and with keyboard on iPhone 16 Plus and
+  iPhone 16e, complete suite, review, ready PR #118, and squash merge. Per the
+  explicit release boundary, no build-number bump, archive, TestFlight upload,
+  hosted data change, or tester Slack post is in scope.

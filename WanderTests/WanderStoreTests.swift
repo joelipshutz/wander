@@ -2594,6 +2594,110 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
     }
 
+    func testNewWannaGoSaveKeepsOptionalDetailsCollapsedAndUnselectedByDefault() {
+        let candidate = PlaceCandidate(
+            id: "mapkit_compact_want",
+            name: "Compact Want Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+        let block = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)[0]
+
+        XCTAssertTrue(
+            MapPlaceSaveDetailsPolicy.usesCompactWannaGoLayout(
+                context: context,
+                status: .wannaGo
+            )
+        )
+        XCTAssertFalse(
+            MapPlaceSaveDetailsPolicy.usesCompactWannaGoLayout(
+                context: context,
+                status: .been
+            )
+        )
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.suggestedSelections(
+                for: block,
+                context: context,
+                status: .wannaGo
+            ),
+            []
+        )
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.suggestedSelections(
+                for: block,
+                context: context,
+                status: .been
+            ),
+            Set(block.defaultValues)
+        )
+    }
+
+    func testQuickAddCoordinateParserAcceptsDecimalAndCardinalCoordinates() throws {
+        let decimal = try XCTUnwrap(AddScreen.coordinate(from: "34.0522, -118.2437"))
+        XCTAssertEqual(decimal.latitude, 34.0522, accuracy: 0.000_001)
+        XCTAssertEqual(decimal.longitude, -118.2437, accuracy: 0.000_001)
+
+        let cardinal = try XCTUnwrap(AddScreen.coordinate(from: "34.0522 N, 118.2437 W"))
+        XCTAssertEqual(cardinal.latitude, 34.0522, accuracy: 0.000_001)
+        XCTAssertEqual(cardinal.longitude, -118.2437, accuracy: 0.000_001)
+
+        XCTAssertNil(AddScreen.coordinate(from: "Los Angeles"))
+        XCTAssertNil(AddScreen.coordinate(from: "123.0, -118.2"))
+    }
+
+    @MainActor
+    func testCanonicalNewPlaceSubmissionPersistsTheAddTabSave() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_shared_flow",
+            name: "Shared Flow Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            ratingScore: nil,
+            note: "Ryan said the patio is great",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false
+        )
+
+        let persistedResult = await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: nil
+        )
+        let result = try XCTUnwrap(persistedResult)
+        let visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.userPlace.status, .wannaGo)
+        XCTAssertEqual(visiblePlace.userPlace.note, "Ryan said the patio is great")
+        XCTAssertEqual(visiblePlace.userPlace.sourceType, AddSourceType.manual.rawValue)
+    }
+
     func testFollowersAndFollowingUseGraphEdges() {
         let store = makeStore()
 

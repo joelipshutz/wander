@@ -10,6 +10,7 @@ struct WanderRootView: View {
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
+    @State private var addSheetDetent = AddSheetLayout.restingDetent
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var discoverSection: DiscoverSection?
     @State private var sharedProfile: SharedProfileRoute?
@@ -93,11 +94,19 @@ struct WanderRootView: View {
         }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             addTabResetToken = UUID()
+            addSheetDetent = AddSheetLayout.restingDetent
         }) {
-            AddScreen(resetToken: addTabResetToken)
+            AddScreen(resetToken: addTabResetToken, selectedDetent: $addSheetDetent) {
+                isPresentingAdd = false
+            }
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
+                .presentationDetents(AddSheetLayout.detents, selection: $addSheetDetent)
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(28)
+                .presentationBackground(WanderTheme.surfaceBone.color)
+                .presentationContentInteraction(.resizes)
         }
         .sheet(item: $auth.activeGate) { request in
             AuthGateSheet(request: request)
@@ -193,6 +202,7 @@ struct WanderRootView: View {
         } set: { newTab in
             if newTab == .add {
                 addTabResetToken = UUID()
+                addSheetDetent = AddSheetLayout.restingDetent
                 isPresentingAdd = true
             } else {
                 selectedTab = newTab
