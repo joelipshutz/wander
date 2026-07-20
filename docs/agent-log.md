@@ -12619,3 +12619,26 @@ Refinement publishing handoff, 2026-07-20 10:14 PDT:
 - Committed the selected-direction update as `2fd54ac` (`feat: refine selected Add launcher mock`) and pushed it to draft PR #118.
 - Returned Linear REC-17 to `In Review` and added handoff comment `ee86fb71-119f-40b2-861c-281bcce983b9` with the selected interaction, validation, and explicit mock-only boundary.
 - Next implementation pass should treat the refined D screenshot as the approved launcher baseline, then reconcile the smart-field parser and the canonical Map save-flow work currently preserved in `stash@{0}`.
+
+## 2026-07-20 11:05 PDT - Codex - REC-17 keyboard-aware sheet refinement
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+
+Goal: make the selected D launcher sit lower in its resting state and transition cleanly when the smart field opens or dismisses the keyboard.
+
+Starting status and coordination:
+
+- Fetched origin and confirmed the isolated draft-PR worktree is clean at `ee15cd2`, matching its remote branch. No active worktree overlaps the debug-only Add launcher mock source.
+- The intended interaction is a compact resting detent, an expanded keyboard/focus detent, interactive keyboard dismissal, and a smooth return to the lower resting position. The input will become a real focusable SwiftUI text field for this validation rather than remaining static ghost text.
+- Expected changes are `Wander/Features/Add/AddLauncherMockups.swift`, new down/keyboard-up simulator renders in the private design-review folder, and this log. Production navigation, Add/save behavior, persistence, tests, schema, build number, TestFlight, merge, and Slack remain out of scope; `stash@{0}` remains untouched.
+
+Keyboard-aware mock result, 2026-07-20 11:10 PDT:
+
+- Replaced D's static field shell with a real SwiftUI `TextField` and focus state. The sheet now rests at a compact 300pt detent, promotes with a 0.32-second snappy transition to the large detent on focus, and returns to rest when focus leaves or the Search key submits.
+- Added interactive keyboard dismissal to the sheet scroll surface. Dragging the sheet back to the resting detent also clears field focus so the keyboard and sheet settle together instead of fighting each other.
+- The smart field gets a terracotta focus ring/icon state and an accessible clear affordance once text exists. Existing ghost text and the two matched action rows remain unchanged.
+- The final arm64 simulator build passed on iPhone 16 Plus / iOS 18.6 and `git diff --check` passed. Captured down/focused states on iPhone 16 Plus and down/full-software-keyboard states on iPhone 16e; the larger simulator was in hardware-keyboard mode, while the 16e render directly confirms the full keyboard layout keeps the field and both actions unobscured.
+- Updated the private design report/baseline with the 300pt resting contract, focus transition, interactive dismissal, and four new screenshots. No production code or tests changed; the save-flow implementation stash remains untouched. Next: publish this interaction refinement to draft PR #118 and return REC-17 to review.

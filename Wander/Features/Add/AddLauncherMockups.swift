@@ -30,26 +30,43 @@ enum AddLauncherMockupPage: String, CaseIterable {
     }
 }
 
+private enum AddLauncherSheetLayout {
+    static let restingDetent = PresentationDetent.height(300)
+}
+
 struct AddLauncherMockupRoot: View {
     let page: AddLauncherMockupPage
     @State private var isPresentingAdd = false
+    @State private var selectedDetent: PresentationDetent
+
+    init(page: AddLauncherMockupPage) {
+        self.page = page
+        _selectedDetent = State(
+            initialValue: page == .actionDock ? AddLauncherSheetLayout.restingDetent : .medium
+        )
+    }
 
     var body: some View {
         AddLauncherMapBackdrop(page: page, isPresentingAdd: isPresentingAdd)
             .preferredColorScheme(.light)
             .onAppear {
+                selectedDetent = page == .actionDock ? AddLauncherSheetLayout.restingDetent : .medium
                 isPresentingAdd = true
             }
             .sheet(isPresented: $isPresentingAdd) {
-                AddLauncherSheetMockup(page: page) {
+                AddLauncherSheetMockup(page: page, selectedDetent: $selectedDetent) {
                     isPresentingAdd = false
                 }
-                .presentationDetents([.medium])
+                .presentationDetents(availableDetents, selection: $selectedDetent)
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)
                 .presentationBackground(WanderTheme.surfaceBone.color)
-                .presentationContentInteraction(.scrolls)
+                .presentationContentInteraction(page == .actionDock ? .resizes : .scrolls)
             }
+    }
+
+    private var availableDetents: Set<PresentationDetent> {
+        page == .actionDock ? [AddLauncherSheetLayout.restingDetent, .large] : [.medium]
     }
 }
 
@@ -259,7 +276,10 @@ private struct AddLauncherTabItem: View {
 
 private struct AddLauncherSheetMockup: View {
     let page: AddLauncherMockupPage
+    @Binding var selectedDetent: PresentationDetent
     let dismiss: () -> Void
+    @State private var smartInputText = ""
+    @FocusState private var isSmartInputFocused: Bool
 
     var body: some View {
         ScrollView(.vertical) {
@@ -274,7 +294,10 @@ private struct AddLauncherSheetMockup: View {
                 case .smartInput:
                     SmartInputDirection()
                 case .actionDock:
-                    ActionDockDirection()
+                    ActionDockDirection(
+                        text: $smartInputText,
+                        isFocused: $isSmartInputFocused
+                    )
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -282,7 +305,28 @@ private struct AddLauncherSheetMockup: View {
             .padding(.bottom, WanderTheme.spacing4)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(WanderTheme.surfaceBone.color)
+        .onChange(of: isSmartInputFocused) { _, isFocused in
+            guard page == .actionDock else { return }
+            withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
+                selectedDetent = isFocused ? .large : AddLauncherSheetLayout.restingDetent
+            }
+        }
+        .onChange(of: selectedDetent) { _, detent in
+            guard page == .actionDock,
+                  detent == AddLauncherSheetLayout.restingDetent,
+                  isSmartInputFocused else { return }
+            isSmartInputFocused = false
+        }
+        .onAppear {
+            guard page == .actionDock,
+                  ProcessInfo.processInfo.arguments.contains("-WanderAddLauncherKeyboard") else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                isSmartInputFocused = true
+            }
+        }
     }
 
     private var header: some View {
@@ -475,9 +519,16 @@ private struct SmartInputDirection: View {
 }
 
 private struct ActionDockDirection: View {
+    @Binding var text: String
+    let isFocused: FocusState<Bool>.Binding
+
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            AddLauncherSearchField(placeholder: "Search, paste a link, or add coordinates")
+            AddLauncherSmartSearchField(
+                text: $text,
+                placeholder: "Search, paste a link, or add coordinates",
+                isFocused: isFocused
+            )
 
             VStack(spacing: 0) {
                 AddLauncherDockRow(
@@ -499,6 +550,59 @@ private struct ActionDockDirection: View {
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
         }
+    }
+}
+
+private struct AddLauncherSmartSearchField: View {
+    @Binding var text: String
+    let placeholder: String
+    let isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(isFocused.wrappedValue ? WanderTheme.terracotta.color : WanderTheme.textMuted.color)
+
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(placeholder).foregroundStyle(WanderTheme.textFaint.color)
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .focused(isFocused)
+            .textInputAutocapitalization(.words)
+            .submitLabel(.search)
+            .onSubmit {
+                isFocused.wrappedValue = false
+            }
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear add place search")
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(
+                    isFocused.wrappedValue ? WanderTheme.terracotta.color.opacity(0.7) : WanderTheme.borderHairline.color,
+                    lineWidth: isFocused.wrappedValue ? 1.5 : 1
+                )
+        }
+        .animation(.easeOut(duration: 0.16), value: isFocused.wrappedValue)
     }
 }
 
