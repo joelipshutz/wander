@@ -19,6 +19,9 @@ struct DiscoverScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var selectedOwnerCandidateID: String?
+    @State private var activityLoadState: DiscoverActivityLoadState = .loading
+    @State private var followInFlightProfileIDs: Set<String> = []
+    @State private var followFailedProfileIDs: Set<String> = []
     @State private var lastHandledAuthState: Bool?
     @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
     @FocusState private var searchFieldFocused: Bool
@@ -147,20 +150,29 @@ struct DiscoverScreen: View {
             .wanderScreen()
             .task {
                 applyRequestedSection()
+                activityLoadState = .loading
+                await refreshDiscoverDefaultContent()
+                lastHandledAuthState = auth.isSignedIn
+                lastHandledVisiblePlaceSignature = visiblePlaceSignature
             }
             .task(id: auth.isSignedIn) {
                 let requestedAuthState = auth.isSignedIn
                 let previousAuthState = lastHandledAuthState
                 lastHandledAuthState = requestedAuthState
-                await refreshRemotePlacesIfNeeded()
                 guard !Task.isCancelled,
                       auth.isSignedIn == requestedAuthState
                 else {
                     return
                 }
-                lastHandledVisiblePlaceSignature = visiblePlaceSignature
                 guard let previousAuthState,
                       previousAuthState != requestedAuthState
+                else {
+                    return
+                }
+                activityLoadState = .loading
+                await refreshDiscoverDefaultContent(forceRecommendations: true)
+                guard !Task.isCancelled,
+                      auth.isSignedIn == requestedAuthState
                 else {
                     return
                 }
@@ -302,9 +314,9 @@ struct DiscoverScreen: View {
     private var membersSearchField: some View {
         DiscoverSearchField(
             text: $memberQuery,
-            placeholders: ["Search rec.me members"],
+            placeholders: ["Search name or @handle"],
             isTicker: false,
-            accessibilityLabel: "Search rec.me members"
+            accessibilityLabel: "Search people"
         )
         .focused($searchFieldFocused)
     }
@@ -369,16 +381,31 @@ struct DiscoverScreen: View {
         let activity = latestActivityPlaces
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                SectionTitle("Latest Activity")
+                SectionTitle("Activity")
                 Spacer()
                 Text("Network")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
 
-            if activity.isEmpty {
-                EmptyPanel(title: "No activity yet", action: "follow more people to fill this in")
-            } else {
+            switch activityLoadState {
+            case .loading:
+                DiscoverLoadingPanel(label: "Loading activity")
+            case .failed:
+                DiscoverActionPanel(
+                    icon: "wifi.exclamationmark",
+                    title: "Activity couldn't load",
+                    message: "Check your connection and try again.",
+                    actionTitle: "Try again"
+                ) {
+                    Task { await refreshActivity() }
+                }
+            case .loaded where latestActivityPlaces.isEmpty:
+                DiscoverActivityEmptyPanel {
+                    selectedMode = .members
+                    searchFieldFocused = false
+                }
+            case .loaded:
                 ForEach(activity) { visiblePlace in
                     LatestActivityRow(
                         visiblePlace: visiblePlace,
@@ -394,9 +421,77 @@ struct DiscoverScreen: View {
     private var membersContent: some View {
         if isMemberSearchActive {
             memberSearchResultsSection
+        } else {
+            peopleValueNote
+            peopleRecommendationsSection
         }
 
-        friendsSection
+        peopleSection
+    }
+
+    private var peopleValueNote: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 28, height: 28)
+
+            Text("Follow people whose taste you trust. Places they choose to share can appear in Activity and on your map.")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.skyTint.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+
+    @ViewBuilder
+    private var peopleRecommendationsSection: some View {
+        switch store.discoverPeopleRecommendationsState {
+        case .idle where !auth.isSignedIn:
+            DiscoverActionPanel(
+                icon: "person.crop.circle.badge.plus",
+                title: "Find people you trust",
+                message: "Sign in to see people worth following.",
+                actionTitle: "Sign in"
+            ) {
+                auth.presentGate(for: .followPeople)
+            }
+        case .idle, .loading:
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                SectionTitle("People worth following")
+                DiscoverLoadingPanel(label: "Finding people")
+            }
+        case .failed:
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                SectionTitle("People worth following")
+                DiscoverActionPanel(
+                    icon: "arrow.clockwise",
+                    title: "Suggestions couldn't load",
+                    message: "Search still works, or try these suggestions again.",
+                    actionTitle: "Try again"
+                ) {
+                    Task {
+                        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
+                    }
+                }
+            }
+        case .loaded(let recommendations) where recommendations.isEmpty:
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                SectionTitle("People worth following")
+                EmptyPanel(title: "No suggestions yet", action: "search a name or @handle above")
+            }
+        case .loaded(let recommendations):
+            PeopleRecommendationShelf(
+                recommendations: recommendations,
+                isFollowing: { store.hasAcknowledgedFollow(to: $0) },
+                isFollowInFlight: { followInFlightProfileIDs.contains($0) },
+                didFollowFail: { followFailedProfileIDs.contains($0) },
+                open: { selectedProfile = SelectedProfile(id: $0.profile.id) },
+                follow: followRecommendation
+            )
+        }
     }
 
     private var memberSearchResultsSection: some View {
@@ -425,12 +520,12 @@ struct DiscoverScreen: View {
         }
     }
 
-    private var friendsSection: some View {
+    private var peopleSection: some View {
         let friends = friendProfiles
         let recommendationCounts = store.visiblePlaceCountsByOwnerID()
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                SectionTitle("Friends")
+                SectionTitle("People")
                 Spacer()
                 Text("\(friends.count)")
                     .font(.system(size: 12, weight: .black))
@@ -438,7 +533,7 @@ struct DiscoverScreen: View {
             }
 
             if friends.isEmpty {
-                EmptyPanel(title: "No friends yet", action: "search members to follow people")
+                EmptyPanel(title: "No one followed yet", action: "search or follow someone above")
             } else {
                 ForEach(friends) { profile in
                     FriendListRow(
@@ -691,9 +786,49 @@ struct DiscoverScreen: View {
         searchFieldFocused = false
     }
 
-    private func refreshRemotePlacesIfNeeded() async {
+    private func refreshDiscoverDefaultContent(forceRecommendations: Bool = false) async {
+        let didLoadActivity = await refreshRemotePlacesIfNeeded()
+        await refreshRecommendationsIfNeeded(force: forceRecommendations)
+        activityLoadState = didLoadActivity ? .loaded : .failed
+    }
+
+    private func refreshActivity() async {
+        activityLoadState = .loading
+        activityLoadState = await refreshRemotePlacesIfNeeded() ? .loaded : .failed
+    }
+
+    private func refreshRemotePlacesIfNeeded() async -> Bool {
+        guard auth.isSignedIn else { return true }
+        guard backend.followRepository != nil, backend.placeRepository != nil else { return true }
+        return await store.refreshRemoteSocialSurfaces(backend: backend)
+    }
+
+    private func refreshRecommendationsIfNeeded(force: Bool) async {
         guard auth.isSignedIn else { return }
-        await store.refreshRemoteSocialSurfaces(backend: backend)
+        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)
+    }
+
+    private func followRecommendation(_ recommendation: DiscoverPeopleRecommendation) {
+        auth.requireSignIn(for: .followPeople) {
+            let profileID = recommendation.profile.id
+            guard !followInFlightProfileIDs.contains(profileID) else { return }
+            followInFlightProfileIDs.insert(profileID)
+            followFailedProfileIDs.remove(profileID)
+
+            Task {
+                let succeeded = await store.follow(
+                    userID: profileID,
+                    source: .profile,
+                    backend: backend
+                )
+                followInFlightProfileIDs.remove(profileID)
+                if succeeded {
+                    followFailedProfileIDs.remove(profileID)
+                } else {
+                    followFailedProfileIDs.insert(profileID)
+                }
+            }
+        }
     }
 
     private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
@@ -731,7 +866,7 @@ private enum DiscoverMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .places: "Places"
-        case .members: "Members"
+        case .members: "People"
         }
     }
 
@@ -741,6 +876,12 @@ private enum DiscoverMode: String, CaseIterable, Identifiable {
         case .members: "person.2"
         }
     }
+}
+
+private enum DiscoverActivityLoadState: Equatable {
+    case loading
+    case loaded
+    case failed
 }
 
 private struct SelectedProfile: Identifiable {
@@ -786,6 +927,208 @@ private struct EmptyPanel: View {
         .padding(WanderTheme.spacing4)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private struct DiscoverLoadingPanel: View {
+    let label: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            ProgressView()
+                .tint(WanderTheme.terracotta.color)
+            Text(label)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct DiscoverActionPanel: View {
+    let icon: String
+    let title: String
+    let message: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: icon)
+                .font(.system(size: 19, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 48, height: 48)
+                .background(WanderTheme.skyTint.color)
+                .clipShape(Circle())
+
+            Text(title)
+                .font(.system(size: 18, weight: .black, design: .rounded))
+                .multilineTextAlignment(.center)
+
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(actionTitle, action: action)
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.terracotta.color)
+                .clipShape(Capsule())
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+}
+
+private struct DiscoverActivityEmptyPanel: View {
+    let findPeople: () -> Void
+
+    var body: some View {
+        DiscoverActionPanel(
+            icon: "person.2.fill",
+            title: "Your Activity starts with people",
+            message: "Follow people you trust and places they choose to share can show up here.",
+            actionTitle: "Find people to follow",
+            action: findPeople
+        )
+    }
+}
+
+private struct PeopleRecommendationShelf: View {
+    let recommendations: [DiscoverPeopleRecommendation]
+    let isFollowing: (String) -> Bool
+    let isFollowInFlight: (String) -> Bool
+    let didFollowFail: (String) -> Bool
+    let open: (DiscoverPeopleRecommendation) -> Void
+    let follow: (DiscoverPeopleRecommendation) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            SectionTitle("People worth following")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                    ForEach(recommendations) { recommendation in
+                        PeopleRecommendationCard(
+                            recommendation: recommendation,
+                            isFollowing: isFollowing(recommendation.id),
+                            isFollowInFlight: isFollowInFlight(recommendation.id),
+                            didFollowFail: didFollowFail(recommendation.id),
+                            open: { open(recommendation) },
+                            follow: { follow(recommendation) }
+                        )
+                    }
+                }
+                .padding(.vertical, WanderTheme.spacing1)
+            }
+        }
+    }
+}
+
+private struct PeopleRecommendationCard: View {
+    let recommendation: DiscoverPeopleRecommendation
+    let isFollowing: Bool
+    let isFollowInFlight: Bool
+    let didFollowFail: Bool
+    let open: () -> Void
+    let follow: () -> Void
+
+    private var profile: ProfileShell { recommendation.profile }
+
+    private var bioText: String {
+        guard let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty else {
+            return "Follow to see the places they choose to share."
+        }
+        return bio
+    }
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing2) {
+            Button(action: open) {
+                VStack(spacing: WanderTheme.spacing2) {
+                    WanderAvatar(
+                        initials: String(profile.displayName.prefix(1)),
+                        avatarURL: profile.avatarURL,
+                        size: 52,
+                        color: WanderTheme.pinSocial.color
+                    )
+
+                    Text(profile.displayName)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+
+                    Text("@\(profile.handle)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Text(recommendation.reason.displayText(for: profile))
+                .font(.system(size: 11, weight: .black))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(minHeight: 28, alignment: .top)
+
+            Text(bioText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(minHeight: 32, alignment: .top)
+
+            Spacer(minLength: 0)
+
+            Button(action: follow) {
+                Group {
+                    if isFollowInFlight {
+                        ProgressView()
+                            .tint(WanderTheme.textOnAction.color)
+                    } else {
+                        Text(isFollowing ? "Following" : "Follow")
+                    }
+                }
+                .font(.system(size: 13, weight: .black))
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isFollowing ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
+            .background(isFollowing ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
+            .clipShape(Capsule())
+            .disabled(isFollowing || isFollowInFlight)
+            .accessibilityLabel(isFollowInFlight ? "Following \(profile.displayName)" : (isFollowing ? "Following \(profile.displayName)" : "Follow \(profile.displayName)"))
+
+            if didFollowFail {
+                Text("Couldn't follow. Try again.")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateError.color)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(width: 172)
+        .frame(minHeight: 238)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
     }
 }
 

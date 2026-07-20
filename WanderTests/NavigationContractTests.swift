@@ -564,6 +564,39 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sections[1].contains("await runPlaceholderTicker()"))
     }
 
+    func testDiscoverColdStartKeepsTabsAndBuildsThePeopleNetwork() throws {
+        let discoverScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+
+        XCTAssertTrue(discoverScreen.contains("ForEach(DiscoverMode.allCases)"))
+        XCTAssertTrue(discoverScreen.contains("case .loaded where latestActivityPlaces.isEmpty"))
+        XCTAssertTrue(discoverScreen.contains("DiscoverActivityEmptyPanel"))
+        XCTAssertTrue(discoverScreen.contains("selectedMode = .members"))
+        XCTAssertTrue(discoverScreen.contains("PeopleRecommendationShelf"))
+        XCTAssertTrue(discoverScreen.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(discoverScreen.contains("store.hasAcknowledgedFollow(to: $0)"))
+        XCTAssertTrue(discoverScreen.contains("if isMemberSearchActive"))
+        XCTAssertTrue(discoverScreen.contains("SectionTitle(\"People\")"))
+        XCTAssertTrue(discoverScreen.contains("SectionTitle(\"People worth following\")"))
+        XCTAssertFalse(discoverScreen.contains("SectionTitle(\"Following\")"))
+
+        let recommendationCard = try XCTUnwrap(
+            discoverScreen
+                .components(separatedBy: "private struct PeopleRecommendationCard")
+                .dropFirst()
+                .first?
+                .components(separatedBy: "private struct DiscoverSearchField")
+                .first
+        )
+        XCTAssertTrue(recommendationCard.contains("size: 52"))
+        XCTAssertTrue(recommendationCard.contains(".lineLimit(2)"))
+        XCTAssertTrue(recommendationCard.contains(".frame(minHeight: 238)"))
+        XCTAssertFalse(recommendationCard.contains("size: 58"))
+        XCTAssertFalse(recommendationCard.contains(".lineLimit(3)"))
+        XCTAssertFalse(recommendationCard.contains(".frame(minHeight: 264)"))
+    }
+
     func testDiscoverUnboundedRowsAreLazyAndSearchWorkIsCancellable() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
@@ -575,13 +608,13 @@ final class NavigationContractTests: XCTestCase {
         )
         let friends = try sourceSection(
             source,
-            after: "private var friendsSection: some View",
+            after: "private var peopleSection: some View",
             before: "private func beginSaveDiscoverPlace"
         )
         let memberResults = try sourceSection(
             source,
             after: "private var memberSearchResultsSection: some View",
-            before: "private var friendsSection: some View"
+            before: "private var peopleSection: some View"
         )
 
         XCTAssertTrue(placeResults.contains("LazyVStack"))

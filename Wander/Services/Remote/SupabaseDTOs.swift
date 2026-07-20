@@ -38,6 +38,54 @@ struct RemoteProfileShellDTO: Codable, Equatable {
     }
 }
 
+struct RemoteDiscoverPeopleRecommendationDTO: Codable, Equatable {
+    let id: String
+    let handle: String
+    let displayName: String
+    let avatarURL: String?
+    let bio: String?
+    let homeArea: String?
+    let createdAt: Date?
+    let relationship: String?
+    let reasonKind: String
+    let sharedFollowCount: Int
+    let resultRank: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case handle
+        case displayName = "display_name"
+        case avatarURL = "avatar_url"
+        case bio
+        case homeArea = "home_area"
+        case createdAt = "created_at"
+        case relationship
+        case reasonKind = "reason_kind"
+        case sharedFollowCount = "shared_follow_count"
+        case resultRank = "result_rank"
+    }
+
+    func recommendation() -> DiscoverPeopleRecommendation {
+        let profile = ProfileShell(
+            id: id,
+            handle: handle,
+            displayName: displayName,
+            avatarURL: avatarURL,
+            bio: bio,
+            homeArea: homeArea,
+            isPrivateProfile: false,
+            createdAt: createdAt,
+            relationship: relationship.flatMap(ViewerRelationship.init(rawValue:)) ?? .nonFollower
+        )
+        let reason: DiscoverPeopleRecommendationReason = switch reasonKind {
+        case "follows_you": .followsYou
+        case "shared_follows": .sharedFollows(max(sharedFollowCount, 1))
+        default: .suggested
+        }
+        return DiscoverPeopleRecommendation(profile: profile, reason: reason, rank: resultRank)
+    }
+}
+
 struct RemoteCurrentProfileDTO: Codable, Equatable {
     let id: String
     let handle: String

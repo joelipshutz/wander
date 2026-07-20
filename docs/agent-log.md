@@ -11045,6 +11045,112 @@ Build-71 TestFlight completion, 2026-07-13 17:55 PDT:
 - No tester data was deleted or reset. Existing Been summary timestamps were updated only when their persisted latest active visit differed from the latest active explicit visit.
 - Tester focus: confirm Been entries show plausible dates rather than `rn`; Discover Latest Activity is newest-first; saved-time labels remain visible with long metadata; edited visit dates propagate to follower views after refresh or relaunch.
 
+## 2026-07-13 18:53 PDT - Codex - REC-90 Discover Redesign Planning
+
+Agent: Codex
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`Redesign Discover around activity, nearby place memories, and people discovery`)
+
+Goal: produce the product, full-state UX, and engineering specification for a Beli-inspired Discover redesign before any implementation begins.
+
+Starting status:
+
+- Updated global gstack from `1.26.0.0` to `1.60.1.0`, installed the checksum-verified Bun runtime required by setup, rebuilt browse/design tooling, regenerated host skills, and ran gstack migrations.
+- Ran `git fetch origin`, inspected the clean but REC-60-dedicated root checkout, all active worktrees, recent project history, and the latest coordination log.
+- Created this isolated worktree from `origin/main` at `aa6cf21` because the root checkout belongs to REC-60 and REC-89 is active in a separate Profile-redesign branch.
+- Created Linear `REC-90`, assigned it to Joe, moved it to `In Progress`, and related it to REC-7, REC-9, REC-10, REC-39, and REC-86.
+- Mission Control task creation was attempted, but local `http://localhost:4000` is not running.
+- GBrain search was attempted twice serially and hit the documented PGLite lock timeout both times; the lock file was absent after timeout, so this session is falling back to canonical KB Markdown and repo docs.
+
+Expected planning files:
+
+- `docs/agent-log.md`
+- A feature design/spec document under `docs/plans/` or `docs/specs/`, after the gstack decision gates are complete
+- `docs/decisions.md` and/or `docs/open-questions.md` only if the reviews produce durable decisions or unresolved product questions
+- gstack design, state, and engineering review artifacts under `~/.gstack/projects/`
+
+Planned workflow:
+
+1. Run `office-hours` to lock the user problem, premises, alternatives, and recommended wedge.
+2. Run `plan-design-review` rather than post-implementation `design-review`, because the requested output is a pre-code specification of every Discover state.
+3. Run `plan-eng-review` to lock reuse boundaries, architecture, data flow, failure modes, performance, and complete test coverage.
+4. Stop before implementation and hand off an approved plan tied to REC-90.
+
+Office-hours checkpoint, 2026-07-13 19:16 PDT:
+
+- Joe confirmed that the canonical office-hours product spec, full-state design specification, and engineering plan must live inside the rec.me repo. The private gstack artifact repository is a mirror only, not the source of truth.
+- Current implementation audit: Discover already has Places/Members modes, a natural-language place search, privacy-filtered newest-first followed-user activity, member search, profile drill-in, and follow/unfollow behavior. The missing growth surfaces are proactive people recommendations and a confidence-aware “Places you may have been” recovery flow.
+- Existing locked guidance currently limits people discovery to contacts, exact/near-exact handle search, and visible profile links, and forbids a global people directory or ranking people. REC-90 must explicitly revise or preserve that boundary; the new Beli-inspired suggestions cannot silently bypass it.
+- Product goal carried into office-hours from Joe's brief: increase follow creation and network density so follow-powered place discovery becomes useful. No implementation or database seeding has started.
+
+Office-hours design-doc checkpoint, 2026-07-13 20:17 PDT:
+
+- Wrote the canonical repo-owned product design at `docs/specs/2026-07-13-rec-90-discover-redesign-product-spec.md`; the private gstack path is an artifact mirror only.
+- Joe selected the Beli-balanced direction: Places remains the default with newest-first Activity and a provenance-appropriate place-recovery shelf; People receives proactive recommendations and explicit follow value.
+- The spec separates prototype validation, People acquisition, place recovery, and later recommendation-source expansion into independently gated slices. Contacts and device-location people ranking are not in REC-90 v1.
+- Three cold adversarial review rounds scored 6/10, 8/10, then 9/10. Sixty issue instances were surfaced across completeness, consistency, clarity, scope, and feasibility. All final-round findings were addressed in the repo document without starting implementation.
+- Key locks include explicit recommendation consent, no protected pre-follow place previews, a narrow security-definer recommendation path by default, deterministic search/ranking/reason rules, complete product-state transitions, offline cache truthfulness, positive place-save success separated from dismissal, and powered rather than under-sampled production lift claims.
+- Joe approved the office-hours product spec and selected the recommended handoff into the pre-engineering full-state `plan-design-review`.
+- Joe added a hard visual gate: after the full-state design specification, create repo-owned mocks for the main end-to-end flows and important state variants, present them for approval, and do not proceed to `plan-eng-review` or implementation until he approves the mocks.
+
+Plan-design-review and mock-v1 checkpoint, 2026-07-13 22:22 PDT:
+
+- Joe selected the full-screen-plus-state-board mock depth: nine main journeys as complete iPhone screens and five grouped boards for data, mutation, recovery, responsive, and accessibility states.
+- Created the canonical full-state design review at `docs/reviews/2026-07-13-rec-90-discover-plan-design-review.md`. It records the stable IA, exact density/geometry, 34 named UI states, emotional/trust journey, AI-slop audit, design-system fit, responsive/accessibility contract, prototype script, tasks, and approval gate.
+- Created the repo-owned clickable design room at `preview/discover-redesign/`. It includes local-only fictitious preview profiles, 9 journey screens, 5 state boards, 390pt/320pt and type-size controls, follow/dismiss interactions, vendored Pretext text measurement, README, metadata, and rendered overview PNGs.
+- The external gstack image-variant generator was not used because sandbox review rejected sending the private REC-90 brief to an external service without a separate informed permission. The replacement local HTML workflow sent no REC-90 product details off-device.
+- Visual QA found and fixed two artifact issues: missing self-contained token variables when served from the mock directory, and product controls that initially rendered at 32–40pt instead of the 44pt iOS target.
+- Verification: `node --check` passes, `git diff --check` passes, the local mock has zero browser console errors, and a scripted audit across all nine journeys reports no horizontal screen/body overflow at 390pt or 320pt with 1.32× type. Places, People, state-board, and small-phone screenshots were reviewed visually.
+- Design status remains intentionally incomplete: mock v1 awaits Joe's visual/taste approval. Per his hard gate, `plan-eng-review` and implementation remain blocked.
+- Pushed `codex/rec-90-discover-plan` and opened required draft PR #97: https://github.com/joelipshutz/wander/pull/97. The PR and Linear REC-90 both state the same blocking gate and validation evidence; it is not ready to merge.
+
+Mock-v1.1 empty-Activity correction, 2026-07-15 09:23 PDT:
+
+- Joe liked the Discover direction and horizontal people shelves, then correctly flagged that the compact Activity-empty state tile did not show the Places / People tabs.
+- Clarified the product contract: empty Activity is only a body-content state. The Discover title, Places / People peer tabs, search, and existing four-tab root navigation must remain persistent.
+- Added Journey 02 as a complete 390pt Activity-empty phone screen, wired `Find people to follow` to the People suggestions journey, renumbered the artifact to ten journeys, and labeled the compact PL-02 state-board tile as a body-only comparison.
+- Added `preview/discover-redesign/discover-activity-empty.png` and updated the mock README, metadata, and plan-design review. No SwiftUI, database, recommendation, or other engineering work started.
+- Verification: `node --check` and `git diff --check` pass; the browser reports zero console errors; the empty-state CTA opens People; both mode tabs, search, and all four root tabs are present; all ten journeys have no horizontal phone/body overflow at 320pt with 1.32× type.
+- Design approval remains open. `plan-eng-review` and implementation are still blocked until Joe approves the corrected mock direction.
+
+Mock-v1.2 Direction B exploration, 2026-07-15 09:41 PDT:
+
+- Joe supplied a second product recommendation: reframe Discover as a social answer engine that finds a place for the current moment using evidence from trusted people. He explicitly asked to keep people front and center and preserve the horizontal people-card treatment he liked.
+- Preserved the existing mock as Direction A and added Direction B after it rather than overwriting approved context. Direction B has three complete phone journeys: zero-query home, populated `Joe’s favorite restaurants`, and a strict zero-result for apostrophe-less `Joes favorite restaurants`.
+- Direction B keeps the Places / People tabs, puts one universal search first, then horizontally scrolling prompts and `People Worth Following` as the first content shelf. Nearby/new/recovery content follows with named human provenance; Activity is supporting evidence rather than the dominant page.
+- The answer journey shows editable interpretation chips, Joe as a visible source, a plain-language answer summary, Show on Map, refinements, and `Why it matched` on every result. The mock records the strict Been/Favorite/rating/Wanna Go/zero-result truth contract and does not claim to fix the reported parser or request-race defects.
+- Added `preview/discover-redesign/discover-direction-b-home.png`, `preview/discover-redesign/discover-direction-b-answer.png`, and `preview/discover-redesign/discover-direction-b-zero.png`; updated the design-room README, metadata, and plan-design review. No SwiftUI, database, parser, search, or other engineering work started.
+- Verification: `node --check` and `git diff --check` pass; all three Direction B journeys render with Places / People and all four root tabs; the home prompt opens the answer; clearing returns to Direction B home; Show on Map and the explicit visited fallback acknowledge their query changes; all 13 screens have no horizontal phone/body overflow at 320pt with 1.32× type; browser console has zero errors.
+- The design gate is now a direction-selection gate: A, B, or a named hybrid. `plan-eng-review` remains blocked until Joe chooses and the canonical product contract is reconciled.
+
+REC-90 Direction B engineering-review start, 2026-07-15 15:52 PDT:
+
+- Joe approved the Direction B mocks and asked to run `plan-eng-review` against the current branch diff, then build. Direction B is now the selected direction; the older Direction A wording in the canonical product spec must be reconciled before implementation is treated as complete.
+- Re-ran the gstack preflight from the isolated worktree, found the branch-specific office-hours design artifact, loaded existing REC-90 decisions, fetched `origin`, confirmed the worktree is clean, and inspected the 18-file docs/mock diff plus the current Discover implementation and tests.
+- Existing reuse boundaries are strong: `DiscoverScreen` already owns Places/People tabs, universal place search, member search, newest-first Activity, horizontal member results, and profile navigation; `WanderStore` already owns privacy-filtered visible places, profile search, follow/unfollow reconciliation, deterministic/remote filter parsing, and local fixtures.
+- Verified the search defects behind Direction B in current code: query changes start untracked tasks, `favorite` maps only to Been, apostrophe-less `Joes` is not parsed as an owner, `LA` bypasses area filtering, owner matching uses substring containment, and remote parser results are accepted without a semantic-validity gate.
+- The gstack complexity gate is triggered: the branch already contains 18 planning/mock files, while the complete product spec adds recommendation backend/consent/city/dismissal/place-recovery work beyond the core social-answer loop. The next required review action is an explicit scope decision before architecture review continues.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` is `in_progress`. Linear `REC-90` remains `In Progress`; draft PR #97 remains the handoff PR. No SwiftUI, parser, model, database, or production behavior has been changed.
+
+REC-90 scope reduction checkpoint, 2026-07-15 16:07 PDT:
+
+- Joe reduced the first implementation lake to the two Discover cold-start/null states: Places with empty Activity and People with no existing social content. Both states must use the approved horizontal people-card treatment, direct Follow actions, and recommendation value copy to create the network.
+- Deferred from this first build: place recovery, populated social-answer results, query-truth hardening, durable recommendation dismissals, city shelves, Contacts, and the broader REC-90 ranking/experiment contract. The implementation will preserve persistent Places/People tabs, search, and the existing root navigation.
+- Architecture review found one blocking source question. Live mode intentionally starts from `WanderFixtures.empty()`, which contains only the current profile. Existing remote APIs can fetch current followers/following and exact/prefix search results, but there is no production recommendation endpoint. A true zero-graph user therefore cannot receive real recommendation cards without a narrow remote source; local fictional fixtures remain demo/test-only.
+- No application behavior has changed. The next `plan-eng-review` action is the required one-issue architecture decision on graph-only reuse versus a minimal consented recommendation RPC versus production fictional accounts.
+
+REC-90 recommendation-source decision, 2026-07-15 16:18 PDT:
+
+- Joe selected the minimal real-profile recommendation RPC. Public profiles are recommendation-eligible by default; Private Profile users must always be excluded. This supersedes the draft spec's explicit opt-in/default-false recommendation rule.
+- Verified a pre-existing backend contract gap that now blocks the selected architecture: `public.profiles` has no private-profile field, `WanderStore.setPrivateProfile` changes only local state and local place visibility, and `app.search_profiles_by_handle` filters deleted rows but cannot filter private profiles. The Settings copy currently promises that Private Profile hides the username from search.
+- The next architecture decision is whether to make Private Profile authoritative in Supabase and apply it to search, graph projections, and recommendations; infer it from an unrelated visibility field; or accept client-only filtering. No schema or behavior change has been made yet.
+
+REC-90 private-profile authority decision, 2026-07-15 16:29 PDT:
+
+- Joe selected an authoritative Supabase `is_private` profile state. The implementation must hydrate it, update it through a current-user-only RPC, and exclude private profiles server-side from profile search, recommendations, followers, and following.
+- Trigger audit confirmed the current Settings flow stages the toggle, shows a warning, and calls `store.setPrivateProfile` only after the user confirms. The new remote privacy transition will hook into that confirmed action rather than default-visibility changes or passive Discover loading.
+- The Discover trigger contract being confirmed next is: Places empty is based on zero rendered privacy-visible followed-user Activity rows after refresh; People default recommendations appear whenever People has no active search, not only when follow count is zero; the same settled recommendation payload powers both surfaces; and follow success refreshes Activity without silently changing tabs.
 ## 2026-07-13 14:22 PDT - Codex - REC-89 Profile Redesign Mockups
 
 Agent: Codex
@@ -12485,6 +12591,81 @@ Pre-landing review checkpoint, 2026-07-17 17:11 PDT:
 - The optional gstack initialization/telemetry path was not run because the managed environment rejected its out-of-repo writes/possible telemetry; the checklist review was completed locally and recorded here instead. The advisory slop scanner was unavailable because `bun` is not installed.
 - Independent review reproduced one release-order finding: REC-98 and REC-100 append `docs/agent-log.md` from the same base, so the second branch must integrate latest `main` and preserve both log histories. Their current overlapping Swift source changes auto-merge cleanly. REC-100 will land first; the active REC-98 owner will then integrate latest `main`, resolve the append-only log conflict, rerun its focused/full/build gate, and provide a final merge-ready head.
 - Merge remains intentionally separate from release: no build 78 bump starts until both PRs are squash-merged into latest `main`.
+## 2026-07-17 18:00 PDT - Codex - REC-90 Engineering Review Complete / Build Start
+
+Agent: Codex using gstack `plan-eng-review`
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`In Progress`)
+
+- Completed and persisted the narrowed engineering review at `docs/reviews/2026-07-17-rec-90-null-states-plan-eng-review.md`; reconciled the product spec with the approved first build slice.
+- Latest `main` already contains authoritative `is_private_profile` storage, update RPCs, hydration, and local privacy behavior. REC-90 will reuse that work and harden only the final search/graph/follow eligibility paths that still omit the private-profile predicate.
+- Approved architecture: one authenticated security-invoker recommendation RPC over RLS-readable public profiles/follows, one existing `ProfileRepository` method, one shared `WanderStore` response/state, and one shared horizontal recommendation shelf/card for Places empty and People default states. No place rows, new service class, fake production profiles, city/Contacts source, or dismissal system.
+- Review coverage is RPC metadata/behavior, repository decode, store loading/empty/error/deduplication/follow acknowledgement, presentation trigger contracts, full XCTest/build, and dual-size simulator screenshots. No unresolved implementation decision remains.
+- Starting sequential implementation now. Expected files are one Supabase migration/test, existing repository/DTO/backend/store boundaries, Discover SwiftUI and focused XCTest/source-contract files, plus this append-only log. No hosted push, build-number change, TestFlight release, merge, or Slack action is authorized.
+
+Implementation and validation checkpoint, 2026-07-17 17:49 PDT:
+
+- Implemented the approved null/default-state loop. Places preserves the permanent Places/People tabs and newest-first Activity; successful zero-row Activity now shows **Your Activity starts with people** with **Find people to follow**, while loading and failure have separate truthful states. The CTA switches to People without focusing or clearing search.
+- People now leads with the approved horizontal **People worth following** shelf whenever member search is inactive. Cards use real public profile shells, explain the recommendation reason, provide direct per-card Follow/Following/loading/failure states, and retain an acknowledged follow in the cached response for the current appearance. Search and the existing Following list remain available.
+- Added one cached `WanderStore` recommendation state through the existing `ProfileRepository`/`WanderBackend` boundary. No production fake accounts, place-derived eligibility, new service layer, contacts, city shelf, dismissals, or search-answer work was added.
+- Added migration `20260717180000_discover_profile_recommendations.sql`: one bounded security-invoker profile/follow recommendation RPC plus final Private Profile hardening for member search, follower/following graph enumeration, and direct follow. The RPC excludes self, existing follows, deleted/private/blocked profiles and ranks follows-you, aggregate shared follows, then stable public fallback; it returns no place data.
+- Hosted dry run showed exactly that one pending migration. Applied it successfully to linked project `rugmtlgufrhlxwfkumhw`; `migration list --linked` shows local/remote `20260717180000` aligned. Metadata verification confirms the recommendation and follow functions are security invoker, authenticated-only, anon-denied, and have pinned search paths.
+- The first hosted pgTAP execution exposed three fixture-isolation assumptions because real hosted public profiles also matched the test viewer. Updated only the rollback test fixture to scope fixture assertions and use deterministic future fallback dates; the final hosted rollback run passed all 23 assertions. No test rows persisted.
+- Added repository mapping/parameter tests, store cache/force-refresh/empty/error/identity/privacy/follow-acknowledgement tests, and a Discover presentation source contract. Focused REC-90 tests passed 8/8. The complete iPhone 17 Pro / iOS 26.2 suite passed 385/385 with zero failures; the generic iOS Simulator build passed.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 16e. Evidence: `/tmp/rec90-visuals/activity-empty-iphone-17-pro.png` and `/tmp/rec90-visuals/activity-empty-iphone-16e.png`. Both preserve visible tabs, readable copy, 44pt CTA, and unclipped bottom navigation. The populated People direction remains the approved pre-code horizontal-card mock under `preview/discover-redesign/`, with production behavior covered by repository/store/source contracts.
+- Durable decisions were recorded in `docs/decisions.md`; the narrowed product contract and gstack engineering review live in `docs/specs/2026-07-13-rec-90-discover-redesign-product-spec.md` and `docs/reviews/2026-07-17-rec-90-null-states-plan-eng-review.md`.
+- No build-number bump, TestFlight archive/upload, merge, tester Slack note, or fake production seed occurred. Next: publish the validated branch to existing draft PR #97, mark it ready, attach validation to REC-90, and move the issue to In Review.
+
+Publishing handoff, 2026-07-17 17:54 PDT:
+
+- Committed the validated implementation as `aabd5aceb` (`feat: add Discover network-building null states`) and pushed `codex/rec-90-discover-plan`.
+- Updated existing PR #97 to **feat: add Discover network-building null states**, marked it ready for review, and confirmed it is merge-clean against latest `origin/main`: https://github.com/joelipshutz/wander/pull/97.
+- Moved Linear REC-90 to `In Review`, attached PR #97, and added the implementation, hosted migration, pgTAP, XCTest/build, visual-QA, and deferred-scope evidence. Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` is in `review` with the same handoff.
+- This is a PR handoff only. The branch is not merged and no TestFlight release was requested or performed.
+
+## 2026-07-18 13:57 PDT - Codex - REC-90 Populated People Feedback Pass
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and `recme-linear-log-triage`
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/97
+
+Goal: apply Joe's approval feedback to the populated People experience: remove Codex/backend smoke identities, seed a small realistic synthetic social graph with place reviews, separate a general People section from People worth following, and reduce card height.
+
+Starting status and coordination:
+
+- Continued in the existing clean isolated REC-90 worktree at pushed head `8c0567c`; no competing Discover implementation branch is being created.
+- Reopened REC-90 from In Review to In Progress and recorded the feedback. Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` is not running.
+- This explicitly reverses the earlier REC-90 no-fake-production-profiles constraint. Before any hosted mutation, this pass will enumerate exact profile ids, handles, dependent saves/reviews/follows, and auth relationships so real Joe/Ryan/demo/tester rows are preserved.
+- Expected files are the REC-90 spec/review or decisions record, existing Discover SwiftUI and focused tests, a reviewed idempotent seed/cleanup mechanism if the schema supports synthetic profiles safely, and this append-only log. No schema/RPC security change, build-number bump, TestFlight release, merge, or Slack action is implied.
+
+Hosted data and implementation checkpoint, 2026-07-18 14:18 PDT:
+
+- Audited the linked project before mutation. Exactly 16 profile rows matched verified Codex/backend-smoke ids; together they owned one `Codex Smoke Coffee` place/save, zero follows, blocks, attributes, lists, shared visits, or other user-owned rows. The real Joe, Ryan, existing rec.me demo, and remaining tester profile ids were explicitly excluded.
+- Added `scripts/seed-discover-demo-people.sql` as an operational script rather than a migration. It validates every targeted smoke id/handle pair and all 18 referenced existing place ids before deleting or seeding, uses idempotent profile and user/place upserts, creates no follow edges, and enforces postconditions before commit.
+- A rollback-only hosted dry run completed without error. The committed apply then removed all 16 verified Codex/smoke profiles and the orphaned smoke place, and upserted Maya Chen, Elena Torres, Marcus Reed, Priya Shah, Theo Brooks, and Samira Patel with four realistic Been reviews each.
+- Independent post-apply verification returned: zero Codex/smoke profiles, six demo profiles, 24 active reviews, 24 derived visit rows, zero smoke-place rows, and all four preserved real/demo tester profiles. An authenticated Joe-view call to `discover_profile_recommendations(20)` returned all six demo profiles at ranks 2–7 with `suggested` reasons.
+- Discover now names the existing-follow list **People** while retaining **People worth following** for recommendations. Recommendation cards use a 52pt avatar, two-line bio, and 238pt minimum height instead of 58pt/three lines/264pt; the 44pt Follow target is unchanged. Added a focused presentation contract and recorded the feedback delta in the product spec, engineering review, and durable decisions.
+- The focused XCTest is running on iPhone 16 Plus / iOS 18.6 after the sandboxed simulator lookup failed as expected and was rerun with approved simulator access. Full suite, build, populated visual QA, publishing, and Linear handoff remain pending.
+
+Validation and publishing checkpoint, 2026-07-18 14:34 PDT:
+
+- Focused `NavigationContractTests/testDiscoverColdStartKeepsTabsAndBuildsThePeopleNetwork` passed 1/1. The first verbose run was stopped after its output stream orphaned the build process; the quiet rerun completed with a valid result bundle. After tightening the test to scope the size/line/height assertions specifically to `PeopleRecommendationCard`, the final focused rerun also passed 1/1 at `/private/tmp/DerivedData-rec90-people-full/Logs/Test/Test-Wander-2026.07.18_15-34-39--0700.xcresult`.
+- A first cached full-suite attempt failed before executing tests because CoreSimulator lost the temporary `WanderTests.xctest` install bundle. A clean DerivedData rerun passed all 385/385 tests with zero failures on iPhone 16 Plus / iOS 18.6: `/private/tmp/DerivedData-rec90-people-full/Logs/Test/Test-Wander-2026.07.18_14-21-56--0700.xcresult`.
+- The generic iOS Simulator build completed with exit code 0. No schema migration, project-generation change, build-number bump, archive, upload, merge, or Slack announcement occurred.
+- Computer-use visual QA exercised the actual Discover People surface on iPhone 16 Plus and the smaller iPhone 16e. Screenshots are `/private/tmp/rec90-people-16plus.png` and `/private/tmp/rec90-people-16e.png`; both show the **People** heading/count/list, readable copy, stable safe areas, and no clipping at either width. The local QA session was signed out, so hosted recommendation cards were not rendered in these screenshots; their compact 52pt/two-line/238pt source contract is covered by the focused test and the authenticated hosted RPC/data verification.
+- `git diff --check` is clean. Mission Control remained unavailable on a second update attempt because `localhost:4000` is still down. Next: final diff review, commit/push this feedback pass to PR #97, add the complete data/test/visual evidence to REC-90, and move it back to In Review.
+
+Publishing handoff, 2026-07-18 15:40 PDT:
+
+- Committed the validated feedback pass as `91a1f65` (`feat: populate Discover people`) and pushed `codex/rec-90-discover-plan` to existing ready PR #97: https://github.com/joelipshutz/wander/pull/97.
+- Added the hosted cleanup/seed, UI delta, 385/385 XCTest, build, and dual-size visual evidence to PR #97 and Linear REC-90. REC-90 is back in `In Review` with Joe still assigned.
+- The hosted data change is already live in linked project `rugmtlgufrhlxwfkumhw`; the operational script is committed so the exact fixture set remains auditable and idempotently maintainable. No Clerk account deletion was attempted; the removed app-visible Supabase profile rows were the audited Codex/smoke fixtures.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be advanced because `localhost:4000` remained unavailable throughout the pass.
+- This handoff stops at ready PR review. No merge, build-number bump, TestFlight archive/upload, tester Slack note, or release action occurred.
+
 
 ## 2026-07-17 17:11 PDT - Codex - REC-99 Mixed Social Pin Mockups
 
@@ -12634,6 +12815,54 @@ Release completion, 2026-07-17 20:00 PDT:
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
 
+REC-90 latest-main integration checkpoint, 2026-07-18 15:47 PDT:
+
+- Final GitHub inspection after the feedback push reported PR #97 as conflicting because `origin/main` advanced from `2b2f19a9b` to `02b812fc8` with REC-98 category emoji work and TestFlight build-78 bookkeeping.
+- Fetched and merged exact `origin/main` `02b812fc8` into `codex/rec-90-discover-plan`. All Swift/project/taxonomy changes auto-merged; direct inspection confirms REC-90's separate **People** heading and compact 52pt/two-line/238pt recommendation card remain intact alongside main's new category emoji rendering.
+- The only conflict was the expected append-only `docs/agent-log.md` tail. Resolved it by retaining the complete REC-90, REC-98, REC-100, and build-78 histories; no conflict markers or unrelated edits were dropped.
+- Next: commit the merge, rerun the focused Discover contract plus the complete XCTest/build gate against integrated latest main, push, and recheck PR #97 mergeability before final handoff.
+
+REC-90 integrated validation, 2026-07-18 15:54 PDT:
+
+- The latest-main focused Discover card/section contract passed 1/1 at `/private/tmp/DerivedData-rec90-people-integrated/Logs/Test/Test-Wander-2026.07.18_15-43-34--0700.xcresult`.
+- The exact integrated source passed the complete iPhone 16 Plus / iOS 18.6 suite, 412/412 with zero failures: `/private/tmp/DerivedData-rec90-people-integrated/Logs/Test/Test-Wander-2026.07.18_15-48-34--0700.xcresult`.
+- A first generic build rerun failed only while generating dSYM because task-owned DerivedData caches had filled `/private/tmp`. Removed the two obsolete REC-90 caches created by this task (3.6 GB), retained the integrated test evidence, and reran the same generic iOS Simulator build successfully with exit code 0.
+- Integrated diff and conflict-marker checks are clean. Next: commit/push the latest-main merge and confirm PR #97 is mergeable before switching to the separate Add-flow worktree.
+
+REC-90 final integrated handoff, 2026-07-18 15:57 PDT:
+
+- Committed the validated latest-main integration as merge commit `2199fc1` and pushed it to `codex/rec-90-discover-plan`.
+- GitHub now reports ready PR #97 `MERGEABLE` against exact base `02b812fc8`; Linear REC-90 remains `In Review` with the full hosted-data and validation evidence attached.
+- The REC-90 worktree is clean and handed off. Work now moves to the separate latest-main Add-flow worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; no Discover files will be edited from that task.
+
+## 2026-07-20 10:20 PDT - Codex - REC-90 approved people data follow-up
+
+Agent: Codex
+Branch: `codex/rec-90-discover-plan`
+Worktree: `/private/tmp/recme-rec90-discover-plan`
+Linear: `REC-90` (`In Progress`)
+
+Goal: after Joe approved the modular People simulator direction, make the hosted populated state useful by placing rich synthetic profiles in Joe's existing-follow section while preserving separate unfollowed candidates for People worth following, and audit the exact completion state of Places.
+
+Start state and evidence:
+
+- Refetched `origin`, inspected the clean REC-90 and mock worktrees, existing PRs, and the recent coordination log. PR #97 contains the production null/default-state work but is currently behind/conflicting with newer `main`; dependent mock PR #131 is clean and remains debug-only.
+- Read-only hosted verification confirms six synthetic public profiles are live. Each has a specific bio and home area plus four active Been places, four ratings, and four detailed notes. All six currently have zero followers and no avatar URL.
+- The operational seed intentionally created no follow edges, so those profiles can appear in People worth following but not Joe's populated People section. This pass will add only exact, auditable Joe-to-demo follow edges for Maya Chen, Marcus Reed, and Priya Shah; Elena Torres, Theo Brooks, and Samira Patel remain unfollowed candidates. Ryan, private users, and unrelated graph rows are out of scope.
+- Places audit: newest-first privacy-visible Activity, including loading/error/empty/populated presentation, is implemented and validated in PR #97. The separate Places you may have been recovery shelf and its candidate/dismissal algorithms were explicitly deferred and are not implemented.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` remains unavailable. Linear REC-90 is the active tracker.
+
+Expected files are the existing idempotent operational seed and this append-only log. No schema/RPC, app UI, private-profile state, Ryan/tester graph, build number, TestFlight release, or Slack action is in scope for this data follow-up.
+
+Hosted follow-data completion, 2026-07-20 10:31 PDT:
+
+- Extended `scripts/seed-discover-demo-people.sql` with an exact public-profile precondition for Joe and ten idempotent follow edges. Joe now follows Maya Chen, Marcus Reed, and Priya Shah; no Ryan/private/unrelated user graph row is touched. Seven demo-to-demo edges give Elena Torres, Theo Brooks, and Samira Patel deterministic shared-follow/popularity evidence.
+- The first rollback-only hosted execution passed every profile/place/graph guard and persisted nothing. The committed hosted apply then passed its postconditions with six demo profiles, 24 detailed rated reviews, three exact Joe-to-demo follows, and seven exact demo graph edges. A second rollback-only execution passed, proving the applied seed is idempotent.
+- Post-apply authenticated Joe verification shows the remaining recommendation profiles exactly as intended: Elena with three shared follows, Theo with two, and Samira with two. The three existing-follow profiles are excluded from recommendations and present in Joe's follows.
+- Production RLS/RPC verification returned four visible Been places with four ratings for each of Maya, Marcus, and Priya: 12 followed-person place memories are now available to the Activity/profile hydration path.
+- `git diff --check` passes. No Xcode build/test was run because this delta changes only the audited operational data seed and documentation; the production UI/test evidence on PR #97 is unchanged.
+- Places remains partially complete: the branch implements newest-first Activity and its full loading/error/empty/populated contract, and Joe's hosted graph can now populate it. `Places you may have been` recovery, including candidate generation and dismiss/undo, remains unbuilt and requires its own reviewed engineering slice.
+- PR #97 remains the production handoff and currently needs integration with newer `main`, which has overlapping Discover/performance work. This data-only commit will be pushed without attempting an unsafe blind merge; latest-main reconciliation and complete regression validation remain required before REC-90 can merge.
 ## 2026-07-18 13:51 PDT - Codex - REC-17 Add-vs-Map Save-Flow Diagnosis
 
 Agent: Codex

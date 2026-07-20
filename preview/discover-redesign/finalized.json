@@ -1,0 +1,13 @@
+{
+  "source_mockup": null,
+  "source_plan": "docs/specs/2026-07-13-rec-90-discover-redesign-product-spec.md",
+  "mode": "plan-driven",
+  "html_file": "preview/discover-redesign/index.html",
+  "pretext_tier": "card/list layout with prepare() and layout()",
+  "framework": "vanilla",
+  "iterations": 2,
+  "date": "2026-07-15T09:48:08-07:00",
+  "screen": "rec-90-discover-design-room",
+  "branch": "codex/rec-90-discover-plan",
+  "approval_status": "awaiting-joe"
+}

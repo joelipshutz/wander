@@ -106,6 +106,7 @@ final class WanderStore: ObservableObject {
         }
     }
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
+    @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
     var defaultVisibility: PlaceVisibility {
         willSet {
             guard newValue != defaultVisibility else { return }
@@ -679,13 +680,18 @@ final class WanderStore: ObservableObject {
     func apply(authState: AuthState) {
         switch authState {
         case .signedIn(let session):
+            let previousUserID = currentUser.id
             apply(session: session)
+            if previousUserID != currentUser.id {
+                discoverPeopleRecommendationsState = .idle
+            }
             analytics.identify(userID: session.userID)
             #if DEBUG
             WanderDebugLog.sync.debug("store auth signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
         case .signedOut, .unavailable:
             applySignedOutProfile()
+            discoverPeopleRecommendationsState = .idle
             analytics.resetIdentity()
             #if DEBUG
             WanderDebugLog.sync.debug("store auth signed_out_or_unavailable pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
@@ -835,6 +841,7 @@ final class WanderStore: ObservableObject {
         sourceArtifacts = []
         extractionJobs = []
         remoteVisiblePlaceCache = []
+        discoverPeopleRecommendationsState = .idle
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         discoverParseCache.removeAll()
@@ -2925,6 +2932,16 @@ final class WanderStore: ObservableObject {
         return .nonFollower
     }
 
+    func hasAcknowledgedFollow(to userID: String) -> Bool {
+        let viewerID = currentUser.id
+        return follows.contains(where: { follow in
+            let isViewerFollow = follow.followerUserID == viewerID
+            let isTargetFollow = follow.followedUserID == userID
+            let isAcknowledged = follow.syncStateRaw == SyncState.synced.rawValue
+            return isViewerFollow && isTargetFollow && isAcknowledged
+        })
+    }
+
     func shell(for profile: LocalProfile) -> ProfileShell {
         ProfileShell(
             id: profile.id,
@@ -2993,6 +3010,57 @@ final class WanderStore: ObservableObject {
         }
 
         return profiles
+    }
+
+    func refreshDiscoverPeopleRecommendations(
+        backend: WanderBackend?,
+        force: Bool = false,
+        limit: Int = 20
+    ) async {
+        guard let backend, backend.profileRepository != nil else {
+            discoverPeopleRecommendationsState = .idle
+            return
+        }
+
+        if !force {
+            switch discoverPeopleRecommendationsState {
+            case .loading, .loaded:
+                return
+            case .idle, .failed:
+                break
+            }
+        }
+
+        let requestingUserID = currentUser.id
+        discoverPeopleRecommendationsState = .loading
+
+        do {
+            let recommendations = try await backend.discoverProfileRecommendations(limit: limit)
+            guard currentUser.id == requestingUserID else {
+                discoverPeopleRecommendationsState = .idle
+                return
+            }
+
+            let visibleRecommendations = recommendations.filter { recommendation in
+                recommendation.profile.id != currentUser.id
+                    && recommendation.profile.isPrivateProfile != true
+                    && !isBlockedBetweenCurrentUser(and: recommendation.profile.id)
+                    && !hasAcknowledgedFollow(to: recommendation.profile.id)
+            }
+            upsertRemoteProfileShells(
+                visibleRecommendations.map(\.profile),
+                preserveExistingProfileMetadataWhenMissing: true
+            )
+            discoverPeopleRecommendationsState = .loaded(visibleRecommendations)
+            lastRemoteError = nil
+        } catch {
+            guard currentUser.id == requestingUserID else {
+                discoverPeopleRecommendationsState = .idle
+                return
+            }
+            lastRemoteError = remoteErrorMessage(error)
+            discoverPeopleRecommendationsState = .failed
+        }
     }
 
     func contactMatches() async -> [ContactMatch] {
@@ -3908,16 +3976,17 @@ final class WanderStore: ObservableObject {
         persist()
     }
 
-    func follow(userID: String, source: FollowSource = .profile, backend: WanderBackend?) async {
+    @discardableResult
+    func follow(userID: String, source: FollowSource = .profile, backend: WanderBackend?) async -> Bool {
         let follow = upsertFollow(userID: userID, source: source)
 
         guard let follow else {
-            return
+            return relationship(to: userID) == .follower || relationship(to: userID) == .mutual
         }
 
         guard let backend else {
             persist()
-            return
+            return false
         }
 
         do {
@@ -3930,12 +3999,14 @@ final class WanderStore: ObservableObject {
             persist()
             await refreshRemoteSocialGraph(backend: backend)
             await refreshRemoteVisiblePlaces(backend: backend)
+            return true
         } catch {
             follow.syncStateRaw = SyncState.failed.rawValue
             follow.lastSyncError = remoteErrorMessage(error)
             lastRemoteError = follow.lastSyncError
             objectWillChange.send()
             persist()
+            return false
         }
     }
 
@@ -4204,14 +4275,16 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    func refreshRemoteSocialSurfaces(backend: WanderBackend?) async {
+    @discardableResult
+    func refreshRemoteSocialSurfaces(backend: WanderBackend?) async -> Bool {
         await refreshRemoteSocialSurfaces(in: Self.defaultRemoteViewport, backend: backend)
     }
 
-    func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async {
-        guard let backend else { return }
+    @discardableResult
+    func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async -> Bool {
+        guard let backend else { return false }
         let requestUserID = currentUser.id
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return false }
 
         let locallyFollowedProfileIDs = Set(following(of: requestUserID).map(\.id))
         var remoteFollowing: [ProfileShell]?
@@ -4224,12 +4297,12 @@ final class WanderStore: ObservableObject {
         if backend.followRepository != nil {
             do {
                 remoteFollowing = try await backend.following(userID: requestUserID)
-                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
                 remoteFollowers = try await backend.followers(userID: requestUserID)
             } catch {
                 firstRefreshError = firstRefreshError ?? error
             }
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
         }
         if backend.placeRepository != nil {
             do {
@@ -4237,7 +4310,7 @@ final class WanderStore: ObservableObject {
             } catch {
                 firstRefreshError = firstRefreshError ?? error
             }
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
         }
         let followedProfileIDs = locallyFollowedProfileIDs
             .union(remoteFollowing?.map(\.id) ?? [])
@@ -4245,14 +4318,14 @@ final class WanderStore: ObservableObject {
             .sorted()
 
         for profileID in followedProfileIDs {
-            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
             if backend.userPlaceRepository != nil {
                 do {
                     visiblePlacesByOwnerID[profileID] = try await backend.userPlaces(for: profileID)
                 } catch {
                     firstRefreshError = firstRefreshError ?? error
                 }
-                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
             }
             if backend.followRepository != nil {
                 do {
@@ -4260,11 +4333,11 @@ final class WanderStore: ObservableObject {
                 } catch {
                     firstRefreshError = firstRefreshError ?? error
                 }
-                guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
             }
         }
 
-        guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
         withDeferredPersistence {
             if let remoteFollowing, let remoteFollowers {
                 upsertRemoteSocialGraph(
@@ -4288,6 +4361,7 @@ final class WanderStore: ObservableObject {
             lastRemoteError = firstRefreshError.map(remoteErrorMessage)
             persist()
         }
+        return firstRefreshError == nil
     }
 
     func refreshRemoteProfileVisiblePlaces(profileID: String, backend: WanderBackend?) async {

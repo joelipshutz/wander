@@ -204,6 +204,14 @@ final class WanderBackend: ObservableObject {
         return try await profileRepository.searchProfiles(handleQuery: handleQuery)
     }
 
+    func discoverProfileRecommendations(limit: Int = 20) async throws -> [DiscoverPeopleRecommendation] {
+        guard let profileRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await profileRepository.discoverProfileRecommendations(limit: limit)
+    }
+
     func currentProfile() async throws -> LocalProfile? {
         guard let profileRepository else {
             throw WanderRemoteError.notConfigured

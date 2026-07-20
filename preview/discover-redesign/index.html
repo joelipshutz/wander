@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>rec.me · REC-90 Discover design room</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23D46F4D'/%3E%3Cpath d='M10 20V11h6.2c4.4 0 6.8 2 6.8 5s-2.4 5-6.8 5H14v-3h2.2c2 0 2.8-.7 2.8-2s-.8-2-2.8-2H14v6z' fill='%23FFF7EA'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@500;600;700;800&family=Funnel+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s6-5.9 6-12A6 6 0 0 0 6 9c0 6.1 6 12 6 12Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c.3-4 2.3-6 6-6s5.7 2 6 6M14.5 14c3.5-.6 5.6 1 6.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 3v16M15 5v16" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-discover" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z" fill="currentColor"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 21c.3-5 2.8-7.5 7.5-7.5s7.2 2.5 7.5 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M3 8.5c5.2-4 12.2-4 17.5-.1M6.5 12c3.2-2.2 7.6-2.2 10.8 0M10 15.5c1.3-.7 2.7-.7 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 4 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13M14 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M5 12h8c4 0 6 2 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="9" r="2" fill="currentColor"/><path d="m4 18 5-5 3 3 3-3 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <header class="lab-header">
+    <div>
+      <p class="eyebrow">REC-90 · pre-engineering design gate</p>
+      <h1>Discover that builds the network</h1>
+      <p class="lab-lede">Compare a Beli-balanced social shelf with a provenance-first answer engine. Both keep people visible and trusted evidence legible.</p>
+    </div>
+    <div class="status-chip"><span></span> Mock v1.2 · choose A or B</div>
+  </header>
+
+  <main class="design-room">
+    <aside class="control-rail" aria-label="Mock controls">
+      <section class="control-group">
+        <p class="control-label">View</p>
+        <div class="seg-control" role="group" aria-label="Artifact view">
+          <button class="seg-button is-active" data-workspace="journeys">Main journeys</button>
+          <button class="seg-button" data-workspace="states">State boards</button>
+        </div>
+      </section>
+
+      <section class="control-group journey-controls">
+        <p class="control-label">Journey</p>
+        <nav class="scenario-list" aria-label="Journey screens">
+          <p class="scenario-group-label"><span>A</span>Beli-balanced</p>
+          <button class="scenario-button is-active" data-screen="places-populated"><span>01</span><b>Places · home</b><small>Activity + strong recovery</small></button>
+          <button class="scenario-button" data-screen="activity-empty"><span>02</span><b>Places · empty</b><small>Persistent tabs + Find People</small></button>
+          <button class="scenario-button" data-screen="people-populated"><span>03</span><b>People · suggestions</b><small>Trust reasons + follow value</small></button>
+          <button class="scenario-button" data-screen="people-search"><span>04</span><b>People · search</b><small>Query replaces shelves</small></button>
+          <button class="scenario-button" data-screen="follow-success"><span>05</span><b>Follow · success</b><small>Inline acknowledgement</small></button>
+          <button class="scenario-button" data-screen="activity-unlocked"><span>06</span><b>Activity · unlocked</b><small>New follow changes value</small></button>
+          <button class="scenario-button" data-screen="strong-recovery"><span>07</span><b>Strong recovery</b><small>Been / Wanna Go</small></button>
+          <button class="scenario-button" data-screen="weak-recovery"><span>08</span><b>Weak recovery</b><small>No false visit claim</small></button>
+          <button class="scenario-button" data-screen="profile-open"><span>09</span><b>Profile · preview</b><small>Public shell before follow</small></button>
+          <button class="scenario-button" data-screen="signed-out"><span>10</span><b>Signed out</b><small>Honest People auth gate</small></button>
+          <p class="scenario-group-label direction-b-label"><span>B</span>Social answer engine</p>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-home"><span>B1</span><b>Answer engine · home</b><small>Search + people first</small></button>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-answer"><span>B2</span><b>Answer · Joe’s favorites</b><small>Provenance + truth contract</small></button>
+          <button class="scenario-button direction-b-button" data-screen="direction-b-empty"><span>B3</span><b>Answer · no favorites</b><small>Resolve Joe, never broaden</small></button>
+        </nav>
+      </section>
+
+      <section class="control-group state-controls" hidden>
+        <p class="control-label">Board</p>
+        <nav class="scenario-list" aria-label="State boards">
+          <button class="scenario-button is-active" data-board="places-states"><span>A</span><b>Places data</b><small>Loading through failure</small></button>
+          <button class="scenario-button" data-board="people-states"><span>B</span><b>People data</b><small>Partial + offline + search</small></button>
+          <button class="scenario-button" data-board="mutation-states"><span>C</span><b>Social mutations</b><small>Follow, dismiss, block</small></button>
+          <button class="scenario-button" data-board="recovery-states"><span>D</span><b>Place recovery</b><small>Evidence + resolution</small></button>
+          <button class="scenario-button" data-board="accessibility-states"><span>E</span><b>Responsive + a11y</b><small>320pt + largest type</small></button>
+        </nav>
+      </section>
+
+      <section class="control-group viewport-controls">
+        <p class="control-label">Preview</p>
+        <div class="compact-controls">
+          <button class="mini-button is-active" data-width="390">390pt</button>
+          <button class="mini-button" data-width="320">320pt</button>
+          <button class="mini-button" data-type="standard">Type 1×</button>
+          <button class="mini-button" data-type="large">Type 1.32×</button>
+        </div>
+      </section>
+
+      <section class="decision-note">
+        <p class="control-label">Locked intent</p>
+        <p>People stays prominent in both directions. Every place answer names its human source. Following unlocks authorized place evidence, never private previews.</p>
+      </section>
+    </aside>
+
+    <section class="preview-stage" aria-live="polite">
+      <div class="journey-workspace">
+        <div class="phone-note">
+          <span id="screen-kicker">Direction A · Journey 01 of 10</span>
+          <strong id="screen-title">Places home</strong>
+          <p id="screen-note">Default landing: newest-first Activity, then only the recovery shelf the evidence supports.</p>
+        </div>
+        <div class="phone-shell" id="phone-shell">
+          <div class="phone-bezel">
+            <div class="dynamic-island" aria-hidden="true"></div>
+            <div class="phone-canvas" id="phone-canvas"></div>
+          </div>
+        </div>
+        <div class="flow-rail" aria-label="Flow outcomes">
+          <p class="flow-rail-label">What this proves</p>
+          <ol id="flow-proof"></ol>
+        </div>
+      </div>
+
+      <div class="states-workspace" hidden>
+        <header class="board-header">
+          <div>
+            <p class="eyebrow" id="board-kicker">State board A</p>
+            <h2 id="board-title">Places data states</h2>
+          </div>
+          <p id="board-note">Loading never flashes empty. Cached content names its age. A failed recovery classifier does not invent a shelf.</p>
+        </header>
+        <div class="state-grid" id="state-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="lab-footer">
+    <span>Canonical mock · <code>preview/discover-redesign/</code></span>
+    <span>Native iOS target · 44pt minimum actions · no code implementation approved</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
