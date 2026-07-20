@@ -12613,3 +12613,9 @@ Selected-direction refinement result, 2026-07-20 10:14 PDT:
 - Removed the redundant Paste link or coordinates CTA. I'm here now and From a photo are now the only secondary actions and share the same dock-row structure, subtitle treatment, trailing chevron, hit target, and enclosing surface.
 - The arm64 simulator build passed on iPhone 16 Plus / iOS 18.6, and `git diff --check` passed. Fresh renders on iPhone 16 Plus and iPhone 16e confirm the full ghost text and both action labels fit without truncation.
 - Updated the private design report and baseline to mark refined D as the selected implementation direction. Production behavior remains unchanged and the shelved save-flow draft remains untouched. Next: publish this mock refinement to draft PR #118 and return REC-17 to review.
+
+Refinement publishing handoff, 2026-07-20 10:14 PDT:
+
+- Committed the selected-direction update as `2fd54ac` (`feat: refine selected Add launcher mock`) and pushed it to draft PR #118.
+- Returned Linear REC-17 to `In Review` and added handoff comment `ee86fb71-119f-40b2-861c-281bcce983b9` with the selected interaction, validation, and explicit mock-only boundary.
+- Next implementation pass should treat the refined D screenshot as the approved launcher baseline, then reconcile the smart-field parser and the canonical Map save-flow work currently preserved in `stash@{0}`.
