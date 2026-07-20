@@ -12634,6 +12634,127 @@ Release completion, 2026-07-17 20:00 PDT:
 - Shipped validation is 405 tests with zero failures, a passing generic iOS Simulator build, and a passing signed Release archive/upload. Known deferred behavior: provider metadata enrichment remains intentionally rate-limited and uses a persisted seven-day cooldown capped at four attempts, so a generic place may gain a more specific icon on a later background refresh.
 - No app, schema, auth, tester-data, or build-number change follows this record. This append-only completion entry is landing separately as docs-only release bookkeeping; build 78 remains the released binary from exact source `d2b650a4`.
 
+## 2026-07-18 13:51 PDT - Codex - REC-17 Add-vs-Map Save-Flow Diagnosis
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`Todo`)
+
+Goal: diagnose whether saving a place from the Add tab actually uses a different flow or persistence path from saving through the Map. This pass is read-only diagnosis plus coordination notes; Joe explicitly deferred implementation and the broader "super snappy" Add experience to a separate design review.
+
+Starting status and coordination:
+
+- Recreated the previously cleaned temporary worktree, fetched origin, and fast-forwarded the branch by 25 commits to exact current `origin/main` `02b812f`.
+- The worktree is clean. Other active worktrees are the root REC-60 notification branch and `/private/tmp/recme-rec90-discover-plan`; this pass will not edit their likely overlap surfaces.
+- REC-17 was reopened from Canceled to Todo with the renewed Add-tab save-flow report and acceptance context. Mission Control task creation was attempted earlier, but `localhost:4000` was not running.
+- Expected source inspection is `Wander/Features/Add/AddScreen.swift`, `Wander/Features/Map/MapScreen.swift`, root navigation/presentation wiring, and the shared store save APIs. No app source, test, project, schema, hosted data, build number, TestFlight, merge, or Slack change is in scope.
+
+Implementation restart, 2026-07-18 16:03 PDT:
+
+- Joe asked to continue REC-17 in a new isolated Add-flow worktree and specified the first speed-focused hierarchy: a Wanna Go save should keep category/place type and the note in the primary path, while every other optional field is skippable and collapsed by default behind an expandable caret/disclosure control.
+- Reused the already-created isolated worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; it is based on exact current `origin/main` `02b812fc8`. The only starting modification is this task-owned append-only diagnosis log. Root REC-60 and performance-audit worktrees are clean, and no current overlapping source edits were found.
+- Diagnosis confirms the Add tab is in fact different: `AddScreen` owns a parallel details form and calls `store.saveCandidate` directly, while Map presents `MapPlaceSaveFlowSheet` and submits `MapPlaceSaveSubmission` through its save orchestration. REC-17 is now `In Progress` with this evidence and the new design direction attached.
+- Mission Control task creation was retried and again failed because `localhost:4000` is not running. This is recorded but does not block the repo-required Linear workflow.
+- Expected implementation files are `Wander/Features/Add/AddScreen.swift`, the shared save surface and persistence boundary in `Wander/Features/Map/MapScreen.swift`, focused tests in `WanderTests/`, and this log. `MapScreen.swift` is high-conflict, but current worktree inspection found no overlapping uncommitted edits; changes will stay narrowly inside the shared save-flow types and view.
+
+Add launcher design-review pivot, 2026-07-18 16:24 PDT:
+
+- Joe explicitly paused production implementation and requested SwiftUI mockups first. The new design scope is a compact medium/half-sheet Add launcher over whichever tab was already active, with an upper-right close control, interactive dismissal that leaves the prior tab selected, smaller controls, no manual-add option, and a fast scan hierarchy.
+- The mockups will compare separate Link and Coordinates actions against a combined smart input, while keeping I'm here now, Paste a link, From a photo, and the existing place search concept visible across the set. These are design directions only; root navigation, persistence, save orchestration, and production Add behavior will not change in this pass.
+- Shelved the task-owned production draft in `stash@{0}` as `REC-17 deferred implementation draft before Add mockups`. The stash contains only `AddScreen.swift`, `MapScreen.swift`, `NavigationContractTests.swift`, and `WanderStoreTests.swift`; it is recoverable after Joe selects a direction. The working tree was clean after shelving.
+- The earlier focused XCTest command compiled the app and entered testing but was interrupted when the scope changed. It exited 75 with `TEST INTERRUPTED`; `/tmp/DerivedData-rec17-add-flow-focused/Logs/Test/Test-Wander-2026.07.18_16-14-20--0700.xcresult` is neither a pass nor a failure.
+- REC-17 remains `In Progress` and has the mock-first scope recorded in Linear. Mission Control remains unavailable at `localhost:4000` from two earlier attempts. Expected mock-only files are a new Add launcher mockup source, debug launch routing in `WanderApp.swift`, regenerated XcodeGen project membership, screenshots/design-review artifacts, and this log.
+
+Add launcher mock handoff, 2026-07-18 16:49 PDT:
+
+- Added four debug-only native SwiftUI Add-launcher directions in `AddLauncherMockups.swift`: A Quick Grid, B Source Tabs, C Smart Input, and D Action Dock. Each renders as a native medium-detent sheet over the previous map surface, supports drag/X dismissal, preserves the previous tab, removes manual add, and keeps visible compact controls at or above 44pt hit targets.
+- The comparison covers both product interpretations requested: A and B expose Link and Coordinates separately; C and D combine them through format recognition. All directions retain place search, I'm here now, and From a photo.
+- Visual review on iPhone 16 Plus and iPhone 16e favors A Quick Grid. It has the strongest three-second scan and makes all four supported sources explicit without mode learning. Recommendation: implement A with separate Link and Coordinates initially; treat C Smart Input as a later evolution only after format parsing is proven reliable.
+- Generated the Xcode project successfully. The final arm64 simulator build passed on iPhone 16 Plus / iOS 18.6 with `ONLY_ACTIVE_ARCH=YES ARCHS=arm64`; `git diff --check` also passed. This mock-only pass did not run the full test suite or change production behavior.
+- Captured six simulator renders under `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/design-audit-20260718/screenshots/` and wrote the comparison/recommendation to the adjacent `report.md`. The small-phone pass found and fixed two copy truncations before final capture.
+- The prior production draft remains recoverable in `stash@{0}` (`REC-17 deferred implementation draft before Add mockups`) and is intentionally not part of this review branch. Next: Joe reviews the four directions and the incoming reference screenshot; after a direction is selected, restore/adapt the shelved implementation and wire the chosen launcher into the real root tab flow.
+
+Mock publishing handoff, 2026-07-18 16:51 PDT:
+
+- Committed the mock gallery as `53c573f` (`feat: add SwiftUI Add launcher mockups`), pushed `codex/rec-17-add-save-flow`, and opened draft PR #118 for design selection: https://github.com/joelipshutz/wander/pull/118.
+- Moved Linear REC-17 to `In Review`, attached the draft PR, and added validation/recommendation comment `a92619c9-8b55-4a4c-a960-49420df18249`.
+- The PR is intentionally draft and mock-only. Do not merge it as the production fix; first incorporate Joe's reference screenshot and selected direction, then restore or replace the shelved production save-flow work with matching tests.
+
+## 2026-07-20 10:10 PDT - Codex - REC-17 selected Add launcher refinement
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+
+Goal: refine the selected direction toward D Action Dock while removing its separate Paste link or coordinates CTA. The primary input ghost text must explicitly communicate that it accepts place search, pasted links, and coordinates; the only secondary actions should be I'm here now and From a photo, presented with matching affordances.
+
+Starting status and coordination:
+
+- Fetched origin and confirmed the isolated worktree is clean at `8a83d44`, matching the draft PR branch. Current `origin/main` is `469d198`; this mock-only iteration will remain narrowly scoped and will be updated from latest main before any merge or production implementation.
+- No active worktree overlaps `Wander/Features/Add/AddLauncherMockups.swift`. The production Add/save draft remains shelved in `stash@{0}` and will not be restored during this mock refinement.
+- Expected changes are `Wander/Features/Add/AddLauncherMockups.swift`, a refreshed simulator screenshot/design report outside the repo, and this log. No production Add behavior, persistence, schema, tests, build number, TestFlight, merge, or Slack work is in scope.
+
+Selected-direction refinement result, 2026-07-20 10:14 PDT:
+
+- Refined D Action Dock so the primary field ghost text reads `Search, paste a link, or add coordinates`, explicitly covering all three input formats handled by that field.
+- Removed the redundant Paste link or coordinates CTA. I'm here now and From a photo are now the only secondary actions and share the same dock-row structure, subtitle treatment, trailing chevron, hit target, and enclosing surface.
+- The arm64 simulator build passed on iPhone 16 Plus / iOS 18.6, and `git diff --check` passed. Fresh renders on iPhone 16 Plus and iPhone 16e confirm the full ghost text and both action labels fit without truncation.
+- Updated the private design report and baseline to mark refined D as the selected implementation direction. Production behavior remains unchanged and the shelved save-flow draft remains untouched. Next: publish this mock refinement to draft PR #118 and return REC-17 to review.
+
+Refinement publishing handoff, 2026-07-20 10:14 PDT:
+
+- Committed the selected-direction update as `2fd54ac` (`feat: refine selected Add launcher mock`) and pushed it to draft PR #118.
+- Returned Linear REC-17 to `In Review` and added handoff comment `ee86fb71-119f-40b2-861c-281bcce983b9` with the selected interaction, validation, and explicit mock-only boundary.
+- Next implementation pass should treat the refined D screenshot as the approved launcher baseline, then reconcile the smart-field parser and the canonical Map save-flow work currently preserved in `stash@{0}`.
+
+## 2026-07-20 11:05 PDT - Codex - REC-17 keyboard-aware sheet refinement
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+
+Goal: make the selected D launcher sit lower in its resting state and transition cleanly when the smart field opens or dismisses the keyboard.
+
+Starting status and coordination:
+
+- Fetched origin and confirmed the isolated draft-PR worktree is clean at `ee15cd2`, matching its remote branch. No active worktree overlaps the debug-only Add launcher mock source.
+- The intended interaction is a compact resting detent, an expanded keyboard/focus detent, interactive keyboard dismissal, and a smooth return to the lower resting position. The input will become a real focusable SwiftUI text field for this validation rather than remaining static ghost text.
+- Expected changes are `Wander/Features/Add/AddLauncherMockups.swift`, new down/keyboard-up simulator renders in the private design-review folder, and this log. Production navigation, Add/save behavior, persistence, tests, schema, build number, TestFlight, merge, and Slack remain out of scope; `stash@{0}` remains untouched.
+
+Keyboard-aware mock result, 2026-07-20 11:10 PDT:
+
+- Replaced D's static field shell with a real SwiftUI `TextField` and focus state. The sheet now rests at a compact 300pt detent, promotes with a 0.32-second snappy transition to the large detent on focus, and returns to rest when focus leaves or the Search key submits.
+- Added interactive keyboard dismissal to the sheet scroll surface. Dragging the sheet back to the resting detent also clears field focus so the keyboard and sheet settle together instead of fighting each other.
+- The smart field gets a terracotta focus ring/icon state and an accessible clear affordance once text exists. Existing ghost text and the two matched action rows remain unchanged.
+- The final arm64 simulator build passed on iPhone 16 Plus / iOS 18.6 and `git diff --check` passed. Captured down/focused states on iPhone 16 Plus and down/full-software-keyboard states on iPhone 16e; the larger simulator was in hardware-keyboard mode, while the 16e render directly confirms the full keyboard layout keeps the field and both actions unobscured.
+- Updated the private design report/baseline with the 300pt resting contract, focus transition, interactive dismissal, and four new screenshots. No production code or tests changed; the save-flow implementation stash remains untouched. Next: publish this interaction refinement to draft PR #118 and return REC-17 to review.
+
+Keyboard refinement publishing handoff, 2026-07-20 11:11 PDT:
+
+- Committed the interaction update as `17878fd` (`feat: refine Add sheet keyboard behavior`) and pushed it to draft PR #118.
+- Returned Linear REC-17 to `In Review` and added validation/interaction comment `7ea78981-2c33-4182-8df0-b7075b30f16c`.
+- The approved mock contract is now refined D plus the compact-rest/expanded-focus behavior. Production implementation remains the next pass; do not merge this debug mock as the REC-17 production fix.
+
+## 2026-07-20 11:53 PDT - Codex - REC-17 production ship pass
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+PR: #118 (`Draft`, currently conflicting before latest-main integration)
+
+Goal: ship the approved Add experience as production behavior: compact keyboard-aware launcher over the current tab, selected D source hierarchy, canonical Map save flow/persistence, and Wanna-first category/note hierarchy with optional fields collapsed by default.
+
+Starting status and release boundary:
+
+- Activated the repo-owned `recme-pr-review-merge-release` skill because Joe explicitly said `ship ship ship`. Its safety boundary classifies this as implementation/landing authorization, not an explicit TestFlight release request; this pass must stop after merge and durable status updates unless Joe separately asks for TestFlight.
+- Fetched origin. The worktree is clean at `2106c6f`; current `origin/main` is `469d198` and includes completed, live TestFlight build 81. No unfinished explicit TestFlight release exists.
+- Draft PR #118 still describes mock-only work and is `CONFLICTING/DIRTY` against latest main. First step is to integrate `origin/main`, preserve append-only log history, then convert the PR to production scope before review/merge.
+- The production draft remains in `stash@{0}` for inspection/recovery; do not blindly pop it across the newer main. Expected high-conflict source includes root tab presentation, `AddScreen.swift`, the shared Map save-flow types/sheet, focused tests, generated project membership if the mock source changes, and this log.
+- Mission Control remains unavailable at `localhost:4000`; the required GET retry failed immediately with connection refused. Linear and this log remain the live trackers.
 ## 2026-07-17 20:46 PDT - Codex - REC-101 App-Wide Performance
 
 Agent: Codex using the `investigate` workflow
@@ -13622,6 +13743,72 @@ TestFlight build-81 completion, 2026-07-19 01:38 PDT:
   save fails in some full-form flows, it may remain queued locally instead of
   retrying automatically. App Store production submission was not performed.
 
+REC-17 production implementation checkpoint, 2026-07-20 12:48 PDT:
+
+- Integrated exact current `origin/main` `469d198` into the isolated branch and
+  resolved the generated-project and append-only log conflicts without dropping
+  any mainline history. The existing REC-17 implementation stash remains
+  preserved as `stash@{0}` after its contents were applied and adapted.
+- Replaced the debug-only Add launcher gallery with the approved production
+  launcher: a 300pt resting sheet over the current tab, upper-right close,
+  compact smart field with the exact ghost text `Search, paste a link, or add
+  coordinates`, and only `I'm here now` plus `From a photo` action rows. Search
+  focus/keyboard expands to the large detent; interactive keyboard dismissal
+  and returning to the idle source state settle back to the lower detent.
+- Add now presents the canonical Map save sheet and persists through the shared
+  Map save helper instead of calling `store.saveCandidate` directly. New Wanna
+  saves lead with place/category and note; status, tags/labels, and privacy are
+  collapsed and unselected by default behind `more options`. Link, name, and
+  decimal/cardinal coordinate input all enter through the smart field.
+- Removed the obsolete manual-add surface, parallel Add details form, unused Add
+  save toast, debug mock launch route, and `AddLauncherMockups.swift`; regenerated
+  the Xcode project with XcodeGen.
+- A generic simulator build of the production implementation passed before the
+  mock source removal. A later incremental build was interrupted only because
+  the machine volume filled while compiling localized dependency resources; the
+  same-task DerivedData was cleaned and rebuilt successfully by the focused test
+  gate.
+- Focused final regression gate passed 4/4 on iPhone 16 Plus / iOS 18.6: canonical
+  Add-to-Map save ownership, compact Wanna defaults, canonical persistence, and
+  decimal/cardinal coordinate parsing. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_12-44-16--0700.xcresult`.
+- Next: production visual QA at rest and with keyboard on iPhone 16 Plus and
+  iPhone 16e, complete suite, review, ready PR #118, and squash merge. Per the
+  explicit release boundary, no build-number bump, archive, TestFlight upload,
+  hosted data change, or tester Slack post is in scope.
+
+REC-17 final validation and landing gate, 2026-07-20 14:05 PDT:
+
+- Production resting-state visual QA passed on iPhone 16 Plus / iOS 18.6: the
+  Add launcher presents as the approved low 300pt warm sheet over the current
+  tab with the compact smart field, two action rows, drag affordance, and close
+  control. Temporary XCUITest-only target/source artifacts were removed before
+  the final project generation and are not part of the shipping diff.
+- Keyboard QA initially exposed a focus race when detent expansion happened in
+  the same focus transaction. The production fix now lets the keyboard establish
+  focus, waits 120ms, and then expands with the snappy detent animation; losing
+  focus returns an otherwise idle launcher to the resting detent. The corrected
+  source compiled and passed the complete suite. A final screenshot attempt was
+  blocked by a stalled Xcode UI-test worker, so the corrected keyboard transition
+  has compile/regression evidence but not a retained post-fix screenshot artifact.
+- Restored the production-only Xcode project with `xcodegen generate` and
+  confirmed there are no `WanderUITests` references in `project.yml` or the
+  generated project. `git diff --check origin/main` passes; the final branch diff
+  is limited to Add/root/Map flow implementation, matching regression tests, and
+  this append-only coordination log.
+- Focused REC-17 regression gate passed 4/4 on iPhone 16 Plus / iOS 18.6:
+  canonical Add-to-Map ownership, compact Wanna defaults, canonical persistence,
+  and decimal/cardinal coordinate parsing. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_13-58-01--0700.xcresult`.
+- Complete repo-prescribed suite passed 458/458 with 0 failures on iPhone 16
+  Plus / iOS 18.6. Result bundle:
+  `/private/tmp/recme-rec17-add-save-flow/DerivedData/Logs/Test/Test-Wander-2026.07.20_14-03-08--0700.xcresult`.
+- Final code review found no blocking correctness, persistence, privacy,
+  navigation, accessibility, or scope issue. Next: commit the keyboard polish and
+  validation record, publish the validated branch, mark PR #118 ready, update
+  Linear REC-17 to In Review, and squash-merge. This remains a source-only ship;
+  no build-number bump, TestFlight upload, hosted data mutation, or Slack release
+  announcement is authorized.
 ## 2026-07-20 13:51 PDT - Codex - Current-main performance revalidation
 
 Agent: Codex using the `investigate` workflow

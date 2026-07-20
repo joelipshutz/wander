@@ -118,6 +118,21 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
+        XCTAssertFalse(addScreen.contains("store.saveCandidate("))
+        XCTAssertFalse(addScreen.contains("private var detailsForm"))
+        XCTAssertTrue(addScreen.contains("Search, paste a link, or add coordinates"))
+        XCTAssertTrue(addScreen.contains("\"I'm here now\""))
+        XCTAssertTrue(addScreen.contains("title: \"From a photo\""))
+        XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
+    }
+
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
