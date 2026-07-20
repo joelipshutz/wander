@@ -12648,3 +12648,21 @@ Keyboard refinement publishing handoff, 2026-07-20 11:11 PDT:
 - Committed the interaction update as `17878fd` (`feat: refine Add sheet keyboard behavior`) and pushed it to draft PR #118.
 - Returned Linear REC-17 to `In Review` and added validation/interaction comment `7ea78981-2c33-4182-8df0-b7075b30f16c`.
 - The approved mock contract is now refined D plus the compact-rest/expanded-focus behavior. Production implementation remains the next pass; do not merge this debug mock as the REC-17 production fix.
+
+## 2026-07-20 11:53 PDT - Codex - REC-17 production ship pass
+
+Agent: Codex
+Branch: `codex/rec-17-add-save-flow`
+Worktree: `/private/tmp/recme-rec17-add-save-flow`
+Linear: `REC-17` (`In Progress`)
+PR: #118 (`Draft`, currently conflicting before latest-main integration)
+
+Goal: ship the approved Add experience as production behavior: compact keyboard-aware launcher over the current tab, selected D source hierarchy, canonical Map save flow/persistence, and Wanna-first category/note hierarchy with optional fields collapsed by default.
+
+Starting status and release boundary:
+
+- Activated the repo-owned `recme-pr-review-merge-release` skill because Joe explicitly said `ship ship ship`. Its safety boundary classifies this as implementation/landing authorization, not an explicit TestFlight release request; this pass must stop after merge and durable status updates unless Joe separately asks for TestFlight.
+- Fetched origin. The worktree is clean at `2106c6f`; current `origin/main` is `469d198` and includes completed, live TestFlight build 81. No unfinished explicit TestFlight release exists.
+- Draft PR #118 still describes mock-only work and is `CONFLICTING/DIRTY` against latest main. First step is to integrate `origin/main`, preserve append-only log history, then convert the PR to production scope before review/merge.
+- The production draft remains in `stash@{0}` for inspection/recovery; do not blindly pop it across the newer main. Expected high-conflict source includes root tab presentation, `AddScreen.swift`, the shared Map save-flow types/sheet, focused tests, generated project membership if the mock source changes, and this log.
+- Mission Control remains unavailable at `localhost:4000`; the required GET retry failed immediately with connection refused. Linear and this log remain the live trackers.
