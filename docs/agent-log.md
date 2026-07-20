@@ -12642,3 +12642,9 @@ Keyboard-aware mock result, 2026-07-20 11:10 PDT:
 - The smart field gets a terracotta focus ring/icon state and an accessible clear affordance once text exists. Existing ghost text and the two matched action rows remain unchanged.
 - The final arm64 simulator build passed on iPhone 16 Plus / iOS 18.6 and `git diff --check` passed. Captured down/focused states on iPhone 16 Plus and down/full-software-keyboard states on iPhone 16e; the larger simulator was in hardware-keyboard mode, while the 16e render directly confirms the full keyboard layout keeps the field and both actions unobscured.
 - Updated the private design report/baseline with the 300pt resting contract, focus transition, interactive dismissal, and four new screenshots. No production code or tests changed; the save-flow implementation stash remains untouched. Next: publish this interaction refinement to draft PR #118 and return REC-17 to review.
+
+Keyboard refinement publishing handoff, 2026-07-20 11:11 PDT:
+
+- Committed the interaction update as `17878fd` (`feat: refine Add sheet keyboard behavior`) and pushed it to draft PR #118.
+- Returned Linear REC-17 to `In Review` and added validation/interaction comment `7ea78981-2c33-4182-8df0-b7075b30f16c`.
+- The approved mock contract is now refined D plus the compact-rest/expanded-focus behavior. Production implementation remains the next pass; do not merge this debug mock as the REC-17 production fix.
