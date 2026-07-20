@@ -12773,3 +12773,68 @@ Follow-up, 2026-07-19:
   https://recmegroup.slack.com/archives/D0B90ELP4K1/p1784482741987909.
 - Ryan's Vercel access remains the only incomplete item; PR #122 remains a
   draft and Linear `REC-102` remains `In Progress` until that access is enabled.
+
+## 2026-07-20 12:32 PDT - Codex - REC-102 Website Launch
+
+Agent: Codex
+Branch: `codex/rec-102-site-launch` (coordination log) and
+`codex/getrec-me-launch` (`joelipshutz/recme-site`)
+Worktrees: `/private/tmp/recme-rec102-site-log` and
+`/private/tmp/recme-site-source`
+Linear: `REC-102` (`In Progress`)
+
+Goal: implement the first production rec.me marketing site in the existing
+standalone repository, deploy it through the linked Vercel project, and replace
+the Squarespace placeholder at `getrec.me` with the new site.
+
+Starting status:
+
+- Fetched `origin`, inspected the dirty root checkout and existing worktrees,
+  and continued the existing REC-102 tracker rather than creating a duplicate.
+- The Wander root checkout has an unrelated untracked `.pnpm-store/` and is on
+  another feature branch, so this required log update is isolated in its own
+  worktree and does not touch or remove that state.
+- `joelipshutz/recme-site` contains only an initial README on `main`; no website
+  implementation exists to preserve or port.
+- The existing Vercel `recme-site` project is already linked to that GitHub
+  repository. `getrec.me` currently returns a Squarespace Coming Soon page with
+  `noindex`, so domain cutover must replace that placeholder rather than an
+  active production site.
+- Site direction follows `DESIGN.md` and the product spec: warm cream/espresso/
+  terracotta palette, map-first product story, trusted people instead of public
+  popularity, cross-category places, and explicit no-live-location messaging.
+- Expected site files: `index.html`, `styles.css`, `package.json`, lockfile,
+  `vercel.json`, app icon asset, and `README.md`. Expected Wander file:
+  `docs/agent-log.md` only.
+
+Handoff, 2026-07-20 13:35 PDT:
+
+- Implemented the complete responsive marketing page in
+  `joelipshutz/recme-site` on `codex/getrec-me-launch`: map-first hero, product
+  explanation, trusted-people/privacy positioning, TestFlight CTAs, responsive
+  mobile layout, reduced-motion support, metadata, app icon, and Vercel security
+  headers.
+- Initial Vite production build succeeded (`dist/index.html`, compiled CSS, and
+  icon output) and `git diff --check` passed. The final deployment source was
+  simplified to dependency-free static HTML/CSS to remove package-manager build
+  risk; visual/product output is unchanged.
+- Pushed commits `5c9f24d` and `0d7b7c6` and opened
+  `joelipshutz/recme-site` PR #1:
+  https://github.com/joelipshutz/recme-site/pull/1.
+- Vercel rejected both preview deployments before serving the site. This is
+  consistent with the existing REC-102 access blocker: the Git commit author is
+  Ryan, but Ryan still cannot be a member of Joe's Hobby-plan Vercel team, so
+  Vercel will not authorize his Git-triggered deployment. Removing all build
+  dependencies did not change the failure, ruling out the site build itself.
+- Production cutover is therefore intentionally not performed. `getrec.me`
+  still serves the Squarespace Coming Soon page; DNS was not modified, the
+  failing PR was not merged, and no live site was disrupted.
+- Exact restart: Joe should either upgrade/enable Vercel collaboration and add
+  Ryan, or merge/redeploy PR #1 from Joe's Vercel-authorized GitHub identity.
+  After a successful production deployment, add both `getrec.me` and
+  `www.getrec.me` to the Vercel project, apply the exact DNS records Vercel
+  provides in Squarespace, make the apex canonical, verify HTTPS and the
+  TestFlight CTA, then update REC-102 to Done.
+- Known limitation: the social-card generation call returned no usable artifact,
+  so the launch uses text Open Graph metadata and the app icon only; this does
+  not block deployment.
