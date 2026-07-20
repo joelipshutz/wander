@@ -13809,3 +13809,90 @@ REC-17 final validation and landing gate, 2026-07-20 14:05 PDT:
   Linear REC-17 to In Review, and squash-merge. This remains a source-only ship;
   no build-number bump, TestFlight upload, hosted data mutation, or Slack release
   announcement is authorized.
+## 2026-07-20 13:51 PDT - Codex - Current-main performance revalidation
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/perf-revalidation`
+Worktree: `/private/tmp/recme-perf-revalidation`
+Related Linear: REC-101 and REC-104 (`Done`; read-only revalidation)
+
+Goal: revalidate the interaction-performance work against current build-81
+`main`, determine whether Joe's later REC-104 optimization duplicates any
+REC-101 work, and identify evidence-backed remaining improvements across
+Discover, Profile, and the rest of the app.
+
+Starting status and coordination:
+
+- Fetched exact `origin/main` `469d19896` into a clean isolated worktree. The
+  root checkout remains on an unrelated gone REC-88 branch with untracked
+  `.pnpm-store/`; it will not be modified.
+- Current history places REC-101 (`b0b20a652`) immediately before Joe's
+  REC-104 (`4417b303a`), followed by build 80, REC-95 list-map, and build 81.
+  The audit will trace all later edits for overlap, reversion, or new cost.
+- This phase is diagnostic only. No product code, build number, TestFlight
+  state, Linear status, hosted data, or tester communication will change.
+- Three parallel read-only reviews cover commit-level overlap, remaining
+  Discover/Profile scrolling costs, and app-wide opportunities. Exact current
+  regression tests and available performance fixtures will provide the local
+  revalidation evidence.
+
+Completion checkpoint, 2026-07-20 14:03 PDT:
+
+- Revalidated exact build-81 `origin/main` `469d19896`. Joe's REC-104 commit
+  `4417b303a` is the direct child of REC-101 `b0b20a652` and is complementary,
+  not duplicative. REC-101 covers interaction-time category/avatar, Discover,
+  Profile, visible/list projection, persistence-write, and social-refresh
+  paths. REC-104 adds a launch-scoped index only for visit reconciliation.
+  Later REC-105 and REC-95 edits preserve both fixes.
+- The focused realistic-account regression passed on the installed iPhone 17
+  Pro / iOS 26.5 Simulator in 0.721 seconds. Current-main reconciliation logged
+  `backfill_ms=10.196` and `refresh_ms=7.066` (17.262 ms total), versus the
+  recorded 1,150.7 ms pre-REC-104 result. Warm list projection logged
+  `candidate_ms=0.009`, `item_ms=1.683`, and `resolve_ms=0.936` (2.628 ms total).
+  Result bundle:
+  `/tmp/DerivedData-perf-revalidation/Logs/Test/Test-Wander-2026.07.20_13-54-37--0700.xcresult`.
+- The broader REC-101/REC-104 regression selection passed 28/28 tests in 0.404
+  seconds, covering visible/category projections, coalesced persistence,
+  Discover cancellation/laziness, Profile insights, avatar downsampling/cache,
+  and visit-alias reconciliation. Result bundle:
+  `/tmp/DerivedData-perf-revalidation/Logs/Test/Test-Wander-2026.07.20_13-58-49--0700.xcresult`.
+- The full current-main suite passed 454/454 tests in 5.249 seconds on the same
+  Simulator. The first sandboxed attempt could not contact CoreSimulator and
+  exercised no app code; the required rerun with normal Simulator access
+  succeeded. Result bundle:
+  `/tmp/DerivedData-perf-revalidation/Logs/Test/Test-Wander-2026.07.20_14-03-01--0700.xcresult`.
+- The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed here,
+  and the connected iPhone 15 Pro remains unavailable. This revalidation does
+  not claim a fresh physical-device SwiftUI, Animation Hitches, or Time Profiler
+  trace; that is the remaining acceptance gap for tactile scroll quality.
+- Highest-confidence new finding: Map marker selection is currently near
+  quadratic. `MapScreen` already iterates `visiblePlaceGroups`, but every marker
+  calls `isSelectedMapRepresentative`, which calls
+  `VisiblePlaceGrouping.matchingGroup` and rebuilds every group again. At the
+  existing 900-place / 1,620-save fixture this can perform about 1.46 million
+  grouping iterations plus regex normalization in one body update. The first
+  implementation slice should compare the existing `group.key` directly to the
+  selected key, add a grouping-build-count scale regression, then viewport-bound
+  or cluster annotations.
+- Remaining P1 opportunities are also non-duplicative: index relationship and
+  block state once for cold visible-place projection (the prior real-account
+  trace still measured 144.911 ms); batch remote-refresh publications, cache
+  invalidation, and array reconciliation into one logical apply; move complete
+  snapshot materialization off the main actor or make it incremental; reuse the
+  avatar downsampling/cache design for visit/place photos; and make the Profile
+  Been/Wanna and large-list destinations lazy with revision-keyed presenters.
+- P2 follow-ons: cache Profile input assembly and static-map request/compositing,
+  replace Discover's full-array task signature with a narrow visible-data
+  revision, batch Profile visit fetches, benchmark REC-95 list-map projection,
+  and replace pairwise list-map clustering before lists grow large. Do not make
+  `ProfileOwnerHome` lazy: REC-94 deliberately protects its calendar/MapKit
+  scroll behavior.
+- The full test-host log emitted a CoreLocation main-thread responsiveness
+  diagnostic. No app call to `locationServicesEnabled` exists; the only local
+  provider reads `authorizationStatus` on its documented main-actor boundary.
+  Capture a stack trace before treating the message as an app-owned root cause.
+- Outcome: read-only diagnosis complete with concerns. No product source,
+  Linear status, build number, TestFlight state, hosted data, or tester-facing
+  communication changed. Recommended next issue: fix and benchmark the Map
+  regroup-per-marker path first, then implement indexed cold projection and one
+  transactional remote-refresh apply before another physical-device trace.
