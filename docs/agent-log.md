@@ -14302,3 +14302,33 @@ Parallel release reconciliation, 2026-07-20 15:07 PDT:
   It changes no app binary or hosted schema/data. REC-90 remains `In Progress`
   until that ready PR is squash-merged, after which its successful TestFlight
   and strict hosted smoke evidence can be reconciled to `Done`.
+
+Build-82 smoke/release completion, 2026-07-20 15:16 PDT:
+
+- Published ready PR #135, verified its exact two-file scope, clean mergeability,
+  no failing checks, and no blocking independent review finding, then
+  squash-merged it to `main` as `443c1242d3666736b245eb4f27d10b05ccd25de2`:
+  https://github.com/joelipshutz/wander/pull/135. Deleted the merged remote
+  branch after GitHub's local cleanup step was blocked only because another
+  worktree owns `main`.
+- Final PR validation: Node syntax check passed; `git diff --check` passed;
+  exact dependency install reported zero vulnerabilities; migration ledger was
+  aligned through `20260717180000`; and the strict linked hosted smoke passed
+  with all fixture and behavior mutations rolled back. The released app source
+  had already passed 465/465 tests and the signed device archive gate.
+- Independent App Store Connect verification after the parallel release
+  confirms rec.me `0.1 (82)` / build id
+  `1da16d6f-a976-4eee-8f35-feb0abb13452` remains `VALID`, not expired, export
+  compliant, attached to `rec.me Alpha`, and externally `APPROVED`. No duplicate
+  export, upload, TestFlight mutation, or Slack announcement occurred.
+- Added the PR, hosted smoke, TestFlight, and tester-note evidence to Linear
+  REC-90 and moved it to `Done`. REC-17 was already `Done` from Joe's completed
+  build-82 lane. Public TestFlight link:
+  https://testflight.apple.com/join/knEhRa6t. Tester note:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784584547863859.
+- Known non-blocking test follow-up: the direct-Postgres JS path now has broader
+  metadata/anonymous/caller assertions but could not be hosted-executed on this
+  machine without a DB URL/password. The credentialless linked path strictly
+  ran the committed 23-assertion Discover pgTAP contract; future parity can add
+  its extra ACL plus blocked/self/unauthenticated follow cases to that pgTAP
+  file. This does not block the already-approved build or REC-90 behavior.
