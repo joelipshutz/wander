@@ -12745,3 +12745,19 @@ REC-90 final integrated handoff, 2026-07-18 15:57 PDT:
 - Committed the validated latest-main integration as merge commit `2199fc1` and pushed it to `codex/rec-90-discover-plan`.
 - GitHub now reports ready PR #97 `MERGEABLE` against exact base `02b812fc8`; Linear REC-90 remains `In Review` with the full hosted-data and validation evidence attached.
 - The REC-90 worktree is clean and handed off. Work now moves to the separate latest-main Add-flow worktree `/private/tmp/recme-rec17-add-save-flow` on `codex/rec-17-add-save-flow`; no Discover files will be edited from that task.
+
+## 2026-07-20 09:45 PDT - Codex - REC-90 modular people simulator mock
+
+Agent: Codex
+Branch: `codex/rec-90-people-modules-mock`
+Worktree: `/private/tmp/recme-rec90-people-modules-mock`
+Linear: `REC-90` (`In Progress`)
+
+Goal: produce simulator screenshots, before production implementation, for two visually distinct and eventually independently ranked Discover modules: `People you may know` from the follow graph/contacts and `Popular in Los Angeles` from city/popularity signals.
+
+Start state and coordination:
+
+- Created this isolated worktree from clean `origin/codex/rec-90-discover-plan` so the ready REC-90 PR #97 is not changed while the new direction is still awaiting visual approval.
+- Expected files are a debug-only Discover people-modules mock, the debug launch-argument route in `Wander/App/WanderApp.swift`, regenerated project membership if required, simulator screenshots outside the repo, and this append-only log.
+- No production recommendation query, Supabase RPC, hosted data, auth, schema, follow behavior, or TestFlight build will change in this mock pass.
+- Mission Control task `d79554d8-6451-4b1a-8fe3-e9daff3a325d` could not be updated because `localhost:4000` is unavailable. Linear REC-90 is the live tracker for this pass.

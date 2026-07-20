@@ -274,6 +274,23 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testDiscoverPeopleModulesMockupLaunchArgumentsResolvePages() {
+        XCTAssertNil(DiscoverPeopleModulesMockupPage.resolved(from: ["Wander"]))
+        XCTAssertEqual(
+            DiscoverPeopleModulesMockupPage.resolved(from: ["Wander", "-WanderDiscoverPeopleModulesMockup"]),
+            .populated
+        )
+
+        for page in DiscoverPeopleModulesMockupPage.allCases {
+            XCTAssertEqual(
+                DiscoverPeopleModulesMockupPage.resolved(
+                    from: ["Wander", "-WanderDiscoverPeopleModulesMockup", page.rawValue]
+                ),
+                page
+            )
+        }
+    }
+
     func testRetiredSharedVisitInvitationMockCannotReplaceTheProductionApp() throws {
         let retiredIdentifiers = [
             "WanderSharedVisitInvitationMockup",
