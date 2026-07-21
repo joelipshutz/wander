@@ -15073,3 +15073,19 @@ Handoff, 2026-07-21 16:26 PDT:
 - The implementation itself is ready for Xcode testing now from
   `/private/tmp/recme-rec115-back-arrow`. No TestFlight build, merge, release,
   Slack reply, or build-number change was requested or performed.
+
+GitHub authentication and PR completion, 2026-07-21 16:50 PDT:
+
+- At Ryan's explicit request, reauthenticated GitHub CLI through the browser
+  device flow. `gh auth status` now confirms active account `ryanlane23` with
+  repository access; `gh repo view` confirms `WRITE` permission on
+  `joelipshutz/wander`. No credential value was printed or stored in the repo.
+- Confirmed the prior connector failures did not create a duplicate PR and
+  verified the branch is current with `origin/main` (zero commits behind, two
+  commits ahead). Opened ready PR #146 from `codex/rec-115-back-arrow` to
+  `main`: https://github.com/joelipshutz/wander/pull/146.
+- The PR body omits the internal Slack permalink while retaining the fix,
+  root-cause, impact, test, simulator, and runtime-gap evidence. PR #146 is
+  `OPEN`, is not a draft, and contains no TestFlight or release action.
+- Next durable status is Linear REC-115 `In Review`; merging/release remains a
+  separate workflow and was not requested here.
