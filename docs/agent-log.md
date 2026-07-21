@@ -14883,3 +14883,51 @@ TestFlight build 84 release completed, 2026-07-21 14:46 PDT:
   https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784666728152069.
   Linear REC-107 is `Done` with the complete release evidence. No App Store
   production submission or marketing-version change was made.
+
+Feed refresh regression investigation started, 2026-07-21 14:14 PDT:
+
+- Joe reported that TestFlight build 84 shows “Couldn’t update Feed,” then
+  falls into a visually unrelated empty state. Linear `REC-121` tracks this as
+  a P1. Working in isolated worktree `/private/tmp/recme-rec121-feed-refresh`
+  on `codex/rec-121-feed-refresh`, created from `origin/main` at `f9600bb`;
+  the worktree was clean at start.
+- Hosted verification already confirms `public.followed_feed(null, 25)` works
+  under Joe's authenticated profile and returns the expected empty page shape.
+  Investigation is therefore focused on the iOS request/decode path and a
+  Feed-shaped recovery UI, not changing the deployed RLS/RPC contract.
+- Expected source/test scope: `Wander/Services/WanderLocalStore.swift`,
+  `Wander/Features/Feed/FeedScreen.swift`, `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/RemoteRepositoryTests.swift`, `WanderTests/NavigationContractTests.swift`,
+  and this log. No migration or TestFlight release is authorized by this task.
+
+Feed refresh regression root cause and fix checkpoint, 2026-07-21 14:41 PDT:
+
+- Reproduced the real production failure in `RemoteRepositoryTests`: the hosted
+  envelope's `fetched_at` value has fractional seconds
+  (`2026-07-21T21:10:46.447909+00:00`) but `JSONDecoder.DateDecodingStrategy.iso8601`
+  rejects that shape. This was the direct cause of the Feed's remote refresh
+  error; the database RPC itself was healthy.
+- Replaced the shared remote decoder with a MainActor-isolated ISO-8601 decoder
+  that accepts both fractional and standard timestamps. Added an explicit
+  regression test using the hosted response shape.
+- Feed now retries one initial token-readiness failure only, refreshes again
+  when the signed-in state changes, and renders a Feed-shaped placeholder rail
+  and flat rows plus Retry for any cold/stale load failure. It never presents
+  placeholders as real activity or routes the user to the generic empty state.
+- Static parse and diff checks pass. The focused iPhone 16 Plus test run passed
+  4/4 after the decoder fix; full suite validation is running from the warm
+  derived-data cache. No migration, RLS, or hosted data change was made.
+
+Feed refresh regression handoff, 2026-07-21 14:53 PDT:
+
+- Committed the implementation as `6a76eef` (`fix: decode Feed timestamps and
+  recover gracefully`) and opened PR #142:
+  https://github.com/joelipshutz/wander/pull/142
+- Validation passed: focused Feed regressions 4/4 and complete iPhone 16 Plus
+  / iOS 18.6 suite 488/488. Full result bundle:
+  `/private/tmp/recme-rec121-derived/Logs/Test/Test-Wander-2026.07.21_14-46-50--0700.xcresult`.
+- REC-121 is ready for review. Do not merge or create a TestFlight build from
+  this bug-feedback workflow; a later explicit release request should package
+  the then-current `main`.
+- Linear `REC-121` is In Review with the PR and validation evidence. Mission
+  Control task `6c67ce7c-b38f-406f-9977-cba374767648` is also in Review.
