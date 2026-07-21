@@ -14764,3 +14764,18 @@ Device deployment completed, 2026-07-21 12:20 PDT:
   then installed and foreground-launched it with demo fixtures on the Feed
   surface. No TestFlight, App Store Connect, build-number, migration, backend,
   or production data change was made.
+
+Feed save and styling follow-up started, 2026-07-21 12:35 PDT:
+
+- Joe reported that tapping Feed's save affordance does nothing, and requested
+  it use the regular save flow. Source inspection confirmed `FeedScreen` uses
+  a direct background `store.saveVisiblePlace` path rather than the canonical
+  `MapPlaceSaveFlowSheet` already used by Add, Map, Discover, and Profile.
+- This follow-up will replace that shortcut with `MapPlaceSaveContext` plus the
+  shared sheet/submission path, then flatten activity presentation onto the
+  screen canvas with hairline dividers rather than a bordered rounded container.
+- Working in the existing PR #139 branch `codex/rec-107-feed-mock` at
+  `6821f19`. Pre-existing generated `DerivedData-device/`,
+  `DerivedData-people-tab/`, and `DerivedData-people-tab-validate/` remain
+  untracked and will not be staged. Expected source/tests: `FeedScreen.swift`,
+  `NavigationContractTests.swift`, and this log.

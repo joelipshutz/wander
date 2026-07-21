@@ -7,9 +7,8 @@ struct FeedScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var isShowingSearch = false
     @State private var selectedProfile: FeedProfileRoute?
-    @State private var savingActivityIDs = Set<String>()
-    @State private var savedActivityIDs = Set<String>()
-    @State private var failedActivityIDs = Set<String>()
+    @State private var placeSaveFlow: MapPlaceSaveContext?
+    @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
     @State private var selectedSurface: FeedSurface = .places
 
@@ -52,6 +51,20 @@ struct FeedScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+            .sheet(item: $placeSaveFlow) { context in
+                MapPlaceSaveFlowSheet(context: context) { submission in
+                    await saveFeedFlowSubmission(submission)
+                } onRemove: { _ in
+                    false
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .alert("Saved to your map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
+                Button("OK", role: .cancel) { savedMessage = nil }
+            } message: {
+                Text(savedMessage ?? "")
+            }
         }
     }
 
@@ -91,9 +104,6 @@ struct FeedScreen: View {
             FeedSectionHeading(title: "Your feed", detail: freshnessDetail)
             FeedActivityList(
                 activity: page.activity,
-                savingActivityIDs: savingActivityIDs,
-                savedActivityIDs: savedActivityIDs,
-                failedActivityIDs: failedActivityIDs,
                 openProfile: openProfile,
                 save: save,
                 openList: openList
@@ -155,34 +165,49 @@ struct FeedScreen: View {
     }
 
     private func saveFeaturedPlace(_ featured: FeedFeaturedPlace) {
-        save(place: featured.visiblePlace, activityID: "featured-\(featured.id)")
+        beginSave(visiblePlace: featured.visiblePlace)
     }
 
     private func save(_ activity: FeedActivity) {
         guard let place = activity.place else { return }
-        save(place: place, activityID: activity.id)
+        beginSave(visiblePlace: place)
     }
 
-    private func save(place: VisiblePlace, activityID: String) {
-        guard !savingActivityIDs.contains(activityID), !savedActivityIDs.contains(activityID) else { return }
-
+    private func beginSave(visiblePlace: VisiblePlace) {
         auth.requireSignIn(for: .socialSave) {
-            Task { @MainActor in
-                savingActivityIDs.insert(activityID)
-                failedActivityIDs.remove(activityID)
-                let result = await store.saveVisiblePlace(
-                    place,
-                    status: .wannaGo,
-                    backend: auth.isSignedIn ? backend : nil
-                )
-                savingActivityIDs.remove(activityID)
-                if result.syncState == .failed {
-                    failedActivityIDs.insert(activityID)
-                } else {
-                    savedActivityIDs.insert(activityID)
-                }
-            }
+            placeSaveFlow = MapPlaceSaveContext.addVisiblePlace(
+                visiblePlace,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: attributes(for: visiblePlace)
+            )
         }
+    }
+
+    @MainActor
+    private func saveFeedFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
+        guard case .add(let sourceType) = submission.context.mode else { return nil }
+        guard sourceType != .socialSave || auth.isSignedIn else {
+            placeSaveFlow = nil
+            auth.presentGate(for: .socialSave)
+            return nil
+        }
+
+        guard let result = await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        ) else { return nil }
+
+        await refresh()
+        savedMessage = result.syncState == .synced
+            ? "Saved."
+            : "Saved locally. We'll retry sync."
+        return result
+    }
+
+    private func attributes(for visiblePlace: VisiblePlace) -> [LocalPlaceAttribute] {
+        let storeAttributes = store.attributes(for: visiblePlace.userPlace.id)
+        return storeAttributes.isEmpty ? visiblePlace.attributes : storeAttributes
     }
 
     private func follow(_ recommendation: DiscoverPeopleRecommendation) {
@@ -847,9 +872,6 @@ private struct FeedFeaturedCard: View {
 
 private struct FeedActivityList: View {
     let activity: [FeedActivity]
-    let savingActivityIDs: Set<String>
-    let savedActivityIDs: Set<String>
-    let failedActivityIDs: Set<String>
     let openProfile: (ProfileShell) -> Void
     let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
@@ -859,9 +881,6 @@ private struct FeedActivityList: View {
             ForEach(Array(activity.enumerated()), id: \.element.id) { index, event in
                 FeedActivityModule(
                     activity: event,
-                    isSaving: savingActivityIDs.contains(event.id),
-                    isSaved: savedActivityIDs.contains(event.id),
-                    didFailSave: failedActivityIDs.contains(event.id),
                     openProfile: openProfile,
                     save: save,
                     openList: openList
@@ -873,20 +892,11 @@ private struct FeedActivityList: View {
                 }
             }
         }
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
     }
 }
 
 private struct FeedActivityModule: View {
     let activity: FeedActivity
-    let isSaving: Bool
-    let isSaved: Bool
-    let didFailSave: Bool
     let openProfile: (ProfileShell) -> Void
     let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
@@ -979,28 +989,16 @@ private struct FeedActivityModule: View {
             Button {
                 save(activity)
             } label: {
-                Group {
-                    if isSaving {
-                        ProgressView()
-                            .tint(WanderTheme.textOnAction.color)
-                    } else if isSaved {
-                        Label("Saved", systemImage: "checkmark")
-                    } else if didFailSave {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    } else {
-                        Label("Save to my map", systemImage: "plus")
-                    }
-                }
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(isSaved ? WanderTheme.terracotta.color : WanderTheme.textOnAction.color)
+                Label("Save to my map", systemImage: "plus")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 38)
-                .background(isSaved ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
+                .background(WanderTheme.terracotta.color)
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(isSaving || isSaved)
-            .accessibilityLabel(isSaved ? "Saved to my map" : "Save to my map")
+            .accessibilityLabel("Save to my map")
         }
     }
 

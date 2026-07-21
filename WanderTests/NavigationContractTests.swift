@@ -29,6 +29,27 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(feed.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(feed.contains("MapPlaceSaveContext.addVisiblePlace("))
+        XCTAssertTrue(feed.contains("persistNewPlaceSaveSubmission("))
+        XCTAssertFalse(feed.contains("store.saveVisiblePlace("))
+
+        let feedAfterActivityList = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityList: View").last
+        )
+        let activityList = try XCTUnwrap(
+            feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
+        )
+        XCTAssertTrue(activityList.contains("Divider()"))
+        XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
+        XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
+    }
+
     @MainActor
     func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
         XCTAssertEqual(
