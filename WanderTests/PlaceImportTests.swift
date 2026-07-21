@@ -350,7 +350,11 @@ final class PlaceImportStoreTests: XCTestCase {
             persistence: persistence,
             resolver: DevicePlaceImportResolver(
                 placeResolver: RoutingNoCandidateThrowingDevicePlaceResolver(routes: [
-                    "fremont lake": [placeImportCandidate(name: "Fremont Lake")]
+                    "fremont lake": [placeImportCandidate(
+                        name: "Fremont Lake",
+                        locality: "Pinedale",
+                        region: "WY"
+                    )]
                 ]),
                 metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
                 thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
@@ -383,7 +387,11 @@ final class PlaceImportStoreTests: XCTestCase {
             resolver: DevicePlaceImportResolver(
                 placeResolver: PartiallyThrowingDevicePlaceResolver(
                     successfulName: "Fremont Lake",
-                    candidate: placeImportCandidate(name: "Fremont Lake")
+                    candidate: placeImportCandidate(
+                        name: "Fremont Lake",
+                        locality: "Pinedale",
+                        region: "WY"
+                    )
                 ),
                 metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
                 thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
@@ -431,7 +439,11 @@ final class PlaceImportStoreTests: XCTestCase {
 
     func testManualSearchPreservesOneWeakMapKitCandidateForReview() async throws {
         let snapshot = try manualSearchFixtureSnapshot()
-        let weakCandidate = placeImportCandidate(name: "Farson Ice Cream")
+        let weakCandidate = placeImportCandidate(
+            name: "Farson Ice Cream",
+            locality: "Farson",
+            region: "WY"
+        )
         let placeResolver = FakeDevicePlaceResolver(candidates: [weakCandidate])
         let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
         let store = PlaceImportStore(
@@ -461,7 +473,11 @@ final class PlaceImportStoreTests: XCTestCase {
 
     func testManualSearchAutoSelectsAnExactMapKitCandidate() async throws {
         let snapshot = try manualSearchFixtureSnapshot()
-        let exactCandidate = placeImportCandidate(name: "Farson Mercantile")
+        let exactCandidate = placeImportCandidate(
+            name: "Farson Mercantile",
+            locality: "Farson",
+            region: "WY"
+        )
         let placeResolver = FakeDevicePlaceResolver(candidates: [exactCandidate])
         let store = PlaceImportStore(
             persistence: InMemoryPlaceImportPersistence(snapshot: snapshot),
@@ -886,7 +902,11 @@ final class PlaceImportStoreTests: XCTestCase {
         )
         let placeResolver = PartiallyThrowingDevicePlaceResolver(
             successfulName: "Fremont Lake",
-            candidate: placeImportCandidate(name: "Fremont Lake")
+            candidate: placeImportCandidate(
+                name: "Fremont Lake",
+                locality: "Pinedale",
+                region: "WY"
+            )
         )
         let store = PlaceImportStore(
             persistence: persistence,
@@ -1020,7 +1040,13 @@ final class PlaceImportStoreTests: XCTestCase {
             mediaItems: mediaItems
         )
         var routes = Dictionary(uniqueKeysWithValues: destinationNames.map { name in
-            (name.lowercased(), [placeImportCandidate(name: name)])
+            (name.lowercased(), [placeImportCandidate(
+                name: name,
+                locality: "Pinedale",
+                region: "WY",
+                latitude: 42.8,
+                longitude: -109.8
+            )])
         })
         routes["wind riyer range"] = routes["wind river range"]
         routes["pine coffee & supply"] = routes["pine coffee supply"]
@@ -1180,7 +1206,13 @@ final class PlaceImportStoreTests: XCTestCase {
         )
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(PlaceImportSnapshot.self, from: Data(contentsOf: url))
+        var snapshot = try decoder.decode(PlaceImportSnapshot.self, from: Data(contentsOf: url))
+        snapshot.items = snapshot.items.map { item in
+            var currentItem = item
+            currentItem.resolverVersion = PlaceImportItem.currentResolverVersion
+            return currentItem
+        }
+        return snapshot
     }
 
     private func waitForManualRequestCount(
@@ -1394,6 +1426,152 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
 @MainActor
 final class SocialPlaceImportMetadataTests: XCTestCase {
+    func testInstagramReelDoesNotTreatCreatorAttributionAsAPlace() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Frank N Frank's on Instagram",
+            caption: "@franknfranks is the latest Chinatown spot from veterans of Amboy and Howlin’s Ray’s, serving stacked sandwiches on house-made focaccia.",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let frank = placeImportCandidate(name: "Frank N Frank's")
+        let incidental = placeImportCandidate(name: "Veterans of Amboy")
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "franknfranks": [frank],
+            "veterans of amboy": [incidental]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/reel/Da9EdCzBFuw/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["franknfranks"])
+        XCTAssertEqual(resolution, .candidates([frank], selectedCandidateID: frank.id))
+    }
+
+    func testAcquisitionFromPhraseStillProducesAPlaceHint() {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Grab a sandwich from Maru Coffee.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        XCTAssertEqual(hints.map(\.name), ["Maru Coffee"])
+    }
+
+    func testAcquisitionFromPhraseRejectsPeopleAndCreatorAttribution() {
+        let captions = [
+            "Get restaurant recommendations from my friend Sara.",
+            "Get this from the veterans of Amboy.",
+            "Get the recipe from the team behind Maru Coffee."
+        ]
+
+        for caption in captions {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: nil,
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            XCTAssertTrue(hints.isEmpty, "Unexpected place hint for: \(caption)")
+        }
+    }
+
+    func testAcquisitionFromPhraseKeepsDistinctiveNameNonDurable() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Grab lunch from Gjusta.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        let hint = try XCTUnwrap(hints.first)
+        XCTAssertEqual(hint.name, "Gjusta")
+        XCTAssertEqual(hint.evidence, .acquisitionPhrase)
+        XCTAssertFalse(hint.evidence.shouldRemainVisibleWithoutCandidates)
+    }
+
+    func testAcquisitionFromPhraseKeepsVenueNamesBeginningWithFriend() {
+        let captions = [
+            "Grab pastries from Friends & Family.": "Friends & Family",
+            "Get coffee from Friendship Coffee.": "Friendship Coffee"
+        ]
+
+        for (caption, expectedName) in captions {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: nil,
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            XCTAssertEqual(hints.map(\.name), [expectedName], "Unexpected hints for: \(caption)")
+        }
+    }
+
+    func testOneOCRSlideStateDoesNotConstrainTheWholeCarousel() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: "Summer road trip guide",
+                caption: nil,
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: [
+                "an off the beaten path road trip through WYOMING",
+                "Skyline Drive Overlook"
+            ]
+        )
+
+        let skyline = try XCTUnwrap(hints.first { $0.name == "Skyline Drive Overlook" })
+        XCTAssertNil(skyline.area)
+    }
+
+    func testVenueNameContainingStateDoesNotBecomePostWideArea() throws {
+        for caption in [
+            "Dinner at California Grill.",
+            "Visit California Grill.",
+            "Disney World travel guide for dinner at California Grill."
+        ] {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: "Disney World travel guide",
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            let grill = try XCTUnwrap(hints.first { $0.name == "California Grill" })
+            XCTAssertNil(grill.area, "Unexpected post-wide area for: \(caption)")
+        }
+    }
+
     func testWyomingCarouselCaptionKeepsEveryNamedDestination() async throws {
         let metadata = SocialImportMetadata(
             title: "sunnrayy on Instagram",
@@ -1428,10 +1606,17 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
             "Farson Mercantile"
         ]
         let routes = Dictionary(uniqueKeysWithValues: destinationNames.map { name in
-            (name.lowercased(), [placeImportCandidate(name: name)])
+            (name.lowercased(), [placeImportCandidate(
+                name: name,
+                locality: "Pinedale",
+                region: "WY",
+                latitude: 42.8,
+                longitude: -109.8
+            )])
         })
+        let placeResolver = RoutingDevicePlaceResolver(routes: routes)
         let resolver = DevicePlaceImportResolver(
-            placeResolver: RoutingDevicePlaceResolver(routes: routes),
+            placeResolver: placeResolver,
             metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
             thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
         )
@@ -1449,6 +1634,77 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
             return XCTFail("Expected every itinerary destination to expand, got \(resolution)")
         }
         XCTAssertEqual(Set(entries.compactMap(\.seed.nameHint)), Set(destinationNames))
+        XCTAssertEqual(Set(placeResolver.manualInputs.compactMap(\.areaHint)), ["Wyoming"])
+        XCTAssertTrue(placeResolver.manualInputs.allSatisfy { $0.areaHint == "Wyoming" })
+    }
+
+    func testSocialResolutionNormalizesMapKitAliasesAndRejectsWrongStateResults() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Here’s my guide to a road trip through Wyoming! Stop at Farson Mercantile. Take a dip at Flaming Gorge. Enjoy the sunset at Skyline Drive Overlook!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let farson = placeImportCandidate(
+            name: "Farson Merc",
+            address: "4048 U.S. Highway 191, Farson, WY",
+            locality: "Farson",
+            region: "WY",
+            latitude: 42.109160,
+            longitude: -109.448601
+        )
+        let flamingGorge = placeImportCandidate(
+            name: "Flaming Gorge Reservoir",
+            locality: "Green River",
+            region: "WY",
+            latitude: 41.084987,
+            longitude: -109.545341
+        )
+        let skylineLosAngeles = (1...8).map { index in
+            placeImportCandidate(
+                name: "Skyline Drive Overlook",
+                locality: "Los Angeles",
+                region: "CA",
+                latitude: 34.0 + Double(index) / 1_000,
+                longitude: -118.2
+            )
+        }
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "farson mercantile": [farson],
+            "flaming gorge": [flamingGorge],
+            "skyline drive overlook": skylineLosAngeles
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/p/Dak2JCClKkF/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected three review entries, got \(resolution)")
+        }
+
+        XCTAssertEqual(placeResolver.manualInputs.map(\.areaHint), ["Wyoming", "Wyoming", "Wyoming"])
+        XCTAssertEqual(entries.map(\.seed.nameHint), [
+            "Farson Mercantile",
+            "Flaming Gorge",
+            "Skyline Drive Overlook"
+        ])
+        XCTAssertEqual(entries.map { $0.selectedCandidateID != nil }, [true, true, false])
+        XCTAssertEqual(entries[0].candidates.first?.name, "Farson Mercantile")
+        XCTAssertEqual(entries[0].candidates.first?.sourceProviderPlaceID, farson.sourceProviderPlaceID)
+        XCTAssertEqual(entries[1].candidates.first?.name, "Flaming Gorge")
+        XCTAssertTrue(entries[2].candidates.isEmpty)
+        XCTAssertNotNil(entries[2].helpMessage)
     }
 
     func testNamedCaptionDestinationRemainsVisibleWhenMapKitReturnsNoCandidates() async throws {
@@ -1662,6 +1918,150 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         )
 
         XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testCandidateMatcherTreatsMercAsMercantileAcrossStateNameFormats() {
+        let candidate = placeImportCandidate(
+            name: "Farson Merc",
+            address: "4048 U.S. Highway 191, Farson, WY",
+            locality: "Farson",
+            region: "WY",
+            latitude: 42.109160,
+            longitude: -109.448601
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Farson Mercantile",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testExplicitStateCodeWinsOverStateNameInsideCity() {
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Kansas City, MO"), "MO")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Washington, DC"), "DC")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Jackson, wy"), "WY")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Kansas City, Mo"), "MO")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Washington, D.C."), "DC")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "NE Portland, OR"), "OR")
+    }
+
+    func testLosAngelesShorthandDoesNotBecomeLouisianaSearchRegion() {
+        let losAngeles = ManualPlaceSearchPlan(name: "Gjusta", areaHint: "LA")
+        let downtown = ManualPlaceSearchPlan(name: "Gjusta", areaHint: "Downtown LA")
+        let batonRouge = ManualPlaceSearchPlan(name: "Coffee Call", areaHint: "Baton Rouge, LA")
+
+        XCTAssertEqual(losAngeles.query, "Gjusta LA")
+        XCTAssertNil(losAngeles.regionHint)
+        XCTAssertEqual(downtown.query, "Gjusta Downtown LA")
+        XCTAssertNil(downtown.regionHint)
+        XCTAssertEqual(batonRouge.query, "Coffee Call Baton Rouge")
+        XCTAssertNotNil(batonRouge.regionHint)
+    }
+
+    func testGeorgiaCountryDoesNotBecomeUSStateSearchRegion() {
+        let country = ManualPlaceSearchPlan(name: "Cafe Littera", areaHint: "Tbilisi, Georgia")
+        let ambiguous = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Georgia")
+        let postalState = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Savannah, GA")
+        let namedState = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Savannah, Georgia, USA")
+
+        XCTAssertEqual(country.query, "Cafe Littera Tbilisi, Georgia")
+        XCTAssertNil(country.regionHint)
+        XCTAssertEqual(ambiguous.query, "The Grey Georgia")
+        XCTAssertNil(ambiguous.regionHint)
+        XCTAssertEqual(postalState.query, "The Grey Savannah")
+        XCTAssertNotNil(postalState.regionHint)
+        XCTAssertEqual(namedState.query, "The Grey Savannah")
+        XCTAssertNotNil(namedState.regionHint)
+    }
+
+    func testGeorgiaCountryDoesNotBecomePostWideUSStateContext() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Road trip through Georgia. Dinner at Cafe Littera.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        let cafe = try XCTUnwrap(hints.first { $0.name == "Cafe Littera" })
+        XCTAssertNil(cafe.area)
+    }
+
+    func testCandidateMatcherRejectsAnExactNameInAConflictingState() {
+        let candidate = placeImportCandidate(
+            name: "Skyline Drive Overlook",
+            locality: "Los Angeles",
+            region: "CA"
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Skyline Drive Overlook",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertTrue(match.candidates.isEmpty)
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testCandidateMatcherAcceptsGeographicProviderSuffixInTheRightState() {
+        let candidate = placeImportCandidate(
+            name: "Flaming Gorge Reservoir",
+            locality: "Green River",
+            region: "WY",
+            latitude: 41.084987,
+            longitude: -109.545341
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Flaming Gorge",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testStateAreaHintUsesMapRegionWithoutPollutingSearchText() {
+        let plan = ManualPlaceSearchPlan(
+            name: "Farson Mercantile",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(plan.query, "Farson Mercantile")
+    }
+
+    func testStateRegionSearchKeepsCityInQuery() {
+        let jackson = ManualPlaceSearchPlan(
+            name: "Starbucks",
+            areaHint: "Jackson, Wyoming"
+        )
+        let kansasCity = ManualPlaceSearchPlan(
+            name: "Cafe Gratitude",
+            areaHint: "Kansas City, MO"
+        )
+        let washington = ManualPlaceSearchPlan(
+            name: "Compass Coffee",
+            areaHint: "Washington, D.C."
+        )
+        let portland = ManualPlaceSearchPlan(
+            name: "Proud Mary Coffee",
+            areaHint: "NE Portland, OR"
+        )
+
+        XCTAssertEqual(jackson.query, "Starbucks Jackson")
+        XCTAssertEqual(kansasCity.query, "Cafe Gratitude Kansas City")
+        XCTAssertEqual(washington.query, "Compass Coffee Washington")
+        XCTAssertEqual(portland.query, "Proud Mary Coffee NE Portland")
+        XCTAssertNotNil(jackson.regionHint)
+        XCTAssertNotNil(kansasCity.regionHint)
+        XCTAssertNotNil(washington.regionHint)
+        XCTAssertNotNil(portland.regionHint)
     }
 
     func testCandidateMatcherDoesNotApplyOneCharacterOCRCorrectionByDefault() {
@@ -2050,6 +2450,7 @@ private final class FakeDevicePlaceResolver: PlaceCandidateResolving {
 @MainActor
 private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
     let routes: [String: [PlaceCandidate]]
+    private(set) var manualInputs: [ManualPlaceInput] = []
 
     init(routes: [String: [PlaceCandidate]]) {
         self.routes = routes
@@ -2058,7 +2459,8 @@ private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
-        routes[input.name.lowercased()] ?? []
+        manualInputs.append(input)
+        return routes[input.name.lowercased()] ?? []
     }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
 }
@@ -2183,6 +2585,9 @@ private func googleSharedListPayload(count: Int) throws -> Data {
 private func placeImportCandidate(
     name: String,
     address: String? = nil,
+    locality: String = "Los Angeles",
+    region: String = "CA",
+    country: String = "United States",
     latitude: Double = 34.0522,
     longitude: Double = -118.2437
 ) -> PlaceCandidate {
@@ -2191,9 +2596,9 @@ private func placeImportCandidate(
         name: name,
         category: "restaurant",
         address: address,
-        locality: "Los Angeles",
-        region: "CA",
-        country: "United States",
+        locality: locality,
+        region: region,
+        country: country,
         latitude: latitude,
         longitude: longitude,
         sourceProvider: "mapkit",

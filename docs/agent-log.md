@@ -14636,3 +14636,97 @@ Manual place-search publication and Xcode handoff, 2026-07-21 00:19 PDT:
   and independent final review clean. No merge, build-number bump, TestFlight
   upload, hosted data mutation, or Slack announcement was requested or
   performed.
+
+Instagram relevance and geographic-resolution follow-up, 2026-07-21 10:43 PDT:
+
+- Ryan reported that the current REC-106 branch admits an incidental entity
+  (`Veterans of Amboy`) alongside the reel's actual subject (`Frank n Franks`),
+  and that three Wyoming carousel destinations resolve with missing or wrong
+  geographic context: Farson Mercantile, Skyline Drive Overlook, and Flaming
+  Gorge. Exact Instagram, Apple Maps, and Google Maps references are recorded
+  in REC-106.
+- Reopened REC-106 as `In Progress` and added the new production evidence.
+  Continuing in the existing isolated worktree on
+  `codex/rec-106-instagram-carousel`; the checkout is clean, synchronized with
+  its remote branch, and seven commits ahead of `origin/main`. The main
+  checkout is on unrelated REC-88 work, so no overlap is expected.
+- Investigation scope: social-candidate provenance/relevance, post-level
+  geographic context propagation, MapKit query construction and canonical
+  matching, deterministic regression fixtures/tests, and this coordination
+  log. OpenAI-assisted extraction/reranking will be evaluated against the
+  existing backend boundary; no API key will be placed in the iOS client.
+- No Swift edits will be made until exact pre-fix fixtures reproduce the wrong
+  extra entity and the Wyoming-to-California/Los Angeles search drift. Expected
+  files are import extraction/resolution services and their focused tests;
+  additional files will be logged before editing if the confirmed root cause
+  crosses that boundary.
+
+Instagram relevance and geographic-resolution investigation checkpoint, 2026-07-21 11:22 PDT:
+
+- Added exact public regression fixtures before production changes. Eight
+  focused tests reproduced 15 failures: the Frank N Frank's reel queried and
+  imported `Veterans of Amboy`; every Wyoming carousel lookup discarded its
+  post-wide state; Farson's `Merc` alias and Flaming Gorge's `Reservoir` suffix
+  did not match; an exact-name California candidate beat Wyoming context; and a
+  state-only typed search polluted the natural-language query instead of
+  bounding MapKit geographically. The pre-fix result bundle is
+  `DerivedData-rec106-prefx/Logs/Test/Test-Wander-2026.07.21_10-59-36--0700.xcresult`
+  and remains untracked generated output.
+- Root cause was split across extraction, search, and matching. The extractor's
+  unrestricted bare `from` rule treated creator provenance as an itinerary
+  destination. Post-wide Wyoming evidence was never inherited by per-slide
+  hints. MapKit searches were unbounded, while the matcher gave geography only
+  a small bonus and did not normalize full state names/codes or known provider
+  aliases. Resolved rows then overwrote stronger creator-facing names with
+  MapKit aliases.
+- Implemented bounded deterministic repairs in
+  `SocialPlaceImportMetadata.swift`, `MapKitPlaceResolver.swift`,
+  `PlaceImportCandidateMatcher.swift`, `PlaceImportStore.swift`, and
+  `PlaceImportModels.swift`: attribution-safe phrase extraction; one-state
+  travel-context inheritance; region-biased MapKit requests; bounded provider
+  query variants; hard rejection of contradictory known states; `WY`/Wyoming,
+  `Merc`/`Mercantile`, and geographic provider-suffix normalization; source-name
+  preservation with provider identity/metadata retained; and resolver version 6
+  so persisted bad social rows are reprocessed.
+- Validation now passes 63/63 import tests and 498/498 full-suite tests on
+  iPhone 17 Pro / iOS 26.5. `git diff --check` passes. A historical manual-search
+  test fixture was explicitly normalized to the current resolver version so it
+  tests typed-search behavior without racing the intentional production upgrade;
+  its fake candidates now use the Wyoming geography required by the new safety
+  contract.
+- OpenAI is appropriate for a later authenticated server-side evidence-role and
+  geographic-context stage, not as a client secret or map authority. Created
+  child follow-up REC-120 under REC-97 for strict candidate-closed structured
+  output, auth/quotas/evals, privacy-safe observability, physical-device QA, and
+  an approved provider/licensing strategy. The exact deterministic REC-106 fixes
+  do not require OpenAI. Apple currently has no reliable searchable Skyline
+  Drive Overlook POI, so this patch rejects Los Angeles results and leaves that
+  named destination honestly unresolved instead of inventing a match.
+
+Instagram relevance and geographic-resolution final validation, 2026-07-21 12:02 PDT:
+
+- Three independent read-only review passes drove additional hardening before
+  publication: city/state suffix parsing now prefers the rightmost explicit
+  state; `LA` remains Los Angeles unless Louisiana syntax is unambiguous;
+  Georgia the country is not forced into the U.S. state; OCR-only geography
+  cannot leak across carousel slides; state-named venues such as California
+  Grill cannot become post-wide geography; and creator-attribution filtering
+  preserves legitimate venues such as Friends & Family and Friendship Coffee.
+  The final reviewer found no remaining P1/P2 issue in the changed REC-106 scope.
+- Final focused geography/relevance validation passed 4/4. The complete import
+  suite passed 73/73 at
+  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-58-45--0700.xcresult`;
+  the complete app suite passed 508/508 at
+  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-59-31--0700.xcresult`;
+  and a generic iOS Simulator build passed for arm64 and x86_64. Generated
+  DerivedData directories remain untracked and are excluded from publication.
+- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed on
+  this Mac; tests used the available iPhone 17 / iOS 26.5 runtime. The generic
+  simulator build covers both simulator architectures. `git diff --check`
+  passes. No build-number bump, TestFlight upload, hosted data mutation, or
+  merge was requested or performed.
+- Publication remains on branch `codex/rec-106-instagram-carousel` and existing
+  PR #137 (https://github.com/joelipshutz/wander/pull/137). REC-106 will return
+  to `In Review` after the push. Ryan still needs to clear/reimport the two exact
+  Instagram URLs because resolver version 6 intentionally reprocesses older
+  social-import rows.

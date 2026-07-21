@@ -543,6 +543,7 @@ struct SocialPlaceSearchHint: Equatable {
     enum Evidence: Equatable {
         case explicitLocation
         case itineraryPhrase
+        case acquisitionPhrase
         case imageText
         case namedEntity
         case itineraryHandle
@@ -552,7 +553,33 @@ struct SocialPlaceSearchHint: Equatable {
             switch self {
             case .explicitLocation, .itineraryPhrase, .imageText:
                 true
-            case .namedEntity, .itineraryHandle, .socialHandle:
+            case .acquisitionPhrase, .namedEntity, .itineraryHandle, .socialHandle:
+                false
+            }
+        }
+
+        var trustRank: Int {
+            switch self {
+            case .explicitLocation:
+                5
+            case .itineraryPhrase:
+                4
+            case .imageText:
+                3
+            case .acquisitionPhrase, .namedEntity:
+                2
+            case .itineraryHandle:
+                1
+            case .socialHandle:
+                0
+            }
+        }
+
+        var preservesCreatorNameWhenMatched: Bool {
+            switch self {
+            case .explicitLocation, .itineraryPhrase:
+                true
+            case .acquisitionPhrase, .imageText, .namedEntity, .itineraryHandle, .socialHandle:
                 false
             }
         }
@@ -587,7 +614,19 @@ enum SocialPlaceHintExtractor {
         // the bounded search budget so they cannot crowd out named destinations.
         appendHandles(from: primaryEvidence, to: &results)
 
-        return Array(results.prefix(limit))
+        let postArea = postWideArea(from: metadata)
+        var contextualResults: [SocialPlaceSearchHint] = []
+        for hint in results {
+            append(
+                SocialPlaceSearchHint(
+                    name: hint.name,
+                    area: hint.area ?? postArea,
+                    evidence: hint.evidence
+                ),
+                to: &contextualResults
+            )
+        }
+        return Array(contextualResults.prefix(limit))
     }
 
     private static func appendExplicitLocationHints(
@@ -629,9 +668,19 @@ enum SocialPlaceHintExtractor {
     private static func appendPhraseHints(from text: String, to output: inout [SocialPlaceSearchHint]) {
         for value in captures(pattern: itineraryPattern, in: text) {
             let cleaned = trimPhrase(value)
+            guard !isAttributionPhrase(cleaned) else { continue }
             let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
                 ? .itineraryHandle
                 : .itineraryPhrase
+            append(parsedHint(from: cleaned, evidence: evidence), to: &output)
+        }
+
+        for value in captures(pattern: acquisitionPattern, in: text) {
+            let cleaned = trimPhrase(value)
+            guard !isAttributionPhrase(cleaned) else { continue }
+            let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
+                ? .itineraryHandle
+                : .acquisitionPhrase
             append(parsedHint(from: cleaned, evidence: evidence), to: &output)
         }
     }
@@ -642,6 +691,7 @@ enum SocialPlaceHintExtractor {
     ) {
         for value in captures(pattern: itineraryPattern, in: text) {
             let cleaned = trimPhrase(value)
+            guard !isAttributionPhrase(cleaned) else { continue }
             guard let hint = parsedHint(from: cleaned, evidence: .imageText),
                   isStrongMediaPlaceName(hint.name)
             else { continue }
@@ -751,9 +801,14 @@ enum SocialPlaceHintExtractor {
               hasDistinctiveVenueToken(hint.name)
         else { return }
         let key = normalized(hint.name) + "|" + normalized(hint.area ?? "")
-        guard !output.contains(where: {
+        if let existingIndex = output.firstIndex(where: {
             normalized($0.name) + "|" + normalized($0.area ?? "") == key
-        }) else { return }
+        }) {
+            if hint.evidence.trustRank > output[existingIndex].evidence.trustRank {
+                output[existingIndex] = hint
+            }
+            return
+        }
         output.append(hint)
     }
 
@@ -805,6 +860,52 @@ enum SocialPlaceHintExtractor {
         return value.trimmingCharacters(in: CharacterSet(charactersIn: " ,;:-"))
     }
 
+    private static func isAttributionPhrase(_ value: String) -> Bool {
+        let phrase = value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(phrase.startIndex..<phrase.endIndex, in: phrase)
+        return attributionPatterns.contains { pattern in
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
+            return expression.firstMatch(in: phrase, range: range) != nil
+        }
+    }
+
+    private static func postWideArea(from metadata: SocialImportMetadata) -> String? {
+        // Post-wide geography must come from post-level author copy. A state that only
+        // appears in one carousel slide cannot safely constrain every other slide.
+        let evidence = metadata.primaryEvidenceText
+        let stateCodes = PlaceImportGeography.mentionedStateCodes(in: evidence).filter { stateCode in
+            guard let stateName = PlaceImportGeography.canonicalStateName(for: stateCode) else {
+                return false
+            }
+            return stateParticipatesInTravelContext(stateName, evidence: evidence)
+        }
+        guard stateCodes.count == 1, let stateCode = stateCodes.first else { return nil }
+        return PlaceImportGeography.canonicalStateName(for: stateCode)
+    }
+
+    private static func stateParticipatesInTravelContext(
+        _ stateName: String,
+        evidence: String
+    ) -> Bool {
+        let state = NSRegularExpression.escapedPattern(for: stateName)
+        let contextualStateEnd = #"(?:['’]s)?(?=\s*(?:[.!?,;:#]|$|\b(?:again|and|across|during|for|from|in|next|on|this|through|today|tomorrow|to|with)\b))"#
+        let patterns = [
+            #"(?i)\b(?:road\s+trip|trip|travel(?:ing|ling)?|journey|tour|adventure|itinerary|guide)\b[^\n.!?]{0,70}?\b(?:through|to|in|around|across|for)\s+(?:the\s+)?(?:[a-z'’-]+\s+){0,3}\b"#
+                + state + contextualStateEnd,
+            #"(?i)\b(?:explore|exploring|visit|visiting|touring)\s+(?:the\s+)?"#
+                + state + contextualStateEnd,
+            #"(?im)^\s*"# + state
+                + #"(?:['’]s)?[\s:—-]+(?:travel|road\s+trip|trip|adventure|itinerary|guide)\b"#
+        ]
+        let range = NSRange(evidence.startIndex..<evidence.endIndex, in: evidence)
+        return patterns.contains { pattern in
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
+            return expression.firstMatch(in: evidence, range: range) != nil
+        }
+    }
+
     private static func containsBusinessToken(_ value: String) -> Bool {
         let normalizedValue = normalized(value)
         return [
@@ -847,7 +948,17 @@ enum SocialPlaceHintExtractor {
         "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
     ]
 
-    private static let itineraryPattern = #"(?i)\b(?:called|at|from|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|[#\n.!?]|$)"#
+    private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|[#\n.!?]|$)"#
+
+    private static let acquisitionPattern = #"(?i)\b(?:grab|grabbing|get|getting|order|ordering|buy|buying|pick(?:ed|ing)?\s+up|rent|renting|eat|eating|drink|drinking|try|trying)\b[^#\n.!?]{0,70}?\bfrom\s+(@?[^#\n.!?]{3,90}?)(?=[#\n.!?]|$)"#
+
+    private static let attributionPatterns = [
+        #"^(?:(?:the|a|an)\s+)?(?:creator|creators|founder|founders|owner|owners)\s+of\b"#,
+        #"^(?:(?:the|a|an)\s+)?team\s+(?:behind|from)\b"#,
+        #"^(?:(?:the|a|an)\s+)?veterans?\s+of\b"#,
+        #"^(?:my|our|a|an|the)\s+friends?\b"#,
+        #"^friends?\s+(?:behind|from|of|who)\b"#
+    ]
 
     private static let strongPlaceDesignators: Set<String> = [
         "aquarium", "bakery", "beach", "brewery", "brewing", "falls", "farms",

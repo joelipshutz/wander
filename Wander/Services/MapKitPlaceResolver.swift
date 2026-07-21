@@ -77,25 +77,50 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
         let area = input.areaHint?.trimmingCharacters(in: .whitespacesAndNewlines)
         let category = input.category?.trimmingCharacters(in: .whitespacesAndNewlines)
         let searchPlan = ManualPlaceSearchPlan(name: name, areaHint: area)
-        let query = searchPlan.query
+        var candidates: [PlaceCandidate] = []
+        var candidateIDs = Set<String>()
+        var lastError: Error?
+        let perQueryLimit = max(1, 8 / searchPlan.queries.count)
+        for query in searchPlan.queries {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.resultTypes = [.pointOfInterest, .address]
+            if let coordinate = searchPlan.coordinateHint {
+                request.region = MKCoordinateRegion(
+                    center: coordinate,
+                    latitudinalMeters: 1_500,
+                    longitudinalMeters: 1_500
+                )
+            } else if let region = searchPlan.regionHint {
+                request.region = MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(
+                        latitude: region.latitude,
+                        longitude: region.longitude
+                    ),
+                    span: MKCoordinateSpan(
+                        latitudeDelta: region.latitudeDelta,
+                        longitudeDelta: region.longitudeDelta
+                    )
+                )
+            }
 
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.resultTypes = [.pointOfInterest, .address]
-        if let coordinate = searchPlan.coordinateHint {
-            request.region = MKCoordinateRegion(
-                center: coordinate,
-                latitudinalMeters: 1_500,
-                longitudinalMeters: 1_500
-            )
+            do {
+                let response = try await MKLocalSearch(request: request).start()
+                for candidate in mapItems(response.mapItems, fallbackCategory: category, limit: perQueryLimit)
+                    where candidateIDs.insert(candidate.id).inserted {
+                    candidates.append(candidate)
+                }
+            } catch {
+                lastError = error
+            }
         }
-
-        let response = try await MKLocalSearch(request: request).start()
-        let candidates = mapItems(response.mapItems, fallbackCategory: category, limit: 8)
         guard !candidates.isEmpty else {
+            if let lastError {
+                throw lastError
+            }
             throw PlaceResolutionError.noCandidates
         }
-        return candidates
+        return Array(candidates.prefix(8))
     }
 
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] {
@@ -363,21 +388,50 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
 
 struct ManualPlaceSearchPlan {
     let query: String
+    let queries: [String]
     let coordinateHint: CLLocationCoordinate2D?
+    let regionHint: PlaceImportSearchRegion?
 
     init(name: String, areaHint: String?) {
-        coordinateHint = LinkPlaceResolutionHeuristics.coordinate(from: areaHint)
-        if coordinateHint != nil {
-            query = name
-            return
+        let resolvedCoordinateHint = LinkPlaceResolutionHeuristics.coordinate(from: areaHint)
+        let resolvedRegionHint = resolvedCoordinateHint == nil
+            ? PlaceImportGeography.searchRegion(for: areaHint)
+            : nil
+        let queryAreaHint: String?
+        if resolvedCoordinateHint != nil {
+            queryAreaHint = nil
+        } else if resolvedRegionHint != nil {
+            queryAreaHint = PlaceImportGeography.localityText(in: areaHint)
+        } else {
+            queryAreaHint = areaHint
         }
 
-        query = [name, areaHint]
-            .compactMap { value -> String? in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " ")
+        let names = Self.providerNameVariants(for: name)
+        let resolvedQueries = names.map { searchName in
+            [searchName, queryAreaHint]
+                .compactMap { value -> String? in
+                    guard let value, !value.isEmpty else { return nil }
+                    return value
+                }
+                .joined(separator: " ")
+        }
+        coordinateHint = resolvedCoordinateHint
+        regionHint = resolvedRegionHint
+        queries = resolvedQueries
+        query = resolvedQueries[0]
+    }
+
+    private static func providerNameVariants(for name: String) -> [String] {
+        let folded = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        var variants = [name]
+        if folded.contains("gorge"), !folded.contains("reservoir") {
+            variants.append("\(name) Reservoir")
+        }
+        if folded.contains("overlook"), !folded.contains("interpretive site") {
+            variants.append("\(name) Interpretive Site")
+        }
+        return variants
     }
 }
 

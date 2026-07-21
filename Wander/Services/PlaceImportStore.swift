@@ -194,13 +194,20 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 allowNearSpellingMatch: hint.evidence == .imageText
             )
             if let selectedCandidateID = match.selectedCandidateID,
-               let selectedCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
+               let providerCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
+                let selectedCandidate = socialCandidate(
+                    from: providerCandidate,
+                    preservingCreatorNameFrom: hint
+                )
+                let resolvedCandidates = match.candidates.map { candidate in
+                    candidate.id == selectedCandidateID ? selectedCandidate : candidate
+                }
                 let identity = candidateIdentity(selectedCandidate)
                 if seenResolvedCandidates.insert(identity).inserted {
                     entries.append(
                         PlaceImportResolvedEntry(
                             seed: socialSeed(from: seed, hint: hint, candidate: selectedCandidate),
-                            candidates: match.candidates,
+                            candidates: resolvedCandidates,
                             selectedCandidateID: selectedCandidateID,
                             helpMessage: nil
                         )
@@ -384,6 +391,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     }
 
     private func candidateResolution(_ match: PlaceImportCandidateMatch) -> PlaceImportResolution {
+        guard !match.candidates.isEmpty else {
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
+        }
         if let selectedCandidateID = match.selectedCandidateID {
             return .candidates(match.candidates, selectedCandidateID: selectedCandidateID)
         }
@@ -486,7 +496,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     ) -> PlaceImportSeed {
         PlaceImportSeed(
             rawText: original.rawText,
-            nameHint: candidate?.name ?? hint.name,
+            nameHint: hint.name,
             areaHint: candidate?.address ?? hint.area,
             sourceURLString: original.sourceURLString,
             sourceLine: original.sourceLine,
@@ -494,6 +504,40 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
             sourceProviderPlaceID: candidate?.sourceProviderPlaceID
+        )
+    }
+
+    private func socialCandidate(
+        from candidate: PlaceCandidate,
+        preservingCreatorNameFrom hint: SocialPlaceSearchHint
+    ) -> PlaceCandidate {
+        guard hint.evidence.preservesCreatorNameWhenMatched,
+              PlaceImportCandidateMatcher.namesAreEquivalent(candidate.name, hint.name)
+        else { return candidate }
+
+        return PlaceCandidate(
+            id: candidate.id,
+            name: hint.name,
+            category: candidate.category,
+            primaryCategory: candidate.primaryCategory,
+            subcategory: candidate.subcategory,
+            categorySource: candidate.categorySource,
+            categoryConfidence: candidate.categoryConfidence,
+            rawProviderType: candidate.rawProviderType,
+            address: candidate.address,
+            locality: candidate.locality,
+            region: candidate.region,
+            country: candidate.country,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            sourceProvider: candidate.sourceProvider,
+            sourceProviderPlaceID: candidate.sourceProviderPlaceID,
+            distanceMeters: candidate.distanceMeters,
+            websiteURLString: candidate.websiteURLString,
+            phoneNumber: candidate.phoneNumber,
+            timeZoneIdentifier: candidate.timeZoneIdentifier,
+            actionLinksJSON: candidate.actionLinksJSON,
+            confidence: candidate.confidence
         )
     }
 
