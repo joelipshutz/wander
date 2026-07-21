@@ -11,6 +11,7 @@ struct FeedScreen: View {
     @State private var savedActivityIDs = Set<String>()
     @State private var failedActivityIDs = Set<String>()
     @State private var followingProfileIDs = Set<String>()
+    @State private var selectedSurface: FeedSurface = .places
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -23,23 +24,19 @@ struct FeedScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    FeedSearchLauncher(placeholders: tickerSuggestions) {
-                        isShowingSearch = true
-                    }
+            VStack(spacing: 0) {
+                FeedSurfaceTabs(selectedSurface: $selectedSurface)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing2)
 
-                    content
+                switch selectedSurface {
+                case .places:
+                    placesSurface
+                case .people:
+                    FeedPeopleSurface(openProfile: openProfile)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing16)
             }
-            .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
-            .refreshable {
-                await refresh()
-            }
             .task {
                 await refresh()
             }
@@ -55,6 +52,25 @@ struct FeedScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+        }
+    }
+
+    private var placesSurface: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                FeedSearchLauncher(placeholders: tickerSuggestions) {
+                    isShowingSearch = true
+                }
+
+                content
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing16)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            await refresh()
         }
     }
 
@@ -183,6 +199,495 @@ struct FeedScreen: View {
                 await refresh()
             }
         }
+    }
+}
+
+private enum FeedSurface: String, CaseIterable, Identifiable {
+    case places
+    case people
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .places: "Places"
+        case .people: "People"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .places: "mappin.and.ellipse"
+        case .people: "person.2"
+        }
+    }
+}
+
+private struct FeedSurfaceTabs: View {
+    @Binding var selectedSurface: FeedSurface
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(FeedSurface.allCases) { surface in
+                Button {
+                    selectedSurface = surface
+                } label: {
+                    VStack(spacing: WanderTheme.spacing1) {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Image(systemName: surface.systemImage)
+                                .font(.system(size: 15, weight: .black))
+                            Text(surface.title)
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                        }
+                        .foregroundStyle(
+                            selectedSurface == surface
+                                ? WanderTheme.textInk.color
+                                : WanderTheme.textMuted.color
+                        )
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+
+                        Rectangle()
+                            .fill(selectedSurface == surface ? WanderTheme.textInk.color : .clear)
+                            .frame(height: 3)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedSurface == surface ? .isSelected : [])
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(WanderTheme.borderHairline.color)
+                .frame(height: 1)
+                .zIndex(-1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Feed section")
+    }
+}
+
+private struct FeedPeopleSurface: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    let openProfile: (ProfileShell) -> Void
+
+    @State private var memberQuery = ""
+    @State private var memberResults: [ProfileShell] = []
+    @State private var followInFlightProfileIDs: Set<String> = []
+    @State private var followFailedProfileIDs: Set<String> = []
+    @FocusState private var searchFieldFocused: Bool
+
+    private var isMemberSearchActive: Bool {
+        !memberQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var followingProfiles: [ProfileShell] {
+        store.following(of: store.currentUser.id)
+            .map(store.shell(for:))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                FeedPeopleSearchField(text: $memberQuery)
+                    .focused($searchFieldFocused)
+
+                if isMemberSearchActive {
+                    memberSearchResultsSection
+                } else {
+                    FeedPeopleValueNote()
+                    peopleRecommendationsSection
+                    peopleSection
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing16)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            await refreshRecommendations()
+        }
+        .task(id: auth.isSignedIn) {
+            await refreshRecommendations()
+        }
+        .task(id: memberQuery) {
+            await refreshMembers(query: memberQuery, debounce: true)
+        }
+    }
+
+    @ViewBuilder
+    private var peopleRecommendationsSection: some View {
+        switch store.discoverPeopleRecommendationsState {
+        case .idle where !auth.isSignedIn:
+            FeedPeopleActionPanel(
+                icon: "person.crop.circle.badge.plus",
+                title: "Find people you trust",
+                message: "Sign in to see people worth following.",
+                actionTitle: "Sign in"
+            ) {
+                auth.presentGate(for: .followPeople)
+            }
+        case .idle, .loading:
+            FeedPeopleLoadingPanel(label: "Finding people")
+        case .failed:
+            FeedPeopleActionPanel(
+                icon: "arrow.clockwise",
+                title: "Suggestions couldn't load",
+                message: "Search still works, or try these suggestions again.",
+                actionTitle: "Try again"
+            ) {
+                Task { await refreshRecommendations(force: true) }
+            }
+        case .loaded(let recommendations) where recommendations.isEmpty:
+            FeedPeopleEmptyPanel(
+                title: "No suggestions yet",
+                message: "Search a name or @handle above."
+            )
+        case .loaded(let recommendations):
+            PeopleRecommendationShelf(
+                recommendations: recommendations,
+                isFollowing: { store.hasAcknowledgedFollow(to: $0) },
+                isFollowInFlight: { followInFlightProfileIDs.contains($0) },
+                didFollowFail: { followFailedProfileIDs.contains($0) },
+                open: { openProfile($0.profile) },
+                follow: followRecommendation
+            )
+        }
+    }
+
+    private var memberSearchResultsSection: some View {
+        let profiles = memberResults.map(latestProfileShell)
+        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            FeedSectionHeading(title: "People results")
+
+            if profiles.isEmpty {
+                FeedPeopleEmptyPanel(
+                    title: "No people found",
+                    message: "Try a handle or full first name."
+                )
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: WanderTheme.spacing3) {
+                        ForEach(profiles) { profile in
+                            FeedMemberResultTile(
+                                profile: profile,
+                                recCount: recommendationCounts[profile.id, default: 0]
+                            ) {
+                                openProfile(profile)
+                            }
+                        }
+                    }
+                    .padding(.vertical, WanderTheme.spacing1)
+                }
+            }
+        }
+    }
+
+    private var peopleSection: some View {
+        let recommendationCounts = store.visiblePlaceCountsByOwnerID()
+        return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack {
+                FeedSectionHeading(title: "People")
+                Spacer()
+                Text("\(followingProfiles.count)")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            if followingProfiles.isEmpty {
+                FeedPeopleEmptyPanel(
+                    title: "No one followed yet",
+                    message: "Follow someone above or search by name."
+                )
+            } else {
+                ForEach(followingProfiles) { profile in
+                    FeedFollowedPersonRow(
+                        profile: profile,
+                        recCount: recommendationCounts[profile.id, default: 0]
+                    ) {
+                        openProfile(profile)
+                    }
+                }
+            }
+        }
+    }
+
+    private func refreshRecommendations(force: Bool = false) async {
+        guard auth.isSignedIn else { return }
+        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)
+    }
+
+    private func refreshMembers(query: String, debounce: Bool) async {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            memberResults = []
+            return
+        }
+
+        if debounce {
+            do {
+                try await Task.sleep(for: .milliseconds(225))
+            } catch {
+                return
+            }
+        }
+
+        let results = await store.discoverMembers(query: query, backend: backend)
+        guard !Task.isCancelled, query == memberQuery else { return }
+        memberResults = results
+    }
+
+    private func followRecommendation(_ recommendation: DiscoverPeopleRecommendation) {
+        auth.requireSignIn(for: .followPeople) {
+            let profileID = recommendation.profile.id
+            guard !followInFlightProfileIDs.contains(profileID) else { return }
+            followInFlightProfileIDs.insert(profileID)
+            followFailedProfileIDs.remove(profileID)
+
+            Task { @MainActor in
+                let succeeded = await store.follow(
+                    userID: profileID,
+                    source: .profile,
+                    backend: backend
+                )
+                followInFlightProfileIDs.remove(profileID)
+                if succeeded {
+                    followFailedProfileIDs.remove(profileID)
+                } else {
+                    followFailedProfileIDs.insert(profileID)
+                }
+            }
+        }
+    }
+
+    private func latestProfileShell(for profile: ProfileShell) -> ProfileShell {
+        guard let localProfile = store.profiles.first(where: { $0.id == profile.id }) else {
+            return profile
+        }
+        return store.shell(for: localProfile)
+    }
+}
+
+private struct FeedPeopleSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            TextField("Search name or @handle", text: $text)
+                .font(.system(size: 15, weight: .bold))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .foregroundStyle(WanderTheme.textInk.color)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                }
+                .accessibilityLabel("Clear people search")
+            }
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .accessibilityLabel("Search people")
+    }
+}
+
+private struct FeedPeopleValueNote: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 24, height: 24)
+
+            Text("Follow people whose taste you trust. Shared places can appear in your Feed and on your map.")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.skyTint.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+}
+
+private struct FeedPeopleLoadingPanel: View {
+    let label: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            ProgressView()
+                .tint(WanderTheme.terracotta.color)
+            Text(label)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct FeedPeopleEmptyPanel: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            Text(title)
+                .font(.system(size: 16, weight: .black))
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+}
+
+private struct FeedPeopleActionPanel: View {
+    let icon: String
+    let title: String
+    let message: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: icon)
+                .font(.system(size: 19, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 44, height: 44)
+                .background(WanderTheme.skyTint.color)
+                .clipShape(Circle())
+
+            Text(title)
+                .font(.system(size: 18, weight: .black, design: .rounded))
+                .multilineTextAlignment(.center)
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .multilineTextAlignment(.center)
+            Button(actionTitle, action: action)
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.terracotta.color)
+                .clipShape(Capsule())
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+    }
+}
+
+private struct FeedMemberResultTile: View {
+    let profile: ProfileShell
+    let recCount: Int
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                WanderAvatar(
+                    initials: String(profile.displayName.prefix(1)),
+                    avatarURL: profile.avatarURL,
+                    size: 46,
+                    color: WanderTheme.pinSocial.color
+                )
+                Text(profile.displayName)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                Text("@\(profile.handle)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(recCount) rec matches")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+            }
+            .frame(width: 154, height: 142, alignment: .leading)
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FeedFollowedPersonRow: View {
+    let profile: ProfileShell
+    let recCount: Int
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: WanderTheme.spacing3) {
+                WanderAvatar(
+                    initials: String(profile.displayName.prefix(1)),
+                    avatarURL: profile.avatarURL,
+                    size: 42,
+                    color: WanderTheme.pinSocial.color
+                )
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(profile.displayName)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("@\(profile.handle)")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer()
+
+                Text("\(recCount) recs")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
+            .padding(.vertical, WanderTheme.spacing2)
+            .frame(minHeight: WanderTheme.tapMinimum)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open \(profile.displayName)'s profile")
     }
 }
 

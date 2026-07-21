@@ -20,6 +20,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
+        XCTAssertTrue(feed.contains("private enum FeedSurface"))
+        XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
+        XCTAssertTrue(feed.contains("case .people:"))
+        XCTAssertTrue(feed.contains("FeedPeopleSurface(openProfile: openProfile)"))
+        XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
+        XCTAssertTrue(feed.contains("store.discoverMembers(query: query, backend: backend)"))
+        XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
     @MainActor
@@ -152,6 +159,7 @@ final class NavigationContractTests: XCTestCase {
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
+            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),

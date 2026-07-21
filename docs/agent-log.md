@@ -14704,3 +14704,31 @@ People-tab design checkpoint, 2026-07-21 09:05 PDT:
   output and must not be staged. After approval, refactor the current Discover
   People content into the new Feed sibling tab, then run source contracts,
   full XCTest, and dual-size simulator QA before updating PR #139.
+
+People-tab implementation, 2026-07-21 11:22 PDT:
+
+- Joe approved the mock direction and asked to wire it into PR #139. Added a
+  persistent `Places | People` selector to `FeedScreen`: Places preserves the
+  existing compact-search Feed, while People has a compact name/handle search,
+  a signed-out/loading/error/empty recovery state, the shared horizontal
+  `People worth following` shelf, and followed-people profile rows.
+- Kept the discovery algorithms and backend boundaries single-sourced. The new
+  surface calls the existing `WanderStore.discoverMembers`,
+  `refreshDiscoverPeopleRecommendations`, and `follow` contracts, and reuses
+  the existing `PeopleRecommendationShelf`; no migration, RPC, ranking, or
+  opt-in behavior changed. `PeopleRecommendationShelf` is now internal rather
+  than file-private solely so Feed can reuse it.
+- Added Feed navigation-contract coverage for the People selector, existing
+  people-search/recommendation methods, and profile presentation route.
+- Validation: `xcodegen generate`; clean arm64 iPhone 16 Plus simulator build;
+  full `xcodebuild test` on iPhone 16 Plus (469 passed, 0 failed); and visual
+  QA of the selected People state on iPhone 16 Plus and iPhone 16e. Screenshots:
+  `/private/tmp/rec107-people-16plus.png` and
+  `/private/tmp/rec107-people-16e.png`. The signed-out state correctly prompts
+  for sign-in while retaining the existing local People list; signed-in users
+  receive the existing recommendation shelf.
+- `DerivedData-device/`, `DerivedData-people-tab/`, and
+  `DerivedData-people-tab-validate/` are generated, untracked local build
+  output. Do not stage them. A pre-existing partial build was cleaned with
+  Xcode's scoped clean command after a low-disk failure; no source or device
+  data was removed.
