@@ -15054,3 +15054,22 @@ Validation checkpoint, 2026-07-21 16:24 PDT:
 - Final scope is limited to the Lists SwiftUI affordance, its focused navigation
   regression, and this coordination log. No schema, persistence, auth, release,
   build-number, or TestFlight change is included.
+
+Handoff, 2026-07-21 16:26 PDT:
+
+- Committed the complete REC-115 implementation as
+  `f338660c827beafb9f42569ce03e22c6008ea6a3` (`fix: add new-list back
+  affordance`) and pushed `codex/rec-115-back-arrow` to `origin`.
+- The GitHub connector rejected the required ready PR because the repository's
+  external trust status was not established and the first proposed body linked
+  internal Linear/Slack context. A safer draft with those links removed was
+  then attempted, but the GitHub integration returned `403 Resource not
+  accessible by integration`. The local `gh` session for `ryanlane23` is also
+  expired, so CLI fallback is unavailable without human re-authentication.
+- Linear REC-115 remains `In Progress`, with the pushed branch, commit, test
+  evidence, and PR-auth blocker recorded. Exact restart: run
+  `gh auth login -h github.com`, open a PR from `codex/rec-115-back-arrow` to
+  `main`, then move REC-115 to `In Review` and attach the final PR/head SHA.
+- The implementation itself is ready for Xcode testing now from
+  `/private/tmp/recme-rec115-back-arrow`. No TestFlight build, merge, release,
+  Slack reply, or build-number change was requested or performed.
