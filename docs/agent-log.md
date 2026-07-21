@@ -14730,3 +14730,21 @@ Instagram relevance and geographic-resolution final validation, 2026-07-21 12:02
   to `In Review` after the push. Ryan still needs to clear/reimport the two exact
   Instagram URLs because resolver version 6 intentionally reprocesses older
   social-import rows.
+
+Instagram relevance and geographic-resolution publication, 2026-07-21 12:06 PDT:
+
+- Committed the validated implementation as `e0f90e07a` (`REC-106: Fix social
+  import relevance and geography`) and pushed it to
+  `origin/codex/rec-106-instagram-carousel`; the existing open PR #137 now
+  contains the commit. GitHub PR metadata/comment writes could not be refreshed
+  because both the local `gh` token and the installed GitHub integration lack
+  write access, but this did not block the authenticated git branch push.
+- Added the final behavior, validation, retest instructions, Skyline limitation,
+  and REC-120 follow-up to REC-106 in Linear, then moved REC-106 to `In Review`.
+  No merge or release action was performed.
+- Opened `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` through Xcode and
+  verified the Branch Chooser reports `codex/rec-106-instagram-carousel` with
+  `Ry’s iPhone` selected. Started a fresh Run; Xcode reached the phone but is
+  waiting on `Unlock Ry’s iPhone to Continue`. The project/branch and pending
+  run are intentionally left open so Ryan can unlock the phone and test. Do not
+  claim a fresh device launch until that lock-screen gate completes.
