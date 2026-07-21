@@ -1006,7 +1006,7 @@ private struct DiscoverActivityEmptyPanel: View {
     }
 }
 
-private struct PeopleRecommendationShelf: View {
+struct PeopleRecommendationShelf: View {
     let recommendations: [DiscoverPeopleRecommendation]
     let isFollowing: (String) -> Bool
     let isFollowInFlight: (String) -> Bool

@@ -9,6 +9,7 @@ final class WanderBackend: ObservableObject {
     let blockRepository: (any BlockRepository)?
     let muteRepository: (any MuteRepository)?
     let placeRepository: (any PlaceRepository)?
+    let feedRepository: (any FeedRepository)?
     let userPlaceRepository: (any UserPlaceRepository)?
     let socialPlaceSaveRepository: (any SocialPlaceSaveRepository)?
     let visitRepository: (any VisitRepository)?
@@ -39,6 +40,7 @@ final class WanderBackend: ObservableObject {
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.muteRepository = SupabaseMuteRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
+            self.feedRepository = SupabaseFeedRepository(rpc: client)
             let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client, userPlaceDeleter: client)
             self.userPlaceRepository = userPlaceRepository
             self.socialPlaceSaveRepository = userPlaceRepository
@@ -56,6 +58,7 @@ final class WanderBackend: ObservableObject {
             self.blockRepository = nil
             self.muteRepository = nil
             self.placeRepository = nil
+            self.feedRepository = nil
             self.userPlaceRepository = nil
             self.socialPlaceSaveRepository = nil
             self.visitRepository = nil
@@ -81,6 +84,7 @@ final class WanderBackend: ObservableObject {
         blockRepository: (any BlockRepository)? = nil,
         muteRepository: (any MuteRepository)? = nil,
         placeRepository: (any PlaceRepository)? = nil,
+        feedRepository: (any FeedRepository)? = nil,
         userPlaceRepository: (any UserPlaceRepository)? = nil,
         socialPlaceSaveRepository: (any SocialPlaceSaveRepository)? = nil,
         visitRepository: (any VisitRepository)? = nil,
@@ -98,6 +102,7 @@ final class WanderBackend: ObservableObject {
         self.blockRepository = blockRepository
         self.muteRepository = muteRepository
         self.placeRepository = placeRepository
+        self.feedRepository = feedRepository
         self.userPlaceRepository = userPlaceRepository
         self.socialPlaceSaveRepository = socialPlaceSaveRepository
         self.visitRepository = visitRepository
@@ -116,6 +121,7 @@ final class WanderBackend: ObservableObject {
             || blockRepository != nil
             || muteRepository != nil
             || placeRepository != nil
+            || feedRepository != nil
             || userPlaceRepository != nil
             || socialPlaceSaveRepository != nil
             || visitRepository != nil

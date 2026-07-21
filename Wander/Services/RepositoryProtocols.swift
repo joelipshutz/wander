@@ -1445,6 +1445,11 @@ protocol PlaceRepository {
 }
 
 @MainActor
+protocol FeedRepository {
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage
+}
+
+@MainActor
 protocol UserPlaceRepository {
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace]
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult

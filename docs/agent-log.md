@@ -14541,3 +14541,298 @@ Release outcome, 2026-07-21 12:11 PDT:
   saved user photo nor a usable Google Maps place photo is available. No
   production App Store release was performed. This log entry is the only
   post-upload source change and does not alter the archived binary.
+## 2026-07-20 16:12 PDT - Codex - REC-107 Feed design mock
+
+Agent: Codex using `design-html` (mock) and `design-review` (post-mock audit)
+Branch: `codex/rec-107-feed-mock`
+Worktree: `/private/tmp/recme-rec107-feed-mock`
+Linear: `REC-107` (`In Progress`)
+Mission Control: `ee7b601b-40ea-4278-a3bb-5d87c00e4688` (`in_progress`)
+
+Goal: turn the supplied Beli feed reference into an approved, rec.me-native
+Feed mock before any production code. The proposed information architecture is
+compact ticker search, an optional Featured for you horizontal place rail, then
+a modular newest-first Your feed of place saves, Been/Wanna Go events, list
+adds, and list creation. Activity cards must support actor identity, place/list
+metadata, relative time, rating/note/media, and a direct save affordance.
+
+Scope guardrails:
+
+- This is a mock/review pass only. Do not rename the shipped tab, change its
+  icon, or touch production Swift/UI/backend contracts before Joe approves the
+  primary Feed states.
+- The supplied Beli screenshot is reference material for hierarchy and density,
+  not a visual or copy clone. rec.me remains a trusted-place memory product,
+  not a generic public social network.
+- Design artifacts live under the per-user gstack design directory; expected
+  repo changes during this pass are only this append-only coordination log and,
+  after approval, durable product/design decision documentation if needed.
+
+Checkpoint, 2026-07-20 16:25 PDT:
+
+- Generated and manually audited the primary approval candidate at
+  `~/.gstack/projects/joelipshutz-wander/designs/feed-20260720/feed-primary-contract.png`.
+  It preserves the rec.me four-tab shell and puts social provenance, optional
+  notes/media, ratings, and saves at the center of the Feed. Two generated
+  alternates were discarded because they either changed the tab hierarchy or
+  became a generic card grid.
+- Added draft state and module contracts in
+  `docs/specs/2026-07-20-rec-107-feed-design.md`. The contract covers loading,
+  no activity, no featured candidates, offline/error, search, save transitions,
+  privacy/blocked exclusion, and Dynamic Type. It also explicitly requires
+  existing ticker motion and a bottom-right save affordance on compact Been and
+  Want to go modules.
+- The design model's remote quality check could not run because it would export
+  the private mock to an external service under the current policy. Manual
+  visual review is complete; no production Swift, tab rename, backend, or
+  project configuration was changed. Awaiting Joe's visual approval before
+  engineering review.
+- Added the same checkpoint to Linear REC-107. Mission Control is unavailable
+  on `localhost:4000` in this session, so its task remains `in_progress` rather
+  than moving to `review`; no workaround was used.
+
+Engineering-review completion, 2026-07-20 17:20 PDT:
+
+- Joe approved the Feed mock, the full truthful scope, durable Feed event
+  envelope, database-triggered emission, the existing five-tab shell with
+  Discover renamed to Feed, a dedicated `FeedScreen`, full hosted/native test
+  coverage, a deterministic trusted-place shelf, and a future personalized
+  ranker TODO.
+- The current app has no canonical way to save another person's list. Rather
+  than present a misleading action, Joe chose `View list` for list-created and
+  list-add modules; place modules retain the canonical `Save to my map` flow.
+- Added `docs/plans/2026-07-20-rec-107-feed-engineering-plan.md`, updated the
+  approved design spec, and added the deferred ranker to `TODOS.md`. The plan
+  locks an append-only, trigger-emitted activity envelope and one RLS-filtered,
+  keyset-paginated Feed projection. It includes pgTAP, Swift, simulator,
+  privacy, error, performance, and failure-mode requirements.
+- Reviewed current PostgreSQL trigger and Supabase RLS guidance. The plan uses
+  `AFTER` triggers for transactionally committed events and a narrow pinned
+  server function for viewer-scoped reads. No app source or hosted schema has
+  changed yet.
+- Recorded the completed review, QA test plan, and five implementation tasks
+  in the private gstack artifact store. Artifact sync is `artifacts-only`; no
+  application data or source files were published by that workflow.
+
+Implementation checkpoint, 2026-07-20 23:30 PDT:
+
+- Began REC-107 implementation on `codex/rec-107-feed-mock` from current
+  `origin/main` (`339cba2`; no rebase was required after fetch).
+- Confirmed the existing social save path is `WanderStore.saveVisiblePlace`,
+  list details already route through `NotificationDestination.list`, and the
+  current Discover screen owns a large combined places/member search surface.
+  Feed will use a dedicated screen and preserve that search surface as a
+  separate focused destination instead of duplicating its parser.
+- Expected implementation touch points: Feed models/store/remote boundary,
+  `Wander/Features/Feed`, root navigation, list-route helper, migration/tests,
+  and generated Xcode project membership after source files are added.
+
+Implementation and validation checkpoint, 2026-07-21 00:17 PDT:
+
+- Implemented the dedicated Feed tab and compact rotating search launcher. The
+  prior combined Discover surface remains the focused full-screen search
+  destination; no parser or person-search behavior was duplicated.
+- Added a durable Feed contract: append-only `feed_events`, trigger-emitted
+  place/list events, an RLS-filtered/keyset-paginated `followed_feed` RPC,
+  native repository/DTO boundaries, deterministic local Feed fixtures, and
+  modular Featured-for-you versus chronological Your feed presentation.
+- Activity modules support place save, Been, Want to go, list creation, and
+  list additions. They retain honest rating semantics, optional note/media
+  rendering, actor routing, direct place save, and `View list` for list events.
+  The tab label is now `Feed` with the native `newspaper` icon while preserving
+  the existing five-tab enum and routing contract.
+- Ran `xcodegen generate`; then an arm64 iPhone 16 Plus build completed
+  successfully. Full native validation passed: `xcodebuild test … iPhone 16
+  Plus … ARCHS=arm64` executed 469 tests with 0 failures. The Feed-specific
+  models and navigation contracts are covered by new tests.
+- Captured and reviewed both populated demo Feed and signed-out/no-activity
+  Feed states on iPhone 16 Plus. The featured horizontal rail, reverse-
+  chronological Feed modules, list CTA, compact search, and empty-state
+  recovery hierarchy render correctly. A smaller iPhone 16 install initially
+  could not complete because the machine had only 116 MB free on the system
+  data volume. After user-approved removal of this worktree's generated
+  DerivedData, installed the validated simulator app onto iPhone 16 and
+  confirmed the populated Feed also fits and clips correctly there.
+- Added the pgTAP contract under `supabase/tests/feed_activity.sql`, including
+  append-only emission, no duplicate note-edit event, cursor, follow/block/
+  private/visibility filtering, and direct-RPC grant checks. It remains
+  unexecuted locally because this machine has no Supabase CLI, Docker, or
+  `psql`. Hosted migration/test application is intentionally deferred to the
+  PR review/release lane.
+
+Handoff, 2026-07-21 00:21 PDT:
+
+- Committed the implementation as `15d9ff3` (`feat: add social Feed tab`) and
+  opened ready review PR #139: https://github.com/joelipshutz/wander/pull/139.
+  Linear REC-107 is now `In Review` with the same validation and hosted pgTAP
+  follow-up recorded.
+- Before merge: run the committed Feed migration and pgTAP contract against a
+  confirmed hosted/staging Supabase target, verify security-definer metadata
+  and grants, then rebase/update from latest `main` and rerun native tests if
+  app source conflicts occur. Do not increment a build number or upload to
+  TestFlight unless Joe explicitly requests a release.
+
+Device QA deployment, 2026-07-21 01:47 PDT:
+
+- At Joe's request, built the unchanged `codex/rec-107-feed-mock` branch for
+  connected physical device `iPhone (254)` (UDID
+  `00008140-0018152C08A2201C`). Signed device build succeeded with the existing
+  Apple Development provisioning profile for `com.grayline.wander`.
+- Installed and foreground-launched the app directly on that phone with
+  `-WanderUseDemoFixtures -WanderInitialTab discover`; the stable underlying
+  tab value opens the renamed Feed tab. Verified the Wander process is running
+  on-device (PID 4765). This was a direct developer install only: no version
+  bump, archive, upload, TestFlight mutation, or production backend migration.
+- `DerivedData-device/` is local, untracked device-build output from this
+  deployment. It must not be committed; retain it only while device debugging
+  is useful, then clear it with Xcode's scoped clean command.
+
+People-tab design checkpoint, 2026-07-21 09:05 PDT:
+
+- Joe clarified that the current Feed is the Places surface and asked to bring
+  back the prior People/Members surface as a first-class sibling. The proposed
+  structure is a persistent `Places | People` control above the compact search:
+  Places retains the current Feed, while People retains its name/handle search,
+  the modular horizontal `People worth following` shelf, and the followed
+  `People` list. No backend, ranking, or recommendation-contract change is
+  proposed.
+- Per the existing design-first instruction, no app source was changed. A
+  393×852 iPhone mock was generated and visually checked with no browser
+  console errors; it is held for Joe's approval before implementation. Linear
+  REC-107 was returned to `In Progress` with the scope change recorded.
+- `DerivedData-device/` remains an unrelated untracked local device-build
+  output and must not be staged. After approval, refactor the current Discover
+  People content into the new Feed sibling tab, then run source contracts,
+  full XCTest, and dual-size simulator QA before updating PR #139.
+
+People-tab implementation, 2026-07-21 11:22 PDT:
+
+- Joe approved the mock direction and asked to wire it into PR #139. Added a
+  persistent `Places | People` selector to `FeedScreen`: Places preserves the
+  existing compact-search Feed, while People has a compact name/handle search,
+  a signed-out/loading/error/empty recovery state, the shared horizontal
+  `People worth following` shelf, and followed-people profile rows.
+- Kept the discovery algorithms and backend boundaries single-sourced. The new
+  surface calls the existing `WanderStore.discoverMembers`,
+  `refreshDiscoverPeopleRecommendations`, and `follow` contracts, and reuses
+  the existing `PeopleRecommendationShelf`; no migration, RPC, ranking, or
+  opt-in behavior changed. `PeopleRecommendationShelf` is now internal rather
+  than file-private solely so Feed can reuse it.
+- Added Feed navigation-contract coverage for the People selector, existing
+  people-search/recommendation methods, and profile presentation route.
+- Validation: `xcodegen generate`; clean arm64 iPhone 16 Plus simulator build;
+  full `xcodebuild test` on iPhone 16 Plus (469 passed, 0 failed); and visual
+  QA of the selected People state on iPhone 16 Plus and iPhone 16e. Screenshots:
+  `/private/tmp/rec107-people-16plus.png` and
+  `/private/tmp/rec107-people-16e.png`. The signed-out state correctly prompts
+  for sign-in while retaining the existing local People list; signed-in users
+  receive the existing recommendation shelf.
+- `DerivedData-device/`, `DerivedData-people-tab/`, and
+  `DerivedData-people-tab-validate/` are generated, untracked local build
+  output. Do not stage them. A pre-existing partial build was cleaned with
+  Xcode's scoped clean command after a low-disk failure; no source or device
+  data was removed.
+
+Handoff, 2026-07-21 11:25 PDT:
+
+- Committed the app implementation as `c8430d5` (`feat: add People surface to
+  Feed`) and pushed it to the existing ready-review PR #139:
+  https://github.com/joelipshutz/wander/pull/139.
+- REC-107 is `In Review` with the validation record and commit link. No
+  TestFlight build, App Store build number, backend migration, or production
+  data changed in this update.
+- Before merge, inspect the PR against current `main` and rerun the full native
+  test suite if source conflicts require a rebase. The earlier Feed migration's
+  hosted pgTAP/RLS verification remains a separate pre-merge requirement.
+
+Device deployment started, 2026-07-21 11:30 PDT:
+
+- Joe requested a direct installation of the latest PR #139 development build
+  on the connected paired device `iPhone (254)` (iPhone 16 Pro,
+  `E0C1F5F2-1609-5FB7-8CF7-DF59C10A63C3`). This is a local developer deploy
+  only; no TestFlight, App Store Connect, build-number, backend, or source
+  change is intended.
+
+Device deployment completed, 2026-07-21 12:20 PDT:
+
+- The first device build exhausted local disk space. To recover only safe,
+  generated storage, cleared scoped Wander Xcode build output and an unused
+  Playwright browser cache. No source, simulator, phone, or user data was
+  removed.
+- Rebuilt the current PR #139 source successfully for the paired iPhone 16 Pro
+  (arm64, `com.grayline.wander`, Apple development signing team `Y7TVK75RZ8`),
+  then installed and foreground-launched it with demo fixtures on the Feed
+  surface. No TestFlight, App Store Connect, build-number, migration, backend,
+  or production data change was made.
+
+Feed save and styling follow-up started, 2026-07-21 12:35 PDT:
+
+- Joe reported that tapping Feed's save affordance does nothing, and requested
+  it use the regular save flow. Source inspection confirmed `FeedScreen` uses
+  a direct background `store.saveVisiblePlace` path rather than the canonical
+  `MapPlaceSaveFlowSheet` already used by Add, Map, Discover, and Profile.
+- This follow-up will replace that shortcut with `MapPlaceSaveContext` plus the
+  shared sheet/submission path, then flatten activity presentation onto the
+  screen canvas with hairline dividers rather than a bordered rounded container.
+- Working in the existing PR #139 branch `codex/rec-107-feed-mock` at
+  `6821f19`. Pre-existing generated `DerivedData-device/`,
+  `DerivedData-people-tab/`, and `DerivedData-people-tab-validate/` remain
+  untracked and will not be staged. Expected source/tests: `FeedScreen.swift`,
+  `NavigationContractTests.swift`, and this log.
+
+Feed save and styling follow-up handoff, 2026-07-21 13:00 PDT:
+
+- Replaced Feed's immediate `store.saveVisiblePlace` shortcut with the shared
+  `MapPlaceSaveFlowSheet`. Feed save actions now open the standard status,
+  rating, note, visibility, and photo flow, then persist through
+  `persistNewPlaceSaveSubmission` and refresh the Feed. The resulting
+  confirmation preserves an offline-sync message where applicable.
+- Flattened `FeedActivityList`: activity entries now inherit the warm screen
+  canvas and are separated only by `borderHairline` dividers. The featured
+  horizontal place rail remains intentionally card-based.
+- Added `NavigationContractTests.testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat`
+  to prevent a return to the direct-save path or enclosing activity card.
+- Committed and pushed `03b8489` (`fix: route Feed saves through shared flow`)
+  to the existing PR #139. Linear REC-107 has the follow-up and validation
+  status. Mission Control was unavailable on `localhost:4000` during this
+  follow-up.
+- Validation: `xcrun swiftc -parse Wander/Features/Feed/FeedScreen.swift
+  WanderTests/NavigationContractTests.swift` passed. The required full
+  simulator XCTest run remains in progress while Xcode recompiles the current
+  simulator SDK cache (`DerivedData-people-tab-validate/`); it had not emitted
+  a compiler or test failure at handoff. A focused retry correctly failed only
+  with the same cache's `build.db` lock. Check the original test run/result
+  bundle before merging. Generated `DerivedData-*` directories remain
+  untracked and must not be staged.
+
+TestFlight release preparation started, 2026-07-21 13:35 PDT:
+
+- Joe explicitly requested a TestFlight release for PR #139. Rebased
+  `codex/rec-107-feed-mock` onto current `origin/main`; the only conflict was
+  this coordination log, resolved by retaining both the completed build-83
+  release record and the Feed history. Generated `DerivedData-*` directories
+  remain pre-existing, untracked local output and will not be staged.
+- Release review confirmed the Feed migration revokes client execution of
+  `app.record_feed_event(...)`; added a pgTAP regression assertion so
+  `authenticated` cannot create arbitrary feed events directly. Static
+  validation passed: `git diff --check` and `xcrun swiftc -parse
+  Wander/Features/Feed/FeedScreen.swift WanderTests/NavigationContractTests.swift`.
+- The system `supabase` CLI is absent. Attempts to resolve it through `npx`
+  did not produce a usable CLI, so hosted migration/RLS verification remains
+  required before the release can be called fully validated.
+
+Feed backend release verification completed, 2026-07-21 13:55 PDT:
+
+- Installed Supabase CLI `2.109.1` transiently through `npx`, linked this
+  isolated worktree to the documented Wander project ref, and confirmed
+  `20260720234500_feed_activity.sql` was the only pending migration.
+- Applied that migration to the linked hosted project. A second migration-list
+  check shows local and remote aligned through `20260720234500`.
+- The first hosted pgTAP run surfaced a test-only SQL literal error in
+  `Maya's Noodles`; corrected it to PostgreSQL escaping and reran the complete
+  rollback-wrapped `supabase/tests/feed_activity.sql` suite. It reached its
+  twentieth and final assertion successfully. The direct hosted metadata check
+  also confirmed: `feed_events` RLS is enabled, `app.followed_feed` is
+  security-definer with a pinned `search_path`, authenticated callers cannot
+  call `app.record_feed_event`, authenticated callers can call
+  `public.followed_feed`, and anonymous callers cannot.
