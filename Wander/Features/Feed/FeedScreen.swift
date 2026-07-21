@@ -36,7 +36,7 @@ struct FeedScreen: View {
                 }
             }
             .wanderScreen()
-            .task {
+            .task(id: auth.isSignedIn) {
                 await refresh()
             }
             .fullScreenCover(isPresented: $isShowingSearch) {
@@ -117,6 +117,8 @@ struct FeedScreen: View {
                     retry: refresh
                 )
             }
+        } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
+            FeedRefreshRecoveryState(retry: refresh)
         } else {
             FeedSectionHeading(title: "Your feed")
             FeedEmptyState(
@@ -127,14 +129,6 @@ struct FeedScreen: View {
                 follow: follow
             )
 
-            if store.feedLoadState == .failed {
-                FeedRetryRow(
-                    title: "Couldn’t update Feed",
-                    subtitle: "Search still works while we reconnect.",
-                    actionTitle: "Retry",
-                    retry: refresh
-                )
-            }
         }
     }
 
@@ -1115,6 +1109,104 @@ private struct FeedLoadingState: View {
         }
         .redacted(reason: .placeholder)
         .accessibilityLabel("Loading Feed")
+    }
+}
+
+/// Keeps a cold-load failure visually in the Feed instead of showing the
+/// follow-people empty state. The placeholders deliberately do not invent
+/// social activity that the app failed to retrieve.
+private struct FeedRefreshRecoveryState: View {
+    let retry: () async -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            FeedSectionHeading(title: "Featured for you")
+            FeedRecoveryFeaturedRail()
+
+            FeedSectionHeading(title: "Your feed", detail: "Reconnecting")
+            FeedRecoveryActivityList()
+
+            FeedRetryRow(
+                title: "Feed is reconnecting",
+                subtitle: "Your updates will appear here as soon as we’re back online.",
+                actionTitle: "Retry",
+                retry: retry
+            )
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Feed couldn't update. Retry to reconnect.")
+    }
+}
+
+private struct FeedRecoveryFeaturedRail: View {
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WanderTheme.spacing3) {
+                ForEach(0..<2, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(height: 92)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: 116, height: 14)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: 82, height: 11)
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(height: 38)
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .frame(width: 184, alignment: .leading)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                }
+            }
+            .padding(.horizontal, 1)
+        }
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct FeedRecoveryActivityList: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { index in
+                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                    Circle()
+                        .fill(WanderTheme.surfaceSand.color)
+                        .frame(width: 48, height: 48)
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: index == 0 ? 188 : 156, height: 15)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: 124, height: 11)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: index == 2 ? 168 : 210, height: 13)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing1)
+
+                    Capsule()
+                        .fill(WanderTheme.surfaceSand.color)
+                        .frame(width: 38, height: 32)
+                }
+                .padding(WanderTheme.spacing3)
+
+                if index < 2 {
+                    Divider()
+                        .overlay(WanderTheme.borderHairline.color)
+                }
+            }
+        }
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
     }
 }
 

@@ -880,7 +880,7 @@ final class WanderStore: ObservableObject {
 
         if let backend, let repository = backend.feedRepository {
             do {
-                let page = try await repository.followedFeed(before: nil, limit: 25)
+                let page = try await loadFollowedFeed(from: repository)
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
                 followedFeedPage = page
                 feedLoadState = .loaded
@@ -901,6 +901,28 @@ final class WanderStore: ObservableObject {
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
         return true
+    }
+
+    /// Clerk may report a signed-in user slightly before its first usable
+    /// Supabase bearer token is available. Retry that narrow startup race once;
+    /// ordinary transport and server failures remain visible to the caller.
+    private func loadFollowedFeed(from repository: any FeedRepository) async throws -> FollowedFeedPage {
+        do {
+            return try await repository.followedFeed(before: nil, limit: 25)
+        } catch {
+            guard Self.shouldRetryFollowedFeed(after: error) else { throw error }
+            try await Task.sleep(for: .milliseconds(300))
+            return try await repository.followedFeed(before: nil, limit: 25)
+        }
+    }
+
+    private static func shouldRetryFollowedFeed(after error: Error) -> Bool {
+        if let authError = error as? AuthSessionError {
+            return authError == .notSignedIn || authError == .tokenUnavailable
+        }
+
+        guard let remoteError = error as? WanderRemoteError else { return false }
+        return remoteError == .notAuthenticated
     }
 
     private func fixtureFollowedFeedPage(relativeTo now: Date) -> FollowedFeedPage {

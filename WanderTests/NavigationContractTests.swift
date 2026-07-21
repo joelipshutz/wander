@@ -50,6 +50,18 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
     }
 
+    func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(feed.contains(".task(id: auth.isSignedIn)"))
+        XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
+        XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
+        XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
+        XCTAssertFalse(feed.contains("title: \"Couldn’t update Feed\""))
+    }
+
     @MainActor
     func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
         XCTAssertEqual(
