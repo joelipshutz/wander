@@ -14744,3 +14744,23 @@ Handoff, 2026-07-21 11:25 PDT:
 - Before merge, inspect the PR against current `main` and rerun the full native
   test suite if source conflicts require a rebase. The earlier Feed migration's
   hosted pgTAP/RLS verification remains a separate pre-merge requirement.
+
+Device deployment started, 2026-07-21 11:30 PDT:
+
+- Joe requested a direct installation of the latest PR #139 development build
+  on the connected paired device `iPhone (254)` (iPhone 16 Pro,
+  `E0C1F5F2-1609-5FB7-8CF7-DF59C10A63C3`). This is a local developer deploy
+  only; no TestFlight, App Store Connect, build-number, backend, or source
+  change is intended.
+
+Device deployment completed, 2026-07-21 12:20 PDT:
+
+- The first device build exhausted local disk space. To recover only safe,
+  generated storage, cleared scoped Wander Xcode build output and an unused
+  Playwright browser cache. No source, simulator, phone, or user data was
+  removed.
+- Rebuilt the current PR #139 source successfully for the paired iPhone 16 Pro
+  (arm64, `com.grayline.wander`, Apple development signing team `Y7TVK75RZ8`),
+  then installed and foreground-launched it with demo fixtures on the Feed
+  surface. No TestFlight, App Store Connect, build-number, migration, backend,
+  or production data change was made.
