@@ -14929,3 +14929,5 @@ Feed refresh regression handoff, 2026-07-21 14:53 PDT:
 - REC-121 is ready for review. Do not merge or create a TestFlight build from
   this bug-feedback workflow; a later explicit release request should package
   the then-current `main`.
+- Linear `REC-121` is In Review with the PR and validation evidence. Mission
+  Control task `6c67ce7c-b38f-406f-9977-cba374767648` is also in Review.
