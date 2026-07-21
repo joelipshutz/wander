@@ -14732,3 +14732,15 @@ People-tab implementation, 2026-07-21 11:22 PDT:
   output. Do not stage them. A pre-existing partial build was cleaned with
   Xcode's scoped clean command after a low-disk failure; no source or device
   data was removed.
+
+Handoff, 2026-07-21 11:25 PDT:
+
+- Committed the app implementation as `c8430d5` (`feat: add People surface to
+  Feed`) and pushed it to the existing ready-review PR #139:
+  https://github.com/joelipshutz/wander/pull/139.
+- REC-107 is `In Review` with the validation record and commit link. No
+  TestFlight build, App Store build number, backend migration, or production
+  data changed in this update.
+- Before merge, inspect the PR against current `main` and rerun the full native
+  test suite if source conflicts require a rebase. The earlier Feed migration's
+  hosted pgTAP/RLS verification remains a separate pre-merge requirement.
