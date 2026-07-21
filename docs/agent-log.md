@@ -14659,3 +14659,15 @@ Implementation and validation checkpoint, 2026-07-21 00:17 PDT:
   unexecuted locally because this machine has no Supabase CLI, Docker, or
   `psql`. Hosted migration/test application is intentionally deferred to the
   PR review/release lane.
+
+Handoff, 2026-07-21 00:21 PDT:
+
+- Committed the implementation as `15d9ff3` (`feat: add social Feed tab`) and
+  opened ready review PR #139: https://github.com/joelipshutz/wander/pull/139.
+  Linear REC-107 is now `In Review` with the same validation and hosted pgTAP
+  follow-up recorded.
+- Before merge: run the committed Feed migration and pgTAP contract against a
+  confirmed hosted/staging Supabase target, verify security-definer metadata
+  and grants, then rebase/update from latest `main` and rerun native tests if
+  app source conflicts occur. Do not increment a build number or upload to
+  TestFlight unless Joe explicitly requests a release.
