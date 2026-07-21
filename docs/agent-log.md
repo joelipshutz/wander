@@ -14401,3 +14401,17 @@ Implementation and validation, 2026-07-21 00:08 PDT:
 - `git diff --check` passes. No schema, hosted data, build number, TestFlight,
   or Slack release state changed. Publishing the ready PR and Linear handoff is
   the remaining work.
+
+Handoff, 2026-07-21 00:11 PDT:
+
+- Committed the implementation as `ce1150c7bf2db347134c3d33efc5904b61b1803e`
+  (`fix: show place photos on list tiles`) and pushed
+  `codex/rec-113-list-place-photos`.
+- Opened ready PR #138 against `main`; GitHub reports no merge conflicts:
+  https://github.com/joelipshutz/wander/pull/138.
+- Linked PR #138 and the validation details to Linear REC-113, then moved the
+  issue from `In Progress` to `In Review`. It remains open until Ryan completes
+  the signed-in live-photo acceptance check and the change is actually shipped.
+- No TestFlight build was requested or created. Next: Ryan should test all three
+  list scopes plus the bottom list-map browse cards with places that cover both
+  a user-photo winner and a Google Maps fallback; merge only after that check.
