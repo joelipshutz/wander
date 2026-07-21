@@ -14917,3 +14917,15 @@ Feed refresh regression root cause and fix checkpoint, 2026-07-21 14:41 PDT:
 - Static parse and diff checks pass. The focused iPhone 16 Plus test run passed
   4/4 after the decoder fix; full suite validation is running from the warm
   derived-data cache. No migration, RLS, or hosted data change was made.
+
+Feed refresh regression handoff, 2026-07-21 14:53 PDT:
+
+- Committed the implementation as `6a76eef` (`fix: decode Feed timestamps and
+  recover gracefully`) and opened PR #142:
+  https://github.com/joelipshutz/wander/pull/142
+- Validation passed: focused Feed regressions 4/4 and complete iPhone 16 Plus
+  / iOS 18.6 suite 488/488. Full result bundle:
+  `/private/tmp/recme-rec121-derived/Logs/Test/Test-Wander-2026.07.21_14-46-50--0700.xcresult`.
+- REC-121 is ready for review. Do not merge or create a TestFlight build from
+  this bug-feedback workflow; a later explicit release request should package
+  the then-current `main`.
