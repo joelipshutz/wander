@@ -366,7 +366,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
-        XCTAssertTrue(activeLists.contains(".prefix(4)"))
+        XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
+        XCTAssertTrue(activeLists.contains("limit: 4"))
+        XCTAssertTrue(activeLists.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertTrue(source.contains("let renderedLists = activeLists"))
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))

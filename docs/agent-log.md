@@ -14332,3 +14332,72 @@ Build-82 smoke/release completion, 2026-07-20 15:16 PDT:
   ran the committed 23-assertion Discover pgTAP contract; future parity can add
   its extra ACL plus blocked/self/unauthenticated follow cases to that pgTAP
   file. This does not block the already-approved build or REC-90 behavior.
+
+## 2026-07-20 23:43 PDT - Codex - REC-113 list and map-card place photos
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Progress`)
+
+Goal: implement REC-113 so My, Friends, and Collabs list tiles show one photo
+from each of up to four distinct places, preferring visible user photos and
+falling back to Google Maps place photos. Also replace the emoji-only media in
+the list map's browse card called out in Ryan's screenshot with the same photo
+preference and fallback behavior.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `339cba2e0`. The primary checkout has unrelated `.gitignore`
+  changes and an untracked `.pnpm-store/`; both were left untouched.
+- Existing worktrees do not overlap this REC-113 branch. The high-conflict
+  `Wander/Features/Lists/ListsScreen.swift` is not listed in another active
+  agent's current log entry; all edits will stay in this isolated worktree.
+- Current list mosaics render category emoji only. The list map browse card can
+  show only a current-user photo with a local asset reference; it does not load
+  an uploaded/visible user photo or Google Maps fallback. Existing place-profile
+  infrastructure already provides authenticated visible-user-photo lookup,
+  Google Places fallback, cached image loading, and Google Maps attribution.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, a focused Lists
+  photo resolver under `Wander/Features/Lists/`, focused tests under
+  `WanderTests/`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log.
+  No schema/RLS, auth, build-number, or TestFlight changes are in scope.
+
+Implementation and validation, 2026-07-21 00:08 PDT:
+
+- Added one shared Lists photo resolver and media view for both the My/Friends/
+  Collabs four-place mosaics and the list-map browse card from Ryan's
+  screenshot. Resolution is user-first: a current-user local/uploaded visit
+  photo, then the first photo visible through existing RLS/RPC behavior, then
+  the existing Google Places photo endpoint. An unreadable user image falls
+  through to Google; emoji remains the honest final fallback.
+- Google-provided images render with a compact `Google Maps` attribution strip.
+  Preview mosaics select at most four distinct place IDs in list order, so the
+  same saved place cannot consume multiple photo cells.
+- Preserved provider identity on the lightweight list-cover projection so photo
+  lookup uses the exact saved Google/MapKit metadata instead of reconstructing
+  it from display copy. Reused `WanderBackend` metadata/image task coalescing
+  and image cache rather than adding a second network/cache path.
+- Added five focused resolver/selector tests and updated the list-home hot-path
+  contract. Ran `xcodegen generate`; the generated project diff contains only
+  the new app/test source membership.
+- Focused final validation passed: 6/6 tests (the five REC-113 cases plus the
+  list projection contract). Full suite passed earlier in the same final code
+  pass: 470/470 tests, zero failures, on iPhone 17 Pro / iOS 26.5. The repository
+  command's iPhone 16 Plus / iOS 18.6 destination is not installed on this
+  machine; the attempted run failed at destination selection rather than in app
+  code, so it is not reported as a pass.
+- Visual layout QA passed for populated list tiles and the exact selected
+  list-map browse card on iPhone 17 Pro and smaller iPhone 17e. No clipping,
+  overlap, or changed hit targets were observed. Evidence:
+  `/private/tmp/rec113-lists-iphone17pro.png`,
+  `/private/tmp/rec113-lists-iphone17e.png`,
+  `/private/tmp/rec113-map-card-iphone17pro.png`, and
+  `/private/tmp/rec113-map-card-iphone17e.png`. The deterministic fixture has no
+  authenticated photo repository, so those screenshots intentionally exercise
+  the emoji fallback; user-photo/Google image selection is covered by the
+  focused tests and remains the signed-in live-data check for Ryan.
+- `git diff --check` passes. No schema, hosted data, build number, TestFlight,
+  or Slack release state changed. Publishing the ready PR and Linear handoff is
+  the remaining work.

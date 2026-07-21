@@ -431,11 +431,17 @@ struct ListsScreen: View {
 
         let sourceLists = store.visiblePlaceLists(scope: selectedScope.placeListScope)
         let visiblePlacesByListID = store.visiblePlacesByListID(in: sourceLists)
+        let preferredUserPhotosByPlaceID = store.firstVisitPhotosByPlaceID()
         let storeLists = sourceLists
             .map { list in
-                PlaceListMock(
+                let previewPlaces = ListPreviewPlaceSelector.distinctPrefix(
+                    visiblePlacesByListID[list.id, default: []],
+                    limit: 4
+                )
+                return PlaceListMock(
                     summary: list,
-                    visiblePlaces: Array(visiblePlacesByListID[list.id, default: []].prefix(4)),
+                    visiblePlaces: previewPlaces,
+                    preferredUserPhotosByPlaceID: preferredUserPhotosByPlaceID,
                     store: store
                 )
             }
@@ -691,12 +697,12 @@ private struct ListPreviewMosaic: View {
     }
 
     private func mosaicTile(place: ListPlaceMock) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                .fill(place.tint)
-
-            WanderCategoryEmoji(emoji: place.emoji, size: 22)
-        }
+        ListPlacePhotoMedia(
+            place: place,
+            cornerRadius: WanderTheme.radiusSmall,
+            fallbackEmojiSize: 22,
+            googleAttributionFontSize: 8
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
     }
@@ -2886,21 +2892,14 @@ private struct ListMapPlaceTile: View {
 private struct ListMapCompactMedia: View {
     let place: ListPlaceMock
     let outlines: [MapPinOutline]
-    @State private var localImage: UIImage?
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .fill(place.tint)
-            WanderCategoryEmoji(emoji: place.emoji, size: 22)
-
-            if let localImage {
-                Image(uiImage: localImage)
-                    .resizable()
-                    .scaledToFill()
-                    .transition(.opacity)
-            }
-        }
+        ListPlacePhotoMedia(
+            place: place,
+            cornerRadius: WanderTheme.radiusMedium,
+            fallbackEmojiSize: 22,
+            googleAttributionFontSize: 7
+        )
         .frame(width: 62, height: 62)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(
@@ -2918,16 +2917,71 @@ private struct ListMapCompactMedia: View {
             .offset(x: 4, y: 4)
         }
         .accessibilityHidden(true)
-        .task(id: place.compactPhotoAssetRef) {
-            guard let assetRef = place.compactPhotoAssetRef else {
-                localImage = nil
-                return
+    }
+}
+
+private struct ListPlacePhotoMedia: View {
+    @EnvironmentObject private var backend: WanderBackend
+    let place: ListPlaceMock
+    let cornerRadius: CGFloat
+    let fallbackEmojiSize: CGFloat
+    let googleAttributionFontSize: CGFloat
+    @State private var resolvedPhoto: ListPlaceResolvedPhoto?
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(place.tint)
+
+                WanderCategoryEmoji(emoji: place.emoji, size: fallbackEmojiSize)
+
+                if let resolvedPhoto {
+                    Image(uiImage: resolvedPhoto.image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .transition(.opacity)
+                }
             }
-            let image = VisitPhotoLocalFileStore.image(from: assetRef)
-            withAnimation(.easeOut(duration: 0.2)) {
-                localImage = image
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(alignment: .bottom) {
+                if resolvedPhoto?.photo.isGooglePlacesPhoto == true {
+                    Text("Google Maps")
+                        .font(.system(size: googleAttributionFontSize, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .padding(.horizontal, 3)
+                        .frame(maxWidth: .infinity, minHeight: 13)
+                        .background(Color.black.opacity(0.68))
+                        .allowsHitTesting(false)
+                }
             }
         }
+        .clipped()
+        .task(id: photoResolutionKey) {
+            resolvedPhoto = nil
+            let resolved = await ListPlacePhotoResolver.resolve(
+                request: place.canonicalProfilePlace.photoRequest,
+                preferredUserPhoto: place.preferredUserPhoto,
+                backend: backend
+            )
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                resolvedPhoto = resolved
+            }
+        }
+    }
+
+    private var photoResolutionKey: String {
+        [
+            place.canonicalProfilePlace.photoLookupKey,
+            place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo"
+        ]
+            .joined(separator: "|")
     }
 }
 
@@ -3572,9 +3626,34 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 }
 
+private func listPlacePhoto(from photo: LocalVisitPhoto?) -> PlacePhoto? {
+    guard let photo else { return nil }
+
+    return PlacePhoto(
+        provider: "visit_photo",
+        providerPlaceID: photo.id,
+        photoURLString: photo.remoteURLString ?? "",
+        width: photo.width,
+        height: photo.height,
+        authorName: nil,
+        authorProfileURLString: nil,
+        authorAvatarURLString: nil,
+        sourcePhotoURLString: nil,
+        flagContentURLString: nil,
+        storageBucket: photo.storageBucket,
+        storagePath: photo.storagePath,
+        localAssetRef: photo.localAssetRef
+    )
+}
+
 @MainActor
 private extension PlaceListMock {
-    init(summary list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore) {
+    init(
+        summary list: LocalPlaceList,
+        visiblePlaces: [VisiblePlace],
+        preferredUserPhotosByPlaceID: [String: LocalVisitPhoto],
+        store: WanderStore
+    ) {
         let owner = store.profiles.first { $0.id == list.ownerUserID }
         self.id = list.id
         self.name = list.name
@@ -3582,8 +3661,14 @@ private extension PlaceListMock {
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
         self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
-        self.places = visiblePlaces.map {
-            ListPlaceMock(cover: $0, currentUserID: store.currentUser.id)
+        self.places = visiblePlaces.map { visiblePlace in
+            ListPlaceMock(
+                cover: visiblePlace,
+                currentUserID: store.currentUser.id,
+                preferredUserPhoto: listPlacePhoto(
+                    from: preferredUserPhotosByPlaceID[visiblePlace.place.id]
+                )
+            )
         }
         self.itemCountOverride = list.cachedItemCount
         self.sourceListID = list.id
@@ -3613,16 +3698,16 @@ private extension PlaceListMock {
                     attributes: visiblePlace.attributes
                 )
             ]
-            let compactPhotoAssetRef = context
-                .firstVisitPhotoByPlaceID[visiblePlace.place.id]?
-                .localAssetRef
+            let preferredUserPhoto = listPlacePhoto(
+                from: context.firstVisitPhotoByPlaceID[visiblePlace.place.id]
+            )
 
             return ListPlaceMock(
                 visiblePlace: visiblePlace,
                 saves: saves,
                 tasteSaves: context.tasteSaves,
                 currentUserID: context.currentUserID,
-                compactPhotoAssetRef: compactPhotoAssetRef
+                preferredUserPhoto: preferredUserPhoto
             )
         }
         self.itemCountOverride = list.cachedItemCount
@@ -3690,7 +3775,7 @@ private struct ListPlaceMock: Identifiable {
     let saves: [PlaceSaveSummary]
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
-    let compactPhotoAssetRef: String?
+    let preferredUserPhoto: PlacePhoto?
     let saveStates: [MapPinSaveState]
 
     init(
@@ -3714,7 +3799,7 @@ private struct ListPlaceMock: Identifiable {
         saves: [PlaceSaveSummary] = [],
         tasteSaves: [PlaceSaveSummary] = [],
         currentUserID: String = "you",
-        compactPhotoAssetRef: String? = nil,
+        preferredUserPhoto: PlacePhoto? = nil,
         saveStates: [MapPinSaveState]? = nil
     ) {
         self.id = id
@@ -3737,7 +3822,7 @@ private struct ListPlaceMock: Identifiable {
         self.saves = saves
         self.tasteSaves = tasteSaves
         self.currentUserID = currentUserID
-        self.compactPhotoAssetRef = compactPhotoAssetRef
+        self.preferredUserPhoto = preferredUserPhoto
         self.saveStates = saveStates ?? [
             MapPinSaveState(ownership: saveOwnership, status: status)
         ]
@@ -3817,7 +3902,7 @@ private struct ListPlaceMock: Identifiable {
         saves: [PlaceSaveSummary] = [],
         tasteSaves: [PlaceSaveSummary] = [],
         currentUserID: String,
-        compactPhotoAssetRef: String? = nil
+        preferredUserPhoto: PlacePhoto? = nil
     ) {
         let place = visiblePlace.place
         let categoryPresentation = visiblePlace.categoryPresentation
@@ -3851,7 +3936,7 @@ private struct ListPlaceMock: Identifiable {
             saves: saves,
             tasteSaves: tasteSaves,
             currentUserID: currentUserID,
-            compactPhotoAssetRef: compactPhotoAssetRef,
+            preferredUserPhoto: preferredUserPhoto,
             saveStates: saves.isEmpty
                 ? nil
                 : saves.map { save in
@@ -3863,7 +3948,11 @@ private struct ListPlaceMock: Identifiable {
         )
     }
 
-    init(cover visiblePlace: VisiblePlace, currentUserID: String) {
+    init(
+        cover visiblePlace: VisiblePlace,
+        currentUserID: String,
+        preferredUserPhoto: PlacePhoto? = nil
+    ) {
         let place = visiblePlace.place
         let categoryPresentation = visiblePlace.categoryPresentation
         let category = categoryPresentation.assignment.primaryCategory
@@ -3884,7 +3973,9 @@ private struct ListPlaceMock: Identifiable {
             visiblePlaceID: visiblePlace.id,
             locality: place.locality,
             ownerName: visiblePlace.owner.id == currentUserID ? "You" : visiblePlace.owner.displayName,
-            currentUserID: currentUserID
+            profilePlace: PlaceSheetPlace(visiblePlace: visiblePlace),
+            currentUserID: currentUserID,
+            preferredUserPhoto: preferredUserPhoto
         )
     }
 
