@@ -338,6 +338,71 @@ final class PlaceImportStoreTests: XCTestCase {
         })
     }
 
+    func testFreshSocialImportKeepsResolvedPlacesWhenAnotherHintHasNoMapCandidate() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: RoutingNoCandidateThrowingDevicePlaceResolver(routes: [
+                    "fremont lake": [placeImportCandidate(name: "Fremont Lake")]
+                ]),
+                metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/p/fresh-no-candidate/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(items.map(\.state), [.ready, .needsHelp])
+        XCTAssertFalse(items.contains { $0.displayName == "instagram.com" })
+        XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
+    }
+
+    func testFreshSocialImportKeepsPartialResultsDuringTransientMapFailure() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: PartiallyThrowingDevicePlaceResolver(
+                    successfulName: "Fremont Lake",
+                    candidate: placeImportCandidate(name: "Fremont Lake")
+                ),
+                metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/p/fresh-partial-map-failure/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(items.map(\.state), [.ready, .needsHelp])
+        XCTAssertFalse(items.contains { $0.displayName == "instagram.com" })
+        XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
+    }
+
     func testSocialResolverRejectsGenericCoffeeHintsAroundOneNamedVenue() async throws {
         let oneCedar = placeImportCandidate(name: "One Cedar")
         let resolver = DevicePlaceImportResolver(
@@ -791,7 +856,7 @@ final class PlaceImportStoreTests: XCTestCase {
         routes["wind riyer range"] = routes["wind river range"]
         routes["pine coffee & supply"] = routes["pine coffee supply"]
         let resolver = DevicePlaceImportResolver(
-            placeResolver: RoutingDevicePlaceResolver(routes: routes),
+            placeResolver: RoutingNoCandidateThrowingDevicePlaceResolver(routes: routes),
             metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
             thumbnailRecognizer: recognizer
         )
@@ -1737,6 +1802,25 @@ private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
         routes[input.name.lowercased()] ?? []
+    }
+    func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
+}
+
+@MainActor
+private final class RoutingNoCandidateThrowingDevicePlaceResolver: PlaceCandidateResolving {
+    let routes: [String: [PlaceCandidate]]
+
+    init(routes: [String: [PlaceCandidate]]) {
+        self.routes = routes
+    }
+
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        guard let candidates = routes[input.name.lowercased()] else {
+            throw PlaceResolutionError.noCandidates
+        }
+        return candidates
     }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
 }

@@ -14470,3 +14470,51 @@ Xcode handoff follow-up, 2026-07-20 22:29 PDT:
   worktree as its own Xcode project and verify the Branch Chooser, without
   switching or overwriting another active checkout. This follow-up changes
   process documentation only; app code and prior validation are unchanged.
+
+Regression follow-up, 2026-07-20 23:06 PDT:
+
+- Ryan's first real-device test exposed a blocker: the newly imported source
+  appeared as a `needsHelp` row titled `instagram.com` with “Retry automatic
+  match” instead of the extracted destinations. Reviewed the supplied 22:57
+  screenshot and the live Xcode console on `Ry’s iPhone` before editing.
+- The console proves carousel fetch/OCR did work: 12 media discovered, 12 OCR
+  attempts, 13 hints, five resolved entries, and four honest unresolved
+  entries. Production MapKit throws `PlaceResolutionError.noCandidates` for an
+  ordinary zero-result search, but `DevicePlaceImportResolver.socialResolution`
+  counted that as a service failure and discarded all nine accumulated rows.
+  Repeated manual retries then also triggered Apple Maps' 50-searches-per-minute
+  throttle. Expected edit scope is
+  `Wander/Services/PlaceImportStore.swift`, focused import regressions, and this
+  log. Existing-upgrade rollback behavior must remain intact.
+- The `/ios-fix` DebugBridge snapshot endpoint is not installed in this app, so
+  `GET /state/snapshot` is unavailable without expanding the project with
+  debug-only instrumentation. The user-supplied pre-fix screenshot plus the
+  live console trace are the reproducing evidence; the durable regression
+  fixture will be an executable store/resolver test that injects the same
+  partial MapKit lookup failure.
+
+Regression implementation checkpoint, 2026-07-20 23:23 PDT:
+
+- Copied the physical-device import snapshot to a temporary directory with
+  `xcrun devicectl` and inspected only the failing row. It contains the exact
+  REC-106 URL, no name/candidates, resolver version 5, and the source-level
+  temporary-MapKit help message. The device Run binary UUID matches the Xcode
+  build, ruling out a stale install. No private snapshot content was committed.
+- Fixed the semantic mismatch: `PlaceResolutionError.noCandidates` now follows
+  the normal unmatched-hint path instead of counting as an outage. A genuine
+  per-hint MapKit error now preserves named partial rows for a fresh import;
+  resolver-version upgrades still restore all prior rows atomically if their
+  refresh is incomplete. A generic `instagram.com` row remains possible only
+  when a real service failure leaves no usable named entry at all.
+- Added production-faithful regression coverage for a no-candidate throw, a
+  transient per-hint failure, existing-row rollback, and the exact 12-slide REC-106
+  fixture. The fixture now logs 13 hints, nine resolved destinations, four
+  ordinary no-candidate hints, and zero lookup failures.
+- Validation: four focused regression tests passed; the full suite passed 486
+  tests with zero failures; `xcodegen generate` produced no tracked project
+  churn; and the generic iOS Simulator build succeeded. The first sandboxed
+  generic build could not access CoreSimulator/SwiftPM caches, so the identical
+  build was rerun with the repository-prescribed elevated access and passed.
+  An independent read-only diff review found no P0/P1 issues and confirmed that
+  enum handling, cancellation, fresh-import partial results, and upgrade
+  rollback are exhaustive and correctly scoped.

@@ -13,6 +13,7 @@ enum PlaceImportResolution: Equatable {
     case needsHelp(String)
     case expanded([PlaceImportSeed], sourceName: String?)
     case expandedResolved([PlaceImportResolvedEntry], sourceName: String?)
+    case partialExpandedResolved([PlaceImportResolvedEntry], sourceName: String?)
 }
 
 @MainActor
@@ -124,9 +125,22 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 candidates = try await placeResolver.resolveManualEntry(
                     ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
                 )
+            } catch PlaceResolutionError.noCandidates {
+                candidates = []
             } catch {
                 try Task.checkCancellation()
                 lookupFailureCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints,
+                    helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
+                }
                 continue
             }
             try Task.checkCancellation()
@@ -206,8 +220,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             "social import resolution source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) resolved_count=\(resolvedCount, privacy: .public) unresolved_count=\(unresolvedCount, privacy: .public) no_candidate_count=\(noCandidateCount, privacy: .public) low_confidence_count=\(lowConfidenceCount, privacy: .public) lookup_failure_count=\(lookupFailureCount, privacy: .public) rejected_hint_count=\(rejectedHintCount, privacy: .public)"
         )
         if lookupFailureCount > 0 {
+            if !entries.isEmpty {
+                return .partialExpandedResolved(entries, sourceName: nil)
+            }
             return .needsHelp(
-                "Apple Maps matching was temporarily unavailable. Your previous import results were kept; retry later."
+                "Apple Maps matching was temporarily unavailable. Retry later."
             )
         }
         if entries.count == 1, let entry = entries.first {
@@ -272,7 +289,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         _ hint: SocialPlaceSearchHint,
         originalSeed: PlaceImportSeed,
         to entries: inout [PlaceImportResolvedEntry],
-        seenHints: inout Set<String>
+        seenHints: inout Set<String>,
+        helpMessage: String = "This place was named in the post, but Apple Maps needs your help matching it."
     ) -> Bool {
         guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
         let identity = hintIdentity(hint)
@@ -282,7 +300,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 seed: socialSeed(from: originalSeed, hint: hint, candidate: nil),
                 candidates: [],
                 selectedCandidateID: nil,
-                helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                helpMessage: helpMessage
             )
         )
         return true
@@ -847,7 +865,14 @@ final class PlaceImportStore: ObservableObject {
                 guard !Task.isCancelled,
                       let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
-                if case .needsHelp = resolution,
+                let shouldRestorePreviousRows: Bool
+                switch resolution {
+                case .needsHelp, .partialExpandedResolved:
+                    shouldRestorePreviousRows = true
+                case .candidates, .expanded, .expandedResolved:
+                    shouldRestorePreviousRows = false
+                }
+                if shouldRestorePreviousRows,
                    restoreReplacedSocialItems(placeholderID: itemID, at: resolvedIndex) {
                     // A transient metadata failure must not erase previously useful rows.
                 } else {
@@ -918,7 +943,8 @@ final class PlaceImportStore: ObservableObject {
                 batches[batchIndex].sourceName = sourceName
             }
             return
-        case .expandedResolved(let entries, let sourceName):
+        case .expandedResolved(let entries, let sourceName),
+             .partialExpandedResolved(let entries, let sourceName):
             let original = items[index]
             let expandedItems = entries.map { entry in
                 let state: PlaceImportItemState
