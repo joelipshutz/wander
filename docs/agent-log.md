@@ -14510,3 +14510,34 @@ Build-bump checkpoint:
   number values. `git diff --check` passes.
 - Next: publish this build metadata to `main`, verify exact latest `main`, then
   run the signed archive/upload/TestFlight helper sequence.
+
+Release outcome, 2026-07-21 12:11 PDT:
+
+- Committed the release metadata as `b48a20677ecc5311d7375e28ae5ba28577048bac`
+  (`chore: release TestFlight build 83`) and fast-forwarded `origin/main` from
+  the REC-113 squash merge to that commit. Re-fetched immediately before the
+  release gate; local `HEAD` and `origin/main` matched exactly.
+- Exact pushed `main` passed the generic iOS Simulator build and the full test
+  suite: 479/479 tests, zero failures, on iPhone 17 Pro / iOS 26.5. The
+  repository's documented iPhone 16 Plus / iOS 18.6 destination remains
+  unavailable on this machine; the installed current target was used, with the
+  earlier row-alignment visual acceptance also completed on iPhone 17 Pro and
+  smaller iPhone 17e.
+- Created the signed archive at
+  `/private/tmp/Wander-0.1-build83.xcarchive`. Archive metadata independently
+  verified bundle `com.grayline.wander`, marketing version `0.1`, and build
+  `83`. Export used `manageAppVersionAndBuildNumber=false`; Xcode reported both
+  archive and App Store Connect upload success.
+- App Store Connect build `b6244993-c316-44b6-8c5a-a2a92d79596a` reached
+  `VALID`, has `usesNonExemptEncryption=false`, received the build-83 What to
+  Test copy, was attached to the public `rec.me Alpha` group, and completed
+  external beta review as `APPROVED`. Public link:
+  https://testflight.apple.com/join/knEhRa6t.
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784661015734009.
+  Updated Linear REC-113 with the merge, validation, archive, TestFlight, and
+  Slack evidence and confirmed the issue is `Done`.
+- Known behavior: category emoji remains the final fallback when neither a
+  saved user photo nor a usable Google Maps place photo is available. No
+  production App Store release was performed. This log entry is the only
+  post-upload source change and does not alter the archived binary.
