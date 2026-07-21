@@ -14611,3 +14611,28 @@ Manual place-search implementation and validation, 2026-07-21 00:14 PDT:
 - An independent read-only review caught and drove fixes for automatic-import
   scope, cancellability, stale async results, and deterministic concurrency-test
   setup. The final review reports no remaining production or test findings.
+
+Manual place-search publication and Xcode handoff, 2026-07-21 00:19 PDT:
+
+- Committed the validated fix as `d50d7ae15` (`REC-106: Fix manual place
+  search`) and pushed it to `origin/codex/rec-106-instagram-carousel`. Updated
+  ready PR #137 with the physical-device evidence, manual-search root cause,
+  repaired behavior, and current 491-test validation:
+  https://github.com/joelipshutz/wander/pull/137. The PR remains open and was
+  not merged.
+- Added a detailed REC-106 Linear comment with the explanation for honest
+  unresolved Search rows, fix, validation, and concrete retest steps. Moved
+  REC-106 from `In Progress` to `In Review` for Ryan's physical-device retest.
+- Verified through Xcode UI that
+  `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` is open and the Branch
+  Chooser reports `codex/rec-106-instagram-carousel`; the selected destination
+  remains `Ry’s iPhone`. Started a fresh Run after the push. Xcode built the
+  branch, then presented its local-network device-discovery sheet because the
+  phone was unavailable on cable/LAN; cancelled that wait and left the correct
+  branch/project open for Ryan. Do not claim a fresh physical-device launch
+  until the phone reconnects.
+- Final handoff remains 6/6 focused regressions passed, 491/491 full-suite tests
+  passed, generic iOS Simulator build passed, XcodeGen and diff checks passed,
+  and independent final review clean. No merge, build-number bump, TestFlight
+  upload, hosted data mutation, or Slack announcement was requested or
+  performed.
