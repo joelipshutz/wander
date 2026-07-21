@@ -60,7 +60,7 @@ insert into public.places (
   id, canonical_name, category, latitude, longitude, source_provider, source_provider_place_id
 )
 values
-  ('70000000-0000-0000-0000-000000000001', 'Maya\'s Noodles', 'restaurant', 34.0522, -118.2437, 'mapkit', 'feed-noodles'),
+  ('70000000-0000-0000-0000-000000000001', 'Maya''s Noodles', 'restaurant', 34.0522, -118.2437, 'mapkit', 'feed-noodles'),
   ('70000000-0000-0000-0000-000000000002', 'Fern Coffee', 'coffee', 34.0450, -118.2500, 'mapkit', 'feed-coffee');
 
 insert into public.user_places (

@@ -14820,3 +14820,19 @@ TestFlight release preparation started, 2026-07-21 13:35 PDT:
 - The system `supabase` CLI is absent. Attempts to resolve it through `npx`
   did not produce a usable CLI, so hosted migration/RLS verification remains
   required before the release can be called fully validated.
+
+Feed backend release verification completed, 2026-07-21 13:55 PDT:
+
+- Installed Supabase CLI `2.109.1` transiently through `npx`, linked this
+  isolated worktree to the documented Wander project ref, and confirmed
+  `20260720234500_feed_activity.sql` was the only pending migration.
+- Applied that migration to the linked hosted project. A second migration-list
+  check shows local and remote aligned through `20260720234500`.
+- The first hosted pgTAP run surfaced a test-only SQL literal error in
+  `Maya's Noodles`; corrected it to PostgreSQL escaping and reran the complete
+  rollback-wrapped `supabase/tests/feed_activity.sql` suite. It reached its
+  twentieth and final assertion successfully. The direct hosted metadata check
+  also confirmed: `feed_events` RLS is enabled, `app.followed_feed` is
+  security-definer with a pinned `search_path`, authenticated callers cannot
+  call `app.record_feed_event`, authenticated callers can call
+  `public.followed_feed`, and anonymous callers cannot.
