@@ -14683,3 +14683,6 @@ Device QA deployment, 2026-07-21 01:47 PDT:
   tab value opens the renamed Feed tab. Verified the Wander process is running
   on-device (PID 4765). This was a direct developer install only: no version
   bump, archive, upload, TestFlight mutation, or production backend migration.
+- `DerivedData-device/` is local, untracked device-build output from this
+  deployment. It must not be committed; retain it only while device debugging
+  is useful, then clear it with Xcode's scoped clean command.
