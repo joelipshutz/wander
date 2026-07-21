@@ -14854,3 +14854,32 @@ TestFlight build 84 release started, 2026-07-21 14:05 PDT:
   held its build database lock; it was stopped, then the clean rerun completed
   successfully. Result bundle:
   `/private/tmp/recme-build84-derived/Logs/Test/Test-Wander-2026.07.21_13-26-15--0700.xcresult`.
+
+TestFlight build 84 release completed, 2026-07-21 14:46 PDT:
+
+- Squash-merged Feed PR #139 as `f8f02ef` and its build-number PR #140 as
+  `20fee3b`; the signed archive was created from that exact current `main`.
+- Hosted Feed migration `20260720234500_feed_activity.sql` is applied and the
+  migration ledger is aligned. Its hosted rollback pgTAP contract reached the
+  final twentieth assertion after correcting one test-only PostgreSQL string
+  literal. Direct metadata verification confirmed RLS, security-definer and
+  pinned-search-path posture, authenticated reader access, anonymous denial,
+  and denial of direct event writes.
+- The full iPhone 16 Plus / iOS 18.6 XCTest suite passed 484/484. Xcode archive
+  preparation initially exhausted the machine's disk; reclaimed 4.9 GB only
+  from generated Wander `DerivedData` caches, with no source, user data, or
+  TestFlight archive removed. A stale archive process was then stopped before
+  the final logged archive. That final archive reports bundle
+  `com.grayline.wander`, marketing version `0.1`, and build `84` at
+  `/private/tmp/Wander-0.1-build84.xcarchive`.
+- `xcodebuild -exportArchive` used automatic App Store signing with
+  `manageAppVersionAndBuildNumber=false` and reported `Uploaded Wander` /
+  `EXPORT SUCCEEDED`. App Store Connect build
+  `a511aeb7-0753-4814-9f64-78817a767f7b` is `VALID`, has
+  `usesNonExemptEncryption=false`, carries the en-US What to Test copy, is
+  attached to `rec.me Alpha`, and its external TestFlight review is `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784666728152069.
+  Linear REC-107 is `Done` with the complete release evidence. No App Store
+  production submission or marketing-version change was made.
