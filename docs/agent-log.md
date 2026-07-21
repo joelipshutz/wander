@@ -14472,3 +14472,41 @@ Review and implementation checkpoint, 2026-07-21 11:43 PDT:
   / iOS 26.5. `git diff --check` also passes. The implementation now has no
   unresolved critical or informational findings from the required pre-merge
   engineering review.
+
+## 2026-07-21 11:48 PDT - Codex - TestFlight Build 83 Release
+
+Agent: Codex using the `recme-pr-review-merge-release` workflow
+Branch: `codex/testflight-build-83`
+Worktree: `/private/tmp/recme-build83-release`
+Linear: `REC-113`
+
+Goal: Ryan explicitly requested a new TestFlight build after accepting the live
+list-photo behavior and requesting the final wrapped-name row-alignment fix.
+Package exact latest merged `main`, including squash-merged PR #138, as rec.me
+`0.1 (83)`; validate, archive, upload, attach to the public TestFlight group,
+and post the required tester note.
+
+Starting state:
+
+- PR #138 squash-merged cleanly as `9d11839dd`; `origin/main` was re-fetched and
+  this isolated release worktree was created from that exact commit. The dirty
+  unrelated primary checkout remains untouched.
+- Build 82 is the latest completed and approved TestFlight release. `project.yml`
+  reports marketing version `0.1` and build `82`; build 83 is the next monotonic
+  release number, with no competing build-83 lane found.
+- The implementation passed 479/479 tests on iPhone 17 Pro / iOS 26.5, focused
+  photo/layout coverage passed 13/13, two-size row-alignment visual QA passed,
+  and the required engineering review has no unresolved findings.
+- Expected release edits are limited to `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this append-only log. No marketing
+  version change, schema/data mutation, or App Store production submission is
+  in scope.
+
+Build-bump checkpoint:
+
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 82 to 83, kept
+  `MARKETING_VERSION` at `0.1`, and regenerated the Xcode project with XcodeGen.
+- The generated project diff contains only the intended Debug and Release build
+  number values. `git diff --check` passes.
+- Next: publish this build metadata to `main`, verify exact latest `main`, then
+  run the signed archive/upload/TestFlight helper sequence.
