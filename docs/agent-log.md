@@ -14931,3 +14931,25 @@ Feed refresh regression handoff, 2026-07-21 14:53 PDT:
   the then-current `main`.
 - Linear `REC-121` is In Review with the PR and validation evidence. Mission
   Control task `6c67ce7c-b38f-406f-9977-cba374767648` is also in Review.
+
+TestFlight build 85 release started, 2026-07-21 15:05 PDT:
+
+- Joe explicitly requested that the Feed refresh regression fix be pushed to
+  his device through TestFlight. PR #142 was independently reviewed with no
+  blockers and squash-merged as `38bc85a` (`fix: decode Feed timestamps and
+  recover gracefully`). The GitHub CLI reported a local checkout conflict only
+  after the remote merge; direct remote verification confirmed `main` points
+  to that merge commit.
+- Created isolated release worktree `/private/tmp/recme-build85-release` on
+  `codex/testflight-build-85` from exact `origin/main` `38bc85a`. The worktree
+  is clean apart from this append-only release entry. The existing build-84
+  release is complete and approved; `project.yml` is marketing version `0.1`,
+  build `84`, so this release increments the build exactly once to `85`.
+- Release scope is only merged PR #142: accept hosted fractional ISO-8601 Feed
+  timestamps, retry a brief signed-in token-readiness race, and retain Feed
+  structure with Retry when cold/stale refreshes fail. No migration, RLS,
+  remote data, or marketing-version change is included.
+- Pending: generate the project, validate exact post-bump `main` with native
+  build/tests, archive/upload with `manageAppVersionAndBuildNumber=false`, run
+  the TestFlight helper, attach the actual uploaded build to the public group,
+  update REC-121, and post the required tester release note.
