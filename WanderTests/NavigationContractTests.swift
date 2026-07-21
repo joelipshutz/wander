@@ -378,6 +378,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
     }
 
+    func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let listGrid = try sourceSection(
+            source,
+            after: "private func listGrid(lists: [PlaceListMock]) -> some View",
+            before: "private var activeLists: [PlaceListMock]"
+        )
+        let listTile = try sourceSection(
+            source,
+            after: "private struct ListTile: View",
+            before: "private struct ListPreviewMosaic: View"
+        )
+        let photoMedia = try sourceSection(
+            source,
+            after: "private struct ListPlacePhotoMedia: View",
+            before: "private struct ListMapAvailabilityNotice: View"
+        )
+
+        XCTAssertEqual(
+            listGrid.components(separatedBy: "alignment: .top").count - 1,
+            2,
+            "Both list-grid columns should pin each row's tiles to the same top edge"
+        )
+        XCTAssertTrue(
+            listTile.contains(".lineLimit(2)"),
+            "Long list names should keep wrapping below the aligned preview mosaic"
+        )
+        XCTAssertTrue(photoMedia.contains("targetPixelSize"))
+        XCTAssertTrue(photoMedia.contains("store.currentUser.id"))
+        XCTAssertTrue(photoMedia.contains("store.follows"))
+        XCTAssertTrue(photoMedia.contains("store.blocks"))
+        XCTAssertTrue(
+            photoMedia.contains("resolvedPhotoKey == resolutionKey"),
+            "A relationship or account change should synchronously hide stale user photos"
+        )
+    }
+
     func testListsScreenOnlyUsesMockDataForExplicitVisualQAScenarios() {
         XCTAssertFalse(ListsScreenScenario.live.usesMockData)
         XCTAssertFalse(ListsScreenScenario.empty.usesMockData)

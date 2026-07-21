@@ -14415,3 +14415,60 @@ Handoff, 2026-07-21 00:11 PDT:
 - No TestFlight build was requested or created. Next: Ryan should test all three
   list scopes plus the bottom list-map browse cards with places that cover both
   a user-photo winner and a Google Maps fallback; merge only after that check.
+
+## 2026-07-21 11:15 PDT - Codex - REC-113 list-tile row alignment and release
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Review`)
+
+Goal: incorporate Ryan's signed-in acceptance feedback by keeping every list
+tile top-aligned within its two-column row while allowing a two-line list name
+to grow downward, then squash-merge PR #138 and publish an explicit TestFlight
+build from the resulting latest `main`.
+
+Starting status:
+
+- Fetched `origin`; the REC-113 worktree is clean and exactly tracks the pushed
+  branch at `efc444fe9`. PR #138 remains the implementation lane.
+- `origin/main` is `339cba2e0`, `CURRENT_PROJECT_VERSION` is 82, and the latest
+  durable release record confirms build 82 completed. No newer unfinished
+  build-number bump or explicit release lane was found.
+- The primary checkout remains on unrelated `codex/rec-88-visit-friends-mockup`
+  work. This isolated worktree remains required; those files will not be
+  touched.
+- Expected implementation files: `Wander/Features/Lists/ListsScreen.swift`, a
+  focused contract test in `WanderTests/NavigationContractTests.swift`, and this
+  log. After the implementation PR lands, the release lane will touch only the
+  required build-number/project files plus this log on latest `main`.
+
+Review and implementation checkpoint, 2026-07-21 11:43 PDT:
+
+- Added explicit top alignment to both lazy-grid columns. Verified the
+  requested row behavior on iPhone 17 Pro and smaller iPhone 17e: both preview
+  mosaics start at the same y-position, a two-line name grows beneath its own
+  preview, and the next row starts level again. Evidence:
+  `/private/tmp/rec113-aligned-lists-17pro.png` and
+  `/private/tmp/rec113-aligned-lists-17e.png`.
+- The pre-merge specialist review identified three blocking risks in the photo
+  path: full-size image decoding on the main actor, repeated visible-user photo
+  metadata requests across list cells, and a stale authorized photo remaining
+  visible after an account/follow/block change. Fixed all three with bounded
+  off-main downsampling plus decoded-image caching, in-flight request
+  coalescing scoped to the current authorization graph, and synchronous stale
+  image invalidation before re-resolution.
+- Consolidated the duplicate `LocalVisitPhoto` to `PlacePhoto` conversion into
+  one shared initializer while preserving local file, hosted storage, and
+  remote URL sources. Added coverage for local file reads, missing-local remote
+  fallback, cancellation, terminal provider failure, exact four-place
+  selection, image downsampling, concurrent request coalescing, and source
+  preservation.
+- Focused validation after those fixes passed 13/13 tests on iPhone 17 Pro / iOS
+  26.5. A preceding focused compile exposed a Swift 6 test-only `async let`
+  isolation error; the test was corrected to use explicit main-actor tasks and
+  the rerun passed. No production compile failure occurred.
+- Final full-suite gate passed 479/479 tests with zero failures on iPhone 17 Pro
+  / iOS 26.5. `git diff --check` also passes. The implementation now has no
+  unresolved critical or informational findings from the required pre-merge
+  engineering review.

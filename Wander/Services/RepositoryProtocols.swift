@@ -867,6 +867,24 @@ struct PlacePhoto: Decodable, Equatable {
         self.localAssetRef = localAssetRef
     }
 
+    init(localVisitPhoto photo: LocalVisitPhoto) {
+        self.init(
+            provider: "visit_photo",
+            providerPlaceID: photo.id,
+            photoURLString: photo.remoteURLString ?? "",
+            width: photo.width,
+            height: photo.height,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: photo.storageBucket,
+            storagePath: photo.storagePath,
+            localAssetRef: photo.localAssetRef
+        )
+    }
+
     enum CodingKeys: String, CodingKey {
         case provider
         case providerPlaceID = "provider_place_id"

@@ -402,8 +402,8 @@ struct ListsScreen: View {
     private func listGrid(lists: [PlaceListMock]) -> some View {
         LazyVGrid(
             columns: [
-                GridItem(.flexible(), spacing: WanderTheme.spacing3),
-                GridItem(.flexible(), spacing: WanderTheme.spacing3)
+                GridItem(.flexible(), spacing: WanderTheme.spacing3, alignment: .top),
+                GridItem(.flexible(), spacing: WanderTheme.spacing3, alignment: .top)
             ],
             alignment: .leading,
             spacing: WanderTheme.spacing6
@@ -2921,22 +2921,31 @@ private struct ListMapCompactMedia: View {
 }
 
 private struct ListPlacePhotoMedia: View {
+    @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.displayScale) private var displayScale
     let place: ListPlaceMock
     let cornerRadius: CGFloat
     let fallbackEmojiSize: CGFloat
     let googleAttributionFontSize: CGFloat
     @State private var resolvedPhoto: ListPlaceResolvedPhoto?
+    @State private var resolvedPhotoKey: String?
 
     var body: some View {
         GeometryReader { proxy in
+            let targetPixelSize = max(
+                1,
+                Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
+            )
+            let resolutionKey = photoResolutionKey
+
             ZStack {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(place.tint)
 
                 WanderCategoryEmoji(emoji: place.emoji, size: fallbackEmojiSize)
 
-                if let resolvedPhoto {
+                if resolvedPhotoKey == resolutionKey, let resolvedPhoto {
                     Image(uiImage: resolvedPhoto.image)
                         .resizable()
                         .scaledToFill()
@@ -2948,7 +2957,8 @@ private struct ListPlacePhotoMedia: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .overlay(alignment: .bottom) {
-                if resolvedPhoto?.photo.isGooglePlacesPhoto == true {
+                if resolvedPhotoKey == resolutionKey,
+                   resolvedPhoto?.photo.isGooglePlacesPhoto == true {
                     Text("Google Maps")
                         .font(.system(size: googleAttributionFontSize, weight: .semibold))
                         .foregroundStyle(Color.white)
@@ -2960,28 +2970,49 @@ private struct ListPlacePhotoMedia: View {
                         .allowsHitTesting(false)
                 }
             }
-        }
-        .clipped()
-        .task(id: photoResolutionKey) {
-            resolvedPhoto = nil
-            let resolved = await ListPlacePhotoResolver.resolve(
-                request: place.canonicalProfilePlace.photoRequest,
-                preferredUserPhoto: place.preferredUserPhoto,
-                backend: backend
-            )
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.2)) {
-                resolvedPhoto = resolved
+            .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+                resolvedPhoto = nil
+                resolvedPhotoKey = resolutionKey
+                let resolved = await ListPlacePhotoResolver.resolve(
+                    request: place.canonicalProfilePlace.photoRequest,
+                    preferredUserPhoto: place.preferredUserPhoto,
+                    authorizationScopeKey: photoAuthorizationScopeKey,
+                    targetPixelSize: targetPixelSize,
+                    backend: backend
+                )
+                guard !Task.isCancelled, photoResolutionKey == resolutionKey else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    resolvedPhoto = resolved
+                    resolvedPhotoKey = resolutionKey
+                }
             }
         }
+        .clipped()
     }
 
     private var photoResolutionKey: String {
         [
             place.canonicalProfilePlace.photoLookupKey,
-            place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo"
+            place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo",
+            photoAuthorizationScopeKey
         ]
             .joined(separator: "|")
+    }
+
+    private var photoAuthorizationScopeKey: String {
+        let followsKey = store.follows
+            .map {
+                "\($0.followerUserID)>\($0.followedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        let blocksKey = store.blocks
+            .map {
+                "\($0.blockerUserID)>\($0.blockedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        return "user:\(store.currentUser.id)|follows:\(followsKey)|blocks:\(blocksKey)"
     }
 }
 
@@ -3626,26 +3657,6 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
 }
 
-private func listPlacePhoto(from photo: LocalVisitPhoto?) -> PlacePhoto? {
-    guard let photo else { return nil }
-
-    return PlacePhoto(
-        provider: "visit_photo",
-        providerPlaceID: photo.id,
-        photoURLString: photo.remoteURLString ?? "",
-        width: photo.width,
-        height: photo.height,
-        authorName: nil,
-        authorProfileURLString: nil,
-        authorAvatarURLString: nil,
-        sourcePhotoURLString: nil,
-        flagContentURLString: nil,
-        storageBucket: photo.storageBucket,
-        storagePath: photo.storagePath,
-        localAssetRef: photo.localAssetRef
-    )
-}
-
 @MainActor
 private extension PlaceListMock {
     init(
@@ -3665,9 +3676,8 @@ private extension PlaceListMock {
             ListPlaceMock(
                 cover: visiblePlace,
                 currentUserID: store.currentUser.id,
-                preferredUserPhoto: listPlacePhoto(
-                    from: preferredUserPhotosByPlaceID[visiblePlace.place.id]
-                )
+                preferredUserPhoto: preferredUserPhotosByPlaceID[visiblePlace.place.id]
+                    .map(PlacePhoto.init(localVisitPhoto:))
             )
         }
         self.itemCountOverride = list.cachedItemCount
@@ -3698,9 +3708,8 @@ private extension PlaceListMock {
                     attributes: visiblePlace.attributes
                 )
             ]
-            let preferredUserPhoto = listPlacePhoto(
-                from: context.firstVisitPhotoByPlaceID[visiblePlace.place.id]
-            )
+            let preferredUserPhoto = context.firstVisitPhotoByPlaceID[visiblePlace.place.id]
+                .map(PlacePhoto.init(localVisitPhoto:))
 
             return ListPlaceMock(
                 visiblePlace: visiblePlace,
