@@ -14779,3 +14779,28 @@ Feed save and styling follow-up started, 2026-07-21 12:35 PDT:
   `DerivedData-people-tab/`, and `DerivedData-people-tab-validate/` remain
   untracked and will not be staged. Expected source/tests: `FeedScreen.swift`,
   `NavigationContractTests.swift`, and this log.
+
+Feed save and styling follow-up handoff, 2026-07-21 13:00 PDT:
+
+- Replaced Feed's immediate `store.saveVisiblePlace` shortcut with the shared
+  `MapPlaceSaveFlowSheet`. Feed save actions now open the standard status,
+  rating, note, visibility, and photo flow, then persist through
+  `persistNewPlaceSaveSubmission` and refresh the Feed. The resulting
+  confirmation preserves an offline-sync message where applicable.
+- Flattened `FeedActivityList`: activity entries now inherit the warm screen
+  canvas and are separated only by `borderHairline` dividers. The featured
+  horizontal place rail remains intentionally card-based.
+- Added `NavigationContractTests.testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat`
+  to prevent a return to the direct-save path or enclosing activity card.
+- Committed and pushed `03b8489` (`fix: route Feed saves through shared flow`)
+  to the existing PR #139. Linear REC-107 has the follow-up and validation
+  status. Mission Control was unavailable on `localhost:4000` during this
+  follow-up.
+- Validation: `xcrun swiftc -parse Wander/Features/Feed/FeedScreen.swift
+  WanderTests/NavigationContractTests.swift` passed. The required full
+  simulator XCTest run remains in progress while Xcode recompiles the current
+  simulator SDK cache (`DerivedData-people-tab-validate/`); it had not emitted
+  a compiler or test failure at handoff. A focused retry correctly failed only
+  with the same cache's `build.db` lock. Check the original test run/result
+  bundle before merging. Generated `DerivedData-*` directories remain
+  untracked and must not be staged.
