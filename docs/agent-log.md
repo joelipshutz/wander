@@ -15087,5 +15087,6 @@ GitHub authentication and PR completion, 2026-07-21 16:50 PDT:
 - The PR body omits the internal Slack permalink while retaining the fix,
   root-cause, impact, test, simulator, and runtime-gap evidence. PR #146 is
   `OPEN`, is not a draft, and contains no TestFlight or release action.
-- Next durable status is Linear REC-115 `In Review`; merging/release remains a
-  separate workflow and was not requested here.
+- Moved Linear REC-115 to `In Review`, attached PR #146, and recorded the
+  validation evidence. Merging/release remains a separate workflow and was not
+  requested here.
