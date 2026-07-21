@@ -105,6 +105,9 @@ final class WanderStore: ObservableObject {
             objectWillChange.send()
         }
     }
+    @Published private(set) var followedFeedPage: FollowedFeedPage?
+    @Published private(set) var feedLoadState: FeedLoadState = .idle
+    @Published private(set) var lastFeedRefreshAt: Date?
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
     var defaultVisibility: PlaceVisibility {
@@ -842,6 +845,9 @@ final class WanderStore: ObservableObject {
         extractionJobs = []
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsState = .idle
+        followedFeedPage = nil
+        feedLoadState = .idle
+        lastFeedRefreshAt = nil
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         discoverParseCache.removeAll()
@@ -860,6 +866,143 @@ final class WanderStore: ObservableObject {
 
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
+    }
+
+    /// Loads the local Feed fixture only when a remote Feed repository is not
+    /// available. Production data is supplied by the server-side event
+    /// projection; the fixture keeps demo and visual-QA launches deterministic.
+    @discardableResult
+    func refreshFollowedFeed(backend: WanderBackend?) async -> Bool {
+        let requestUserID = currentUser.id
+        feedLoadState = followedFeedPage == nil ? .loading : .stale
+
+        guard !Task.isCancelled else { return false }
+
+        if let backend, let repository = backend.feedRepository {
+            do {
+                let page = try await repository.followedFeed(before: nil, limit: 25)
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+                followedFeedPage = page
+                feedLoadState = .loaded
+                lastFeedRefreshAt = page.fetchedAt
+                lastRemoteError = nil
+                return true
+            } catch {
+                guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
+                lastRemoteError = remoteErrorMessage(error)
+                feedLoadState = followedFeedPage == nil ? .failed : .stale
+                return false
+            }
+        }
+
+        guard currentUser.id == requestUserID else { return false }
+        let page = fixtureFollowedFeedPage(relativeTo: .now)
+        followedFeedPage = page
+        feedLoadState = .loaded
+        lastFeedRefreshAt = page.fetchedAt
+        return true
+    }
+
+    private func fixtureFollowedFeedPage(relativeTo now: Date) -> FollowedFeedPage {
+        let followedIDs = Set(following(of: currentUser.id).map(\.id))
+        let followedPlaces = visiblePlaces(filters: PlaceFilters(ownerScopes: ["following"]))
+            .filter { followedIDs.contains($0.owner.id) }
+            .filter { !$0.owner.isPrivateProfile }
+            .filter { !isMuted(userID: $0.owner.id) }
+
+        func place(ownerID: String, name: String) -> VisiblePlace? {
+            followedPlaces.first {
+                $0.owner.id == ownerID && $0.place.canonicalName == name
+            }
+        }
+
+        func actor(for visiblePlace: VisiblePlace) -> ProfileShell {
+            shell(for: visiblePlace.owner)
+        }
+
+        func actorShell(for userID: String) -> ProfileShell? {
+            profile(for: userID).map(shell(for:))
+        }
+
+        let mayaBarNido = place(ownerID: "user_maya", name: "Bar Nido")
+        let ryanNoodles = place(ownerID: "user_ryan", name: "Larchmont Noodles")
+        let demoFernDesk = place(ownerID: "user_demo", name: "Fern Desk Coffee")
+        let ryanJuniper = place(ownerID: "user_ryan", name: "Juniper Table")
+        let mayaList = visiblePlaceLists.first { $0.id == "list_maya_sunset" }
+        let ryanList = visiblePlaceLists.first { $0.id == "list_ryan_brooklyn_tables" }
+
+        let activity = [
+            mayaBarNido.map {
+                FeedActivity(
+                    id: "fixture-feed-maya-been-bar-nido",
+                    kind: .placeBeen,
+                    actor: actor(for: $0),
+                    place: $0,
+                    occurredAt: now.addingTimeInterval(-3 * 60 * 60),
+                    note: $0.userPlace.note,
+                    rating: $0.userPlace.ratingScore
+                )
+            },
+            ryanNoodles.map {
+                FeedActivity(
+                    id: "fixture-feed-ryan-wanna-noodles",
+                    kind: .placeWannaGo,
+                    actor: actor(for: $0),
+                    place: $0,
+                    occurredAt: now.addingTimeInterval(-5 * 60 * 60),
+                    note: $0.userPlace.note
+                )
+            },
+            mayaList.flatMap { list in
+                actorShell(for: list.ownerUserID).map { actor in
+                FeedActivity(
+                    id: "fixture-feed-maya-created-sunset-list",
+                    kind: .listCreated,
+                    actor: actor,
+                    list: list,
+                    occurredAt: now.addingTimeInterval(-9 * 60 * 60),
+                    note: list.description
+                )
+                }
+            },
+            ryanJuniper.flatMap { visiblePlace in
+                ryanList.map { list in
+                    FeedActivity(
+                        id: "fixture-feed-ryan-added-juniper-list",
+                        kind: .listItemAdded,
+                        actor: actor(for: visiblePlace),
+                        place: visiblePlace,
+                        list: list,
+                        occurredAt: now.addingTimeInterval(-14 * 60 * 60),
+                        rating: visiblePlace.userPlace.ratingScore
+                    )
+                }
+            },
+            demoFernDesk.map {
+                FeedActivity(
+                    id: "fixture-feed-demo-saved-fern-desk",
+                    kind: .placeSaved,
+                    actor: actor(for: $0),
+                    place: $0,
+                    occurredAt: now.addingTimeInterval(-26 * 60 * 60),
+                    note: $0.userPlace.note
+                )
+            }
+        ]
+        .compactMap { $0 }
+
+        let orderedActivity = FeedPresentation.newestFirst(activity, relativeTo: now)
+        let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
+        return FollowedFeedPage(
+            activity: orderedActivity,
+            featuredPlaces: FeedPresentation.featuredPlaces(
+                from: orderedActivity,
+                currentUserPlaceIDs: savedPlaceIDs,
+                relativeTo: now
+            ),
+            nextCursor: nil,
+            fetchedAt: now
+        )
     }
 
     var effectiveDefaultVisibility: PlaceVisibility {

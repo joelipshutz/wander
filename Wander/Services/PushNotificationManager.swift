@@ -343,9 +343,13 @@ final class PushNotificationManager: ObservableObject {
     }
 
     func openSharedVisit(participantID: String, generation: Int) {
-        navigationRequest = NotificationNavigationRequest(
-            destination: .sharedVisit(participantID: participantID, generation: generation)
-        )
+        route(to: .sharedVisit(participantID: participantID, generation: generation))
+    }
+
+    /// Reuses the app's existing cross-tab destination handoff for in-app
+    /// actions (for example, Feed's `View list`) as well as push responses.
+    func route(to destination: NotificationDestination) {
+        navigationRequest = NotificationNavigationRequest(destination: destination)
     }
 
     func consumeNavigationRequest(id: UUID) {

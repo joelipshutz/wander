@@ -306,6 +306,132 @@ struct RemotePlaceAttributeDTO: Codable, Equatable {
     }
 }
 
+struct RemoteFeedMediaDTO: Codable, Equatable {
+    let id: String
+    let urlString: String?
+    let accessibilityLabel: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case urlString = "url"
+        case accessibilityLabel = "accessibility_label"
+    }
+
+    var preview: FeedMediaPreview {
+        FeedMediaPreview(id: id, urlString: urlString, accessibilityLabel: accessibilityLabel)
+    }
+}
+
+struct RemoteFeedListDTO: Codable, Equatable {
+    let id: String
+    let ownerUserID: String
+    let name: String
+    let description: String
+    let visibility: String
+    let itemCount: Int
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerUserID = "owner_user_id"
+        case name
+        case description
+        case visibility
+        case itemCount = "item_count"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func localList() -> LocalPlaceList {
+        LocalPlaceList(
+            localID: "remote_feed_list_\(id)",
+            serverID: id,
+            ownerUserID: ownerUserID,
+            name: name,
+            description: description,
+            visibility: PlaceListVisibility(rawValue: visibility) ?? .followers,
+            syncState: .synced,
+            cachedItemCount: itemCount,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+struct RemoteFeedActivityDTO: Codable, Equatable {
+    let id: String
+    let eventType: String
+    let occurredAt: Date
+    let actor: RemoteProfileShellDTO
+    let place: RemoteVisiblePlaceDTO?
+    let list: RemoteFeedListDTO?
+    let note: String?
+    let rating: Double?
+    let media: [RemoteFeedMediaDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case eventType = "event_type"
+        case occurredAt = "occurred_at"
+        case actor
+        case place
+        case list
+        case note
+        case rating
+        case media
+    }
+
+    func activity() throws -> FeedActivity {
+        guard let kind = FeedActivityKind(rawValue: eventType) else {
+            throw WanderRemoteError.invalidResponse("Unknown Feed event type: \(eventType)")
+        }
+        return FeedActivity(
+            id: id,
+            kind: kind,
+            actor: actor.profileShell(fallbackRelationship: .follower),
+            place: try place?.visiblePlace(),
+            list: list?.localList(),
+            occurredAt: occurredAt,
+            note: note,
+            rating: rating,
+            media: media.map(\.preview)
+        )
+    }
+}
+
+struct RemoteFeedFeaturedPlaceDTO: Codable, Equatable {
+    let place: RemoteVisiblePlaceDTO
+    let reason: String
+
+    func featuredPlace() throws -> FeedFeaturedPlace {
+        FeedFeaturedPlace(visiblePlace: try place.visiblePlace(), reason: reason)
+    }
+}
+
+struct RemoteFollowedFeedPageDTO: Codable, Equatable {
+    let activity: [RemoteFeedActivityDTO]
+    let featuredPlaces: [RemoteFeedFeaturedPlaceDTO]
+    let nextCursor: String?
+    let fetchedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case activity
+        case featuredPlaces = "featured_places"
+        case nextCursor = "next_cursor"
+        case fetchedAt = "fetched_at"
+    }
+
+    func followedFeedPage() throws -> FollowedFeedPage {
+        FollowedFeedPage(
+            activity: try activity.map { try $0.activity() },
+            featuredPlaces: try featuredPlaces.map { try $0.featuredPlace() },
+            nextCursor: nextCursor,
+            fetchedAt: fetchedAt
+        )
+    }
+}
+
 struct RemotePlaceListCollaboratorDTO: Codable, Equatable {
     let userID: String
     let handle: String

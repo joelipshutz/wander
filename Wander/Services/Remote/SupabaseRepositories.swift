@@ -285,6 +285,22 @@ struct SupabasePlaceRepository: PlaceRepository {
     }
 }
 
+struct SupabaseFeedRepository: FeedRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        let response: RemoteFollowedFeedPageDTO = try await rpc.call(
+            "followed_feed",
+            params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
+        )
+        return try response.followedFeedPage()
+    }
+}
+
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository {
     private let rpc: RemoteProcedureCalling
     private let userPlaceDeleter: RemoteUserPlaceDeleting?
@@ -1773,6 +1789,16 @@ private struct ProfileVisiblePlacesParams: Encodable {
         case profileID = "profile_id"
         case statusFilter = "status_filter"
         case categoryFilter = "category_filter"
+    }
+}
+
+private struct FollowedFeedParams: Encodable {
+    let before: String?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case before = "input_before"
+        case limit = "input_limit"
     }
 }
 

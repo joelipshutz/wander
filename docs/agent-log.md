@@ -14613,3 +14613,49 @@ Engineering-review completion, 2026-07-20 17:20 PDT:
 - Recorded the completed review, QA test plan, and five implementation tasks
   in the private gstack artifact store. Artifact sync is `artifacts-only`; no
   application data or source files were published by that workflow.
+
+Implementation checkpoint, 2026-07-20 23:30 PDT:
+
+- Began REC-107 implementation on `codex/rec-107-feed-mock` from current
+  `origin/main` (`339cba2`; no rebase was required after fetch).
+- Confirmed the existing social save path is `WanderStore.saveVisiblePlace`,
+  list details already route through `NotificationDestination.list`, and the
+  current Discover screen owns a large combined places/member search surface.
+  Feed will use a dedicated screen and preserve that search surface as a
+  separate focused destination instead of duplicating its parser.
+- Expected implementation touch points: Feed models/store/remote boundary,
+  `Wander/Features/Feed`, root navigation, list-route helper, migration/tests,
+  and generated Xcode project membership after source files are added.
+
+Implementation and validation checkpoint, 2026-07-21 00:17 PDT:
+
+- Implemented the dedicated Feed tab and compact rotating search launcher. The
+  prior combined Discover surface remains the focused full-screen search
+  destination; no parser or person-search behavior was duplicated.
+- Added a durable Feed contract: append-only `feed_events`, trigger-emitted
+  place/list events, an RLS-filtered/keyset-paginated `followed_feed` RPC,
+  native repository/DTO boundaries, deterministic local Feed fixtures, and
+  modular Featured-for-you versus chronological Your feed presentation.
+- Activity modules support place save, Been, Want to go, list creation, and
+  list additions. They retain honest rating semantics, optional note/media
+  rendering, actor routing, direct place save, and `View list` for list events.
+  The tab label is now `Feed` with the native `newspaper` icon while preserving
+  the existing five-tab enum and routing contract.
+- Ran `xcodegen generate`; then an arm64 iPhone 16 Plus build completed
+  successfully. Full native validation passed: `xcodebuild test … iPhone 16
+  Plus … ARCHS=arm64` executed 469 tests with 0 failures. The Feed-specific
+  models and navigation contracts are covered by new tests.
+- Captured and reviewed both populated demo Feed and signed-out/no-activity
+  Feed states on iPhone 16 Plus. The featured horizontal rail, reverse-
+  chronological Feed modules, list CTA, compact search, and empty-state
+  recovery hierarchy render correctly. A smaller iPhone 16 install initially
+  could not complete because the machine had only 116 MB free on the system
+  data volume. After user-approved removal of this worktree's generated
+  DerivedData, installed the validated simulator app onto iPhone 16 and
+  confirmed the populated Feed also fits and clips correctly there.
+- Added the pgTAP contract under `supabase/tests/feed_activity.sql`, including
+  append-only emission, no duplicate note-edit event, cursor, follow/block/
+  private/visibility filtering, and direct-RPC grant checks. It remains
+  unexecuted locally because this machine has no Supabase CLI, Docker, or
+  `psql`. Hosted migration/test application is intentionally deferred to the
+  PR review/release lane.

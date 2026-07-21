@@ -6,6 +6,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
 
+    func testDiscoverTabPresentsTheDedicatedFeedWithTheCompactSearchLauncher() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(root.contains("FeedScreen()"))
+        XCTAssertTrue(root.contains("case .discover: \"Feed\""))
+        XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
+        XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
+        XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
+        XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
+    }
+
     @MainActor
     func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
         XCTAssertEqual(
