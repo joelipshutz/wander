@@ -14437,3 +14437,23 @@ Completion checkpoint, 2026-07-20 16:50 PDT:
   and this log. No schema/data mutation, build-number bump, TestFlight upload,
   or tester announcement occurred. Ready to commit, publish a ready PR, link it
   to REC-106, and move the issue to `In Review` for Ryan's device/Xcode test.
+
+Publication checkpoint, 2026-07-20 22:17 PDT:
+
+- Committed the implementation as `5ab743368` (`REC-106: Fix Instagram
+  carousel place imports`), pushed `codex/rec-106-instagram-carousel`, and
+  opened ready PR #137: https://github.com/joelipshutz/wander/pull/137. The PR
+  links REC-106 and records the root cause, nine expected destinations, safety
+  behavior, and complete validation evidence.
+- Local `gh` authentication was stale and the GitHub connector could not create
+  a pull request with its integration permissions, so the signed-in GitHub web
+  UI was used to publish and verify the ready (non-draft) PR. This did not alter
+  implementation scope or validation.
+- Linear REC-106 is being handed off in `In Review` with PR #137 attached.
+  Ryan's next step is to open this worktree in Xcode, paste the supplied
+  Instagram URL, and confirm the nine ordered candidates on his simulator or
+  device. The only known validation gap remains the unavailable iPhone 16 Plus
+  / iOS 18.6 runtime; all automated tests and the generic simulator build are
+  green on the installed Xcode/iOS 26.5 environment.
+- No build-number bump, TestFlight upload, release attachment, hosted data
+  mutation, or Slack announcement was requested or performed.
