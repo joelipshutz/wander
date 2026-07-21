@@ -14518,3 +14518,25 @@ Regression implementation checkpoint, 2026-07-20 23:23 PDT:
   An independent read-only diff review found no P0/P1 issues and confirmed that
   enum handling, cancellation, fresh-import partial results, and upgrade
   rollback are exhaustive and correctly scoped.
+
+Regression publication and device handoff, 2026-07-20 23:29 PDT:
+
+- Committed the repair as `da6900232` (`REC-106: Preserve partial Instagram
+  imports`) and pushed it to `origin/codex/rec-106-instagram-carousel`, updating
+  ready PR #137: https://github.com/joelipshutz/wander/pull/137. Updated the PR
+  description with the real-device root cause, repaired semantics, and current
+  486-test validation. The PR remains open and was not merged.
+- Added a Linear REC-106 comment with the failure evidence, fix commit, test
+  results, and device retest instructions. REC-106 remains `In Review` until
+  Ryan confirms the existing failed row can be retried or the supplied URL can
+  be imported again with all nine named destinations preserved.
+- Opened `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in
+  Xcode, verified the Branch Chooser is `codex/rec-106-instagram-carousel`, set
+  the destination to `Ry’s iPhone`, and ran the repaired app on the physical
+  device. The import queue was preserved; Ryan's next action is to tap `Retry
+  automatic match` on the existing `instagram.com` row or paste the URL again.
+- Final validation remains four focused regressions passed, 486/486 full-suite
+  tests passed, generic iOS Simulator build passed, `xcodegen generate` passed
+  without project churn, `git diff --check` passed, and independent review had
+  no P0/P1 findings. No build-number bump, TestFlight upload, merge, hosted data
+  mutation, or Slack announcement was requested or performed.
