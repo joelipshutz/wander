@@ -14541,3 +14541,75 @@ Release outcome, 2026-07-21 12:11 PDT:
   saved user photo nor a usable Google Maps place photo is available. No
   production App Store release was performed. This log entry is the only
   post-upload source change and does not alter the archived binary.
+## 2026-07-20 16:12 PDT - Codex - REC-107 Feed design mock
+
+Agent: Codex using `design-html` (mock) and `design-review` (post-mock audit)
+Branch: `codex/rec-107-feed-mock`
+Worktree: `/private/tmp/recme-rec107-feed-mock`
+Linear: `REC-107` (`In Progress`)
+Mission Control: `ee7b601b-40ea-4278-a3bb-5d87c00e4688` (`in_progress`)
+
+Goal: turn the supplied Beli feed reference into an approved, rec.me-native
+Feed mock before any production code. The proposed information architecture is
+compact ticker search, an optional Featured for you horizontal place rail, then
+a modular newest-first Your feed of place saves, Been/Wanna Go events, list
+adds, and list creation. Activity cards must support actor identity, place/list
+metadata, relative time, rating/note/media, and a direct save affordance.
+
+Scope guardrails:
+
+- This is a mock/review pass only. Do not rename the shipped tab, change its
+  icon, or touch production Swift/UI/backend contracts before Joe approves the
+  primary Feed states.
+- The supplied Beli screenshot is reference material for hierarchy and density,
+  not a visual or copy clone. rec.me remains a trusted-place memory product,
+  not a generic public social network.
+- Design artifacts live under the per-user gstack design directory; expected
+  repo changes during this pass are only this append-only coordination log and,
+  after approval, durable product/design decision documentation if needed.
+
+Checkpoint, 2026-07-20 16:25 PDT:
+
+- Generated and manually audited the primary approval candidate at
+  `~/.gstack/projects/joelipshutz-wander/designs/feed-20260720/feed-primary-contract.png`.
+  It preserves the rec.me four-tab shell and puts social provenance, optional
+  notes/media, ratings, and saves at the center of the Feed. Two generated
+  alternates were discarded because they either changed the tab hierarchy or
+  became a generic card grid.
+- Added draft state and module contracts in
+  `docs/specs/2026-07-20-rec-107-feed-design.md`. The contract covers loading,
+  no activity, no featured candidates, offline/error, search, save transitions,
+  privacy/blocked exclusion, and Dynamic Type. It also explicitly requires
+  existing ticker motion and a bottom-right save affordance on compact Been and
+  Want to go modules.
+- The design model's remote quality check could not run because it would export
+  the private mock to an external service under the current policy. Manual
+  visual review is complete; no production Swift, tab rename, backend, or
+  project configuration was changed. Awaiting Joe's visual approval before
+  engineering review.
+- Added the same checkpoint to Linear REC-107. Mission Control is unavailable
+  on `localhost:4000` in this session, so its task remains `in_progress` rather
+  than moving to `review`; no workaround was used.
+
+Engineering-review completion, 2026-07-20 17:20 PDT:
+
+- Joe approved the Feed mock, the full truthful scope, durable Feed event
+  envelope, database-triggered emission, the existing five-tab shell with
+  Discover renamed to Feed, a dedicated `FeedScreen`, full hosted/native test
+  coverage, a deterministic trusted-place shelf, and a future personalized
+  ranker TODO.
+- The current app has no canonical way to save another person's list. Rather
+  than present a misleading action, Joe chose `View list` for list-created and
+  list-add modules; place modules retain the canonical `Save to my map` flow.
+- Added `docs/plans/2026-07-20-rec-107-feed-engineering-plan.md`, updated the
+  approved design spec, and added the deferred ranker to `TODOS.md`. The plan
+  locks an append-only, trigger-emitted activity envelope and one RLS-filtered,
+  keyset-paginated Feed projection. It includes pgTAP, Swift, simulator,
+  privacy, error, performance, and failure-mode requirements.
+- Reviewed current PostgreSQL trigger and Supabase RLS guidance. The plan uses
+  `AFTER` triggers for transactionally committed events and a narrow pinned
+  server function for viewer-scoped reads. No app source or hosted schema has
+  changed yet.
+- Recorded the completed review, QA test plan, and five implementation tasks
+  in the private gstack artifact store. Artifact sync is `artifacts-only`; no
+  application data or source files were published by that workflow.

@@ -66,6 +66,18 @@ Date: 2026-05-29
 
 ## P2
 
+- Add personalized Feed ranking after REC-107 usage data exists.
+  - Why: the first Feed release intentionally orders activity newest-first and
+    uses a deterministic trusted-place shelf. That keeps the social record
+    legible while the product learns what users actually save.
+  - Scope: rank the existing Feed module contract using trust, recency,
+    proximity, place relevance, and observed save likelihood. Preserve a clear
+    provenance reason for every featured result; do not turn it into an opaque
+    influencer ranking.
+  - Depends on: shipped REC-107 event analytics and enough real Feed sessions
+    to evaluate quality against reverse chronology.
+
+
 - Decide backend/auth stack. Done 2026-06-01.
   - Why: follow graph, geo queries, offline sync, profile/block rules, and visibility policies are core to Wander.
   - Decision: Clerk + Supabase. Clerk owns identity/session/account surfaces; Supabase owns Postgres/RLS/PostGIS/storage/functions; SwiftData owns local cache and sync queue.
