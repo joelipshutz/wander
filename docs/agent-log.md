@@ -14804,3 +14804,19 @@ Feed save and styling follow-up handoff, 2026-07-21 13:00 PDT:
   with the same cache's `build.db` lock. Check the original test run/result
   bundle before merging. Generated `DerivedData-*` directories remain
   untracked and must not be staged.
+
+TestFlight release preparation started, 2026-07-21 13:35 PDT:
+
+- Joe explicitly requested a TestFlight release for PR #139. Rebased
+  `codex/rec-107-feed-mock` onto current `origin/main`; the only conflict was
+  this coordination log, resolved by retaining both the completed build-83
+  release record and the Feed history. Generated `DerivedData-*` directories
+  remain pre-existing, untracked local output and will not be staged.
+- Release review confirmed the Feed migration revokes client execution of
+  `app.record_feed_event(...)`; added a pgTAP regression assertion so
+  `authenticated` cannot create arbitrary feed events directly. Static
+  validation passed: `git diff --check` and `xcrun swiftc -parse
+  Wander/Features/Feed/FeedScreen.swift WanderTests/NavigationContractTests.swift`.
+- The system `supabase` CLI is absent. Attempts to resolve it through `npx`
+  did not produce a usable CLI, so hosted migration/RLS verification remains
+  required before the release can be called fully validated.

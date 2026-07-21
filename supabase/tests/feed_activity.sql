@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(19);
+select plan(20);
 
 select ok(
   exists (
@@ -37,6 +37,15 @@ select ok(
 select ok(
   not has_function_privilege('authenticated', 'app.record_user_place_feed_event()', 'execute'),
   'authenticated cannot call the user-place event trigger directly'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'app.record_feed_event(text, text, uuid, uuid, uuid, uuid)',
+    'execute'
+  ),
+  'authenticated cannot create arbitrary feed events directly'
 );
 
 insert into public.profiles (id, handle, display_name, is_private_profile)
