@@ -15058,3 +15058,15 @@ Hosted repair and validation, 2026-07-21 16:30 PDT:
 - Mission Control was unavailable at `http://localhost:4000`, so no duplicate
   tracker task could be created. Linear `REC-121` was reopened as P1 and will
   carry the hosted validation and PR link.
+
+Completion, 2026-07-21 16:33 PDT:
+
+- Committed the repair as `4ed11d2` (`fix: restore authenticated Feed RPC
+  access`), pushed `codex/rec-121-feed-permissions`, and opened PR #145:
+  https://github.com/joelipshutz/wander/pull/145.
+- Linear `REC-121` is `In Review`, includes the PR and complete hosted/native
+  validation notes, and explicitly records the full-suite Xcode runner gap.
+- The production migration is live. TestFlight build 85 needs no replacement:
+  pulling to refresh or tapping Retry now calls the corrected Feed RPC.
+- No TestFlight upload, App Store build-number change, or production app
+  submission was performed for this server-contract repair.
