@@ -14953,3 +14953,35 @@ TestFlight build 85 release started, 2026-07-21 15:05 PDT:
   build/tests, archive/upload with `manageAppVersionAndBuildNumber=false`, run
   the TestFlight helper, attach the actual uploaded build to the public group,
   update REC-121, and post the required tester release note.
+
+TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
+
+- Squash-merged Feed fix PR #142 as `38bc85a`, then merged the metadata-only
+  build-number PR #143 as `364e43e`. The archive was created from that exact
+  latest `main` commit at `/private/tmp/Wander-0.1-build85.xcarchive`.
+- Archive metadata independently confirms display name `rec.me`, bundle
+  `com.grayline.wander`, marketing version `0.1`, build `85`, arm64, and team
+  `Y7TVK75RZ8`. Export used automatic App Store signing with
+  `manageAppVersionAndBuildNumber=false`; the first local-account upload path
+  was denied before upload, then the unchanged archive uploaded successfully
+  with the local App Store Connect API credential.
+- App Store Connect build `0.1 (85)`, id
+  `3e082181-c4c1-48c1-ae25-396671a95f93`, is `VALID`, has
+  `usesNonExemptEncryption=false`, and carries the en-US What to Test copy.
+  It is attached to `rec.me Alpha`; external TestFlight review is `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- Validation: PR #142's exact Feed source passed 488/488 on the prescribed
+  iPhone 16 Plus / iOS 18.6 suite before the metadata-only build bump. Two
+  post-bump full-suite attempts were interrupted only after idle Xcode runner
+  processes failed to launch tests; no compiler or XCTest failure occurred.
+  The signed production archive then succeeded from exact latest `main`.
+- Known technical follow-up: the archive emits two Swift concurrency warnings
+  in `RemoteDecoding` because its custom JSON date-decoding closure references
+  main-actor-isolated formatters. This did not block the archive or affect the
+  Feed fix; resolve the warnings before tightening warnings to errors.
+- REC-121 is now release-complete and remains `Done` in Linear, with the full
+  TestFlight evidence attached as a comment. The matching Mission Control task
+  `6c67ce7c-b38f-406f-9977-cba374767648` is `done`. Posted the required tester
+  note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
+  Store production submission or marketing-version change was made.
