@@ -14457,3 +14457,16 @@ Publication checkpoint, 2026-07-20 22:17 PDT:
   green on the installed Xcode/iOS 26.5 environment.
 - No build-number bump, TestFlight upload, release attachment, hosted data
   mutation, or Slack announcement was requested or performed.
+
+Xcode handoff follow-up, 2026-07-20 22:29 PDT:
+
+- Ryan clarified that every pushed branch intended for his local testing must
+  also be opened in Xcode before handoff. Opened
+  `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in Xcode and
+  verified the visible Branch Chooser reports
+  `codex/rec-106-instagram-carousel`; the selected run destination is Ryan's
+  iPhone. Xcode began normal package resolution/indexing for this worktree.
+- Added the durable handoff rule to `AGENTS.md`: open the isolated branch
+  worktree as its own Xcode project and verify the Branch Chooser, without
+  switching or overwriting another active checkout. This follow-up changes
+  process documentation only; app code and prior validation are unchanged.
