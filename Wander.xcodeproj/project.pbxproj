@@ -53,6 +53,7 @@
 		6B10E1C7F7DBA21983734B9E /* PlaceImportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4A6BBFEC984756BBE9A7E5 /* PlaceImportStore.swift */; };
 		6BA93655CF0B8C26582726FC /* PlaceImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD54264608BDFD2478F5DFE2 /* PlaceImportModels.swift */; };
 		6C035ED0288DBF6D7F44666C /* WanderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */; };
+		6DD4FB880BABD14154A14AC1 /* rec-106-manual-place-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */; };
 		6E92ECEF915365AE40170F7E /* AnalyticsEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62D76C9EC89546850909A7 /* AnalyticsEvent.swift */; };
 		6F22AE424BA53E5AC8514E7A /* ProfileRedesignMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */; };
 		73924B066BD7D0F8917C6F09 /* WanderPlaceCategoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */; };
@@ -118,6 +119,7 @@
 		02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkAuthService.swift; sourceTree = "<group>"; };
 		0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverScreen.swift; sourceTree = "<group>"; };
 		038D4985674B1D969110954F /* WanderEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderEnums.swift; sourceTree = "<group>"; };
+		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
 		0DA94EC62E68038D903E3501 /* ListsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListsScreen.swift; sourceTree = "<group>"; };
 		0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
 		10F65E6837895B0A19DDFAB2 /* SupabaseRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseRepositories.swift; sourceTree = "<group>"; };
@@ -354,6 +356,7 @@
 				C1AFBD6D06D23BC0C007F77C /* VisibilityPolicyTests.swift */,
 				A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */,
 				2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */,
+				AEC993BF400CE82DF8C78D55 /* Fixtures */,
 			);
 			path = WanderTests;
 			sourceTree = "<group>";
@@ -383,6 +386,14 @@
 				02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */,
 			);
 			path = Auth;
+			sourceTree = "<group>";
+		};
+		AEC993BF400CE82DF8C78D55 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */,
+			);
+			path = Fixtures;
 			sourceTree = "<group>";
 		};
 		C8403BB176FCA62C7D566901 /* App */ = {
@@ -495,6 +506,7 @@
 			buildConfigurationList = 0ED2594294971F381BE0136A /* Build configuration list for PBXNativeTarget "WanderTests" */;
 			buildPhases = (
 				8F2696591ED3034AEB25A26D /* Sources */,
+				A2A62777D17314023474B968 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -579,6 +591,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				9BDDE72CA80B33CAFC0EFD17 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2A62777D17314023474B968 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6DD4FB880BABD14154A14AC1 /* rec-106-manual-place-search-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

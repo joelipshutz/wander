@@ -14540,3 +14540,74 @@ Regression publication and device handoff, 2026-07-20 23:29 PDT:
   without project churn, `git diff --check` passed, and independent review had
   no P0/P1 findings. No build-number bump, TestFlight upload, merge, hosted data
   mutation, or Slack announcement was requested or performed.
+
+Manual place-search regression follow-up, 2026-07-20 23:44 PDT:
+
+- Ryan reported that some recovered Instagram destinations correctly remain
+  unresolved with a `Search for this place` action, but typing a place name and
+  city and pressing Search produces no visible result. Reopened REC-106 as `In
+  Progress` and resumed the existing isolated worktree/branch. The worktree is
+  clean and synchronized with
+  `origin/codex/rec-106-instagram-carousel`; no overlapping edits are recorded.
+- Investigation will first capture a reproducing device/store snapshot, then
+  trace the manual-search UI action through the import store and MapKit resolver.
+  Expected scope is the import-review/manual-match view, its store/resolver
+  contract, focused regression tests, and this log. No Swift edit will be made
+  until the dead Search action has a durable reproducer.
+
+Manual place-search reproduction checkpoint, 2026-07-20 23:51 PDT:
+
+- Captured the current physical-device import snapshot without mutating app
+  state. The exact REC-106 batch contains nine rows: five ready, one ambiguous,
+  and three named `needs_help` rows. The Farson Mercantile row proves the Search
+  callback fired: its seed was updated to `FARSON MERCANTILE` / `Wyoming` at
+  23:27:24 PDT, then persisted with zero candidates and the message `No matching
+  Apple Maps place was found. Try a nearby city or neighborhood.` The source
+  snapshot SHA-256 is
+  `1fa45b1afb2dc9d04a8829b8301a53ad64af7244dc130ea04d0db3799807ecec`;
+  only a minimized, public REC-106 row was copied into the test fixture.
+- Root cause is now reproduced: the rescue sheet starts a fire-and-forget retry
+  and dismisses before its result; the unresolved row never renders the stored
+  `helpMessage`, so no-result, throttling, and transport failures redraw the same
+  Search action and look like a dead button. A second loss path converts one
+  low-confidence MapKit candidate into `needs_help`, making that candidate
+  inaccessible instead of reviewable.
+- Added `WanderTests/Fixtures/rec-106-manual-place-search-pre.json` as the durable
+  minimized pre-fix store snapshot. This checkout intentionally has no
+  DebugBridge/StateServer, and the paired phone disconnected after the trace, so
+  the skill's HTTP state/screenshot endpoints remain unavailable; per the repo's
+  established exception, the physical app-container snapshot plus deterministic
+  Swift regression tests are the reproducible evidence. Planned fix: await the
+  search, keep the sheet open with visible failure feedback, wire keyboard
+  submit, and preserve even one weak result for explicit user review.
+
+Manual place-search implementation and validation, 2026-07-21 00:14 PDT:
+
+- Replaced the fire-and-forget rescue action with an awaited manual-search
+  result. The sheet now shows an in-progress state, keeps and displays MapKit
+  failures, supports the keyboard Search action, and automatically opens the
+  candidate picker when review is needed. The unresolved inbox row also renders
+  its persisted `helpMessage`, so a no-result or temporary Maps failure cannot
+  look like a dead button. Cancel and swipe-to-dismiss remain available during a
+  slow lookup; the import row still updates when the request completes.
+- Scoped weak-candidate preservation to explicit typed searches through a
+  separate resolver entry point. Ordinary automatic imports retain their prior
+  safety contract and still reject a lone unrelated result. A typed search may
+  retain even one low-confidence candidate for human review instead of hiding
+  it. Successful exact matches still become ready automatically.
+- Added state-and-seed validation around asynchronous resolver completion so an
+  older result or failure cannot overwrite a newer typed query, retry,
+  selection, save, or dismissal. Manual-search markers are cleared on every
+  terminal state transition. Deterministic tests cover overlapping searches and
+  dismissal while a result is in flight.
+- Added the minimized public REC-106 physical-device snapshot as a test resource
+  and regenerated `Wander.xcodeproj` with XcodeGen. No private app-container
+  data was committed. Focused validation passed 6/6 tests, including the existing
+  lone-unrelated-result guard; the full suite passed 491/491 tests on iPhone 17
+  Pro / iOS 26.5; the generic iOS Simulator build passed; `xcodegen generate`
+  and `git diff --check` passed. The first full-suite attempt ended before XCTest
+  bootstrapped because the simulator test host was killed; its result bundle
+  reported zero executed tests, and the identical elevated rerun passed all 491.
+- An independent read-only review caught and drove fixes for automatic-import
+  scope, cancellability, stale async results, and deterministic concurrency-test
+  setup. The final review reports no remaining production or test findings.

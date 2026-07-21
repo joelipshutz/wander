@@ -403,6 +403,175 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
     }
 
+    func testManualSearchReturnsVisibleFailureFromDeviceSnapshot() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = RecordingPlaceImportResolver(
+            resolution: .needsHelp("Apple Maps search is temporarily unavailable.")
+        )
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "  Farson Mercantile  ",
+            area: "Farson, Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .failed("Apple Maps search is temporarily unavailable."))
+        XCTAssertEqual(resolver.lastSeed?.nameHint, "Farson Mercantile")
+        XCTAssertEqual(resolver.lastSeed?.areaHint, "Farson, Wyoming")
+        XCTAssertEqual(resolver.lastSource, .instagram)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .needsHelp)
+        XCTAssertEqual(
+            store.item(id: "rec-106-farson-manual-search")?.helpMessage,
+            "Apple Maps search is temporarily unavailable."
+        )
+        XCTAssertEqual(persistence.snapshot.items.first?.helpMessage, "Apple Maps search is temporarily unavailable.")
+    }
+
+    func testManualSearchPreservesOneWeakMapKitCandidateForReview() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let weakCandidate = placeImportCandidate(name: "Farson Ice Cream")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [weakCandidate])
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "Farson Mercantile",
+            area: "Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .needsReview(candidateCount: 1))
+        XCTAssertEqual(placeResolver.manualInputs, [
+            ManualPlaceInput(name: "Farson Mercantile", areaHint: "Wyoming", category: nil)
+        ])
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .ambiguous)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.candidates, [weakCandidate])
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID)
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.helpMessage)
+    }
+
+    func testManualSearchAutoSelectsAnExactMapKitCandidate() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let exactCandidate = placeImportCandidate(name: "Farson Mercantile")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [exactCandidate])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: snapshot),
+            resolver: DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "Farson Mercantile",
+            area: "Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .matched)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .ready)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID, exactCandidate.id)
+    }
+
+    func testNewManualSearchSupersedesAnInFlightResult() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = ControllablePlaceImportResolver()
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+        let firstCandidate = placeImportCandidate(name: "First Place")
+        let secondCandidate = placeImportCandidate(name: "Second Place")
+
+        let firstSearch = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "First Place",
+                area: "Wyoming"
+            )
+        }
+        let receivedFirstRequest = await waitForManualRequestCount(1, resolver: resolver)
+        XCTAssertTrue(receivedFirstRequest)
+
+        let secondSearch = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "Second Place",
+                area: "Wyoming"
+            )
+        }
+        let queuedSecondRequest = await waitForImportItem(
+            id: "rec-106-farson-manual-search",
+            nameHint: "Second Place",
+            state: .queued,
+            store: store
+        )
+        XCTAssertTrue(queuedSecondRequest)
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([firstCandidate], selectedCandidateID: firstCandidate.id)
+            )
+        )
+        let receivedSecondRequest = await waitForManualRequestCount(2, resolver: resolver)
+        XCTAssertTrue(receivedSecondRequest)
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([secondCandidate], selectedCandidateID: secondCandidate.id)
+            )
+        )
+
+        let secondOutcome = await secondSearch.value
+        let firstOutcome = await firstSearch.value
+        XCTAssertEqual(secondOutcome, .matched)
+        XCTAssertEqual(firstOutcome, .matched)
+        XCTAssertEqual(resolver.manualSeeds.map(\.nameHint), ["First Place", "Second Place"])
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.seed.nameHint, "Second Place")
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID, secondCandidate.id)
+        XCTAssertEqual(persistence.snapshot.items.first?.selectedCandidateID, secondCandidate.id)
+    }
+
+    func testDismissedManualSearchIgnoresItsInFlightResult() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = ControllablePlaceImportResolver()
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: snapshot),
+            resolver: resolver
+        )
+        let candidate = placeImportCandidate(name: "Farson Mercantile")
+
+        let search = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "Farson Mercantile",
+                area: "Wyoming"
+            )
+        }
+        let receivedRequest = await waitForManualRequestCount(1, resolver: resolver)
+        XCTAssertTrue(receivedRequest)
+        store.dismiss(itemID: "rec-106-farson-manual-search")
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([candidate], selectedCandidateID: candidate.id)
+            )
+        )
+
+        let outcome = await search.value
+        XCTAssertEqual(
+            outcome,
+            .failed("This import is no longer waiting for a place match.")
+        )
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .dismissed)
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID)
+    }
+
     func testSocialResolverRejectsGenericCoffeeHintsAroundOneNamedVenue() async throws {
         let oneCedar = placeImportCandidate(name: "One Cedar")
         let resolver = DevicePlaceImportResolver(
@@ -997,6 +1166,51 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.item(id: item.id)?.state, .queued)
         XCTAssertEqual(store.item(id: item.id)?.candidates, [])
         XCTAssertEqual(store.item(id: item.id)?.resolverVersion, PlaceImportItem.currentResolverVersion)
+    }
+
+    private func manualSearchFixtureSnapshot() throws -> PlaceImportSnapshot {
+        let bundle = Bundle(for: PlaceImportStoreTests.self)
+        let url = try XCTUnwrap(
+            bundle.url(forResource: "rec-106-manual-place-search-pre", withExtension: "json")
+                ?? bundle.url(
+                    forResource: "rec-106-manual-place-search-pre",
+                    withExtension: "json",
+                    subdirectory: "Fixtures"
+                )
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(PlaceImportSnapshot.self, from: Data(contentsOf: url))
+    }
+
+    private func waitForManualRequestCount(
+        _ expectedCount: Int,
+        resolver: ControllablePlaceImportResolver
+    ) async -> Bool {
+        for _ in 0..<1_000 {
+            if resolver.manualSeeds.count >= expectedCount {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
+    }
+
+    private func waitForImportItem(
+        id: String,
+        nameHint: String,
+        state: PlaceImportItemState,
+        store: PlaceImportStore
+    ) async -> Bool {
+        for _ in 0..<1_000 {
+            if let item = store.item(id: id),
+               item.seed.nameHint == nameHint,
+               item.state == state {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
     }
 }
 
@@ -1735,6 +1949,49 @@ private final class FakePlaceImportResolver: PlaceImportResolving {
             sourceProviderPlaceID: "provider-\(name)",
             confidence: 0.9
         )
+    }
+}
+
+@MainActor
+private final class RecordingPlaceImportResolver: PlaceImportResolving {
+    let resolution: PlaceImportResolution
+    private(set) var lastSeed: PlaceImportSeed?
+    private(set) var lastSource: PlaceImportSource?
+
+    init(resolution: PlaceImportResolution) {
+        self.resolution = resolution
+    }
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        lastSeed = seed
+        lastSource = source
+        return resolution
+    }
+}
+
+@MainActor
+private final class ControllablePlaceImportResolver: PlaceImportResolving {
+    private(set) var manualSeeds: [PlaceImportSeed] = []
+    private var continuations: [CheckedContinuation<PlaceImportResolution, Never>] = []
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        .needsHelp("Automatic resolution was not expected in this test.")
+    }
+
+    func resolveManualSearch(
+        seed: PlaceImportSeed,
+        source _: PlaceImportSource
+    ) async throws -> PlaceImportResolution {
+        manualSeeds.append(seed)
+        return await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func completeNext(_ resolution: PlaceImportResolution) -> Bool {
+        guard !continuations.isEmpty else { return false }
+        continuations.removeFirst().resume(returning: resolution)
+        return true
     }
 }
 

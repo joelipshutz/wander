@@ -398,6 +398,7 @@ struct PlaceImportInboxScreen: View {
     @State private var candidatePickerItem: PlaceImportItem?
     @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
+    @State private var pendingManualSearchReviewItemID: String?
     @State private var showsClearConfirmation = false
     @State private var stagedStatuses: [String: PlaceStatus] = [:]
     @State private var bulkSaveQueue: [PlaceImportQuickSaveIntent] = []
@@ -529,9 +530,16 @@ struct PlaceImportInboxScreen: View {
                 }
             )
         }
-        .sheet(item: $rescueItem) { item in
+        .sheet(item: $rescueItem, onDismiss: beginPendingManualSearchReview) { item in
             PlaceImportRescueScreen(item: item) { name, area in
-                importStore.retry(itemID: item.id, name: name, area: area)
+                let outcome = await importStore.search(itemID: item.id, name: name, area: area)
+                if case .needsReview(candidateCount: _) = outcome {
+                    pendingManualSearchReviewItemID = item.id
+                    if rescueItem == nil {
+                        beginPendingManualSearchReview()
+                    }
+                }
+                return outcome
             }
         }
         .task(id: duplicateSignature) {
@@ -877,6 +885,15 @@ struct PlaceImportInboxScreen: View {
         beginSave(item, status: intent.status)
     }
 
+    private func beginPendingManualSearchReview() {
+        guard let itemID = pendingManualSearchReviewItemID else { return }
+        pendingManualSearchReviewItemID = nil
+        guard let item = importStore.item(id: itemID), !item.candidates.isEmpty else { return }
+        DispatchQueue.main.async {
+            candidatePickerItem = item
+        }
+    }
+
     @MainActor
     private func save(_ submission: MapPlaceSaveSubmission, itemID: String) async -> SaveResult? {
         guard case .add(let sourceType) = submission.context.mode else { return nil }
@@ -1084,12 +1101,21 @@ private struct PlaceImportUnresolvedRow: View {
                 action: candidateAction
             )
         case .needsHelp:
-            PlaceImportInlineAction(
-                title: item.seed.nameHint == nil ? "Retry automatic match" : "Search for the place",
-                systemImage: item.seed.nameHint == nil ? "arrow.clockwise" : "magnifyingglass",
-                color: WanderTheme.terracotta.color,
-                action: item.seed.nameHint == nil ? retryAction : rescueAction
-            )
+            VStack(alignment: .leading, spacing: 4) {
+                if let helpMessage = item.helpMessage,
+                   !helpMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(helpMessage)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WanderTheme.stateError.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                PlaceImportInlineAction(
+                    title: item.seed.nameHint == nil ? "Retry automatic match" : "Search for the place",
+                    systemImage: item.seed.nameHint == nil ? "arrow.clockwise" : "magnifyingglass",
+                    color: WanderTheme.terracotta.color,
+                    action: item.seed.nameHint == nil ? retryAction : rescueAction
+                )
+            }
         case .duplicate, .saved, .failed, .dismissed:
             EmptyView()
         }
@@ -1570,15 +1596,26 @@ private func usableImportCoordinate(
 }
 
 private struct PlaceImportRescueScreen: View {
+    private enum Field: Hashable {
+        case name
+        case area
+    }
+
     let item: PlaceImportItem
-    let retryAction: (String, String?) -> Void
+    let searchAction: (String, String?) async -> PlaceImportManualSearchOutcome
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var area: String
+    @State private var isSearching = false
+    @State private var searchFailure: String?
+    @FocusState private var focusedField: Field?
 
-    init(item: PlaceImportItem, retryAction: @escaping (String, String?) -> Void) {
+    init(
+        item: PlaceImportItem,
+        searchAction: @escaping (String, String?) async -> PlaceImportManualSearchOutcome
+    ) {
         self.item = item
-        self.retryAction = retryAction
+        self.searchAction = searchAction
         _name = State(initialValue: item.seed.nameHint ?? "")
         _area = State(initialValue: item.seed.areaHint ?? "")
     }
@@ -1589,8 +1626,34 @@ private struct PlaceImportRescueScreen: View {
                 Section("place") {
                     TextField("Name", text: $name)
                         .textInputAutocapitalization(.words)
+                        .focused($focusedField, equals: .name)
+                        .submitLabel(.next)
+                        .onSubmit {
+                            focusedField = .area
+                        }
                     TextField("City or neighborhood", text: $area)
                         .textInputAutocapitalization(.words)
+                        .focused($focusedField, equals: .area)
+                        .submitLabel(.search)
+                        .onSubmit(performSearch)
+                }
+
+                if isSearching {
+                    Section {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            ProgressView()
+                            Text("Searching Apple Maps…")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+                    }
+                } else if let searchFailure {
+                    Section("search result") {
+                        Label(searchFailure, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WanderTheme.stateError.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 if let sourceURLString = item.seed.sourceURLString {
@@ -1611,12 +1674,45 @@ private struct PlaceImportRescueScreen: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Search") {
-                        retryAction(name, area.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : area)
-                        dismiss()
+                    Button {
+                        performSearch()
+                    } label: {
+                        if isSearching {
+                            ProgressView()
+                        } else {
+                            Text("Search")
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(trimmedName.isEmpty || isSearching)
                 }
+            }
+        }
+    }
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedArea: String? {
+        let value = area.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    private func performSearch() {
+        guard !trimmedName.isEmpty, !isSearching else { return }
+        let submittedName = trimmedName
+        let submittedArea = trimmedArea
+        searchFailure = nil
+        isSearching = true
+        focusedField = nil
+        Task {
+            let outcome = await searchAction(submittedName, submittedArea)
+            isSearching = false
+            switch outcome {
+            case .matched, .needsReview(candidateCount: _):
+                dismiss()
+            case .failed(let message):
+                searchFailure = message
             }
         }
     }

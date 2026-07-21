@@ -16,9 +16,22 @@ enum PlaceImportResolution: Equatable {
     case partialExpandedResolved([PlaceImportResolvedEntry], sourceName: String?)
 }
 
+enum PlaceImportManualSearchOutcome: Equatable {
+    case matched
+    case needsReview(candidateCount: Int)
+    case failed(String)
+}
+
 @MainActor
 protocol PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+    func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+}
+
+extension PlaceImportResolving {
+    func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source)
+    }
 }
 
 @MainActor
@@ -87,6 +100,22 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         case .textNotes:
             return .needsHelp("Add a place name and nearby city to match this line.")
         }
+    }
+
+    func resolveManualSearch(
+        seed: PlaceImportSeed,
+        source _: PlaceImportSource
+    ) async throws -> PlaceImportResolution {
+        guard let name = normalized(seed.nameHint) else {
+            return .needsHelp("Enter a place name before searching.")
+        }
+        return try await manualResolution(
+            name: name,
+            area: seed.areaHint,
+            latitude: seed.latitude,
+            longitude: seed.longitude,
+            preserveUnselectedCandidates: true
+        )
     }
 
     private func socialResolution(
@@ -310,7 +339,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         name: String,
         area: String?,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        preserveUnselectedCandidates: Bool = false
     ) async throws -> PlaceImportResolution {
         do {
             let candidates = try await placeResolver.resolveManualEntry(
@@ -323,6 +353,14 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 latitude: latitude,
                 longitude: longitude
             )
+            if preserveUnselectedCandidates, !match.candidates.isEmpty {
+                // A typed search is an explicit user request. Keep even one weak
+                // MapKit result available for review instead of silently dropping it.
+                return .candidates(
+                    match.candidates,
+                    selectedCandidateID: match.selectedCandidateID
+                )
+            }
             return candidateResolution(match)
         } catch let error as LocalizedError {
             return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
@@ -545,6 +583,7 @@ final class PlaceImportStore: ObservableObject {
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
     private var processingTasks: [String: Task<Void, Never>] = [:]
+    private var manualSearchItemIDs = Set<String>()
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
     init(
@@ -687,6 +726,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].candidates.contains(where: { $0.id == candidateID })
         else { return }
+        manualSearchItemIDs.remove(itemID)
         items[index].selectedCandidateID = candidateID
         items[index].state = .ready
         items[index].helpMessage = nil
@@ -696,6 +736,7 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        manualSearchItemIDs.remove(itemID)
         items[index].state = .queued
         items[index].candidates = []
         items[index].selectedCandidateID = nil
@@ -709,9 +750,39 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func retry(itemID: String, name: String, area: String?) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        _ = queueManualSearch(itemID: itemID, name: name, area: area)
+    }
+
+    func search(itemID: String, name: String, area: String?) async -> PlaceImportManualSearchOutcome {
+        guard let batchID = queueManualSearch(itemID: itemID, name: name, area: area) else {
+            return .failed("Enter a place name before searching.")
+        }
+        await waitForProcessing(batchID: batchID)
+        guard let item = item(id: itemID) else {
+            return .failed("This import is no longer available.")
+        }
+        switch item.state {
+        case .ready:
+            return .matched
+        case .ambiguous:
+            return .needsReview(candidateCount: item.candidates.count)
+        case .needsHelp, .failed:
+            return .failed(
+                item.helpMessage
+                    ?? "No matching Apple Maps place was found. Try a nearby city or neighborhood."
+            )
+        case .queued, .resolving:
+            return .failed("Apple Maps is still searching. Try again in a moment.")
+        case .duplicate, .saved, .dismissed:
+            return .failed("This import is no longer waiting for a place match.")
+        }
+    }
+
+    @discardableResult
+    private func queueManualSearch(itemID: String, name: String, area: String?) -> String? {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return nil }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        guard !trimmedName.isEmpty else { return nil }
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -732,13 +803,16 @@ final class PlaceImportStore: ObservableObject {
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
+        manualSearchItemIDs.insert(itemID)
         let batchID = items[index].batchID
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
+        return batchID
     }
 
     func markSaved(itemID: String, userPlaceID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        manualSearchItemIDs.remove(itemID)
         items[index].state = .saved
         items[index].savedUserPlaceID = userPlaceID
         items[index].duplicateUserPlaceID = nil
@@ -751,6 +825,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
             return
         }
+        manualSearchItemIDs.remove(itemID)
         items[index].state = .dismissed
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
@@ -759,6 +834,8 @@ final class PlaceImportStore: ObservableObject {
     func cancel(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        let batchItemIDs = Set(items.lazy.filter { $0.batchID == batchID }.map(\.id))
+        manualSearchItemIDs.subtract(batchItemIDs)
         let upgradePlaceholderIDs = replacedSocialItemsByPlaceholderID.compactMap { placeholderID, oldItems in
             oldItems.first?.batchID == batchID ? placeholderID : nil
         }
@@ -780,6 +857,8 @@ final class PlaceImportStore: ObservableObject {
     func deleteBatch(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        let batchItemIDs = Set(items.lazy.filter { $0.batchID == batchID }.map(\.id))
+        manualSearchItemIDs.subtract(batchItemIDs)
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
             $0.value.first?.batchID != batchID
         }
@@ -793,6 +872,7 @@ final class PlaceImportStore: ObservableObject {
             task.cancel()
         }
         processingTasks.removeAll()
+        manualSearchItemIDs.removeAll()
         replacedSocialItemsByPlaceholderID.removeAll()
         items.removeAll()
         batches.removeAll()
@@ -856,15 +936,27 @@ final class PlaceImportStore: ObservableObject {
             let itemID = items[index].id
             let seed = items[index].seed
             let source = items[index].source
+            let isManualSearch = manualSearchItemIDs.remove(itemID) != nil
             let isSocialUpgrade = replacedSocialItemsByPlaceholderID[itemID] != nil
             // Keep the pre-upgrade snapshot durable until its network-dependent refresh succeeds.
             synchronizeBatch(batchID, persist: !isSocialUpgrade)
 
             do {
-                let resolution = try await resolver.resolve(seed: seed, source: source)
+                let resolution = if isManualSearch {
+                    try await resolver.resolveManualSearch(seed: seed, source: source)
+                } else {
+                    try await resolver.resolve(seed: seed, source: source)
+                }
                 guard !Task.isCancelled,
                       let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
+                guard items[resolvedIndex].state == .resolving,
+                      items[resolvedIndex].seed == seed
+                else {
+                    // A newer search, retry, or dismissal superseded this request.
+                    await Task.yield()
+                    continue
+                }
                 let shouldRestorePreviousRows: Bool
                 switch resolution {
                 case .needsHelp, .partialExpandedResolved:
@@ -883,6 +975,13 @@ final class PlaceImportStore: ObservableObject {
                 guard !Task.isCancelled,
                       let failedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
+                guard items[failedIndex].state == .resolving,
+                      items[failedIndex].seed == seed
+                else {
+                    // Do not let an older failure overwrite newer user intent.
+                    await Task.yield()
+                    continue
+                }
                 if !restoreReplacedSocialItems(placeholderID: itemID, at: failedIndex) {
                     items[failedIndex].state = .failed
                     items[failedIndex].helpMessage = error.localizedDescription
@@ -913,7 +1012,7 @@ final class PlaceImportStore: ObservableObject {
             if selectedCandidateID != nil {
                 items[index].state = .ready
                 items[index].helpMessage = nil
-            } else if candidates.count > 1 {
+            } else if !candidates.isEmpty {
                 items[index].state = .ambiguous
                 items[index].helpMessage = nil
             } else {
@@ -950,7 +1049,7 @@ final class PlaceImportStore: ObservableObject {
                 let state: PlaceImportItemState
                 if entry.selectedCandidateID != nil {
                     state = .ready
-                } else if entry.candidates.count > 1 {
+                } else if !entry.candidates.isEmpty {
                     state = .ambiguous
                 } else {
                     state = .needsHelp
