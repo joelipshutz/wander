@@ -14671,3 +14671,15 @@ Handoff, 2026-07-21 00:21 PDT:
   and grants, then rebase/update from latest `main` and rerun native tests if
   app source conflicts occur. Do not increment a build number or upload to
   TestFlight unless Joe explicitly requests a release.
+
+Device QA deployment, 2026-07-21 01:47 PDT:
+
+- At Joe's request, built the unchanged `codex/rec-107-feed-mock` branch for
+  connected physical device `iPhone (254)` (UDID
+  `00008140-0018152C08A2201C`). Signed device build succeeded with the existing
+  Apple Development provisioning profile for `com.grayline.wander`.
+- Installed and foreground-launched the app directly on that phone with
+  `-WanderUseDemoFixtures -WanderInitialTab discover`; the stable underlying
+  tab value opens the renamed Feed tab. Verified the Wander process is running
+  on-device (PID 4765). This was a direct developer install only: no version
+  bump, archive, upload, TestFlight mutation, or production backend migration.
