@@ -346,6 +346,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
     }
 
+    func testNewListEditorHasTheRequestedDismissAffordance() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let editor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
+
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .topBarLeading)"))
+        XCTAssertTrue(editor.contains("if !isEditing"), "Edit-list navigation should remain unchanged")
+        XCTAssertTrue(editor.contains("Image(systemName: \"chevron.right\")"))
+        XCTAssertTrue(editor.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(editor.contains(".accessibilityLabel(\"Back to lists\")"))
+        XCTAssertTrue(editor.contains("Button {\n                            dismiss()"))
+    }
+
     func testListMapVisualQAScenariosResolveDeterministically() {
         let scenarios: [(argument: String, expected: ListsScreenScenario)] = [
             ("mapEmpty", .mapEmpty),

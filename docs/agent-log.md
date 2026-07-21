@@ -14985,3 +14985,72 @@ TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
   note in `#testflight-feedback`:
   https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
   Store production submission or marketing-version change was made.
+
+## 2026-07-21 16:15 PDT - Codex - REC-115 new-list back affordance
+
+Agent: Codex using the Linear, rec.me Feedback Feature/Bug, and `ios-fix`
+workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Progress`)
+
+Goal: add the requested right-facing back arrow to the upper-left of the new
+list sheet, preserve the existing unsaved-dismiss behavior, and leave the fix
+ready for Xcode testing with focused regression and simulator evidence.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` `1c39e2c13bfe43aac88abf58979acaa009579dee`. The shared checkout has
+  unrelated `.gitignore` and `.pnpm-store/` changes, which remain untouched.
+- No recent agent-log entry or active worktree reports overlapping REC-115 or
+  the intended source/test files. Expected files are
+  `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Triage: design/UX, P3, Lists create flow. The engineering-review gate is not
+  needed because this is a one-screen affordance using the existing dismissal
+  path, with no shared state, persistence, backend, or navigation-contract
+  change. The design lens requires the exact requested chevron direction, a
+  minimum 44pt tap target, and an explicit accessibility label.
+- The repo intentionally has no DebugBridge/StateServer snapshot/restore API,
+  so the literal `ios-fix` snapshot fixture cannot be captured without adding
+  unrelated debug infrastructure. The existing deterministic `create` Lists
+  launch scenario will be used to reproduce and screenshot the pre-fix state,
+  followed by a focused source-contract test and post-fix simulator screenshot.
+
+Implementation and visual checkpoint, 2026-07-21 16:23 PDT:
+
+- Reproduced the missing leading affordance from exact pre-fix `origin/main`
+  with `-WanderInitialTab lists -WanderListsScenario create`; the baseline
+  screenshot is `/private/tmp/recme-rec115-pre.png`.
+- `ListEditorSheet` now renders a create-only leading toolbar button with the
+  requested `chevron.right`. It calls the existing `dismiss()` path, has a
+  44x44 content target, uses the existing ink/surface toolbar treatment, and
+  exposes the VoiceOver label `Back to lists`. The edit-list presentation does
+  not render the new control.
+- Added a focused navigation source-contract regression covering placement,
+  create-only scope, direction, tap-target size, accessibility label, and the
+  dismissal call. The focused iPhone 17 Pro / iOS 26.5 run passed 1/1:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-20-59--0700.xcresult`.
+- Post-fix visual verification passed on iPhone 17 Pro and smaller iPhone 17e:
+  `/private/tmp/recme-rec115-post-17pro.png` and
+  `/private/tmp/recme-rec115-post-17e.png`. The control is fully visible,
+  right-facing, contrast-safe, and clear of both safe areas; no clipping or
+  toolbar overlap is present. `xcodegen generate` produced no project diff, and
+  `git diff --check` passed before the focused run.
+- The documented iPhone 16 Plus / iOS 18.6 runtime is not installed in this
+  Xcode environment; the currently available iPhone 17 Pro / iOS 26.5 runtime
+  is used for validation.
+
+Validation checkpoint, 2026-07-21 16:24 PDT:
+
+- The full iPhone 17 Pro / iOS 26.5 suite passed 489 tests with 0 failures and
+  0 skips:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-23-06--0700.xcresult`.
+- The full run compiled and linked the patched app after project regeneration.
+  Existing non-blocking runtime diagnostics remain: missing simulator location,
+  Clerk keychain cache access, and the already documented remote-decoder Swift
+  concurrency warnings. No REC-115 compiler warning or test failure occurred.
+- Final scope is limited to the Lists SwiftUI affordance, its focused navigation
+  regression, and this coordination log. No schema, persistence, auth, release,
+  build-number, or TestFlight change is included.

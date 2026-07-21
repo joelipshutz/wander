@@ -3237,6 +3237,22 @@ private struct ListEditorSheet: View {
                 editorActionButtons
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !isEditing {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 16, weight: .black))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .accessibilityLabel("Back to lists")
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         saveAndDismiss()
