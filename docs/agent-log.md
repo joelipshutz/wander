@@ -14332,3 +14332,143 @@ Build-82 smoke/release completion, 2026-07-20 15:16 PDT:
   ran the committed 23-assertion Discover pgTAP contract; future parity can add
   its extra ACL plus blocked/self/unauthenticated follow cases to that pgTAP
   file. This does not block the already-approved build or REC-90 behavior.
+
+## 2026-07-20 23:43 PDT - Codex - REC-113 list and map-card place photos
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Progress`)
+
+Goal: implement REC-113 so My, Friends, and Collabs list tiles show one photo
+from each of up to four distinct places, preferring visible user photos and
+falling back to Google Maps place photos. Also replace the emoji-only media in
+the list map's browse card called out in Ryan's screenshot with the same photo
+preference and fallback behavior.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `339cba2e0`. The primary checkout has unrelated `.gitignore`
+  changes and an untracked `.pnpm-store/`; both were left untouched.
+- Existing worktrees do not overlap this REC-113 branch. The high-conflict
+  `Wander/Features/Lists/ListsScreen.swift` is not listed in another active
+  agent's current log entry; all edits will stay in this isolated worktree.
+- Current list mosaics render category emoji only. The list map browse card can
+  show only a current-user photo with a local asset reference; it does not load
+  an uploaded/visible user photo or Google Maps fallback. Existing place-profile
+  infrastructure already provides authenticated visible-user-photo lookup,
+  Google Places fallback, cached image loading, and Google Maps attribution.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, a focused Lists
+  photo resolver under `Wander/Features/Lists/`, focused tests under
+  `WanderTests/`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log.
+  No schema/RLS, auth, build-number, or TestFlight changes are in scope.
+
+Implementation and validation, 2026-07-21 00:08 PDT:
+
+- Added one shared Lists photo resolver and media view for both the My/Friends/
+  Collabs four-place mosaics and the list-map browse card from Ryan's
+  screenshot. Resolution is user-first: a current-user local/uploaded visit
+  photo, then the first photo visible through existing RLS/RPC behavior, then
+  the existing Google Places photo endpoint. An unreadable user image falls
+  through to Google; emoji remains the honest final fallback.
+- Google-provided images render with a compact `Google Maps` attribution strip.
+  Preview mosaics select at most four distinct place IDs in list order, so the
+  same saved place cannot consume multiple photo cells.
+- Preserved provider identity on the lightweight list-cover projection so photo
+  lookup uses the exact saved Google/MapKit metadata instead of reconstructing
+  it from display copy. Reused `WanderBackend` metadata/image task coalescing
+  and image cache rather than adding a second network/cache path.
+- Added five focused resolver/selector tests and updated the list-home hot-path
+  contract. Ran `xcodegen generate`; the generated project diff contains only
+  the new app/test source membership.
+- Focused final validation passed: 6/6 tests (the five REC-113 cases plus the
+  list projection contract). Full suite passed earlier in the same final code
+  pass: 470/470 tests, zero failures, on iPhone 17 Pro / iOS 26.5. The repository
+  command's iPhone 16 Plus / iOS 18.6 destination is not installed on this
+  machine; the attempted run failed at destination selection rather than in app
+  code, so it is not reported as a pass.
+- Visual layout QA passed for populated list tiles and the exact selected
+  list-map browse card on iPhone 17 Pro and smaller iPhone 17e. No clipping,
+  overlap, or changed hit targets were observed. Evidence:
+  `/private/tmp/rec113-lists-iphone17pro.png`,
+  `/private/tmp/rec113-lists-iphone17e.png`,
+  `/private/tmp/rec113-map-card-iphone17pro.png`, and
+  `/private/tmp/rec113-map-card-iphone17e.png`. The deterministic fixture has no
+  authenticated photo repository, so those screenshots intentionally exercise
+  the emoji fallback; user-photo/Google image selection is covered by the
+  focused tests and remains the signed-in live-data check for Ryan.
+- `git diff --check` passes. No schema, hosted data, build number, TestFlight,
+  or Slack release state changed. Publishing the ready PR and Linear handoff is
+  the remaining work.
+
+Handoff, 2026-07-21 00:11 PDT:
+
+- Committed the implementation as `ce1150c7bf2db347134c3d33efc5904b61b1803e`
+  (`fix: show place photos on list tiles`) and pushed
+  `codex/rec-113-list-place-photos`.
+- Opened ready PR #138 against `main`; GitHub reports no merge conflicts:
+  https://github.com/joelipshutz/wander/pull/138.
+- Linked PR #138 and the validation details to Linear REC-113, then moved the
+  issue from `In Progress` to `In Review`. It remains open until Ryan completes
+  the signed-in live-photo acceptance check and the change is actually shipped.
+- No TestFlight build was requested or created. Next: Ryan should test all three
+  list scopes plus the bottom list-map browse cards with places that cover both
+  a user-photo winner and a Google Maps fallback; merge only after that check.
+
+## 2026-07-21 11:15 PDT - Codex - REC-113 list-tile row alignment and release
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Review`)
+
+Goal: incorporate Ryan's signed-in acceptance feedback by keeping every list
+tile top-aligned within its two-column row while allowing a two-line list name
+to grow downward, then squash-merge PR #138 and publish an explicit TestFlight
+build from the resulting latest `main`.
+
+Starting status:
+
+- Fetched `origin`; the REC-113 worktree is clean and exactly tracks the pushed
+  branch at `efc444fe9`. PR #138 remains the implementation lane.
+- `origin/main` is `339cba2e0`, `CURRENT_PROJECT_VERSION` is 82, and the latest
+  durable release record confirms build 82 completed. No newer unfinished
+  build-number bump or explicit release lane was found.
+- The primary checkout remains on unrelated `codex/rec-88-visit-friends-mockup`
+  work. This isolated worktree remains required; those files will not be
+  touched.
+- Expected implementation files: `Wander/Features/Lists/ListsScreen.swift`, a
+  focused contract test in `WanderTests/NavigationContractTests.swift`, and this
+  log. After the implementation PR lands, the release lane will touch only the
+  required build-number/project files plus this log on latest `main`.
+
+Review and implementation checkpoint, 2026-07-21 11:43 PDT:
+
+- Added explicit top alignment to both lazy-grid columns. Verified the
+  requested row behavior on iPhone 17 Pro and smaller iPhone 17e: both preview
+  mosaics start at the same y-position, a two-line name grows beneath its own
+  preview, and the next row starts level again. Evidence:
+  `/private/tmp/rec113-aligned-lists-17pro.png` and
+  `/private/tmp/rec113-aligned-lists-17e.png`.
+- The pre-merge specialist review identified three blocking risks in the photo
+  path: full-size image decoding on the main actor, repeated visible-user photo
+  metadata requests across list cells, and a stale authorized photo remaining
+  visible after an account/follow/block change. Fixed all three with bounded
+  off-main downsampling plus decoded-image caching, in-flight request
+  coalescing scoped to the current authorization graph, and synchronous stale
+  image invalidation before re-resolution.
+- Consolidated the duplicate `LocalVisitPhoto` to `PlacePhoto` conversion into
+  one shared initializer while preserving local file, hosted storage, and
+  remote URL sources. Added coverage for local file reads, missing-local remote
+  fallback, cancellation, terminal provider failure, exact four-place
+  selection, image downsampling, concurrent request coalescing, and source
+  preservation.
+- Focused validation after those fixes passed 13/13 tests on iPhone 17 Pro / iOS
+  26.5. A preceding focused compile exposed a Swift 6 test-only `async let`
+  isolation error; the test was corrected to use explicit main-actor tasks and
+  the rerun passed. No production compile failure occurred.
+- Final full-suite gate passed 479/479 tests with zero failures on iPhone 17 Pro
+  / iOS 26.5. `git diff --check` also passes. The implementation now has no
+  unresolved critical or informational findings from the required pre-merge
+  engineering review.

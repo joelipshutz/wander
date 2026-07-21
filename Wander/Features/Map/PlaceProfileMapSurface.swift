@@ -991,26 +991,6 @@ private struct PlaceProfilePhotoThumb: View {
     }
 }
 
-private extension PlacePhoto {
-    init(localVisitPhoto photo: LocalVisitPhoto) {
-        self.init(
-            provider: "visit_photo",
-            providerPlaceID: photo.id,
-            photoURLString: "",
-            width: photo.width,
-            height: photo.height,
-            authorName: nil,
-            authorProfileURLString: nil,
-            authorAvatarURLString: nil,
-            sourcePhotoURLString: nil,
-            flagContentURLString: nil,
-            storageBucket: photo.storageBucket,
-            storagePath: photo.storagePath,
-            localAssetRef: photo.localAssetRef
-        )
-    }
-}
-
 private struct PlaceProfileMapFallback: View {
     var body: some View {
         Rectangle()

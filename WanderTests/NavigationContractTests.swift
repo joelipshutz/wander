@@ -366,7 +366,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
-        XCTAssertTrue(activeLists.contains(".prefix(4)"))
+        XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
+        XCTAssertTrue(activeLists.contains("limit: 4"))
+        XCTAssertTrue(activeLists.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertTrue(source.contains("let renderedLists = activeLists"))
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))
@@ -374,6 +376,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(richProjection.contains("VisiblePlaceGrouping.groups("))
         XCTAssertTrue(richProjection.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
+    }
+
+    func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let listGrid = try sourceSection(
+            source,
+            after: "private func listGrid(lists: [PlaceListMock]) -> some View",
+            before: "private var activeLists: [PlaceListMock]"
+        )
+        let listTile = try sourceSection(
+            source,
+            after: "private struct ListTile: View",
+            before: "private struct ListPreviewMosaic: View"
+        )
+        let photoMedia = try sourceSection(
+            source,
+            after: "private struct ListPlacePhotoMedia: View",
+            before: "private struct ListMapAvailabilityNotice: View"
+        )
+
+        XCTAssertEqual(
+            listGrid.components(separatedBy: "alignment: .top").count - 1,
+            2,
+            "Both list-grid columns should pin each row's tiles to the same top edge"
+        )
+        XCTAssertTrue(
+            listTile.contains(".lineLimit(2)"),
+            "Long list names should keep wrapping below the aligned preview mosaic"
+        )
+        XCTAssertTrue(photoMedia.contains("targetPixelSize"))
+        XCTAssertTrue(photoMedia.contains("store.currentUser.id"))
+        XCTAssertTrue(photoMedia.contains("store.follows"))
+        XCTAssertTrue(photoMedia.contains("store.blocks"))
+        XCTAssertTrue(
+            photoMedia.contains("resolvedPhotoKey == resolutionKey"),
+            "A relationship or account change should synchronously hide stale user photos"
+        )
     }
 
     func testListsScreenOnlyUsesMockDataForExplicitVisualQAScenarios() {
