@@ -14836,3 +14836,21 @@ Feed backend release verification completed, 2026-07-21 13:55 PDT:
   security-definer with a pinned `search_path`, authenticated callers cannot
   call `app.record_feed_event`, authenticated callers can call
   `public.followed_feed`, and anonymous callers cannot.
+
+TestFlight build 84 release started, 2026-07-21 14:05 PDT:
+
+- Joe requested TestFlight distribution. PR #139 (`feat: add social Feed tab`)
+  was reviewed, hosted-backend verified, and squash-merged to `main` as
+  `f8f02ef`.
+- Created isolated release worktree `/private/tmp/recme-testflight-build-84`
+  on `codex/testflight-build-84` from that exact `main` revision. Incrementing
+  `CURRENT_PROJECT_VERSION` from 83 to 84, then XcodeGen output, native tests,
+  archive/upload, TestFlight processing, Linear, and tester notification are
+  pending. No generated `DerivedData-*` content will be staged.
+- Ran `xcodegen generate`, which changed only the two expected build-number
+  entries in `Wander.xcodeproj/project.pbxproj`. Full `xcodebuild test` on an
+  iPhone 16 Plus (iOS 18.6) passed: 484 tests passed, 0 failures, 0 skipped.
+  The first clean-cache process became idle while rebuilding dependencies and
+  held its build database lock; it was stopped, then the clean rerun completed
+  successfully. Result bundle:
+  `/private/tmp/recme-build84-derived/Logs/Test/Test-Wander-2026.07.21_13-26-15--0700.xcresult`.
