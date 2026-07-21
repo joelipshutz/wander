@@ -14686,3 +14686,21 @@ Device QA deployment, 2026-07-21 01:47 PDT:
 - `DerivedData-device/` is local, untracked device-build output from this
   deployment. It must not be committed; retain it only while device debugging
   is useful, then clear it with Xcode's scoped clean command.
+
+People-tab design checkpoint, 2026-07-21 09:05 PDT:
+
+- Joe clarified that the current Feed is the Places surface and asked to bring
+  back the prior People/Members surface as a first-class sibling. The proposed
+  structure is a persistent `Places | People` control above the compact search:
+  Places retains the current Feed, while People retains its name/handle search,
+  the modular horizontal `People worth following` shelf, and the followed
+  `People` list. No backend, ranking, or recommendation-contract change is
+  proposed.
+- Per the existing design-first instruction, no app source was changed. A
+  393×852 iPhone mock was generated and visually checked with no browser
+  console errors; it is held for Joe's approval before implementation. Linear
+  REC-107 was returned to `In Progress` with the scope change recorded.
+- `DerivedData-device/` remains an unrelated untracked local device-build
+  output and must not be staged. After approval, refactor the current Discover
+  People content into the new Feed sibling tab, then run source contracts,
+  full XCTest, and dual-size simulator QA before updating PR #139.
