@@ -14985,3 +14985,76 @@ TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
   note in `#testflight-feedback`:
   https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
   Store production submission or marketing-version change was made.
+
+## 2026-07-21 16:08 PDT - Codex - REC-121 Feed RPC Permission Regression
+
+Agent: Codex
+Branch: `codex/rec-121-feed-permissions`
+Worktree: `/private/tmp/recme-rec121-feed-permissions`
+Linear: `REC-121` (re-opened as P1)
+
+Goal: repair the authenticated Feed RPC permission denial reported from
+TestFlight build 85, then make the final offline/error state truthful and
+recoverable rather than an indefinite "Reconnecting" skeleton.
+
+Starting status and evidence:
+
+- Ran `git fetch origin`, inspected the shared root status/worktrees, and read
+  the latest coordination log before creating this clean isolated worktree from
+  `origin/main` at `1c39e2c`.
+- The TestFlight screenshot is Build 85's Feed-shaped recovery view, which only
+  renders after `refreshFollowedFeed` exhausts its request and has no cached
+  page.
+- Reproduced the hosted failure with a read-only transaction under Joe's
+  authenticated role and profile claim: `public.followed_feed(null, 25)` fails
+  with `permission denied for function followed_feed` from the SQL wrapper.
+- Metadata inspection confirms `authenticated` has execute on
+  `public.followed_feed(text, integer)` but not on the security-definer
+  `app.followed_feed(text, integer)` that the public security-invoker wrapper
+  calls. This is the root cause; it is neither a device/network issue nor the
+  previously fixed timestamp decoder failure.
+- The required P1 engineering review found the smallest complete change is one
+  additive grant migration, an authenticated hosted smoke query, a pgTAP
+  privilege assertion, and a Feed recovery-copy adjustment. It intentionally
+  excludes schema/RLS rewrites, retrying arbitrary server errors, or another
+  TestFlight build until requested.
+
+Expected files:
+
+- `supabase/migrations/20260721162000_fix_followed_feed_execute_grant.sql`
+- `supabase/tests/feed_activity.sql`
+- `Wander/Features/Feed/FeedScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Hosted repair and validation, 2026-07-21 16:30 PDT:
+
+- Applied `20260721162000_fix_followed_feed_execute_grant.sql` to the linked
+  hosted project and confirmed the remote migration ledger is aligned.
+- The public Feed wrapper now executes as its owner only to call the existing
+  private security-definer projection; the private function remains
+  non-executable by `authenticated`, so the client cannot bypass the public
+  boundary.
+- Re-ran the exact RPC in a read-only transaction as `authenticated` with
+  Joe's request claim. It now succeeds and returns a valid Feed envelope
+  (currently zero activity and featured items), replacing the reproduced
+  permission denial.
+- Hosted rollback pgTAP passed through its final assertion, now 22 checks,
+  including an authenticated execution check and a private-helper-denial
+  check. This is the security and behavior regression coverage for the fix.
+- The final iOS recovery view keeps the Feed-shaped placeholder but truthfully
+  says `Unavailable` / `Couldn't load Feed` with Retry rather than claiming it
+  is still reconnecting forever. Static parse and `git diff --check` passed.
+- Focused native validation passed 1/1 on the required iPhone 16 Plus,
+  iOS 18.6 simulator:
+  `NavigationContractTests.testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState`.
+  Result: `/private/tmp/DerivedData-rec121-feed-permissions/Logs/Test/Test-Wander-2026.07.21_16-26-35--0700.xcresult`.
+- Full native suite was attempted twice. The first clean-cache run was stopped
+  after the Xcode build system idled before launching tests; the warmed retry
+  produced a result bundle with zero executed tests and `result=unknown`, not
+  a test failure or a pass. This environment/tooling gap is recorded rather
+  than treated as validation. The focused test and hosted integration suite
+  above both passed.
+- Mission Control was unavailable at `http://localhost:4000`, so no duplicate
+  tracker task could be created. Linear `REC-121` was reopened as P1 and will
+  carry the hosted validation and PR link.
