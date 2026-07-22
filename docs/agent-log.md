@@ -17436,3 +17436,18 @@ Review and validation checkpoint, 2026-07-22 16:36 PDT:
 - PR #165 is clear to update and squash-merge. This remains merge-only work;
   no build-number change, archive/upload, TestFlight action, or Slack release
   note was performed.
+
+Merge completion, 2026-07-22 16:37 PDT:
+
+- Force-updated the validated rebased branch, confirmed GitHub reported PR #165
+  `CLEAN` and `MERGEABLE`, and squash-merged it into `main` as
+  `98659cb6a62f02308a9c12368a78781f947facb4`. Deleted the merged remote feature
+  branch afterward.
+- Verified `origin/main` resolves to the REC-112 squash commit. Linear REC-112
+  is Done, with final validation and merge evidence in comment
+  `c62b94be-0d24-479b-80d8-9503c3caec3a`.
+- Final validation remains 572/572 passing tests plus a successful generic iOS
+  Simulator build. No known REC-112 blocker remains.
+- Per the merge-only request, the App Store build number remains unchanged and
+  no TestFlight/Slack release action was taken. REC-112 is eligible for the next
+  explicitly requested release batch.
