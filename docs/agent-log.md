@@ -15634,6 +15634,42 @@ Outcome:
 ## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
 
 Agent: Codex
+Release source: `141c019999f08cecf009e9ef526f91703ff443c3` on `main`
+Release metadata PR: #158
+Linear: `REC-121` (Done)
+
+Release scope:
+
+- PR #152 (`a306b4c`) restores historical Feed events through the reviewed,
+  hosted-validated backfill.
+- PR #153 (`6982a7d`) compacts Feed activity, fixes separator/card sizing, and
+  makes actor and place targets navigate independently.
+
+Validation and release completion:
+
+- Build 89 was prepared by incrementing `CURRENT_PROJECT_VERSION` exactly once
+  from 88, regenerating the Xcode project, and squash-merging PR #158.
+- The full release-branch suite completed successfully on the available iPhone
+  17 Pro / iOS 26.5 simulator. The required iPhone 16 Plus / iOS 18.6 runtime
+  remains unavailable on this Mac.
+- Archived the exact released `main` commit at
+  `/private/tmp/Wander-0.1-build89.xcarchive`. Archive and embedded app metadata
+  confirm rec.me `0.1 (89)`, `com.grayline.wander`, arm64, and team
+  `Y7TVK75RZ8`; strict code-signature verification passed.
+- `xcodebuild -exportArchive` uploaded the unchanged archive with
+  `manageAppVersionAndBuildNumber=false`.
+- App Store Connect build `1ce02b87-9e37-4398-996d-2056820198ad` is `VALID`,
+  reports version 89, and has `usesNonExemptEncryption=false`. The release
+  helper published the What to Test copy, attached the build to public group
+  `rec.me Alpha`, and confirmed external TestFlight review `APPROVED`.
+- Posted the required live tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784756485337549
+- `REC-121` is Done with the PRs, archive, TestFlight result, and two remaining
+  UI-test follow-ups recorded in its Linear comment.
+
+## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
+
+Agent: Codex
 Branch: `codex/testflight-build-89`
 Worktree: `/private/tmp/recme-testflight-build-89`
 Linear: `REC-121` (In Review)
