@@ -15785,7 +15785,6 @@ Outcome:
   PR #152 is landed into the requested Build 89 batch. The earlier simulator
   test attempt did not run because local disk filled; the authoritative
   regression validation is the hosted Feed contract test above.
-
 ## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
 
 Agent: Codex
@@ -16935,3 +16934,307 @@ Starting status and coordination:
 - Expected branch edits are limited to this append-only log and any conflict
   resolution required by the rebase. Review scope remains the four PR files;
   no product expansion is authorized.
+## 2026-07-21 16:17 PDT - Codex - REC-116 default Been save flow
+
+Agent: Codex
+Branch: `codex/rec-116-save-flow`
+Worktree: `/private/tmp/recme-rec116-save-flow`
+Linear: `REC-116` (`In Progress`)
+
+Goal: update the canonical place-save editor so a selected Been save keeps
+place type, rating, visit friends, photos, and notes in the main flow; removes
+the duplicate Save as control after status confirmation; places optional
+questions/tags/labels/privacy behind More options; and starts tag-style options
+unselected without re-adding defaults after a user deselects them.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated branch from current
+  `origin/main` at `1c39e2c13`. The primary checkout is on an unrelated stale
+  REC-88 branch with user-owned `.gitignore` and `.pnpm-store/` changes, so it
+  will not be edited.
+- Read the latest coordination log and existing worktrees. Other active work
+  includes REC-121 on a separate worktree; the only expected coordination
+  overlap is append-only `docs/agent-log.md`. `MapScreen.swift` is a documented
+  high-conflict file, so all REC-116 changes stay isolated here and the branch
+  will be updated from latest `origin/main` before PR handoff.
+- Linear REC-116 was read in full and moved from Backlog to In Progress before
+  implementation. The shared `MapPlaceSaveFlowSheet` is the canonical editor
+  used by Add and Map/social/visit entry points, so no parallel save UI should
+  be introduced.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused regression
+  coverage in `WanderTests/WanderStoreTests.swift` and/or
+  `WanderTests/NavigationContractTests.swift`, plus this log. No schema/RLS,
+  persistence contract, build number, archive, upload, or TestFlight release is
+  in scope.
+
+REC-116 implementation and validation checkpoint, 2026-07-21 17:07 PDT:
+
+- Reworked the shared save sheet so Been details consistently render place
+  type, rating, eligible visit friends, photos, note, and a collapsed More
+  options disclosure in that order. Save as now appears only on the status
+  confirmation step; import, Add Visit, shared-visit, and edit contexts that
+  already know their status open directly on details and cannot navigate into a
+  synthetic picker.
+- More options now owns question blocks, tags, personal labels, and privacy.
+  Every new social save, Add Visit, and shared-visit context starts multi-tag
+  choices and personal labels empty, including values present on a source save
+  or prior visit. Single-choice context such as price/effort remains meaningful,
+  while edit visit/want contexts continue to preserve the user's saved answers.
+  Synchronization also preserves an explicit empty selection so catalog
+  defaults cannot reappear after a user deselects a chip.
+- Corrected the details-step subtitle to “add a few details.” after review found
+  that the old copy still instructed users to pick a status after the picker
+  had been removed. Added regression coverage for all seven context factories,
+  new-save tag/label clearing, explicit deselection, and the SwiftUI disclosure
+  structure/order.
+- Ran `xcodegen generate`, Swift parser checks, and `git diff --check`. Focused
+  REC-116 coverage passed 5/5. The complete suite passed 490/490 on iPhone 17
+  Pro / iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-rec116-focused/Logs/Test/Test-Wander-2026.07.21_17-06-16--0700.xcresult`.
+  The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine; no XCTest failure was hidden by the substitution. Existing headermap,
+  Supabase date-formatter concurrency, and two unused-Bool warnings remain
+  unrelated to REC-116.
+- Reviewed live simulator layouts on iPhone 17 Pro and the smaller iPhone 17e,
+  including the collapsed Been form and expanded More options state. Screenshots:
+  `/private/tmp/rec116-been-17pro.jpeg`,
+  `/private/tmp/rec116-been-17e.png`, and
+  `/private/tmp/rec116-been-17e-more-options.jpeg`. The expanded accessibility
+  tree confirms all tag and personal-label chips are unselected. Demo fixtures
+  are memory-only; the final Save and photo picker were not invoked.
+
+REC-116 push handoff blocker, 2026-07-21 17:09 PDT:
+
+- Committed the validated implementation locally as `3d177ab7e` (`feat: update
+  default Been save flow`). The worktree is current with `origin/main` at
+  `1c39e2c13` and has no unrelated files.
+- Read-only verification confirmed the configured origin is the expected public
+  repository `https://github.com/joelipshutz/wander`. The managed safety review
+  rejected `git push -u origin codex/rec-116-save-flow` because uploading the
+  workspace changes to a public destination requires explicit user approval,
+  even though the repo workflow requires a PR. No alternate upload path was
+  attempted.
+- Exact restart after Ryan explicitly approves the public push: push
+  `codex/rec-116-save-flow`, open a ready PR to `main` linked to REC-116, append
+  the PR/commit handoff here, and move Linear REC-116 from In Progress to In
+  Review with the 490/490 and visual-validation evidence. No TestFlight release
+  is part of this request.
+
+REC-116 ready-for-test handoff, 2026-07-22 11:44 PDT:
+
+- Ryan explicitly approved publishing the branch to the verified public origin.
+  Pushed `codex/rec-116-save-flow` and opened ready PR #151:
+  https://github.com/joelipshutz/wander/pull/151. Implementation commit:
+  `3d177ab7e`; initial coordination/blocker log commit: `5d9b93712`.
+- Final validation remains green: focused REC-116 regressions 5/5, complete
+  iPhone 17 Pro / iOS 26.5 suite 490/490, Swift parse, `xcodegen generate`,
+  `git diff --check`, and visual review on iPhone 17 Pro plus iPhone 17e. The
+  screenshots and XCTest result bundle are recorded in the preceding checkpoint.
+- Known constraints: visit-friend selection remains intentionally eligibility
+  gated (signed in, non-private profile, non-Self visibility, and a supported
+  add/edit-visit mode); edit-visit photos remain managed by the existing photo
+  surface rather than attached in this editor. No schema, hosted data, build
+  number, TestFlight upload, or Slack release note was created.
+- Moved Linear REC-116 to `In Review`, confirmed PR #151 is attached, and added
+  comment `6afd90f2-af15-4df8-862a-b04d6659bc6e` with implementation details,
+  validation evidence, runtime substitution, and a concrete acceptance checklist.
+- Next step: review and test PR #151. REC-116 should stay In Review until the PR
+  is merged and the requested behavior is accepted; a separate explicit request
+  is required for any TestFlight release.
+
+REC-116 latest-main rebase checkpoint, 2026-07-22 11:51 PDT:
+
+- Rebased PR #151 onto current `origin/main` at `67a8bd7cc` (TestFlight build
+  87). The only conflict was the append-only agent log; preserved both the
+  upstream entries and the REC-116 history. `xcodegen generate` produced no
+  tracked changes, and `git diff --check` remains clean.
+- Post-rebase validation passed the complete 492/492 test suite on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec116-rebase/Logs/Test/Test-Wander-2026.07.22_11-48-01--0700.xcresult`.
+  The implementation commit is now `3a5757413` after the rebase.
+- Next step: commit this reconciliation note, safely force-update the existing
+  PR branch with `--force-with-lease`, and confirm GitHub no longer reports the
+  PR as conflicting. Linear REC-116 remains `In Review`; no TestFlight action
+  is part of this handoff.
+
+REC-116 compact-save follow-up start, 2026-07-22 12:45 PDT:
+
+- Ryan accepted the first PR #151 device build and requested a tighter follow-up
+  in the same change: remove the details subheader, move Notes inside More
+  options for both Been and Wanna, and make the default collapsed forms visually
+  parallel and as close to one-screen as possible without violating 44-point
+  tap targets or Dynamic Type behavior.
+- Re-read `DESIGN.md`, the latest coordination log, and Linear REC-116; moved
+  REC-116 from `In Review` back to `In Progress`. Fetched origin and confirmed
+  this isolated worktree is clean at `70c80c4b5`. `origin/main` advanced one
+  commit to `c0b4c33a8`; the branch will be updated before final PR handoff.
+- Expected edits remain limited to `Wander/Features/Map/MapScreen.swift`, focused
+  navigation/store tests as needed, and this log. The compact treatment will
+  preserve the canonical shared save sheet, keep the ScrollView as an
+  accessibility fallback, and avoid schema, build-number, or TestFlight work.
+
+REC-116 compact-save implementation and validation, 2026-07-22 13:15 PDT:
+
+- Removed the details-step “add a few details.” subheader and moved Notes into
+  the collapsed More options disclosure for both Been and Wanna. More options
+  now advertises “note, tags, labels & privacy” and expands in that order before
+  the existing question/tag/label and stealth controls.
+- Compacted the shared form without removing capabilities: the candidate summary
+  is shorter, place type is one flat card with 44-point rows, the rating uses a
+  compact presentation, photos and eligible visit friends are compact rows, and
+  Save is pinned above the bottom safe area. The ScrollView remains in place for
+  Dynamic Type, expanded options, keyboards, and smaller-screen fallback.
+- Actual source edits span `Wander/Features/Map/MapScreen.swift`,
+  `Wander/DesignSystem/PlaceRatingSlider.swift`, and
+  `Wander/Features/SharedVisits/SharedVisitComponents.swift`; updated the
+  structural contract in `WanderTests/NavigationContractTests.swift`. The initial
+  expected-files note was narrower than the final shared-component scope; no
+  unrelated dirty files were modified.
+- Ran `xcodegen generate` (no project diff), Swift parser checks, and
+  `git diff --check`. The focused compact-save regression passed 1/1. The full
+  iPhone 17 Pro / iOS 26.5 suite passed 492/492 with result bundle
+  `/private/tmp/DerivedData-rec116-compact/Logs/Test/Test-Wander-2026.07.22_13-12-40--0700.xcresult`.
+  Existing headermap and Supabase date-formatter concurrency warnings remain
+  unrelated.
+- Visually reviewed collapsed and expanded Been and Wanna forms on iPhone 17 Pro
+  and the smaller iPhone 17e. Collapsed Been fits without scrolling on both;
+  Wanna uses the same compact hierarchy, and both expose Notes only after More
+  options expands. Captures:
+  `/private/tmp/rec116-compact-been-17pro.png`,
+  `/private/tmp/rec116-compact-wanna-17pro.png`,
+  `/private/tmp/rec116-compact-been-17e.png`, and
+  `/private/tmp/rec116-compact-wanna-17e.png`. A temporary launch-only preview
+  route used to reach the sheet directly was removed before the full test run
+  and is absent from the final diff.
+- No schema, hosted data, persistence contract, build number, TestFlight upload,
+  or tester-facing Slack release is part of this follow-up. Next: commit the
+  validated changes, update from current `origin/main`, push PR #151, return
+  Linear REC-116 to `In Review`, and relaunch the updated branch on Ry's iPhone
+  from Xcode.
+
+REC-116 compact-save current-main gate, 2026-07-22 13:19 PDT:
+
+- Committed the compact form work, then rebased the complete PR #151 branch onto
+  current `origin/main` at `0afaf34e5` (the build-88 completion log). Preserved
+  the complete upstream and REC-116 append-only agent-log histories through the
+  only conflict. The compact implementation commit is now `ed4226f34`.
+- Regenerated the project with no tracked diff; Swift parse and `git diff
+  --check` remain clean. The complete post-rebase suite passed 505/505 on
+  iPhone 17 Pro / iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-rec116-compact/Logs/Test/Test-Wander-2026.07.22_13-17-12--0700.xcresult`.
+  A separate cold-cache attempt was intentionally interrupted during dependency
+  compilation after the warmed current-main run was chosen; it did not report
+  an app or test failure.
+- Next: commit this gate note, safely force-update the rebased PR branch, verify
+  GitHub's merge state, update Linear, and run the branch from Xcode on Ry's
+  iPhone. No TestFlight release is requested.
+
+REC-116 second current-main validation, 2026-07-22 13:29 PDT:
+
+- `origin/main` advanced again to `a306b4ca1` (`fix: backfill historical feed
+  activity (#152)`). Rebased PR #151 a second time; the only conflict was this
+  append-only coordination log, and both histories were retained. The compact
+  implementation commit is now `698a798c1`; branch head before this note is
+  `afd369734`.
+- Two warmed test attempts were interrupted by an iOS Simulator runner/channel
+  disconnect. One surfaced while the performance fixture was running; that
+  exact test passed independently in 0.709 seconds. After shutting down the
+  extra iPhone 17e simulator and clean-booting the iPhone 17 Pro destination, a
+  fresh full suite passed 505/505 with zero failures. Result bundle:
+  `/tmp/DerivedData-rec116-final/Logs/Test/Test-Wander-2026.07.22_13-24-04--0700.xcresult`.
+  The runner interruptions were infrastructure-only and did not reproduce after
+  the clean boot.
+- `git diff --check` remains clean. Visual acceptance is unchanged from the
+  prior iPhone 17 Pro and iPhone 17e review: collapsed Been fits without a
+  scroll, Wanna shares the same hierarchy, and Notes appears only inside More
+  options for both flows.
+- Next: commit this latest-main validation, safely force-update PR #151, verify
+  its merge state, return Linear REC-116 to `In Review` with the new evidence,
+  and run the final branch from Xcode on Ry's iPhone. No build-number or
+  TestFlight action was requested.
+
+REC-116 final Build-89-main gate, 2026-07-22 13:32 PDT:
+
+- While PR #151 was being updated, `origin/main` advanced to `141c01999` with
+  the merged Feed layout/navigation work and Build 89 preparation. Rebased the
+  full REC-116 branch again. The only manual conflict was the append-only agent
+  log; both release and REC-116 histories were retained. The compact-form
+  implementation is now `60db87b69`; branch head before this note is
+  `234a6cb64`.
+- The upstream Feed navigation contract and REC-116 save-form assertions both
+  remain present. `xcodegen generate` produced no tracked diff, and `git diff
+  --check` passed.
+- The complete latest-main suite passed 506/506 with zero failures on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec116-final/Logs/Test/Test-Wander-2026.07.22_13-30-26--0700.xcresult`.
+- Next: commit this final gate note, force-update PR #151 with lease protection,
+  confirm GitHub reports a clean ready PR, move Linear REC-116 to `In Review`,
+  and run this exact branch on Ry's iPhone from Xcode. No TestFlight action is
+  part of the request.
+
+REC-116 compact-save final handoff, 2026-07-22 13:35 PDT:
+
+- Force-updated ready PR #151 after the Build-89-main rebase and confirmed
+  GitHub reports `mergeStateStatus: CLEAN` with no checks configured:
+  https://github.com/joelipshutz/wander/pull/151.
+- Returned Linear REC-116 to `In Review` and added comment
+  `b6c1fe67-7355-4b55-8343-c04521818fd4` with the final implementation,
+  506/506 suite, visual-device review, screenshot paths, and PR link.
+- Opened `/private/tmp/recme-rec116-save-flow/Wander.xcodeproj` in Xcode,
+  confirmed the active branch is `codex/rec-116-save-flow` and destination is
+  `Ry’s iPhone`, then built, installed, and launched the app. Xcode reports
+  `Running Wander on Ry’s iPhone`; the exact PR branch is ready for hands-on
+  device testing.
+- No build-number bump, archive, TestFlight upload, hosted data mutation, or
+  tester-facing Slack post was performed for this PR-only device handoff.
+
+## 2026-07-22 15:43 PDT - Codex - REC-116 Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-116-save-flow`
+Worktree: `/private/tmp/recme-rec116-save-flow`
+Linear: `REC-116` (`In Review`)
+Pull request: [#151](https://github.com/joelipshutz/wander/pull/151)
+
+Goal: perform the user-requested final review, squash-merge REC-116 into
+`main`, then package all eligible app changes currently on `main` into a new
+TestFlight build and make it available to the public tester group.
+
+Starting status and coordination:
+
+- Fetched `origin`; the existing isolated REC-116 worktree is clean at
+  `72b8a6999`. The root checkout remains on unrelated stale REC-88 work with
+  user-owned `.gitignore` and `.pnpm-store/` changes and will not be edited or
+  switched.
+- `origin/main` is `6d717d23b` and currently declares build 90. The durable
+  release log records build 90 as completed, so there is no unfinished release
+  to resume. Main has advanced with REC-106 and REC-111 since the last REC-116
+  validation; update the PR onto latest main and rerun the landing gate before
+  merge.
+- The explicit release request authorizes one build-number increment after the
+  merge, archive/upload, TestFlight helper/group attachment, Linear completion,
+  and the required `#testflight-feedback` note. Expected pre-merge edits are
+  limited to this append-only log and conflict resolution; release edits will
+  use a separate clean worktree from the exact merged `main`.
+
+REC-116 final review and landing gate, 2026-07-22 15:56 PDT:
+
+- Rebased the full PR #151 branch onto current `origin/main` at `6d717d23b`.
+  The only conflict was this append-only coordination log; preserved both the
+  upstream release history and the complete REC-116 history. Regenerating with
+  XcodeGen produced no tracked project changes, and `git diff --check` passed.
+- Completed a manual pre-landing review of the full diff plus Greptile and
+  existing-review triage. No blocking correctness, data-loss, security,
+  persistence, accessibility, or performance issues were found. The change is
+  local SwiftUI/form-state work with no schema, RPC, RLS, or hosted-data change.
+  The optional gstack review-history write could not run because its validator
+  requires `bun`, which is not installed; the review result is recorded here.
+- The complete post-rebase suite passed 572/572 with zero failures on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec116-merge-final/Logs/Test/Test-Wander-2026.07.22_15-47-20--0700.xcresult`.
+  The required generic iOS Simulator build also succeeded. Existing Supabase
+  date-formatter concurrency warnings remain unrelated and pre-existing.
+- Next: commit this gate note, force-update PR #151 with lease protection,
+  confirm GitHub still reports a clean ready PR, and squash-merge it. Keep
+  Linear REC-116 in `In Review` until build 91 is actually available to testers.
