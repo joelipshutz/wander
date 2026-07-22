@@ -15220,3 +15220,79 @@ Release scope and preflight:
   currently has `CURRENT_PROJECT_VERSION: "86"`. This explicit release will
   increment the build exactly once to 87, regenerate the Xcode project, then
   validate, archive, upload, attach, and record the TestFlight result.
+
+## 2026-07-22 11:59 PDT - Codex - REC-121 Historical Feed Backfill
+
+Agent: Codex
+Branch: `codex/rec-121-historical-feed`
+Worktree: `/private/tmp/recme-build87-clean-device`
+Linear: `REC-121` (moved to In Progress)
+
+Goal: restore the Feed's historical followed activity and Featured for you rail,
+which Joe reports are absent while a save created yesterday still renders.
+
+Starting evidence and root cause:
+
+- The physical-device probe now completes as loaded, but returned one activity
+  event and zero featured places.
+- `public.feed_events` and its triggers were introduced in migration
+  `20260720234500_feed_activity.sql`. The triggers record only inserts and
+  qualifying transitions from that point forward.
+- `app.followed_feed` derives both activity and featured places exclusively from
+  `feed_events`. There is no migration-time backfill of existing `user_places`,
+  lists, or list items.
+- Therefore, yesterday's newly recorded save is visible while older existing
+  saves are omitted and the rail has no source rows. This is a data-projection
+  gap, not the prior Clerk/RPC-readiness failure.
+
+Planned files:
+
+- `supabase/migrations/*` — idempotent feed-event historical backfill
+- `supabase/tests/feed_activity.sql` — regression coverage for backfilled
+  activity and Featured for you source data
+- `WanderTests/*` only if client presentation needs a guard for a valid
+  partial remote page
+- `docs/agent-log.md`
+
+Coordination:
+
+- The root checkout is on unrelated `codex/rec-60-notifications`; this work
+  uses a clean isolated worktree from current `main`.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. No existing user changes were touched.
+
+Implementation and hosted verification, 2026-07-22 12:18 PDT:
+
+- Added and applied `20260722121000_backfill_feed_activity.sql` to the linked
+  production project `rugmtlgufrhlxwfkumhw`. It creates the private,
+  security-definer `app.backfill_feed_events()` maintenance projection and runs
+  it once. The function is pinned to `search_path=public, app` and has execute
+  revoked from `public`, `anon`, and `authenticated`.
+- The backfill is idempotent. It derives one current historical event per
+  active user place, list, and list item only when the matching source and
+  event type lack an existing event. It preserves historical save, visit, list,
+  and item timestamps instead of flooding the current Feed with migration-time
+  events.
+- Hosted pre-backfill aggregate for Joe: 5 followed accounts, 51 active
+  followed places, 1 Feed event, 50 missing place events, and 0 current rail
+  candidates. Post-backfill: 61 followed Feed events, 0 missing place events,
+  and 35 Featured for you candidates.
+- `pnpm dlx supabase db push --linked --dry-run --yes` listed only the new
+  migration; the actual linked push succeeded. `supabase migration list
+  --linked` is aligned through `20260722121000`.
+- Hosted rollback-only `supabase/tests/feed_activity.sql` passed 27/27. The
+  new regression creates a legacy place with its event intentionally removed,
+  runs the backfill twice, proves exactly one event is restored, and verifies
+  the resulting followed Feed plus Featured for you rail.
+- A full iPhone 16 Plus simulator suite was attempted as required, but the
+  machine ran out of local disk while compiling cached dependencies before any
+  test executed. The resulting incomplete 677 MB
+  `/private/tmp/DerivedData-feed-backfill` cache was removed, returning free
+  space to about 1.1 GB. This is an infrastructure limitation, not a passing
+  iOS test run; the hosted Feed contract test is the validation for this
+  backend-only change.
+- The connected iPhone 16 Pro is visible through `devicectl`, but its iOS lock
+  screen rejected the forced app relaunch. Unlocking it is the remaining
+  real-device step; the already-installed app will fetch the repaired backend
+  Feed on relaunch or pull-to-refresh. No TestFlight build is needed because
+  no client binary changed.
