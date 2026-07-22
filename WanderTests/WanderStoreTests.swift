@@ -2796,6 +2796,46 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
+    func testFollowedFeedRetriesOneTransientAuthReadinessFailure() async {
+        let store = makeStore()
+        let expectedPage = FollowedFeedPage(
+            activity: [],
+            featuredPlaces: [],
+            nextCursor: nil,
+            fetchedAt: Date(timeIntervalSince1970: 1_720_000_000)
+        )
+        let repository = FakeFeedRepository(responses: [
+            .failure(AuthSessionError.tokenUnavailable),
+            .success(expectedPage)
+        ])
+
+        let didRefresh = await store.refreshFollowedFeed(
+            backend: WanderBackend(feedRepository: repository)
+        )
+
+        XCTAssertTrue(didRefresh)
+        XCTAssertEqual(repository.requestCount, 2)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertEqual(store.followedFeedPage?.fetchedAt, expectedPage.fetchedAt)
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testFollowedFeedDoesNotRetryOrdinaryRemoteFailures() async {
+        let store = makeStore()
+        let repository = FakeFeedRepository(responses: [
+            .failure(WanderRemoteError.invalidResponse("service unavailable"))
+        ])
+
+        let didRefresh = await store.refreshFollowedFeed(
+            backend: WanderBackend(feedRepository: repository)
+        )
+
+        XCTAssertFalse(didRefresh)
+        XCTAssertEqual(repository.requestCount, 1)
+        XCTAssertEqual(store.feedLoadState, .failed)
+        XCTAssertNotNil(store.lastRemoteError)
+    }
+
     func testProcessExtractionResultUpdatesJobAndReturnsCandidates() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -5578,6 +5618,22 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.ownerUserPlaceID), [remoteUserPlaceID])
         XCTAssertEqual(placeListRepository.itemRequests.map(\.draft.sourceUserPlaceID), [remoteUserPlaceID])
         XCTAssertEqual(store.visiblePlaceLists(scope: .mine).first { $0.serverID == remoteListID }?.cachedItemCount, 1)
+    }
+}
+
+@MainActor
+private final class FakeFeedRepository: FeedRepository {
+    private var responses: [Result<FollowedFeedPage, Error>]
+    private(set) var requestCount = 0
+
+    init(responses: [Result<FollowedFeedPage, Error>]) {
+        self.responses = responses
+    }
+
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        requestCount += 1
+        guard !responses.isEmpty else { throw TestError.expected }
+        return try responses.removeFirst().get()
     }
 }
 

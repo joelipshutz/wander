@@ -12,7 +12,6 @@ struct WanderRootView: View {
     @State private var isPresentingAdd = false
     @State private var addSheetDetent = AddSheetLayout.restingDetent
     @State private var initialPresentation: WanderInitialPresentation?
-    @State private var discoverSection: DiscoverSection?
     @State private var sharedProfile: SharedProfileRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
@@ -53,7 +52,7 @@ struct WanderRootView: View {
                 .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
-            DiscoverScreen(requestedSection: $discoverSection)
+            FeedScreen()
                 .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
 
@@ -66,7 +65,6 @@ struct WanderRootView: View {
                 .tag(WanderTab.lists)
 
             ProfileScreen(visitInvitationInboxRequestID: $visitInvitationInboxRequestID) {
-                discoverSection = .members
                 selectedTab = .discover
             }
                 .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
@@ -507,7 +505,7 @@ enum WanderTab: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .map: "Map"
-        case .discover: "Discover"
+        case .discover: "Feed"
         case .add: "Add"
         case .lists: "Lists"
         case .profile: "Profile"
@@ -517,7 +515,7 @@ enum WanderTab: String, CaseIterable, Hashable {
     var systemImage: String {
         switch self {
         case .map: "map"
-        case .discover: "sparkle.magnifyingglass"
+        case .discover: "newspaper"
         case .add: "plus"
         case .lists: "bookmark.square"
         case .profile: "person.crop.circle"

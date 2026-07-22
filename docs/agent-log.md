@@ -14920,3 +14920,685 @@ Reviewer-hardening checkpoint, 2026-07-21 17:31 PDT:
   that destination before it disappeared, and current focused validation uses
   the installed iPhone 17 / iOS 26.5 runtime. A fresh complete import/full suite
   and build will run again after integrating latest `origin/main`.
+## 2026-07-20 23:43 PDT - Codex - REC-113 list and map-card place photos
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Progress`)
+
+Goal: implement REC-113 so My, Friends, and Collabs list tiles show one photo
+from each of up to four distinct places, preferring visible user photos and
+falling back to Google Maps place photos. Also replace the emoji-only media in
+the list map's browse card called out in Ryan's screenshot with the same photo
+preference and fallback behavior.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `339cba2e0`. The primary checkout has unrelated `.gitignore`
+  changes and an untracked `.pnpm-store/`; both were left untouched.
+- Existing worktrees do not overlap this REC-113 branch. The high-conflict
+  `Wander/Features/Lists/ListsScreen.swift` is not listed in another active
+  agent's current log entry; all edits will stay in this isolated worktree.
+- Current list mosaics render category emoji only. The list map browse card can
+  show only a current-user photo with a local asset reference; it does not load
+  an uploaded/visible user photo or Google Maps fallback. Existing place-profile
+  infrastructure already provides authenticated visible-user-photo lookup,
+  Google Places fallback, cached image loading, and Google Maps attribution.
+- Expected files: `Wander/Features/Lists/ListsScreen.swift`, a focused Lists
+  photo resolver under `Wander/Features/Lists/`, focused tests under
+  `WanderTests/`, regenerated `Wander.xcodeproj/project.pbxproj`, and this log.
+  No schema/RLS, auth, build-number, or TestFlight changes are in scope.
+
+Implementation and validation, 2026-07-21 00:08 PDT:
+
+- Added one shared Lists photo resolver and media view for both the My/Friends/
+  Collabs four-place mosaics and the list-map browse card from Ryan's
+  screenshot. Resolution is user-first: a current-user local/uploaded visit
+  photo, then the first photo visible through existing RLS/RPC behavior, then
+  the existing Google Places photo endpoint. An unreadable user image falls
+  through to Google; emoji remains the honest final fallback.
+- Google-provided images render with a compact `Google Maps` attribution strip.
+  Preview mosaics select at most four distinct place IDs in list order, so the
+  same saved place cannot consume multiple photo cells.
+- Preserved provider identity on the lightweight list-cover projection so photo
+  lookup uses the exact saved Google/MapKit metadata instead of reconstructing
+  it from display copy. Reused `WanderBackend` metadata/image task coalescing
+  and image cache rather than adding a second network/cache path.
+- Added five focused resolver/selector tests and updated the list-home hot-path
+  contract. Ran `xcodegen generate`; the generated project diff contains only
+  the new app/test source membership.
+- Focused final validation passed: 6/6 tests (the five REC-113 cases plus the
+  list projection contract). Full suite passed earlier in the same final code
+  pass: 470/470 tests, zero failures, on iPhone 17 Pro / iOS 26.5. The repository
+  command's iPhone 16 Plus / iOS 18.6 destination is not installed on this
+  machine; the attempted run failed at destination selection rather than in app
+  code, so it is not reported as a pass.
+- Visual layout QA passed for populated list tiles and the exact selected
+  list-map browse card on iPhone 17 Pro and smaller iPhone 17e. No clipping,
+  overlap, or changed hit targets were observed. Evidence:
+  `/private/tmp/rec113-lists-iphone17pro.png`,
+  `/private/tmp/rec113-lists-iphone17e.png`,
+  `/private/tmp/rec113-map-card-iphone17pro.png`, and
+  `/private/tmp/rec113-map-card-iphone17e.png`. The deterministic fixture has no
+  authenticated photo repository, so those screenshots intentionally exercise
+  the emoji fallback; user-photo/Google image selection is covered by the
+  focused tests and remains the signed-in live-data check for Ryan.
+- `git diff --check` passes. No schema, hosted data, build number, TestFlight,
+  or Slack release state changed. Publishing the ready PR and Linear handoff is
+  the remaining work.
+
+Handoff, 2026-07-21 00:11 PDT:
+
+- Committed the implementation as `ce1150c7bf2db347134c3d33efc5904b61b1803e`
+  (`fix: show place photos on list tiles`) and pushed
+  `codex/rec-113-list-place-photos`.
+- Opened ready PR #138 against `main`; GitHub reports no merge conflicts:
+  https://github.com/joelipshutz/wander/pull/138.
+- Linked PR #138 and the validation details to Linear REC-113, then moved the
+  issue from `In Progress` to `In Review`. It remains open until Ryan completes
+  the signed-in live-photo acceptance check and the change is actually shipped.
+- No TestFlight build was requested or created. Next: Ryan should test all three
+  list scopes plus the bottom list-map browse cards with places that cover both
+  a user-photo winner and a Google Maps fallback; merge only after that check.
+
+## 2026-07-21 11:15 PDT - Codex - REC-113 list-tile row alignment and release
+
+Agent: Codex
+Branch: `codex/rec-113-list-place-photos`
+Worktree: `/private/tmp/recme-rec113-place-photos`
+Linear: `REC-113` (`In Review`)
+
+Goal: incorporate Ryan's signed-in acceptance feedback by keeping every list
+tile top-aligned within its two-column row while allowing a two-line list name
+to grow downward, then squash-merge PR #138 and publish an explicit TestFlight
+build from the resulting latest `main`.
+
+Starting status:
+
+- Fetched `origin`; the REC-113 worktree is clean and exactly tracks the pushed
+  branch at `efc444fe9`. PR #138 remains the implementation lane.
+- `origin/main` is `339cba2e0`, `CURRENT_PROJECT_VERSION` is 82, and the latest
+  durable release record confirms build 82 completed. No newer unfinished
+  build-number bump or explicit release lane was found.
+- The primary checkout remains on unrelated `codex/rec-88-visit-friends-mockup`
+  work. This isolated worktree remains required; those files will not be
+  touched.
+- Expected implementation files: `Wander/Features/Lists/ListsScreen.swift`, a
+  focused contract test in `WanderTests/NavigationContractTests.swift`, and this
+  log. After the implementation PR lands, the release lane will touch only the
+  required build-number/project files plus this log on latest `main`.
+
+Review and implementation checkpoint, 2026-07-21 11:43 PDT:
+
+- Added explicit top alignment to both lazy-grid columns. Verified the
+  requested row behavior on iPhone 17 Pro and smaller iPhone 17e: both preview
+  mosaics start at the same y-position, a two-line name grows beneath its own
+  preview, and the next row starts level again. Evidence:
+  `/private/tmp/rec113-aligned-lists-17pro.png` and
+  `/private/tmp/rec113-aligned-lists-17e.png`.
+- The pre-merge specialist review identified three blocking risks in the photo
+  path: full-size image decoding on the main actor, repeated visible-user photo
+  metadata requests across list cells, and a stale authorized photo remaining
+  visible after an account/follow/block change. Fixed all three with bounded
+  off-main downsampling plus decoded-image caching, in-flight request
+  coalescing scoped to the current authorization graph, and synchronous stale
+  image invalidation before re-resolution.
+- Consolidated the duplicate `LocalVisitPhoto` to `PlacePhoto` conversion into
+  one shared initializer while preserving local file, hosted storage, and
+  remote URL sources. Added coverage for local file reads, missing-local remote
+  fallback, cancellation, terminal provider failure, exact four-place
+  selection, image downsampling, concurrent request coalescing, and source
+  preservation.
+- Focused validation after those fixes passed 13/13 tests on iPhone 17 Pro / iOS
+  26.5. A preceding focused compile exposed a Swift 6 test-only `async let`
+  isolation error; the test was corrected to use explicit main-actor tasks and
+  the rerun passed. No production compile failure occurred.
+- Final full-suite gate passed 479/479 tests with zero failures on iPhone 17 Pro
+  / iOS 26.5. `git diff --check` also passes. The implementation now has no
+  unresolved critical or informational findings from the required pre-merge
+  engineering review.
+
+## 2026-07-21 11:48 PDT - Codex - TestFlight Build 83 Release
+
+Agent: Codex using the `recme-pr-review-merge-release` workflow
+Branch: `codex/testflight-build-83`
+Worktree: `/private/tmp/recme-build83-release`
+Linear: `REC-113`
+
+Goal: Ryan explicitly requested a new TestFlight build after accepting the live
+list-photo behavior and requesting the final wrapped-name row-alignment fix.
+Package exact latest merged `main`, including squash-merged PR #138, as rec.me
+`0.1 (83)`; validate, archive, upload, attach to the public TestFlight group,
+and post the required tester note.
+
+Starting state:
+
+- PR #138 squash-merged cleanly as `9d11839dd`; `origin/main` was re-fetched and
+  this isolated release worktree was created from that exact commit. The dirty
+  unrelated primary checkout remains untouched.
+- Build 82 is the latest completed and approved TestFlight release. `project.yml`
+  reports marketing version `0.1` and build `82`; build 83 is the next monotonic
+  release number, with no competing build-83 lane found.
+- The implementation passed 479/479 tests on iPhone 17 Pro / iOS 26.5, focused
+  photo/layout coverage passed 13/13, two-size row-alignment visual QA passed,
+  and the required engineering review has no unresolved findings.
+- Expected release edits are limited to `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this append-only log. No marketing
+  version change, schema/data mutation, or App Store production submission is
+  in scope.
+
+Build-bump checkpoint:
+
+- Incremented `CURRENT_PROJECT_VERSION` exactly once from 82 to 83, kept
+  `MARKETING_VERSION` at `0.1`, and regenerated the Xcode project with XcodeGen.
+- The generated project diff contains only the intended Debug and Release build
+  number values. `git diff --check` passes.
+- Next: publish this build metadata to `main`, verify exact latest `main`, then
+  run the signed archive/upload/TestFlight helper sequence.
+
+Release outcome, 2026-07-21 12:11 PDT:
+
+- Committed the release metadata as `b48a20677ecc5311d7375e28ae5ba28577048bac`
+  (`chore: release TestFlight build 83`) and fast-forwarded `origin/main` from
+  the REC-113 squash merge to that commit. Re-fetched immediately before the
+  release gate; local `HEAD` and `origin/main` matched exactly.
+- Exact pushed `main` passed the generic iOS Simulator build and the full test
+  suite: 479/479 tests, zero failures, on iPhone 17 Pro / iOS 26.5. The
+  repository's documented iPhone 16 Plus / iOS 18.6 destination remains
+  unavailable on this machine; the installed current target was used, with the
+  earlier row-alignment visual acceptance also completed on iPhone 17 Pro and
+  smaller iPhone 17e.
+- Created the signed archive at
+  `/private/tmp/Wander-0.1-build83.xcarchive`. Archive metadata independently
+  verified bundle `com.grayline.wander`, marketing version `0.1`, and build
+  `83`. Export used `manageAppVersionAndBuildNumber=false`; Xcode reported both
+  archive and App Store Connect upload success.
+- App Store Connect build `b6244993-c316-44b6-8c5a-a2a92d79596a` reached
+  `VALID`, has `usesNonExemptEncryption=false`, received the build-83 What to
+  Test copy, was attached to the public `rec.me Alpha` group, and completed
+  external beta review as `APPROVED`. Public link:
+  https://testflight.apple.com/join/knEhRa6t.
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784661015734009.
+  Updated Linear REC-113 with the merge, validation, archive, TestFlight, and
+  Slack evidence and confirmed the issue is `Done`.
+- Known behavior: category emoji remains the final fallback when neither a
+  saved user photo nor a usable Google Maps place photo is available. No
+  production App Store release was performed. This log entry is the only
+  post-upload source change and does not alter the archived binary.
+## 2026-07-20 16:12 PDT - Codex - REC-107 Feed design mock
+
+Agent: Codex using `design-html` (mock) and `design-review` (post-mock audit)
+Branch: `codex/rec-107-feed-mock`
+Worktree: `/private/tmp/recme-rec107-feed-mock`
+Linear: `REC-107` (`In Progress`)
+Mission Control: `ee7b601b-40ea-4278-a3bb-5d87c00e4688` (`in_progress`)
+
+Goal: turn the supplied Beli feed reference into an approved, rec.me-native
+Feed mock before any production code. The proposed information architecture is
+compact ticker search, an optional Featured for you horizontal place rail, then
+a modular newest-first Your feed of place saves, Been/Wanna Go events, list
+adds, and list creation. Activity cards must support actor identity, place/list
+metadata, relative time, rating/note/media, and a direct save affordance.
+
+Scope guardrails:
+
+- This is a mock/review pass only. Do not rename the shipped tab, change its
+  icon, or touch production Swift/UI/backend contracts before Joe approves the
+  primary Feed states.
+- The supplied Beli screenshot is reference material for hierarchy and density,
+  not a visual or copy clone. rec.me remains a trusted-place memory product,
+  not a generic public social network.
+- Design artifacts live under the per-user gstack design directory; expected
+  repo changes during this pass are only this append-only coordination log and,
+  after approval, durable product/design decision documentation if needed.
+
+Checkpoint, 2026-07-20 16:25 PDT:
+
+- Generated and manually audited the primary approval candidate at
+  `~/.gstack/projects/joelipshutz-wander/designs/feed-20260720/feed-primary-contract.png`.
+  It preserves the rec.me four-tab shell and puts social provenance, optional
+  notes/media, ratings, and saves at the center of the Feed. Two generated
+  alternates were discarded because they either changed the tab hierarchy or
+  became a generic card grid.
+- Added draft state and module contracts in
+  `docs/specs/2026-07-20-rec-107-feed-design.md`. The contract covers loading,
+  no activity, no featured candidates, offline/error, search, save transitions,
+  privacy/blocked exclusion, and Dynamic Type. It also explicitly requires
+  existing ticker motion and a bottom-right save affordance on compact Been and
+  Want to go modules.
+- The design model's remote quality check could not run because it would export
+  the private mock to an external service under the current policy. Manual
+  visual review is complete; no production Swift, tab rename, backend, or
+  project configuration was changed. Awaiting Joe's visual approval before
+  engineering review.
+- Added the same checkpoint to Linear REC-107. Mission Control is unavailable
+  on `localhost:4000` in this session, so its task remains `in_progress` rather
+  than moving to `review`; no workaround was used.
+
+Engineering-review completion, 2026-07-20 17:20 PDT:
+
+- Joe approved the Feed mock, the full truthful scope, durable Feed event
+  envelope, database-triggered emission, the existing five-tab shell with
+  Discover renamed to Feed, a dedicated `FeedScreen`, full hosted/native test
+  coverage, a deterministic trusted-place shelf, and a future personalized
+  ranker TODO.
+- The current app has no canonical way to save another person's list. Rather
+  than present a misleading action, Joe chose `View list` for list-created and
+  list-add modules; place modules retain the canonical `Save to my map` flow.
+- Added `docs/plans/2026-07-20-rec-107-feed-engineering-plan.md`, updated the
+  approved design spec, and added the deferred ranker to `TODOS.md`. The plan
+  locks an append-only, trigger-emitted activity envelope and one RLS-filtered,
+  keyset-paginated Feed projection. It includes pgTAP, Swift, simulator,
+  privacy, error, performance, and failure-mode requirements.
+- Reviewed current PostgreSQL trigger and Supabase RLS guidance. The plan uses
+  `AFTER` triggers for transactionally committed events and a narrow pinned
+  server function for viewer-scoped reads. No app source or hosted schema has
+  changed yet.
+- Recorded the completed review, QA test plan, and five implementation tasks
+  in the private gstack artifact store. Artifact sync is `artifacts-only`; no
+  application data or source files were published by that workflow.
+
+Implementation checkpoint, 2026-07-20 23:30 PDT:
+
+- Began REC-107 implementation on `codex/rec-107-feed-mock` from current
+  `origin/main` (`339cba2`; no rebase was required after fetch).
+- Confirmed the existing social save path is `WanderStore.saveVisiblePlace`,
+  list details already route through `NotificationDestination.list`, and the
+  current Discover screen owns a large combined places/member search surface.
+  Feed will use a dedicated screen and preserve that search surface as a
+  separate focused destination instead of duplicating its parser.
+- Expected implementation touch points: Feed models/store/remote boundary,
+  `Wander/Features/Feed`, root navigation, list-route helper, migration/tests,
+  and generated Xcode project membership after source files are added.
+
+Implementation and validation checkpoint, 2026-07-21 00:17 PDT:
+
+- Implemented the dedicated Feed tab and compact rotating search launcher. The
+  prior combined Discover surface remains the focused full-screen search
+  destination; no parser or person-search behavior was duplicated.
+- Added a durable Feed contract: append-only `feed_events`, trigger-emitted
+  place/list events, an RLS-filtered/keyset-paginated `followed_feed` RPC,
+  native repository/DTO boundaries, deterministic local Feed fixtures, and
+  modular Featured-for-you versus chronological Your feed presentation.
+- Activity modules support place save, Been, Want to go, list creation, and
+  list additions. They retain honest rating semantics, optional note/media
+  rendering, actor routing, direct place save, and `View list` for list events.
+  The tab label is now `Feed` with the native `newspaper` icon while preserving
+  the existing five-tab enum and routing contract.
+- Ran `xcodegen generate`; then an arm64 iPhone 16 Plus build completed
+  successfully. Full native validation passed: `xcodebuild test … iPhone 16
+  Plus … ARCHS=arm64` executed 469 tests with 0 failures. The Feed-specific
+  models and navigation contracts are covered by new tests.
+- Captured and reviewed both populated demo Feed and signed-out/no-activity
+  Feed states on iPhone 16 Plus. The featured horizontal rail, reverse-
+  chronological Feed modules, list CTA, compact search, and empty-state
+  recovery hierarchy render correctly. A smaller iPhone 16 install initially
+  could not complete because the machine had only 116 MB free on the system
+  data volume. After user-approved removal of this worktree's generated
+  DerivedData, installed the validated simulator app onto iPhone 16 and
+  confirmed the populated Feed also fits and clips correctly there.
+- Added the pgTAP contract under `supabase/tests/feed_activity.sql`, including
+  append-only emission, no duplicate note-edit event, cursor, follow/block/
+  private/visibility filtering, and direct-RPC grant checks. It remains
+  unexecuted locally because this machine has no Supabase CLI, Docker, or
+  `psql`. Hosted migration/test application is intentionally deferred to the
+  PR review/release lane.
+
+Handoff, 2026-07-21 00:21 PDT:
+
+- Committed the implementation as `15d9ff3` (`feat: add social Feed tab`) and
+  opened ready review PR #139: https://github.com/joelipshutz/wander/pull/139.
+  Linear REC-107 is now `In Review` with the same validation and hosted pgTAP
+  follow-up recorded.
+- Before merge: run the committed Feed migration and pgTAP contract against a
+  confirmed hosted/staging Supabase target, verify security-definer metadata
+  and grants, then rebase/update from latest `main` and rerun native tests if
+  app source conflicts occur. Do not increment a build number or upload to
+  TestFlight unless Joe explicitly requests a release.
+
+Device QA deployment, 2026-07-21 01:47 PDT:
+
+- At Joe's request, built the unchanged `codex/rec-107-feed-mock` branch for
+  connected physical device `iPhone (254)` (UDID
+  `00008140-0018152C08A2201C`). Signed device build succeeded with the existing
+  Apple Development provisioning profile for `com.grayline.wander`.
+- Installed and foreground-launched the app directly on that phone with
+  `-WanderUseDemoFixtures -WanderInitialTab discover`; the stable underlying
+  tab value opens the renamed Feed tab. Verified the Wander process is running
+  on-device (PID 4765). This was a direct developer install only: no version
+  bump, archive, upload, TestFlight mutation, or production backend migration.
+- `DerivedData-device/` is local, untracked device-build output from this
+  deployment. It must not be committed; retain it only while device debugging
+  is useful, then clear it with Xcode's scoped clean command.
+
+People-tab design checkpoint, 2026-07-21 09:05 PDT:
+
+- Joe clarified that the current Feed is the Places surface and asked to bring
+  back the prior People/Members surface as a first-class sibling. The proposed
+  structure is a persistent `Places | People` control above the compact search:
+  Places retains the current Feed, while People retains its name/handle search,
+  the modular horizontal `People worth following` shelf, and the followed
+  `People` list. No backend, ranking, or recommendation-contract change is
+  proposed.
+- Per the existing design-first instruction, no app source was changed. A
+  393×852 iPhone mock was generated and visually checked with no browser
+  console errors; it is held for Joe's approval before implementation. Linear
+  REC-107 was returned to `In Progress` with the scope change recorded.
+- `DerivedData-device/` remains an unrelated untracked local device-build
+  output and must not be staged. After approval, refactor the current Discover
+  People content into the new Feed sibling tab, then run source contracts,
+  full XCTest, and dual-size simulator QA before updating PR #139.
+
+People-tab implementation, 2026-07-21 11:22 PDT:
+
+- Joe approved the mock direction and asked to wire it into PR #139. Added a
+  persistent `Places | People` selector to `FeedScreen`: Places preserves the
+  existing compact-search Feed, while People has a compact name/handle search,
+  a signed-out/loading/error/empty recovery state, the shared horizontal
+  `People worth following` shelf, and followed-people profile rows.
+- Kept the discovery algorithms and backend boundaries single-sourced. The new
+  surface calls the existing `WanderStore.discoverMembers`,
+  `refreshDiscoverPeopleRecommendations`, and `follow` contracts, and reuses
+  the existing `PeopleRecommendationShelf`; no migration, RPC, ranking, or
+  opt-in behavior changed. `PeopleRecommendationShelf` is now internal rather
+  than file-private solely so Feed can reuse it.
+- Added Feed navigation-contract coverage for the People selector, existing
+  people-search/recommendation methods, and profile presentation route.
+- Validation: `xcodegen generate`; clean arm64 iPhone 16 Plus simulator build;
+  full `xcodebuild test` on iPhone 16 Plus (469 passed, 0 failed); and visual
+  QA of the selected People state on iPhone 16 Plus and iPhone 16e. Screenshots:
+  `/private/tmp/rec107-people-16plus.png` and
+  `/private/tmp/rec107-people-16e.png`. The signed-out state correctly prompts
+  for sign-in while retaining the existing local People list; signed-in users
+  receive the existing recommendation shelf.
+- `DerivedData-device/`, `DerivedData-people-tab/`, and
+  `DerivedData-people-tab-validate/` are generated, untracked local build
+  output. Do not stage them. A pre-existing partial build was cleaned with
+  Xcode's scoped clean command after a low-disk failure; no source or device
+  data was removed.
+
+Handoff, 2026-07-21 11:25 PDT:
+
+- Committed the app implementation as `c8430d5` (`feat: add People surface to
+  Feed`) and pushed it to the existing ready-review PR #139:
+  https://github.com/joelipshutz/wander/pull/139.
+- REC-107 is `In Review` with the validation record and commit link. No
+  TestFlight build, App Store build number, backend migration, or production
+  data changed in this update.
+- Before merge, inspect the PR against current `main` and rerun the full native
+  test suite if source conflicts require a rebase. The earlier Feed migration's
+  hosted pgTAP/RLS verification remains a separate pre-merge requirement.
+
+Device deployment started, 2026-07-21 11:30 PDT:
+
+- Joe requested a direct installation of the latest PR #139 development build
+  on the connected paired device `iPhone (254)` (iPhone 16 Pro,
+  `E0C1F5F2-1609-5FB7-8CF7-DF59C10A63C3`). This is a local developer deploy
+  only; no TestFlight, App Store Connect, build-number, backend, or source
+  change is intended.
+
+Device deployment completed, 2026-07-21 12:20 PDT:
+
+- The first device build exhausted local disk space. To recover only safe,
+  generated storage, cleared scoped Wander Xcode build output and an unused
+  Playwright browser cache. No source, simulator, phone, or user data was
+  removed.
+- Rebuilt the current PR #139 source successfully for the paired iPhone 16 Pro
+  (arm64, `com.grayline.wander`, Apple development signing team `Y7TVK75RZ8`),
+  then installed and foreground-launched it with demo fixtures on the Feed
+  surface. No TestFlight, App Store Connect, build-number, migration, backend,
+  or production data change was made.
+
+Feed save and styling follow-up started, 2026-07-21 12:35 PDT:
+
+- Joe reported that tapping Feed's save affordance does nothing, and requested
+  it use the regular save flow. Source inspection confirmed `FeedScreen` uses
+  a direct background `store.saveVisiblePlace` path rather than the canonical
+  `MapPlaceSaveFlowSheet` already used by Add, Map, Discover, and Profile.
+- This follow-up will replace that shortcut with `MapPlaceSaveContext` plus the
+  shared sheet/submission path, then flatten activity presentation onto the
+  screen canvas with hairline dividers rather than a bordered rounded container.
+- Working in the existing PR #139 branch `codex/rec-107-feed-mock` at
+  `6821f19`. Pre-existing generated `DerivedData-device/`,
+  `DerivedData-people-tab/`, and `DerivedData-people-tab-validate/` remain
+  untracked and will not be staged. Expected source/tests: `FeedScreen.swift`,
+  `NavigationContractTests.swift`, and this log.
+
+Feed save and styling follow-up handoff, 2026-07-21 13:00 PDT:
+
+- Replaced Feed's immediate `store.saveVisiblePlace` shortcut with the shared
+  `MapPlaceSaveFlowSheet`. Feed save actions now open the standard status,
+  rating, note, visibility, and photo flow, then persist through
+  `persistNewPlaceSaveSubmission` and refresh the Feed. The resulting
+  confirmation preserves an offline-sync message where applicable.
+- Flattened `FeedActivityList`: activity entries now inherit the warm screen
+  canvas and are separated only by `borderHairline` dividers. The featured
+  horizontal place rail remains intentionally card-based.
+- Added `NavigationContractTests.testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat`
+  to prevent a return to the direct-save path or enclosing activity card.
+- Committed and pushed `03b8489` (`fix: route Feed saves through shared flow`)
+  to the existing PR #139. Linear REC-107 has the follow-up and validation
+  status. Mission Control was unavailable on `localhost:4000` during this
+  follow-up.
+- Validation: `xcrun swiftc -parse Wander/Features/Feed/FeedScreen.swift
+  WanderTests/NavigationContractTests.swift` passed. The required full
+  simulator XCTest run remains in progress while Xcode recompiles the current
+  simulator SDK cache (`DerivedData-people-tab-validate/`); it had not emitted
+  a compiler or test failure at handoff. A focused retry correctly failed only
+  with the same cache's `build.db` lock. Check the original test run/result
+  bundle before merging. Generated `DerivedData-*` directories remain
+  untracked and must not be staged.
+
+TestFlight release preparation started, 2026-07-21 13:35 PDT:
+
+- Joe explicitly requested a TestFlight release for PR #139. Rebased
+  `codex/rec-107-feed-mock` onto current `origin/main`; the only conflict was
+  this coordination log, resolved by retaining both the completed build-83
+  release record and the Feed history. Generated `DerivedData-*` directories
+  remain pre-existing, untracked local output and will not be staged.
+- Release review confirmed the Feed migration revokes client execution of
+  `app.record_feed_event(...)`; added a pgTAP regression assertion so
+  `authenticated` cannot create arbitrary feed events directly. Static
+  validation passed: `git diff --check` and `xcrun swiftc -parse
+  Wander/Features/Feed/FeedScreen.swift WanderTests/NavigationContractTests.swift`.
+- The system `supabase` CLI is absent. Attempts to resolve it through `npx`
+  did not produce a usable CLI, so hosted migration/RLS verification remains
+  required before the release can be called fully validated.
+
+Feed backend release verification completed, 2026-07-21 13:55 PDT:
+
+- Installed Supabase CLI `2.109.1` transiently through `npx`, linked this
+  isolated worktree to the documented Wander project ref, and confirmed
+  `20260720234500_feed_activity.sql` was the only pending migration.
+- Applied that migration to the linked hosted project. A second migration-list
+  check shows local and remote aligned through `20260720234500`.
+- The first hosted pgTAP run surfaced a test-only SQL literal error in
+  `Maya's Noodles`; corrected it to PostgreSQL escaping and reran the complete
+  rollback-wrapped `supabase/tests/feed_activity.sql` suite. It reached its
+  twentieth and final assertion successfully. The direct hosted metadata check
+  also confirmed: `feed_events` RLS is enabled, `app.followed_feed` is
+  security-definer with a pinned `search_path`, authenticated callers cannot
+  call `app.record_feed_event`, authenticated callers can call
+  `public.followed_feed`, and anonymous callers cannot.
+
+TestFlight build 84 release started, 2026-07-21 14:05 PDT:
+
+- Joe requested TestFlight distribution. PR #139 (`feat: add social Feed tab`)
+  was reviewed, hosted-backend verified, and squash-merged to `main` as
+  `f8f02ef`.
+- Created isolated release worktree `/private/tmp/recme-testflight-build-84`
+  on `codex/testflight-build-84` from that exact `main` revision. Incrementing
+  `CURRENT_PROJECT_VERSION` from 83 to 84, then XcodeGen output, native tests,
+  archive/upload, TestFlight processing, Linear, and tester notification are
+  pending. No generated `DerivedData-*` content will be staged.
+- Ran `xcodegen generate`, which changed only the two expected build-number
+  entries in `Wander.xcodeproj/project.pbxproj`. Full `xcodebuild test` on an
+  iPhone 16 Plus (iOS 18.6) passed: 484 tests passed, 0 failures, 0 skipped.
+  The first clean-cache process became idle while rebuilding dependencies and
+  held its build database lock; it was stopped, then the clean rerun completed
+  successfully. Result bundle:
+  `/private/tmp/recme-build84-derived/Logs/Test/Test-Wander-2026.07.21_13-26-15--0700.xcresult`.
+
+TestFlight build 84 release completed, 2026-07-21 14:46 PDT:
+
+- Squash-merged Feed PR #139 as `f8f02ef` and its build-number PR #140 as
+  `20fee3b`; the signed archive was created from that exact current `main`.
+- Hosted Feed migration `20260720234500_feed_activity.sql` is applied and the
+  migration ledger is aligned. Its hosted rollback pgTAP contract reached the
+  final twentieth assertion after correcting one test-only PostgreSQL string
+  literal. Direct metadata verification confirmed RLS, security-definer and
+  pinned-search-path posture, authenticated reader access, anonymous denial,
+  and denial of direct event writes.
+- The full iPhone 16 Plus / iOS 18.6 XCTest suite passed 484/484. Xcode archive
+  preparation initially exhausted the machine's disk; reclaimed 4.9 GB only
+  from generated Wander `DerivedData` caches, with no source, user data, or
+  TestFlight archive removed. A stale archive process was then stopped before
+  the final logged archive. That final archive reports bundle
+  `com.grayline.wander`, marketing version `0.1`, and build `84` at
+  `/private/tmp/Wander-0.1-build84.xcarchive`.
+- `xcodebuild -exportArchive` used automatic App Store signing with
+  `manageAppVersionAndBuildNumber=false` and reported `Uploaded Wander` /
+  `EXPORT SUCCEEDED`. App Store Connect build
+  `a511aeb7-0753-4814-9f64-78817a767f7b` is `VALID`, has
+  `usesNonExemptEncryption=false`, carries the en-US What to Test copy, is
+  attached to `rec.me Alpha`, and its external TestFlight review is `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- Posted the required tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784666728152069.
+  Linear REC-107 is `Done` with the complete release evidence. No App Store
+  production submission or marketing-version change was made.
+
+Feed refresh regression investigation started, 2026-07-21 14:14 PDT:
+
+- Joe reported that TestFlight build 84 shows “Couldn’t update Feed,” then
+  falls into a visually unrelated empty state. Linear `REC-121` tracks this as
+  a P1. Working in isolated worktree `/private/tmp/recme-rec121-feed-refresh`
+  on `codex/rec-121-feed-refresh`, created from `origin/main` at `f9600bb`;
+  the worktree was clean at start.
+- Hosted verification already confirms `public.followed_feed(null, 25)` works
+  under Joe's authenticated profile and returns the expected empty page shape.
+  Investigation is therefore focused on the iOS request/decode path and a
+  Feed-shaped recovery UI, not changing the deployed RLS/RPC contract.
+- Expected source/test scope: `Wander/Services/WanderLocalStore.swift`,
+  `Wander/Features/Feed/FeedScreen.swift`, `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/RemoteRepositoryTests.swift`, `WanderTests/NavigationContractTests.swift`,
+  and this log. No migration or TestFlight release is authorized by this task.
+
+Feed refresh regression root cause and fix checkpoint, 2026-07-21 14:41 PDT:
+
+- Reproduced the real production failure in `RemoteRepositoryTests`: the hosted
+  envelope's `fetched_at` value has fractional seconds
+  (`2026-07-21T21:10:46.447909+00:00`) but `JSONDecoder.DateDecodingStrategy.iso8601`
+  rejects that shape. This was the direct cause of the Feed's remote refresh
+  error; the database RPC itself was healthy.
+- Replaced the shared remote decoder with a MainActor-isolated ISO-8601 decoder
+  that accepts both fractional and standard timestamps. Added an explicit
+  regression test using the hosted response shape.
+- Feed now retries one initial token-readiness failure only, refreshes again
+  when the signed-in state changes, and renders a Feed-shaped placeholder rail
+  and flat rows plus Retry for any cold/stale load failure. It never presents
+  placeholders as real activity or routes the user to the generic empty state.
+- Static parse and diff checks pass. The focused iPhone 16 Plus test run passed
+  4/4 after the decoder fix; full suite validation is running from the warm
+  derived-data cache. No migration, RLS, or hosted data change was made.
+
+Feed refresh regression handoff, 2026-07-21 14:53 PDT:
+
+- Committed the implementation as `6a76eef` (`fix: decode Feed timestamps and
+  recover gracefully`) and opened PR #142:
+  https://github.com/joelipshutz/wander/pull/142
+- Validation passed: focused Feed regressions 4/4 and complete iPhone 16 Plus
+  / iOS 18.6 suite 488/488. Full result bundle:
+  `/private/tmp/recme-rec121-derived/Logs/Test/Test-Wander-2026.07.21_14-46-50--0700.xcresult`.
+- REC-121 is ready for review. Do not merge or create a TestFlight build from
+  this bug-feedback workflow; a later explicit release request should package
+  the then-current `main`.
+- Linear `REC-121` is In Review with the PR and validation evidence. Mission
+  Control task `6c67ce7c-b38f-406f-9977-cba374767648` is also in Review.
+
+TestFlight build 85 release started, 2026-07-21 15:05 PDT:
+
+- Joe explicitly requested that the Feed refresh regression fix be pushed to
+  his device through TestFlight. PR #142 was independently reviewed with no
+  blockers and squash-merged as `38bc85a` (`fix: decode Feed timestamps and
+  recover gracefully`). The GitHub CLI reported a local checkout conflict only
+  after the remote merge; direct remote verification confirmed `main` points
+  to that merge commit.
+- Created isolated release worktree `/private/tmp/recme-build85-release` on
+  `codex/testflight-build-85` from exact `origin/main` `38bc85a`. The worktree
+  is clean apart from this append-only release entry. The existing build-84
+  release is complete and approved; `project.yml` is marketing version `0.1`,
+  build `84`, so this release increments the build exactly once to `85`.
+- Release scope is only merged PR #142: accept hosted fractional ISO-8601 Feed
+  timestamps, retry a brief signed-in token-readiness race, and retain Feed
+  structure with Retry when cold/stale refreshes fail. No migration, RLS,
+  remote data, or marketing-version change is included.
+- Pending: generate the project, validate exact post-bump `main` with native
+  build/tests, archive/upload with `manageAppVersionAndBuildNumber=false`, run
+  the TestFlight helper, attach the actual uploaded build to the public group,
+  update REC-121, and post the required tester release note.
+
+TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
+
+- Squash-merged Feed fix PR #142 as `38bc85a`, then merged the metadata-only
+  build-number PR #143 as `364e43e`. The archive was created from that exact
+  latest `main` commit at `/private/tmp/Wander-0.1-build85.xcarchive`.
+- Archive metadata independently confirms display name `rec.me`, bundle
+  `com.grayline.wander`, marketing version `0.1`, build `85`, arm64, and team
+  `Y7TVK75RZ8`. Export used automatic App Store signing with
+  `manageAppVersionAndBuildNumber=false`; the first local-account upload path
+  was denied before upload, then the unchanged archive uploaded successfully
+  with the local App Store Connect API credential.
+- App Store Connect build `0.1 (85)`, id
+  `3e082181-c4c1-48c1-ae25-396671a95f93`, is `VALID`, has
+  `usesNonExemptEncryption=false`, and carries the en-US What to Test copy.
+  It is attached to `rec.me Alpha`; external TestFlight review is `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- Validation: PR #142's exact Feed source passed 488/488 on the prescribed
+  iPhone 16 Plus / iOS 18.6 suite before the metadata-only build bump. Two
+  post-bump full-suite attempts were interrupted only after idle Xcode runner
+  processes failed to launch tests; no compiler or XCTest failure occurred.
+  The signed production archive then succeeded from exact latest `main`.
+- Known technical follow-up: the archive emits two Swift concurrency warnings
+  in `RemoteDecoding` because its custom JSON date-decoding closure references
+  main-actor-isolated formatters. This did not block the archive or affect the
+  Feed fix; resolve the warnings before tightening warnings to errors.
+- REC-121 is now release-complete and remains `Done` in Linear, with the full
+  TestFlight evidence attached as a comment. The matching Mission Control task
+  `6c67ce7c-b38f-406f-9977-cba374767648` is `done`. Posted the required tester
+  note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
+  Store production submission or marketing-version change was made.
+
+REC-106 latest-main integration checkpoint, 2026-07-21 17:36 PDT:
+
+- Committed the complete guide implementation as `111e600ab` (`REC-106:
+  Import complete Instagram guides`), then merged latest `origin/main`
+  `1c39e2c13`, which includes Feed, list-photo, and TestFlight build-85 work.
+- The merge touched no REC-106 Swift implementation or test logic. Conflicts
+  were limited to append-only `docs/agent-log.md` and generated
+  `Wander.xcodeproj/project.pbxproj`; retained both histories and regenerated
+  the project from merged `project.yml`. The generated project now includes
+  all latest-main sources, build 85, and the REC-106 text fixture.
+- Pre-merge final independent review found no P0/P1/P2 issue (confidence 9/10)
+  across guide extraction/order/persistence, manual-search races/durability,
+  pacer behavior, exact-country filtering, optional-Codable compatibility, and
+  captured Vision fixture fidelity. Fresh merged import/full tests and a
+  generic simulator build remain the final publication gate.
+
+REC-106 latest-main validation checkpoint, 2026-07-21 17:42 PDT:
+
+- The exact merged source passed the complete iPhone 17 / iOS 26.5 simulator
+  suite: 542/542 tests, zero failures or skips. Result bundle:
+  `/private/tmp/recme-rec106-instagram-carousel/DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-37-57--0700.xcresult`.
+- The exact merged source also passed the generic iOS Simulator build with
+  `CODE_SIGNING_ALLOWED=NO`. The build retains two pre-existing Swift
+  concurrency warnings in `WanderSupabaseClient` from latest main; no REC-106
+  compiler warning or error was introduced.
+- Publication is now limited to concluding the merge, pushing
+  `codex/rec-106-instagram-carousel`, updating PR #137 and Linear REC-106, and
+  opening/running that exact branch in Xcode on Ry's connected iPhone. No
+  TestFlight build or release was requested.

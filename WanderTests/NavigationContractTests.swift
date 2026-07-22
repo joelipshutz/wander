@@ -6,6 +6,62 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
 
+    func testDiscoverTabPresentsTheDedicatedFeedWithTheCompactSearchLauncher() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(root.contains("FeedScreen()"))
+        XCTAssertTrue(root.contains("case .discover: \"Feed\""))
+        XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
+        XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
+        XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
+        XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
+        XCTAssertTrue(feed.contains("private enum FeedSurface"))
+        XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
+        XCTAssertTrue(feed.contains("case .people:"))
+        XCTAssertTrue(feed.contains("FeedPeopleSurface(openProfile: openProfile)"))
+        XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
+        XCTAssertTrue(feed.contains("store.discoverMembers(query: query, backend: backend)"))
+        XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
+    }
+
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(feed.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(feed.contains("MapPlaceSaveContext.addVisiblePlace("))
+        XCTAssertTrue(feed.contains("persistNewPlaceSaveSubmission("))
+        XCTAssertFalse(feed.contains("store.saveVisiblePlace("))
+
+        let feedAfterActivityList = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityList: View").last
+        )
+        let activityList = try XCTUnwrap(
+            feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
+        )
+        XCTAssertTrue(activityList.contains("Divider()"))
+        XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
+        XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
+    }
+
+    func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(feed.contains(".task(id: auth.isSignedIn)"))
+        XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
+        XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
+        XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
+        XCTAssertFalse(feed.contains("title: \"Couldn’t update Feed\""))
+    }
+
     @MainActor
     func testProfileShareLinksResolveOnlyStableRecmeProfileRoutes() throws {
         XCTAssertEqual(
@@ -136,6 +192,7 @@ final class NavigationContractTests: XCTestCase {
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
+            ("Wander/Features/Feed/FeedScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
@@ -366,7 +423,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
-        XCTAssertTrue(activeLists.contains(".prefix(4)"))
+        XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
+        XCTAssertTrue(activeLists.contains("limit: 4"))
+        XCTAssertTrue(activeLists.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertTrue(source.contains("let renderedLists = activeLists"))
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))
@@ -374,6 +433,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(richProjection.contains("VisiblePlaceGrouping.groups("))
         XCTAssertTrue(richProjection.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
+    }
+
+    func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let listGrid = try sourceSection(
+            source,
+            after: "private func listGrid(lists: [PlaceListMock]) -> some View",
+            before: "private var activeLists: [PlaceListMock]"
+        )
+        let listTile = try sourceSection(
+            source,
+            after: "private struct ListTile: View",
+            before: "private struct ListPreviewMosaic: View"
+        )
+        let photoMedia = try sourceSection(
+            source,
+            after: "private struct ListPlacePhotoMedia: View",
+            before: "private struct ListMapAvailabilityNotice: View"
+        )
+
+        XCTAssertEqual(
+            listGrid.components(separatedBy: "alignment: .top").count - 1,
+            2,
+            "Both list-grid columns should pin each row's tiles to the same top edge"
+        )
+        XCTAssertTrue(
+            listTile.contains(".lineLimit(2)"),
+            "Long list names should keep wrapping below the aligned preview mosaic"
+        )
+        XCTAssertTrue(photoMedia.contains("targetPixelSize"))
+        XCTAssertTrue(photoMedia.contains("store.currentUser.id"))
+        XCTAssertTrue(photoMedia.contains("store.follows"))
+        XCTAssertTrue(photoMedia.contains("store.blocks"))
+        XCTAssertTrue(
+            photoMedia.contains("resolvedPhotoKey == resolutionKey"),
+            "A relationship or account change should synchronously hide stale user photos"
+        )
     }
 
     func testListsScreenOnlyUsesMockDataForExplicitVisualQAScenarios() {

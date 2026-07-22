@@ -3,6 +3,34 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testFollowedFeedCallsExpectedRPCAndDecodesTheHostedEmptyEnvelope() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [],
+          "featured_places": [],
+          "next_cursor": null,
+          "fetched_at": "2026-07-21T21:10:46.447909+00:00"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25)
+
+        XCTAssertTrue(page.activity.isEmpty)
+        XCTAssertTrue(page.featuredPlaces.isEmpty)
+        XCTAssertNil(page.nextCursor)
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            page.fetchedAt,
+            fractionalFormatter.date(from: "2026-07-21T21:10:46.447909+00:00")
+        )
+        XCTAssertEqual(rpc.calls.map(\.name), ["followed_feed"])
+        XCTAssertNil(rpc.rawBodies[0]["input_before"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
+    }
+
     func testDiscoverPeopleRecommendationsCallsExpectedRPCAndMapsReasons() async throws {
         let rpc = RecordingRPC()
         rpc.responses["discover_profile_recommendations"] = """
