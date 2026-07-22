@@ -5933,6 +5933,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.ownRating?.subtitle ?? "0 visits",
                 systemImage: "star.fill",
                 tint: WanderTheme.stateWarning.color,
+                explanation: nil,
                 compact: compact
             )
 
@@ -5943,6 +5944,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                 systemImage: "person.2.fill",
                 tint: WanderTheme.pinSocial.color,
+                explanation: .recMe,
                 compact: compact
             )
 
@@ -5953,6 +5955,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
                 systemImage: "sparkles",
                 tint: WanderTheme.terracotta.color,
+                explanation: .fit,
                 compact: compact
             )
         }
@@ -5966,6 +5969,7 @@ private struct PlaceProfileMetricCard: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let explanation: PlaceRatingExplanation?
     let compact: Bool
 
     var body: some View {
@@ -5984,7 +5988,14 @@ private struct PlaceProfileMetricCard: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.68)
+                .padding(.trailing, explanation == nil ? 0 : 14)
                 .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
+                .overlay(alignment: .trailing) {
+                    if let explanation {
+                        PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                            .offset(x: compact ? 8 : 10)
+                    }
+                }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)

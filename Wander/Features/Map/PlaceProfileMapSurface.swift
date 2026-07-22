@@ -479,7 +479,8 @@ private struct PlaceProfileFullView: View {
                     title: "Your rating",
                     subtitle: presentation.ownRating?.subtitle ?? "0 visits",
                     systemImage: "star.fill",
-                    tint: WanderTheme.stateWarning.color
+                    tint: WanderTheme.stateWarning.color,
+                    explanation: nil
                 )
 
                 PlaceProfileRatingTile(
@@ -488,7 +489,8 @@ private struct PlaceProfileFullView: View {
                     title: "rec.me rating",
                     subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                     systemImage: "person.2.fill",
-                    tint: WanderTheme.pinSocial.color
+                    tint: WanderTheme.pinSocial.color,
+                    explanation: .recMe
                 )
 
                 PlaceProfileRatingTile(
@@ -497,7 +499,8 @@ private struct PlaceProfileFullView: View {
                     title: "Fit Rating",
                     subtitle: presentation.fitRating == nil ? "keep saving" : "based on places you like",
                     systemImage: "sparkles",
-                    tint: WanderTheme.terracotta.color
+                    tint: WanderTheme.terracotta.color,
+                    explanation: .fit
                 )
             }
         } else {
@@ -1052,6 +1055,7 @@ private struct PlaceProfileRatingTile: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let explanation: PlaceRatingExplanation?
 
     var body: some View {
         VStack(alignment: .center, spacing: WanderTheme.spacing2) {
@@ -1066,7 +1070,14 @@ private struct PlaceProfileRatingTile: View {
                     .minimumScaleFactor(0.68)
             }
             .foregroundStyle(WanderTheme.textMuted.color)
+            .padding(.trailing, explanation == nil ? 0 : 14)
             .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
+            .overlay(alignment: .trailing) {
+                if let explanation {
+                    PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                        .offset(x: 10)
+                }
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)

@@ -4,6 +4,22 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testRatingExplanationCopyDescribesDistinctSignals() {
+        XCTAssertEqual(PlaceRatingExplanation.recMe.title, "rec.me rating")
+        XCTAssertEqual(
+            PlaceRatingExplanation.recMe.message,
+            "The average rating from people you follow who have been here. Your own rating is shown separately."
+        )
+        XCTAssertEqual(PlaceRatingExplanation.recMe.accessibilityLabel, "About the rec.me rating")
+
+        XCTAssertEqual(PlaceRatingExplanation.fit.title, "Fit rating")
+        XCTAssertEqual(
+            PlaceRatingExplanation.fit.message,
+            "A personalized match score based on places you’ve rated, the categories and tags you like, and saves from people you follow."
+        )
+        XCTAssertEqual(PlaceRatingExplanation.fit.accessibilityLabel, "About the Fit rating")
+    }
+
     func testPlacePhotoDecodesProviderTypesForCategoryEnrichment() throws {
         let data = Data(
             """

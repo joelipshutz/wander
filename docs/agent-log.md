@@ -17321,6 +17321,7 @@ Final outcome:
 - No known release-blocking issue remains. Expanded More options content may
   scroll on smaller devices or at larger Dynamic Type sizes by design; the
   collapsed Been and Wanna flows remain compact and visually parallel.
+
 ## 2026-07-22 15:44 PDT - Codex - REC-112 Calendar Results Map
 
 Agent: Codex using the Linear workflow
@@ -17964,3 +17965,58 @@ Merge completion, 2026-07-22 21:45 PDT:
 - No App Store build number was changed and no archive, upload, TestFlight
   attachment, or tester-facing Slack release note was created. REC-130 will
   ride the next explicitly requested TestFlight release batch from `main`.
+## 2026-07-22 15:49 PDT - Codex - REC-119 Rating Explanations
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-119-ratings-info`
+Worktree: `/private/tmp/recme-rec119-ratings-info`
+Linear: `REC-119` (`In Progress`)
+
+Goal: add small, tappable information affordances beside the rec.me and Fit
+rating labels on the map place card, with concise caret-anchored SwiftUI
+popovers explaining each score, then validate and publish a reviewable mockup.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `6d717d23b`. The root checkout contains unrelated user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or reverted.
+- Existing worktrees and the latest coordination log show no active REC-119
+  work or overlapping unmerged edits. `MapScreen.swift` is a documented
+  high-conflict file, so all work stays isolated here.
+- REC-119 is assigned to Ryan and was moved from Backlog to In Progress before
+  implementation. The source request is limited to the two explanations; Your
+  rating remains unchanged.
+- Expected files are `Wander/Features/Map/MapScreen.swift`, a small shared
+  SwiftUI component under `Wander/DesignSystem/`, focused tests under
+  `WanderTests/`, and this append-only coordination log. If the same rating
+  strip is confirmed on the full place-profile surface, the shared component
+  may also be wired into `Wander/Features/Map/PlaceProfileMapSurface.swift` for
+  consistency.
+- No backend, schema/RLS, analytics, build-number, TestFlight, or release-note
+  change is in scope.
+
+Implementation checkpoint, 2026-07-22 16:03 PDT:
+
+- Added a shared SwiftUI `PlaceRatingInfoButton` with a 44-point tap target,
+  VoiceOver label/hint, and compact-adapted native popover with an anchored
+  caret. The rec.me copy explains the followed-people average; Fit explains
+  the personalized signal from ratings, preferences, and followed saves.
+- Wired the affordance beside rec.me rating and Fit rating on both map place
+  card presentations. Your rating intentionally remains unchanged. An initial
+  inline layout truncated the labels, so the buttons were moved into trailing
+  overlays that preserve the full existing titles and card heights.
+- `xcodegen generate` succeeded. The focused copy-contract test passed 1/1 on
+  the available iPhone 17 Pro / iOS 26.5 simulator at
+  `/private/tmp/DerivedData-rec119-focused/Logs/Test/Test-Wander-2026.07.22_15-58-29--0700.xcresult`.
+  The repository's prescribed iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine.
+- Simulator QA confirmed the refined closed-card layout and the native caret
+  popover at `/private/tmp/rec119-17pro-expanded-refined.png` and
+  `/private/tmp/rec119-17pro-recme-popover.png`. The temporary auto-present
+  state used only to capture the popover was removed; production state is
+  closed by default and opens only from the info button.
+- `origin/main` advanced by three commits during implementation, including
+  REC-116 changes to the high-conflict `MapScreen.swift`. Commit the isolated
+  work, rebase it onto current `origin/main`, resolve the overlap carefully,
+  and rerun focused plus full validation before publication.
