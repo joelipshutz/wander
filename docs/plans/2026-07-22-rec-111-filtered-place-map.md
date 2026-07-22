@@ -1,6 +1,6 @@
 # REC-111 — Filtered Place Map
 
-Status: implemented and validated; ready-PR handoff pending
+Status: implemented and validated; ready for review and testing
 Linear: [REC-111](https://linear.app/recme/issue/REC-111/add-detailed-map-view-for-filtered-place-lists)
 Owner: Ryan
 Implementation branch: `codex/rec-111-filtered-map`

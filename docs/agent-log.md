@@ -16870,3 +16870,24 @@ Implementation and validation checkpoint, 2026-07-22 13:21 PDT:
   TestFlight, or tester-message change is included. `origin/main` advanced by
   four commits during validation; update this branch and rerun the merge gate
   before the ready PR.
+
+Final validation checkpoint, 2026-07-22 13:34 PDT:
+
+- Fetched and rebased the implementation onto current `origin/main` at
+  `141c01999` (TestFlight build 89 metadata). The only rebase conflict was this
+  append-only coordination log; both upstream entries and the REC-111 history
+  were preserved. `xcodegen generate` completed after the rebase with no
+  project-file diff.
+- The fresh post-rebase full suite passed 514/514 tests with zero failures on
+  the installed iPhone 17 Pro / iOS 26.5 simulator:
+  `/private/tmp/DerivedData-rec111-postrebase/Logs/Test/Test-Wander-2026.07.22_13-28-57--0700.xcresult`.
+  This is the final merge gate for implementation commit `3b2f265b1`; the
+  prescribed iPhone 16 Plus / iOS 18.6 runtime remains unavailable locally.
+- Focused REC-111 coverage remains 10/10 at
+  `/private/tmp/DerivedData-rec111-focused/Logs/Test/Test-Wander-2026.07.22_13-25-24--0700.xcresult`.
+  Manual QA artifacts and the final cluster-to-place interaction are recorded
+  in the checkpoint above. Existing `WanderSupabaseClient` concurrency warnings
+  appeared again and are unrelated to this branch.
+- The implementation is complete and ready for a ready (non-draft) PR. No
+  build-number increment, TestFlight upload, or Slack release note was performed
+  because REC-111 requested implementation/testing readiness, not a release.
