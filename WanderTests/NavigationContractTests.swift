@@ -29,7 +29,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
-    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat() throws {
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndKeepsOnlyFeaturedCardsUniform() throws {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -46,8 +46,40 @@ final class NavigationContractTests: XCTestCase {
             feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
         )
         XCTAssertTrue(activityList.contains("Divider()"))
+        XCTAssertTrue(activityList.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
         XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
+
+        XCTAssertTrue(feed.contains("private enum FeedFeaturedLayout"))
+
+        let activityModule = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+        XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
+        XCTAssertFalse(activityModule.contains("maxHeight:"))
+
+        let featuredCard = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedFeaturedCard: View").last?
+                .components(separatedBy: "private struct FeedActivityList: View").first
+        )
+        XCTAssertTrue(featuredCard.contains("height: FeedFeaturedLayout.cardHeight"))
+        XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
+    }
+
+    func testFeedActivityRoutesPersonAndPlaceToTheirOwnProfiles() throws {
+        let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
+        let activityModule = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+
+        XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
+        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
+        XCTAssertTrue(feed.contains("openPlace: openPlace"))
+        XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
+        XCTAssertTrue(activityModule.contains("openPlace(place)"))
+        XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
+        XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
     }
 
     func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {

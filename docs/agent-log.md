@@ -15587,6 +15587,29 @@ Build 88 release completion, 2026-07-22 13:07 PDT:
   iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
   checkout and all user-owned changes remained untouched.
 
+## 2026-07-22 14:18 PDT - Codex - REC-121 Feed Layout and Navigation
+
+Agent: Codex
+Branch: `codex/rec-121-feed-layout`
+Worktree: `/private/tmp/recme-rec121-feed-layout`
+Linear: `REC-121` (In Review)
+
+Outcome:
+
+- Feed separators now extend edge-to-edge while the content remains inset.
+  Activity is content-sized to remove the oversized blank card space; only the
+  Featured rail is locked at 184 x 252 pt so its cards remain visually aligned.
+- Tapping a Feed actor name opens that member profile. Tapping the place/check-in
+  text opens the canonical place profile and preserves the normal save,
+  add-visit, and edit flows.
+- `swiftc -parse` and `git diff --check` passed. A pre-landing review found no
+  release blocker. It recorded two follow-ups for true interaction coverage of
+  actor/place navigation and Feed-specific visit persistence; those need an
+  eventual SwiftUI UI-test harness and do not change the user-visible release
+  behavior validated in the implemented route.
+- This branch is updated with the merged historical Feed backfill and Build 88
+  release log before PR #153 is landed into the requested Build 89 batch.
+
 ## 2026-07-22 14:10 PDT - Codex - REC-121 Historical Feed Backfill
 
 Agent: Codex
