@@ -17042,3 +17042,18 @@ REC-116 ready-for-test handoff, 2026-07-22 11:44 PDT:
 - Next step: review and test PR #151. REC-116 should stay In Review until the PR
   is merged and the requested behavior is accepted; a separate explicit request
   is required for any TestFlight release.
+
+REC-116 latest-main rebase checkpoint, 2026-07-22 11:51 PDT:
+
+- Rebased PR #151 onto current `origin/main` at `67a8bd7cc` (TestFlight build
+  87). The only conflict was the append-only agent log; preserved both the
+  upstream entries and the REC-116 history. `xcodegen generate` produced no
+  tracked changes, and `git diff --check` remains clean.
+- Post-rebase validation passed the complete 492/492 test suite on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec116-rebase/Logs/Test/Test-Wander-2026.07.22_11-48-01--0700.xcresult`.
+  The implementation commit is now `3a5757413` after the rebase.
+- Next step: commit this reconciliation note, safely force-update the existing
+  PR branch with `--force-with-lease`, and confirm GitHub no longer reports the
+  PR as conflicting. Linear REC-116 remains `In Review`; no TestFlight action
+  is part of this handoff.
