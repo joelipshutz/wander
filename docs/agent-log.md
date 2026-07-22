@@ -15336,3 +15336,17 @@ Implementation and validation checkpoint, 2026-07-22 12:39 PDT:
 - A fresh read-only adversarial review checked ShareLink behavior, Swift 6
   concurrency, identity, file lifecycle/privacy, stale-render races,
   accessibility, and test coverage and found no actionable issues or blockers.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the implementation and validation record as `d9d40f5fa`
+  (`feat: share profile map as PNG`) and pushed
+  `codex/rec-110-profile-map-share`.
+- Opened ready PR #155 and linked it to Linear:
+  https://github.com/joelipshutz/wander/pull/155.
+- Moved Linear REC-110 to `In Review`; it is intentionally not marked `Done`
+  until the ready PR is reviewed/landed and the requested behavior is accepted.
+- No TestFlight build, build-number change, merge, or tester-facing Slack post
+  was requested or performed. Next test: Profile > Your Map > share, confirm
+  the activity sheet reports one link and one image, then save/open the image
+  and verify it matches the on-screen static map.
