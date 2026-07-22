@@ -15508,6 +15508,25 @@ Release scope and preflight:
   `Wander.xcodeproj/project.pbxproj`, and this append-only log. Next: regenerate
   with XcodeGen, validate the metadata-only diff, test, open and squash-merge
   the build bump PR, then archive and upload exact latest `main`.
+
+Release validation checkpoint, 2026-07-22 12:51 PDT:
+
+- Advanced `CURRENT_PROJECT_VERSION` from 87 to 88 and regenerated with
+  XcodeGen 2.45.4. The generated project diff is limited to the matching Debug
+  and Release build-number settings; `plutil -lint` and `git diff --check`
+  pass with no signing or membership churn.
+- The exact build-88 source passed all 502 tests on the available iPhone 17 /
+  iOS 26.5 simulator. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-42-33--0700.xcresult`.
+- The exact source also passed the generic iOS Simulator build. Existing
+  ISO-8601 actor-isolation, unused test-expression, metadata-extraction, and
+  legacy headermap warnings remain non-blocking and pre-existing.
+- `scripts/testflight-release.mjs --build-number 88 --dry-run` resolves App
+  Store Connect app `6776850787`, public group `rec.me Alpha`, locale `en-US`,
+  and public link `https://testflight.apple.com/join/knEhRa6t`.
+- Release-branch scope remains only `project.yml`, the two generated project
+  build-number values, and this append-only log. Next: commit, push, review and
+  squash-merge the metadata PR before archiving exact merged `main`.
 REC-115 current-main merge gate, 2026-07-22 12:46 PDT:
 
 - While PR #146 was indexing, `origin/main` advanced to `c0b4c33` with the
@@ -15518,3 +15537,16 @@ REC-115 current-main merge gate, 2026-07-22 12:46 PDT:
   `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-44-23--0700.xcresult`.
 - Existing ISO-8601 actor-isolation and traditional-headermap warnings remain
   unchanged. The current-main merge added no REC-115 regression.
+
+Build 88 validation checkpoint, 2026-07-22 12:56 PDT:
+
+- Confirmed the release branch differs from latest `origin/main` only in the
+  build-number metadata (`project.yml` and generated Xcode project) plus this
+  append-only release log. `CURRENT_PROJECT_VERSION` is 88 in both sources.
+- Regenerated with XcodeGen, passed `git diff --check`, and ran the complete
+  release-branch suite on iPhone 17 Pro, iOS 26.5. All 503/503 tests passed with
+  no failures or skips:
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- Existing ISO-8601 actor-isolation, unused test-expression, simulator-strip,
+  and traditional-headermap warnings remain non-blocking and unchanged. The
+  documented iPhone 16 Plus, iOS 18.6 runtime is not installed on this Mac.
