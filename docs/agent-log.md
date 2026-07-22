@@ -15195,3 +15195,28 @@ Completion, 2026-07-22 00:09 PDT:
 - TestFlight has not been uploaded or requested in this handoff. To ship, land
   PR #149, create the next build from current `main`, then test Feed after a
   cold relaunch and after pressing Retry while signed in.
+
+## 2026-07-22 10:58 PDT - Codex - TestFlight Build 87 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-87`
+Worktree: `/private/tmp/recme-build87-release`
+Linear: `REC-121` (In Review)
+
+Goal: fulfill Joe's explicit request to put the Feed recovery fix on his phone
+through TestFlight.
+
+Release scope and preflight:
+
+- PR #149 was reviewed cleanly and squash-merged to `main` as `cf24bec`
+  (`fix: refresh stale Clerk token after RPC auth failure`). It is the only
+  app-code change since Build 86's release metadata commit; its docs-only
+  companion is excluded from binary behavior but remains on `main`.
+- The merged change retries one authenticated RPC after 401/403 using a fresh
+  Clerk token, keeps a second failure as a real Feed recovery state, and has a
+  focused HTTP regression test plus the complete 490/490 iPhone 16 Plus,
+  iOS 18.6 suite from the merge gate.
+- Build 86 is recorded as the last completed TestFlight build and `project.yml`
+  currently has `CURRENT_PROJECT_VERSION: "86"`. This explicit release will
+  increment the build exactly once to 87, regenerate the Xcode project, then
+  validate, archive, upload, attach, and record the TestFlight result.
