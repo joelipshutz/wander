@@ -15826,3 +15826,25 @@ REC-106 Instagram metadata provenance audit, 2026-07-22 12:18 PDT:
 - This was an evidence/documentation-only pass: no app source changed and no
   new build/test run was necessary. The branch’s last source validation remains
   542/542 tests plus the clean generic iOS Simulator build recorded above.
+
+REC-106 OG-cover OCR check, 2026-07-22 12:55 PDT:
+
+- Followed up on provenance row 7 by downloading the exact current
+  `og:image` served for the 100-shop guide. The response is a 70 KB, 640×640
+  JPEG whose Instagram transform is a square center crop of the original guide
+  slide, not merely a lower-resolution copy of the complete slide.
+- Ran the same Apple Vision configuration as the app (`.accurate` recognition
+  plus language correction) against that local image. Vision returned 35 text
+  observations and correctly recovered several right-column entries, including
+  `THREE MONKEYS COFFEE / PERU`, `7G ROASTER / PORTUGAL`,
+  `ESPRESSO ALCHEMY / CHINA`, and `COFFEEWERK + PRESS / IRELAND`.
+- The cover is not a complete or independently reliable guide source. The left
+  column is physically cropped, and even visible rows can be partial (for
+  example `KOFFEE MAMEYA KAKERU / JAPA` and `EXPERTS / AUSTRIA`). This proves
+  that 640×640 can yield useful OCR, but OG-cover evidence must be merged and
+  deduplicated with full embedded-media OCR rather than treated as complete.
+- Recommended contract for the next implementation decision: always attempt
+  OG-image OCR; treat it as secondary enrichment when full embedded images are
+  available and as the active image source when they are absent; retain source
+  provenance and require normal parsing/corroboration so cropped fragments do
+  not become false place rows. No app source changed in this diagnostic pass.
