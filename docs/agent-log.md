@@ -18046,3 +18046,20 @@ Latest-main validation and publication, 2026-07-22 16:38 PDT:
   added comment `559f62c5-5429-419a-ae1c-f043693fdf04` with the validation and
   hands-on review checklist. No build-number bump, TestFlight upload, or Slack
   release note was requested or performed.
+
+Final REC-112-main gate, 2026-07-22 16:42 PDT:
+
+- `origin/main` advanced again with the REC-112 calendar-map merge and its
+  completion log. Rebased PR #169 onto exact main commit `5804f8763`; the only
+  conflicts were the two append-only coordination-log commits, and the full
+  REC-112, build-91, and REC-119 histories were preserved. Product and test
+  files rebased without conflict.
+- XcodeGen produced no tracked changes and `git diff --check` passed. The final
+  focused REC-119 test passed 1/1 at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-41-48--0700.xcresult`.
+  The complete exact-head suite passed 573/573 with zero failures at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-42-20--0700.xcresult`.
+- Safely force-updated the PR branch with lease protection. GitHub now reports
+  ready PR #169 `CLEAN` and `MERGEABLE`, with no configured checks. The final
+  rebased implementation commit is `0735ad134`; no known blocker remains for
+  Ryan's visual and copy review.
