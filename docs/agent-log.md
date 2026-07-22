@@ -15384,3 +15384,15 @@ Implementation and visual checkpoint, 2026-07-22 12:41 PDT:
   `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-38-42--0700.xcresult`.
 - Existing traditional-headermap build warnings remain unchanged; no new
   warning or test failure was introduced by this correction.
+
+Pre-landing review checkpoint, 2026-07-22 12:44 PDT:
+
+- Ran the required gstack pre-landing review against the exact
+  `origin/main...HEAD` diff. Scope is clean: the native back control, its
+  focused regression, and this required coordination log. No critical or
+  informational finding remains, and no Greptile comment exists on PR #146.
+- The local gstack review-result persistence helper could not write its JSONL
+  receipt because this Mac does not have the helper's required `bun` runtime
+  installed. The review itself completed; the durable result is recorded here
+  instead. Installing unrelated tooling was intentionally left out of this app
+  release.
