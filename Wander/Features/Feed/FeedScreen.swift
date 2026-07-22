@@ -7,6 +7,7 @@ struct FeedScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var isShowingSearch = false
     @State private var selectedProfile: FeedProfileRoute?
+    @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
@@ -50,6 +51,9 @@ struct FeedScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+            }
+            .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
+                selectedPlaceDestination
             }
             .sheet(item: $placeSaveFlow) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
@@ -105,6 +109,7 @@ struct FeedScreen: View {
             FeedActivityList(
                 activity: page.activity,
                 openProfile: openProfile,
+                openPlace: openPlace,
                 save: save,
                 openList: openList
             )
@@ -154,6 +159,10 @@ struct FeedScreen: View {
         selectedProfile = FeedProfileRoute(id: profile.id)
     }
 
+    private func openPlace(_ visiblePlace: VisiblePlace) {
+        selectedPlace = visiblePlace
+    }
+
     private func openList(_ list: LocalPlaceList) {
         pushNotifications.route(to: .list(id: list.id))
     }
@@ -169,39 +178,157 @@ struct FeedScreen: View {
 
     private func beginSave(visiblePlace: VisiblePlace) {
         auth.requireSignIn(for: .socialSave) {
-            placeSaveFlow = MapPlaceSaveContext.addVisiblePlace(
+            presentPlaceSaveFlow(MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
                 defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: attributes(for: visiblePlace)
-            )
+            ))
+        }
+    }
+
+    private func beginPlaceProfileAction(_ visiblePlace: VisiblePlace) {
+        guard let currentUserSave = currentUserSave(matching: visiblePlace) else {
+            beginSave(visiblePlace: visiblePlace)
+            return
+        }
+
+        presentPlaceSaveFlow(MapPlaceSaveContext.addVisitVisiblePlace(
+            currentUserSave,
+            attributes: store.attributes(for: currentUserSave.userPlace.id),
+            latestVisit: store.visits(for: currentUserSave.userPlace.id).first
+        ))
+    }
+
+    private func presentPlaceSaveFlow(_ context: MapPlaceSaveContext) {
+        guard selectedPlace != nil else {
+            placeSaveFlow = context
+            return
+        }
+
+        selectedPlace = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            placeSaveFlow = context
         }
     }
 
     @MainActor
     private func saveFeedFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
-        guard case .add(let sourceType) = submission.context.mode else { return nil }
-        guard sourceType != .socialSave || auth.isSignedIn else {
-            placeSaveFlow = nil
-            auth.presentGate(for: .socialSave)
+        let visitBackend = auth.isSignedIn ? backend : nil
+        switch submission.context.mode {
+        case .add(let sourceType):
+            guard sourceType != .socialSave || auth.isSignedIn else {
+                placeSaveFlow = nil
+                auth.presentGate(for: .socialSave)
+                return nil
+            }
+
+            guard let result = await persistNewPlaceSaveSubmission(
+                submission,
+                store: store,
+                backend: visitBackend
+            ) else { return nil }
+
+            await refresh()
+            savedMessage = result.syncState == .synced
+                ? "Saved."
+                : "Saved locally. We'll retry sync."
+            return result
+
+        case .addVisit, .editVisit, .editWant:
+            let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+                submission,
+                store: store,
+                backend: visitBackend
+            )
+            guard let result else { return nil }
+
+            await persistVisitPhotoAttachments(
+                submission.photoAttachments,
+                to: targetVisit,
+                store: store,
+                backend: visitBackend
+            )
+            await refresh()
+            savedMessage = result.syncState == .synced
+                ? "Visit saved."
+                : "Saved locally. We'll retry sync."
+            return result
+
+        case .sharedVisit:
             return nil
         }
+    }
 
-        guard let result = await persistNewPlaceSaveSubmission(
-            submission,
-            store: store,
-            backend: auth.isSignedIn ? backend : nil
-        ) else { return nil }
+    private var selectedPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedPlace != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedPlace = nil
+                }
+            }
+        )
+    }
 
-        await refresh()
-        savedMessage = result.syncState == .synced
-            ? "Saved."
-            : "Saved locally. We'll retry sync."
-        return result
+    @ViewBuilder
+    private var selectedPlaceDestination: some View {
+        if let selectedPlace {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: selectedPlace),
+                saves: saveSummaries(for: selectedPlace),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: selectedPlace)),
+                onBack: {
+                    self.selectedPlace = nil
+                },
+                onAction: {
+                    beginPlaceProfileAction(selectedPlace)
+                }
+            )
+        }
     }
 
     private func attributes(for visiblePlace: VisiblePlace) -> [LocalPlaceAttribute] {
         let storeAttributes = store.attributes(for: visiblePlace.userPlace.id)
         return storeAttributes.isEmpty ? visiblePlace.attributes : storeAttributes
+    }
+
+    private func currentUserSave(matching visiblePlace: VisiblePlace) -> VisiblePlace? {
+        store.currentUserVisiblePlaces.first { currentUserPlace in
+            VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
+        }
+    }
+
+    private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
+        var seen = Set<String>()
+        let feedPlaces = (page?.activity.compactMap(\.place) ?? [])
+            + (page?.featuredPlaces.map(\.visiblePlace) ?? [])
+
+        return (store.visiblePlaces() + feedPlaces)
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
+            .filter { visiblePlace in
+                guard !seen.contains(visiblePlace.userPlace.id) else { return false }
+                seen.insert(visiblePlace.userPlace.id)
+                return true
+            }
+            .map { visiblePlace in
+                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes(for: visiblePlace))
+            }
+            .sorted { lhs, rhs in
+                if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
+                if rhs.visiblePlace.owner.id == store.currentUser.id { return false }
+                if lhs.visiblePlace.id == selectedPlace.id { return true }
+                if rhs.visiblePlace.id == selectedPlace.id { return false }
+                return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(rhs.visiblePlace.owner.displayName) == .orderedAscending
+            }
+    }
+
+    private var tasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+        }
     }
 
     private func follow(_ recommendation: DiscoverPeopleRecommendation) {
@@ -840,6 +967,8 @@ private struct FeedFeaturedCard: View {
             }
             .buttonStyle(.plain)
 
+            Spacer(minLength: 0)
+
             Button {
                 save(featured)
             } label: {
@@ -854,7 +983,11 @@ private struct FeedFeaturedCard: View {
             .accessibilityLabel("Save \(featured.visiblePlace.place.canonicalName) to my map")
         }
         .padding(WanderTheme.spacing3)
-        .frame(width: 184, alignment: .leading)
+        .frame(
+            width: FeedFeaturedLayout.cardWidth,
+            height: FeedFeaturedLayout.cardHeight,
+            alignment: .topLeading
+        )
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
@@ -867,6 +1000,7 @@ private struct FeedFeaturedCard: View {
 private struct FeedActivityList: View {
     let activity: [FeedActivity]
     let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
     let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
 
@@ -876,6 +1010,7 @@ private struct FeedActivityList: View {
                 FeedActivityModule(
                     activity: event,
                     openProfile: openProfile,
+                    openPlace: openPlace,
                     save: save,
                     openList: openList
                 )
@@ -890,8 +1025,12 @@ private struct FeedActivityList: View {
     }
 }
 
+private enum FeedFeaturedLayout {
+    static let cardWidth: CGFloat = 184
+    static let cardHeight: CGFloat = 252
+}
+
 private enum FeedActivityLayout {
-    static let rowHeight: CGFloat = 240
     static let photoWidth: CGFloat = 88
     static let photoHeight: CGFloat = 56
 }
@@ -899,6 +1038,7 @@ private enum FeedActivityLayout {
 private struct FeedActivityModule: View {
     let activity: FeedActivity
     let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
     let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
 
@@ -919,11 +1059,7 @@ private struct FeedActivityModule: View {
                 .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(headline)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                    activityTitle
 
                     HStack(spacing: WanderTheme.spacing1) {
                         Image(systemName: activity.list == nil ? "fork.knife" : "list.bullet")
@@ -966,20 +1102,59 @@ private struct FeedActivityModule: View {
                     .padding(.leading, 60)
             }
 
-            Spacer(minLength: 0)
-
             HStack {
                 Spacer(minLength: 0)
                 actionButton
             }
+            .padding(.top, WanderTheme.spacing1)
         }
         .padding(WanderTheme.spacing3)
-        .frame(
-            maxWidth: .infinity,
-            minHeight: FeedActivityLayout.rowHeight,
-            maxHeight: FeedActivityLayout.rowHeight,
-            alignment: .top
-        )
+    }
+
+    private var activityTitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: WanderTheme.spacing1) {
+                Button {
+                    openProfile(activity.actor)
+                } label: {
+                    Text(activity.actor.displayName)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
+
+                Text(activityVerb)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+            }
+
+            if let place = activity.place {
+                Button {
+                    openPlace(place)
+                } label: {
+                    Text(place.place.canonicalName)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(place.place.canonicalName)")
+            } else if let list = activity.list {
+                Button {
+                    openList(list)
+                } label: {
+                    Text(list.name)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View list \(list.name)")
+            }
+        }
     }
 
     @ViewBuilder
@@ -1012,19 +1187,18 @@ private struct FeedActivityModule: View {
         }
     }
 
-    private var headline: String {
-        let actor = activity.actor.displayName
-    return switch activity.kind {
+    private var activityVerb: String {
+        switch activity.kind {
         case .placeSaved:
-            "\(actor) saved \(activity.place?.place.canonicalName ?? "a place")"
+            "saved"
         case .placeBeen:
-            "\(actor) marked \(activity.place?.place.canonicalName ?? "a place") Been"
+            "checked in at"
         case .placeWannaGo:
-            "\(actor) added \(activity.place?.place.canonicalName ?? "a place") to Want to go"
+            "added to Want to go"
         case .listCreated:
-            "\(actor) created \(activity.list?.name ?? "a list")"
+            "created"
         case .listItemAdded:
-            "\(actor) added \(activity.place?.place.canonicalName ?? "a place") to \(activity.list?.name ?? "a list")"
+            "added"
         }
     }
 
