@@ -16715,3 +16715,33 @@ Preflight:
   advanced from build 86 to build 90. Expected conflict-resolution files are
   `Wander.xcodeproj/project.pbxproj` and `docs/agent-log.md`; XcodeGen output
   will be regenerated from current `project.yml` if project metadata differs.
+
+REC-106 final landing validation, 2026-07-22 15:10 PDT:
+
+- Merged current `origin/main` `ad0fc9695` into the feature branch. The only
+  conflict was the additive agent log; `Wander.xcodeproj/project.pbxproj`
+  merged automatically and `xcodegen generate` reproduced the intended build
+  90 project with only the two REC-106 fixture resource memberships added.
+- Completed the pre-landing review of the final diff. No blocking correctness,
+  security, persistence, concurrency, or performance issue was found. Social
+  HTML/media inputs are allowlisted and size-bounded; carousel traversal,
+  detached parsing/OCR, OCR concurrency, MapKit request pacing, refresh
+  rollback, and stale manual-search result handling are explicitly bounded or
+  regression-tested.
+- `git diff --check` passed and
+  `plutil -lint Wander.xcodeproj/project.pbxproj` returned `OK`.
+- Fresh full validation against latest main passed on iPhone 17 Pro / iOS 26.5:
+  560 tests, zero failures, zero unexpected failures. Result bundle:
+  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.22_15-05-59--0700.xcresult`.
+- Fresh generic iOS Simulator build passed with code signing disabled. The
+  warnings emitted from `WanderSupabaseClient` and simulator tooling predate
+  and are unrelated to REC-106.
+- PR #137 is approved to squash-merge. This is a merge-only request: no build
+  number increment, archive, TestFlight upload, or Slack release note will be
+  performed. The merged fix will ride the next explicitly requested
+  TestFlight release batch.
+- Known follow-up from the metadata audit remains outside this PR: always OCR
+  the 640×640 OG image as secondary evidence even when full embedded carousel
+  media exists, with provenance-aware deduplication. REC-106's supplied
+  regressions and acceptance criteria are covered by the current implementation;
+  broader server-side/provider fallback work remains tracked in REC-120.
