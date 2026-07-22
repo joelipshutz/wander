@@ -17153,3 +17153,22 @@ REC-116 second current-main validation, 2026-07-22 13:29 PDT:
   its merge state, return Linear REC-116 to `In Review` with the new evidence,
   and run the final branch from Xcode on Ry's iPhone. No build-number or
   TestFlight action was requested.
+
+REC-116 final Build-89-main gate, 2026-07-22 13:32 PDT:
+
+- While PR #151 was being updated, `origin/main` advanced to `141c01999` with
+  the merged Feed layout/navigation work and Build 89 preparation. Rebased the
+  full REC-116 branch again. The only manual conflict was the append-only agent
+  log; both release and REC-116 histories were retained. The compact-form
+  implementation is now `60db87b69`; branch head before this note is
+  `234a6cb64`.
+- The upstream Feed navigation contract and REC-116 save-form assertions both
+  remain present. `xcodegen generate` produced no tracked diff, and `git diff
+  --check` passed.
+- The complete latest-main suite passed 506/506 with zero failures on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec116-final/Logs/Test/Test-Wander-2026.07.22_13-30-26--0700.xcresult`.
+- Next: commit this final gate note, force-update PR #151 with lease protection,
+  confirm GitHub reports a clean ready PR, move Linear REC-116 to `In Review`,
+  and run this exact branch on Ry's iPhone from Xcode. No TestFlight action is
+  part of the request.
