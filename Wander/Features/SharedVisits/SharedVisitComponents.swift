@@ -14,34 +14,41 @@ struct SharedVisitInviteSection: View {
         }
     }
 
+    private var hasExpandedContent: Bool {
+        isLoading || errorMessage != nil || !selectedFriends.isEmpty
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("add friends to this visit")
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Button {
+                isPresentingPicker = true
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.pinSocial.color)
+                    Text("friends")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text("They will get their own editable copy of this visit.")
-                        .font(.system(size: 12, weight: .medium))
+
+                    Spacer()
+
+                    Text(selectedFriends.isEmpty ? "add" : "\(selectedFriends.count) added")
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
                 }
-                Spacer(minLength: WanderTheme.spacing2)
-                Button {
-                    isPresentingPicker = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                        .background(WanderTheme.terracotta.color)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isLoading || errorMessage != nil)
-                .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
-                .accessibilityLabel("Add friends to this visit")
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             }
+            .buttonStyle(.plain)
+            .disabled(isLoading || errorMessage != nil)
+            .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
+            .accessibilityLabel("Add friends to this visit")
+            .accessibilityValue(selectedFriends.isEmpty ? "None added" : "\(selectedFriends.count) added")
 
             if isLoading {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -50,6 +57,7 @@ struct SharedVisitInviteSection: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
+                .padding(.horizontal, WanderTheme.spacing3)
             } else if let errorMessage {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text(errorMessage)
@@ -63,6 +71,7 @@ struct SharedVisitInviteSection: View {
                             .foregroundStyle(WanderTheme.terracotta.color)
                     }
                 }
+                .padding(.horizontal, WanderTheme.spacing3)
             }
 
             ForEach(selectedFriends) { friend in
@@ -91,11 +100,16 @@ struct SharedVisitInviteSection: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Remove \(friend.displayName)")
                 }
+                .padding(.horizontal, WanderTheme.spacing3)
             }
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.bottom, hasExpandedContent ? WanderTheme.spacing3 : 0)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color)
+        )
         .sheet(isPresented: $isPresentingPicker) {
             SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs)
                 .environmentObject(store)

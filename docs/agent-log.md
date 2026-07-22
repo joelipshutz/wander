@@ -17057,3 +17057,58 @@ REC-116 latest-main rebase checkpoint, 2026-07-22 11:51 PDT:
   PR branch with `--force-with-lease`, and confirm GitHub no longer reports the
   PR as conflicting. Linear REC-116 remains `In Review`; no TestFlight action
   is part of this handoff.
+
+REC-116 compact-save follow-up start, 2026-07-22 12:45 PDT:
+
+- Ryan accepted the first PR #151 device build and requested a tighter follow-up
+  in the same change: remove the details subheader, move Notes inside More
+  options for both Been and Wanna, and make the default collapsed forms visually
+  parallel and as close to one-screen as possible without violating 44-point
+  tap targets or Dynamic Type behavior.
+- Re-read `DESIGN.md`, the latest coordination log, and Linear REC-116; moved
+  REC-116 from `In Review` back to `In Progress`. Fetched origin and confirmed
+  this isolated worktree is clean at `70c80c4b5`. `origin/main` advanced one
+  commit to `c0b4c33a8`; the branch will be updated before final PR handoff.
+- Expected edits remain limited to `Wander/Features/Map/MapScreen.swift`, focused
+  navigation/store tests as needed, and this log. The compact treatment will
+  preserve the canonical shared save sheet, keep the ScrollView as an
+  accessibility fallback, and avoid schema, build-number, or TestFlight work.
+
+REC-116 compact-save implementation and validation, 2026-07-22 13:15 PDT:
+
+- Removed the details-step “add a few details.” subheader and moved Notes into
+  the collapsed More options disclosure for both Been and Wanna. More options
+  now advertises “note, tags, labels & privacy” and expands in that order before
+  the existing question/tag/label and stealth controls.
+- Compacted the shared form without removing capabilities: the candidate summary
+  is shorter, place type is one flat card with 44-point rows, the rating uses a
+  compact presentation, photos and eligible visit friends are compact rows, and
+  Save is pinned above the bottom safe area. The ScrollView remains in place for
+  Dynamic Type, expanded options, keyboards, and smaller-screen fallback.
+- Actual source edits span `Wander/Features/Map/MapScreen.swift`,
+  `Wander/DesignSystem/PlaceRatingSlider.swift`, and
+  `Wander/Features/SharedVisits/SharedVisitComponents.swift`; updated the
+  structural contract in `WanderTests/NavigationContractTests.swift`. The initial
+  expected-files note was narrower than the final shared-component scope; no
+  unrelated dirty files were modified.
+- Ran `xcodegen generate` (no project diff), Swift parser checks, and
+  `git diff --check`. The focused compact-save regression passed 1/1. The full
+  iPhone 17 Pro / iOS 26.5 suite passed 492/492 with result bundle
+  `/private/tmp/DerivedData-rec116-compact/Logs/Test/Test-Wander-2026.07.22_13-12-40--0700.xcresult`.
+  Existing headermap and Supabase date-formatter concurrency warnings remain
+  unrelated.
+- Visually reviewed collapsed and expanded Been and Wanna forms on iPhone 17 Pro
+  and the smaller iPhone 17e. Collapsed Been fits without scrolling on both;
+  Wanna uses the same compact hierarchy, and both expose Notes only after More
+  options expands. Captures:
+  `/private/tmp/rec116-compact-been-17pro.png`,
+  `/private/tmp/rec116-compact-wanna-17pro.png`,
+  `/private/tmp/rec116-compact-been-17e.png`, and
+  `/private/tmp/rec116-compact-wanna-17e.png`. A temporary launch-only preview
+  route used to reach the sheet directly was removed before the full test run
+  and is absent from the final diff.
+- No schema, hosted data, persistence contract, build number, TestFlight upload,
+  or tester-facing Slack release is part of this follow-up. Next: commit the
+  validated changes, update from current `origin/main`, push PR #151, return
+  Linear REC-116 to `In Review`, and relaunch the updated branch on Ry's iPhone
+  from Xcode.

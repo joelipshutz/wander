@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlaceRatingSlider: View {
     @Binding var score: Double
+    var isCompact = false
 
     private var normalizedScore: Double {
         let span = PlaceRating.maximumScore - PlaceRating.minimumScore
@@ -32,7 +33,7 @@ struct PlaceRatingSlider: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        VStack(alignment: .leading, spacing: isCompact ? WanderTheme.spacing1 : WanderTheme.spacing2) {
             HStack {
                 Text("rating")
                     .font(.system(size: 13, weight: .bold))
@@ -63,7 +64,8 @@ struct PlaceRatingSlider: View {
             }
             .font(.system(size: 10, weight: .bold))
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, isCompact ? WanderTheme.spacing2 : WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }

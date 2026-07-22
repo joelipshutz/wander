@@ -2857,9 +2857,7 @@ struct MapPlaceSaveContext: Identifiable {
     var subtitle: String {
         switch mode {
         case .add:
-            requiresStatusConfirmation
-                ? "pick status and a few details."
-                : "add a few details."
+            "pick status and a few details."
         case .addVisit:
             "save what happened this time."
         case .sharedVisit(let invitation):
@@ -2868,15 +2866,6 @@ struct MapPlaceSaveContext: Identifiable {
             "adjust this saved visit."
         case .editWant:
             "update why this is on your radar."
-        }
-    }
-
-    var detailsSubtitle: String {
-        switch mode {
-        case .add:
-            "add a few details."
-        case .addVisit, .sharedVisit, .editVisit, .editWant:
-            subtitle
         }
     }
 
@@ -3565,17 +3554,6 @@ struct MapPlaceSaveFlowSheet: View {
         selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood
     }
 
-    private var placeTypeCompactTitle: String {
-        let display = WanderPlaceCategory.display(for: selectedAssignmentForSave)
-        guard isRestaurantsFoodSelected, let selectedCuisine else {
-            return display.compactTitle
-        }
-
-        return [selectedCuisine, display.subcategory, display.category]
-            .compactMap { $0 }
-            .joined(separator: " · ")
-    }
-
     private var saveVisibility: PlaceVisibility {
         store.isPrivateProfile ? .selfOnly : selectedVisibility
     }
@@ -3592,7 +3570,7 @@ struct MapPlaceSaveFlowSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                     header
 
                     switch step {
@@ -3602,11 +3580,17 @@ struct MapPlaceSaveFlowSheet: View {
                         detailsContent
                     }
                 }
-                .padding(WanderTheme.spacing4)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing3)
                 .padding(.bottom, WanderTheme.spacing6)
             }
             .scrollDismissesKeyboard(.interactively)
             .background(WanderTheme.canvasWarm.color)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if step == .details {
+                    saveFooter
+                }
+            }
             .sheet(isPresented: $isChoosingPlaceType) {
                 PlaceTypePickerSheet(
                     selectedAssignment: $selectedAssignment,
@@ -3685,9 +3669,11 @@ struct MapPlaceSaveFlowSheet: View {
             Text(context.title)
                 .font(.system(size: 28, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
-            Text(step == .details ? context.detailsSubtitle : context.subtitle)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            if step == .confirm {
+                Text(context.subtitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
         }
     }
 
@@ -3713,7 +3699,7 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var detailsContent: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             candidateCard
             placeTypeSection
 
@@ -3732,7 +3718,6 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
 
-            noteSection
             optionalDetailsDisclosure
 
             if let errorMessage {
@@ -3745,18 +3730,23 @@ struct MapPlaceSaveFlowSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             }
 
-            WanderPrimaryButton(
-                title: isSaving ? "saving..." : context.saveTitle,
-                systemImage: "checkmark",
-                isDisabled: isSaving || isRemoving
-            ) {
-                save()
-            }
-
             if context.showsRemoveControl {
                 removeSaveSection
             }
         }
+    }
+
+    private var saveFooter: some View {
+        WanderPrimaryButton(
+            title: isSaving ? "saving..." : context.saveTitle,
+            systemImage: "checkmark",
+            isDisabled: isSaving || isRemoving
+        ) {
+            save()
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing2)
+        .background(WanderTheme.canvasWarm.color)
     }
 
     private var noteSection: some View {
@@ -3830,15 +3820,16 @@ struct MapPlaceSaveFlowSheet: View {
                     isShowingOptionalDetails.toggle()
                 }
             } label: {
-                HStack(spacing: WanderTheme.spacing3) {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text("more options")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text("details, tags, labels & privacy")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text("more options")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text("note, tags, labels & privacy")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
 
                     Spacer()
 
@@ -3849,7 +3840,6 @@ struct MapPlaceSaveFlowSheet: View {
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.vertical, WanderTheme.spacing2)
                 .background(WanderTheme.surfaceBone.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
@@ -3863,6 +3853,7 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityHint("Optional. Save without opening this section.")
 
             if isShowingOptionalDetails {
+                noteSection
                 questionAndLabelSections
                 visibilitySection
             }
@@ -3881,16 +3872,7 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var ratingSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("rating")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            PlaceRatingSlider(score: $selectedRatingScore)
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
     }
 
     private var canInviteFriends: Bool {
@@ -3914,10 +3896,14 @@ struct MapPlaceSaveFlowSheet: View {
             ? "choose category"
             : display.category
 
-        return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        return VStack(alignment: .leading, spacing: 0) {
             Text("place type")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: 36)
+
+            Divider().background(WanderTheme.borderHairline.color)
 
             VStack(spacing: 0) {
                 Button {
@@ -3954,46 +3940,53 @@ struct MapPlaceSaveFlowSheet: View {
                 }
                 .buttonStyle(.plain)
             }
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color)
-            )
         }
-        .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color)
+        )
     }
 
     private var candidateCard: some View {
-        HStack(spacing: WanderTheme.spacing3) {
+        HStack(spacing: WanderTheme.spacing2) {
             CategoryThumb(
                 emoji: WanderPlaceCategory.emoji(
                     for: selectedAssignment,
                     cuisine: selectedCuisine,
                     name: context.candidate.name
-                )
+                ),
+                size: 40
             )
 
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(context.candidate.name)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.84)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text(context.candidate.name)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
+
+                    Spacer(minLength: WanderTheme.spacing1)
+
+                    Text(selectedStatus.displayTitle)
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .padding(.vertical, WanderTheme.spacing1)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Capsule())
+                }
+
                 Text(candidateSubtitle)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
-                Text(selectedStatus.displayTitle)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
             }
-
-            Spacer()
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
@@ -4001,8 +3994,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var candidateSubtitle: String {
         selectedCandidate.previewSubtitle(
             includeDistance: false,
-            includeCategory: false,
-            trailingParts: [placeTypeCompactTitle]
+            includeCategory: false
         )
     }
 
@@ -4346,20 +4338,47 @@ private struct MapSaveVisitPhotoSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Text("photos")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Spacer()
-                if !photos.isEmpty {
-                    Text("\(photos.count)")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .padding(.vertical, 4)
-                        .background(WanderTheme.terracottaTint.color)
-                        .clipShape(Capsule())
+            Button {
+                if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                    isShowingPhotoMenu = true
                 }
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "photo.badge.plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.pinSocial.color)
+                    Text("photos")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Spacer()
+
+                    Text(photos.isEmpty ? "add" : "\(photos.count) added")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canAddPhotos || photos.count >= MapPlaceSavePhotoAttachment.maximumCount)
+            .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button("Take Photo") {
+                        isShowingCamera = true
+                    }
+                }
+                Button("Choose from Library") {
+                    isShowingPhotoMenu = false
+                    isShowingPhotoPicker = true
+                }
+                Button("Cancel", role: .cancel) {}
             }
 
             if !photos.isEmpty {
@@ -4391,57 +4410,33 @@ private struct MapSaveVisitPhotoSection: View {
                         }
                     }
                 }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing3)
             }
 
-            if canAddPhotos && photos.count < MapPlaceSavePhotoAttachment.maximumCount {
-                VStack(spacing: WanderTheme.spacing1) {
-                    Button {
-                        isShowingPhotoMenu = true
-                    } label: {
-                        Label("Add photo", systemImage: "photo.badge.plus")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.pinSocial.color)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(WanderTheme.skyTint.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                    .stroke(WanderTheme.pinSocial.color, style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button("Take Photo") {
-                                isShowingCamera = true
-                            }
-                        }
-                        Button("Choose from Library") {
-                            isShowingPhotoMenu = false
-                            isShowingPhotoPicker = true
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    }
-                }
-            } else {
+            if !canAddPhotos {
                 Text("Photos can be added after this is saved as been.")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(WanderTheme.spacing3)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing3)
             }
 
             if let photoError {
                 Text(photoError)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing3)
             }
         }
-        .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color)
+        )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
@@ -4598,7 +4593,7 @@ private struct PlaceTypeRow: View {
                 .foregroundStyle(WanderTheme.textFaint.color)
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(minHeight: 48)
+        .frame(minHeight: WanderTheme.tapMinimum)
     }
 }
 
@@ -7269,16 +7264,17 @@ private struct PlaceFactPill: View {
 private struct CategoryThumb: View {
     let emoji: String
     var status: PlaceStatus? = nil
+    var size: CGFloat = 46
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            WanderCategoryEmoji(emoji: emoji, size: 19)
-                .frame(width: 46, height: 46)
+            WanderCategoryEmoji(emoji: emoji, size: size * 0.42)
+                .frame(width: size, height: size)
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(Circle())
 
             if let status {
-                SavedStatusBadge(status: status, size: 19)
+                SavedStatusBadge(status: status, size: size * 0.42)
                     .offset(x: 4, y: -4)
             }
         }
