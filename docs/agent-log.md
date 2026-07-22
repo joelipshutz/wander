@@ -16891,3 +16891,18 @@ Final validation checkpoint, 2026-07-22 13:34 PDT:
 - The implementation is complete and ready for a ready (non-draft) PR. No
   build-number increment, TestFlight upload, or Slack release note was performed
   because REC-111 requested implementation/testing readiness, not a release.
+
+Publication and handoff, 2026-07-22 13:36 PDT:
+
+- Pushed `codex/rec-111-filtered-map` and opened ready PR
+  [#159](https://github.com/joelipshutz/wander/pull/159) against `main`.
+  Implementation commit: `3b2f265b1`; final validation record commit:
+  `7b8277141`.
+- Linked PR #159 to REC-111, moved the Linear issue from In Progress to In
+  Review, and added the focused/full test results, simulator substitution,
+  manual accessibility/interaction QA, known warning, and no-release note.
+- Handoff state: ready for Ryan to test the Profile → Your map → Countries →
+  United States flow (plus search/type/tag filtering, cluster drill-down, a pin
+  opening existing place detail, small-phone layout, and accessibility). Keep
+  the issue In Review until review/testing is complete; no TestFlight release
+  was requested or performed.
