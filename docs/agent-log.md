@@ -15569,13 +15569,19 @@ Build 88 release completion, 2026-07-22 13:07 PDT:
   build 88 to public group `rec.me Alpha`
   (`219f52d8-c202-4407-ba55-53eb41d40526`). Its final summary reports beta
   review `APPROVED` and public link
-  `https://testflight.apple.com/join/knEhRa6t`. The explicit submit call returned
-  `INVALID_QC_STATE` because the build was already in a non-submittable approved
-  state; no additional review transition was required.
-- `REC-113` is `Done` with PR, validation, TestFlight, archive, and known-fallback
-  evidence in Linear comment `bef8fb0e-0fbe-408d-98b8-c3ecb6af5e39`.
-- Posted the required tester-facing announcement in `#testflight-feedback`:
+  `https://testflight.apple.com/join/knEhRa6t`. Concurrent helper finalization
+  converged on that approved state; a later submit attempt returned
+  `INVALID_QC_STATE` only because the build was already approved, so no further
+  review transition was required.
+- `REC-113` and `REC-115` are `Done` with PR, validation, TestFlight, archive,
+  and tester evidence. The REC-115 release evidence is in Linear comment
+  `012fefd0-1786-4c9f-b793-76144287dff2`.
+- The required tester-facing announcement was posted in
+  `#testflight-feedback`:
   `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750818801029`.
+  A parallel completion path posted the same build-88 checklist seconds later
+  at `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750846466309`;
+  no additional release announcement is needed.
 - Known behavior: category emoji remains the final fallback when a place has no
   usable user photo or Google place photo. The documented iPhone 16 Plus /
   iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
