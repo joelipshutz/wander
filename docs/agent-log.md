@@ -17036,6 +17036,9 @@ REC-116 ready-for-test handoff, 2026-07-22 11:44 PDT:
   add/edit-visit mode); edit-visit photos remain managed by the existing photo
   surface rather than attached in this editor. No schema, hosted data, build
   number, TestFlight upload, or Slack release note was created.
+- Moved Linear REC-116 to `In Review`, confirmed PR #151 is attached, and added
+  comment `6afd90f2-af15-4df8-862a-b04d6659bc6e` with implementation details,
+  validation evidence, runtime substitution, and a concrete acceptance checklist.
 - Next step: review and test PR #151. REC-116 should stay In Review until the PR
   is merged and the requested behavior is accepted; a separate explicit request
   is required for any TestFlight release.
