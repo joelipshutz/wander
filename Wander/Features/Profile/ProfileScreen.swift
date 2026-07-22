@@ -1145,7 +1145,10 @@ enum ProfilePlaceCollectionSource: String, Hashable {
     case mapSummary
 
     var presentsInteractiveMap: Bool {
-        self == .mapSummary
+        switch self {
+        case .calendar, .mapSummary:
+            true
+        }
     }
 }
 

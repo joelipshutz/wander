@@ -17321,3 +17321,118 @@ Final outcome:
 - No known release-blocking issue remains. Expanded More options content may
   scroll on smaller devices or at larger Dynamic Type sizes by design; the
   collapsed Been and Wanna flows remain compact and visually parallel.
+## 2026-07-22 15:44 PDT - Codex - REC-112 Calendar Results Map
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-112-calendar-map`
+Worktree: `/private/tmp/recme-rec112-calendar-map`
+Linear: `REC-112` (moved from Backlog to In Progress)
+
+Goal: show the full-width interactive saved-place map from REC-111 above the
+search field when a populated Profile calendar date opens its place list, with
+the same pin, clustering, filtering, and place-detail behavior.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `6d717d23b`, which includes the merged REC-111 implementation.
+- The root checkout has unrelated user-owned `.gitignore` and `.pnpm-store/`
+  changes and will not be edited. Existing active worktrees do not overlap this
+  REC-112 branch.
+- REC-111 already routes calendar and map-summary collections through the same
+  `SavedPlacesListScreen`; the source policy currently enables its interactive
+  map only for map-summary routes. The intended narrow change is to opt calendar
+  routes into that existing map and update its regression contract.
+- Expected files are `Wander/Features/Profile/ProfileScreen.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this coordination log.
+  No backend, schema/RLS, analytics, build-number, or TestFlight change is in
+  scope.
+
+Implementation and validation checkpoint, 2026-07-22 15:51 PDT:
+
+- Calendar collection routes now opt into the REC-111 interactive map already
+  rendered full-width above the search/filter/list content. The existing map
+  projection limits pins to the selected date's place IDs, follows search and
+  filter changes, clusters crowded coordinates, and opens existing place detail
+  from a pin without duplicating map code.
+- Updated the route-policy regression to require interactive maps for both map
+  summary and calendar sources. `xcodegen generate` completed with no generated
+  project-file diff, and `git diff --check` passed.
+- Focused `ProfilePlaceCollectionMapTests` passed 10/10 on iPhone 17 Pro / iOS
+  26.5. Full suite passed 570/570 with zero failures. Result bundles:
+  `/private/tmp/DerivedData-rec112-focused/Logs/Test/Test-Wander-2026.07.22_15-45-39--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec112-focused/Logs/Test/Test-Wander-2026.07.22_15-49-29--0700.xcresult`.
+- The documented iPhone 16 Plus / iOS 18.6 runtime is not installed; the current
+  available iPhone 17 Pro / iOS 26.5 target was used. Existing Swift concurrency
+  warnings in `WanderSupabaseClient` and unrelated simulator/keychain/location
+  diagnostics remain unchanged.
+- No new visual layout was introduced: REC-112 activates the exact map surface
+  already visually validated for REC-111 on large and small phones. No build
+  number, TestFlight upload, or tester announcement was requested or performed.
+
+Publication and handoff, 2026-07-22 15:52 PDT:
+
+- Committed the implementation as `56a08d9eb`, pushed
+  `codex/rec-112-calendar-map`, and opened ready PR
+  [#165](https://github.com/joelipshutz/wander/pull/165) against `main`.
+- REC-112 is ready for Ryan to test: Profile → calendar → tap any date with a
+  saved place; confirm the full-width map appears above search, pins match the
+  date list, map pan/zoom works, and tapping a pin opens the same place detail
+  as its list row. Keep the issue In Review until that check is accepted.
+
+## 2026-07-22 16:27 PDT - Codex - REC-112 Squash-Merge Gate
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-112-calendar-map`
+Worktree: `/private/tmp/recme-rec112-calendar-map`
+Linear: `REC-112` (`In Review` at start)
+Pull request: [#165](https://github.com/joelipshutz/wander/pull/165)
+
+Goal: perform the user-requested final review, update PR #165 onto current
+`main`, squash-merge it, push/verify `main`, and close durable status. This is a
+merge-only request: do not bump a build number, archive/upload TestFlight, or
+post a tester Slack release note.
+
+Starting status and coordination:
+
+- Fetched `origin`; this isolated worktree is clean at `09208b0e1`. The root
+  checkout remains on unrelated REC-88 work with user-owned `.gitignore` and
+  `.pnpm-store/` changes and will not be edited or switched.
+- PR #165 is open and non-draft with no hold label, required check, review,
+  inline thread, conversation comment, or Greptile finding. GitHub reports a
+  conflict because `origin/main` advanced two commits to `9dfc5e9d6` after the
+  PR opened.
+- TestFlight build 91 is fully complete: uploaded, processed, attached to the
+  public tester group, announced, and recorded on `main`. There is no unfinished
+  explicit release to resume, and this merge does not authorize build 92.
+- Upstream added REC-116 and build-91 metadata. Product files do not overlap
+  REC-112's narrow policy/test changes; the expected rebase conflict is the
+  append-only coordination log. Preserve both histories, rerun the full merge
+  gate on the exact rebased head, then squash-merge if clean.
+
+Review and validation checkpoint, 2026-07-22 16:36 PDT:
+
+- Rebased the branch onto current `origin/main` at `9dfc5e9d6`. The only
+  conflict was the expected append-only `docs/agent-log.md` overlap; both the
+  completed build-91 history and REC-112 history were preserved. Product and
+  test changes rebased without conflict.
+- Completed the gstack review checklist against the exact rebased diff. Scope
+  is clean, there are no SQL/data/auth/backend/API/concurrency or migration
+  changes, the UI activates the already-reviewed REC-111 map path, and the
+  route-policy regression directly covers the behavior. No blocking or
+  informational finding remains. No specialist review was warranted for this
+  three-line product/test policy change.
+- The gstack local review-history helper could not persist the clean result
+  because its required `bun` runtime is unavailable on this Mac; the durable
+  review result is recorded here instead.
+- Regenerated the project with XcodeGen; there is no generated project diff and
+  `git diff --check origin/main...HEAD` passes.
+- Full tests passed 572/572 with zero failures on iPhone 17 Pro / iOS 26.5.
+  Result bundle:
+  `/tmp/DerivedData-rec112-merge-final/Logs/Test/Test-Wander-2026.07.22_16-26-39--0700.xcresult`.
+- The generic iOS Simulator build passed. Existing Supabase formatter
+  actor-isolation warnings remain unchanged and non-blocking.
+- PR #165 is clear to update and squash-merge. This remains merge-only work;
+  no build-number change, archive/upload, TestFlight action, or Slack release
+  note was performed.

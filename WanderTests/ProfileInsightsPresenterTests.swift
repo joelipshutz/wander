@@ -527,7 +527,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
 }
 
 final class ProfilePlaceCollectionMapTests: XCTestCase {
-    func testMapSummaryRouteOptsIntoInteractiveMapWhileCalendarDoesNot() {
+    func testMapSummaryAndCalendarRoutesOptIntoInteractiveMap() {
         let summary = ProfileSummaryItem(
             id: "united-states",
             title: "United States",
@@ -545,7 +545,7 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
         XCTAssertEqual(mapRoute.source, .mapSummary)
         XCTAssertTrue(mapRoute.source.presentsInteractiveMap)
         XCTAssertEqual(calendarRoute.source, .calendar)
-        XCTAssertFalse(calendarRoute.source.presentsInteractiveMap)
+        XCTAssertTrue(calendarRoute.source.presentsInteractiveMap)
     }
 
     func testCollectionMatcherAcceptsCanonicalLocalAndServerPlaceIDs() {
