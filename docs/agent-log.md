@@ -15294,3 +15294,39 @@ Validation checkpoint, 2026-07-22 12:38 PDT:
   no remaining findings. `git diff --check` is clean. Next step: commit the
   three intentional files, open/link the PR, squash-merge it, then package the
   latest `main` as TestFlight build 88.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the reviewed repair as `374a4389c`, opened PR #154, linked it to
+  `REC-113`, and moved the issue to `In Review` with validation evidence.
+- PR #154 was squash-merged to `main` as `c0b4c33a8` (`fix: refresh auth for
+  list photos (#154)`). The remote feature branch was deleted. The failed
+  `gh --delete-branch` local checkout cleanup was caused only by a stale main
+  worktree registration; GitHub had already completed the squash merge.
+- No code or user-owned changes in the dirty root checkout were touched.
+
+## 2026-07-22 12:41 PDT - Codex - TestFlight Build 88 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-88`
+Worktree: `/private/tmp/recme-testflight-build-88`
+Linear: `REC-113` (In Review)
+
+Goal: fulfill Ryan's explicit request to put working list photos on TestFlight
+by packaging the latest `main`, including Feed recovery and the authenticated
+list-photo repair, as build 88.
+
+Release scope and preflight:
+
+- Started from exact `origin/main` commit `c0b4c33a8` in a clean isolated
+  release worktree. The root checkout remains dirty and untouched.
+- Build 86 is the last completed TestFlight release recorded in this log.
+  Main already carried an unshipped build-87 metadata bump, so this release
+  advances once more to build 88 rather than risking reuse of 87.
+- App behavior merged since build 86 consists of PR #149's one-time fresh-token
+  recovery for authenticated Feed RPCs and PR #154's safe fresh-token recovery
+  for list-tile Google place photos and protected user-photo downloads.
+- Expected release files are `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this append-only log. Next: regenerate
+  with XcodeGen, validate the metadata-only diff, test, open and squash-merge
+  the build bump PR, then archive and upload exact latest `main`.
