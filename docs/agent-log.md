@@ -15815,3 +15815,29 @@ Preflight:
   recorded: interaction-level actor/place routing and Feed-specific visit
   persistence coverage. They require test-harness work and do not alter the
   shipped routes reviewed here.
+
+## 2026-07-22 14:31 PDT - Codex - REC-110 TestFlight Build 90 Release
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-90`
+Worktree: `/private/tmp/recme-testflight-build-90`
+Linear: `REC-110` (In Review through TestFlight availability)
+
+Goal: package the exact merged `main` containing REC-110 as the next explicit
+TestFlight build.
+
+Preflight:
+
+- PR #155 (`REC-110`) was squash-merged to `main` at `c3004d8a5` after the
+  48/48 focused and 505/505 full validation. The merged feature branch was
+  deleted from GitHub.
+- `origin/main` currently declares build 89, but no build-89 archive/upload/
+  helper completion is present in the durable release log or available locally.
+  This explicit latest-main release advances once to build 90 rather than
+  reusing or silently rewriting build 89 metadata.
+- Eligible release scope includes REC-110 profile-map sharing plus the Feed
+  backfill/layout changes already merged into build-89 main. No schema or
+  signing changes are introduced by this release branch.
+- App Store Connect credentials are not present at the documented local path
+  on this host, so upload capability will be verified before archive work and
+  any blocked state will retain exact continuation commands.
