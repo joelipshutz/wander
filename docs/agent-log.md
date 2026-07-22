@@ -17380,3 +17380,33 @@ Publication and handoff, 2026-07-22 15:52 PDT:
   saved place; confirm the full-width map appears above search, pins match the
   date list, map pan/zoom works, and tapping a pin opens the same place detail
   as its list row. Keep the issue In Review until that check is accepted.
+
+## 2026-07-22 16:27 PDT - Codex - REC-112 Squash-Merge Gate
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-112-calendar-map`
+Worktree: `/private/tmp/recme-rec112-calendar-map`
+Linear: `REC-112` (`In Review` at start)
+Pull request: [#165](https://github.com/joelipshutz/wander/pull/165)
+
+Goal: perform the user-requested final review, update PR #165 onto current
+`main`, squash-merge it, push/verify `main`, and close durable status. This is a
+merge-only request: do not bump a build number, archive/upload TestFlight, or
+post a tester Slack release note.
+
+Starting status and coordination:
+
+- Fetched `origin`; this isolated worktree is clean at `09208b0e1`. The root
+  checkout remains on unrelated REC-88 work with user-owned `.gitignore` and
+  `.pnpm-store/` changes and will not be edited or switched.
+- PR #165 is open and non-draft with no hold label, required check, review,
+  inline thread, conversation comment, or Greptile finding. GitHub reports a
+  conflict because `origin/main` advanced two commits to `9dfc5e9d6` after the
+  PR opened.
+- TestFlight build 91 is fully complete: uploaded, processed, attached to the
+  public tester group, announced, and recorded on `main`. There is no unfinished
+  explicit release to resume, and this merge does not authorize build 92.
+- Upstream added REC-116 and build-91 metadata. Product files do not overlap
+  REC-112's narrow policy/test changes; the expected rebase conflict is the
+  append-only coordination log. Preserve both histories, rerun the full merge
+  gate on the exact rebased head, then squash-merge if clean.
