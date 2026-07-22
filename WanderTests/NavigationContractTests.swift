@@ -380,6 +380,34 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
     }
 
+    func testNewListEditorHasTheRequestedDismissAffordance() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let editor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
+
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .cancellationAction)"))
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .topBarLeading)"), "Older iOS versions should keep the leading placement")
+        XCTAssertTrue(editor.contains("if !isEditing"), "Edit-list navigation should remain unchanged")
+        XCTAssertTrue(editor.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(editor.contains(".font(.system(size: 17, weight: .regular))"))
+        XCTAssertTrue(editor.contains(".sharedBackgroundVisibility(.hidden)"))
+
+        let backButton = try sourceSection(
+            editor,
+            after: "private var newListBackButton: some View",
+            before: "private var isEditing: Bool"
+        )
+        XCTAssertTrue(backButton.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back to lists\")"))
+        XCTAssertTrue(backButton.contains("Button {\n            dismiss()"))
+        XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
+    }
+
     func testListMapVisualQAScenariosResolveDeterministically() {
         let scenarios: [(argument: String, expected: ListsScreenScenario)] = [
             ("mapEmpty", .mapEmpty),
