@@ -35,6 +35,544 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testEdgeFunctionRefreshesTheClerkTokenOnceAfterForbiddenResponse() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (403, #"{"message":"JWT rejected"}"#.data(using: .utf8)!),
+                (200, #"{"value":"fresh-function-response"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "fresh-function-response")
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer fresh-token"]
+        )
+        XCTAssertEqual(
+            FeedRPCURLProtocol.requestPaths,
+            ["/functions/v1/place-photo", "/functions/v1/place-photo"]
+        )
+        let requestBodies = FeedRPCURLProtocol.requestBodies
+        XCTAssertEqual(requestBodies.count, 2)
+        let firstRequestBody = try XCTUnwrap(requestBodies.first)
+        let secondRequestBody = try XCTUnwrap(requestBodies.dropFirst().first)
+        XCTAssertEqual(firstRequestBody, secondRequestBody)
+        let decodedBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: firstRequestBody) as? [String: String]
+        )
+        XCTAssertEqual(decodedBody["marker"], "photo-retry-probe")
+    }
+
+    func testEdgeFunctionStopsAfterOneFreshTokenRetry() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (403, #"{"message":"JWT still rejected"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            let _: FeedRPCProbe = try await client.invoke(
+                "place-photo",
+                body: FeedRPCProbeParameters()
+            )
+            XCTFail("Expected the second authorization response to remain a failure")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(FeedRPCURLProtocol.authorizationHeaders.count, 2)
+    }
+
+    func testNonIdempotentEdgeFunctionDoesNotReplayAfterAuthorizationFailure() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            let _: FeedRPCProbe = try await client.invoke(
+                "extraction-worker",
+                body: FeedRPCProbeParameters()
+            )
+            XCTFail("Expected the authorization response to fail without replaying the mutation")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 0)
+        XCTAssertEqual(FeedRPCURLProtocol.requestPaths, ["/functions/v1/extraction-worker"])
+    }
+
+    func testConcurrentPlacePhotoFailuresShareOneForcedTokenRefresh() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, #"{"value":"first-photo"}"#.data(using: .utf8)!),
+                (200, #"{"value":"second-photo"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(pausesForcedRefresh: true)
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        async let first: FeedRPCProbe = client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+        async let second: FeedRPCProbe = client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+        defer { auth.releaseForcedRefreshes() }
+        try await auth.waitForForcedRefreshToStart()
+        try await waitForFeedRequestCount(2)
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer cached-token"]
+        )
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        auth.releaseForcedRefreshes()
+        let responses = try await [first, second]
+
+        XCTAssertEqual(Set(responses.map(\.value)), Set(["first-photo", "second-photo"]))
+        XCTAssertEqual(auth.cachedTokenRequestCount, 2)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders.filter { $0 == "Bearer cached-token" }.count,
+            2
+        )
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders.filter { $0 == "Bearer fresh-token" }.count,
+            2
+        )
+    }
+
+    func testFailedSharedTokenRefreshIsRemovedBeforeTheNextAttempt() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, #"{"value":"recovered"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(forcedRefreshFailuresRemaining: 1)
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            let _: FeedRPCProbe = try await client.invoke(
+                "place-photo",
+                body: FeedRPCProbeParameters()
+            )
+            XCTFail("Expected the first forced refresh to fail")
+        } catch {
+            XCTAssertEqual(error as? AuthSessionError, .tokenUnavailable)
+        }
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "recovered")
+        XCTAssertEqual(auth.forcedTokenRequestCount, 2)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer cached-token", "Bearer fresh-token"]
+        )
+    }
+
+    func testRejectedReplacementTokenIsRefreshedAgainOnTheNextRequest() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"cached token rejected"}"#.data(using: .utf8)!),
+                (401, #"{"message":"first replacement rejected"}"#.data(using: .utf8)!),
+                (401, #"{"message":"cached token rejected again"}"#.data(using: .utf8)!),
+                (200, #"{"value":"second-replacement-worked"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(forcedTokens: ["fresh-token-b", "fresh-token-c"])
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            let _: FeedRPCProbe = try await client.invoke(
+                "place-photo",
+                body: FeedRPCProbeParameters()
+            )
+            XCTFail("Expected the first replacement token to remain unauthorized")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        let response: FeedRPCProbe = try await client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(response.value, "second-replacement-worked")
+        XCTAssertEqual(auth.forcedTokenRequestCount, 2)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            [
+                "Bearer cached-token",
+                "Bearer fresh-token-b",
+                "Bearer cached-token",
+                "Bearer fresh-token-c"
+            ]
+        )
+    }
+
+    func testProtectedPhotoDownloadRefreshesTheClerkTokenOnceAfterUnauthorizedResponse() async throws {
+        let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, expectedData)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let data = try await client.downloadObject(
+            bucket: "visit-photos",
+            path: "user/visit/photo.jpg"
+        )
+
+        XCTAssertEqual(data, expectedData)
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer fresh-token"]
+        )
+        XCTAssertEqual(
+            FeedRPCURLProtocol.requestPaths,
+            [
+                "/storage/v1/object/visit-photos/user/visit/photo.jpg",
+                "/storage/v1/object/visit-photos/user/visit/photo.jpg"
+            ]
+        )
+    }
+
+    func testRejectedStorageReplacementTokenIsRefreshedAgainOnTheNextRequest() async throws {
+        let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"cached token rejected"}"#.data(using: .utf8)!),
+                (401, #"{"message":"first replacement rejected"}"#.data(using: .utf8)!),
+                (401, #"{"message":"cached token rejected again"}"#.data(using: .utf8)!),
+                (200, expectedData)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(forcedTokens: ["fresh-token-b", "fresh-token-c"])
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            _ = try await client.downloadObject(
+                bucket: "visit-photos",
+                path: "user/visit/photo.jpg"
+            )
+            XCTFail("Expected the first replacement token to remain unauthorized")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        let data = try await client.downloadObject(
+            bucket: "visit-photos",
+            path: "user/visit/photo.jpg"
+        )
+
+        XCTAssertEqual(data, expectedData)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 2)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            [
+                "Bearer cached-token",
+                "Bearer fresh-token-b",
+                "Bearer cached-token",
+                "Bearer fresh-token-c"
+            ]
+        )
+    }
+
+    func testProtectedPhotoDownloadStopsAfterOneFreshTokenRetry() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (403, #"{"message":"JWT still rejected"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            _ = try await client.downloadObject(
+                bucket: "visit-photos",
+                path: "user/visit/photo.jpg"
+            )
+            XCTFail("Expected the second authorization response to remain a failure")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer fresh-token"]
+        )
+    }
+
+    func testProtectedPhotoDownloadDoesNotRetryForAnotherSignedInAccount() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(switchesUserDuringForcedRefresh: true)
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        do {
+            _ = try await client.downloadObject(
+                bucket: "visit-photos",
+                path: "user/visit/photo.jpg"
+            )
+            XCTFail("Expected the retry to stop after the signed-in account changed")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(FeedRPCURLProtocol.authorizationHeaders, ["Bearer cached-token"])
+    }
+
+    func testProtectedPhotoDownloadDiscardsAResponseAfterTheAccountChanges() async throws {
+        let privatePhoto = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(
+            responses: [(200, privatePhoto)],
+            heldResponseIndices: [0]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let download = Task {
+            try await client.downloadObject(
+                bucket: "visit-photos",
+                path: "user/visit/private-photo.jpg"
+            )
+        }
+        try await waitForFeedRequestCount(1)
+        auth.switchUser(to: "user_other")
+        FeedRPCURLProtocol.releaseHeldResponses()
+
+        do {
+            _ = try await download.value
+            XCTFail("Expected account A's in-flight private response to be discarded")
+        } catch {
+            XCTAssertEqual(error as? WanderRemoteError, .notAuthenticated)
+        }
+    }
+
+    func testReplacementTokenCacheIsIsolatedBySignedInAccount() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, #"{"value":"user-a"}"#.data(using: .utf8)!),
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, #"{"value":"user-b"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession(forcedTokens: ["fresh-user-a", "fresh-user-b"])
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let userAResponse: FeedRPCProbe = try await client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+        auth.switchUser(to: "user_other")
+        let userBResponse: FeedRPCProbe = try await client.invoke(
+            "place-photo",
+            body: FeedRPCProbeParameters()
+        )
+
+        XCTAssertEqual(userAResponse.value, "user-a")
+        XCTAssertEqual(userBResponse.value, "user-b")
+        XCTAssertEqual(auth.forcedTokenRequestCount, 2)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            [
+                "Bearer cached-token",
+                "Bearer fresh-user-a",
+                "Bearer cached-token",
+                "Bearer fresh-user-b"
+            ]
+        )
+    }
+
+    private func waitForFeedRequestCount(_ expectedCount: Int) async throws {
+        for _ in 0..<1_000 {
+            if FeedRPCURLProtocol.requestCount >= expectedCount {
+                return
+            }
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for \(expectedCount) remote request(s)")
+        throw URLError(.timedOut)
+    }
+
     func testFollowedFeedCallsExpectedRPCAndDecodesTheHostedEmptyEnvelope() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """
@@ -1581,7 +2119,9 @@ final class RemoteRepositoryTests: XCTestCase {
     }
 }
 
-private struct FeedRPCProbeParameters: Encodable {}
+private struct FeedRPCProbeParameters: Encodable {
+    let marker = "photo-retry-probe"
+}
 
 private struct FeedRPCProbe: Decodable, Equatable {
     let value: String
@@ -1595,6 +2135,24 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
     let canPresentNativeAuth = false
     private(set) var cachedTokenRequestCount = 0
     private(set) var forcedTokenRequestCount = 0
+    private var forcedTokens: [String]
+    private var forcedRefreshFailuresRemaining: Int
+    private let pausesForcedRefresh: Bool
+    private let switchesUserDuringForcedRefresh: Bool
+    private var forcedRefreshGateIsOpen = false
+    private var pausedForcedRefreshes: [CheckedContinuation<Void, Never>] = []
+
+    init(
+        forcedTokens: [String] = ["fresh-token"],
+        forcedRefreshFailuresRemaining: Int = 0,
+        pausesForcedRefresh: Bool = false,
+        switchesUserDuringForcedRefresh: Bool = false
+    ) {
+        self.forcedTokens = forcedTokens
+        self.forcedRefreshFailuresRemaining = forcedRefreshFailuresRemaining
+        self.pausesForcedRefresh = pausesForcedRefresh
+        self.switchesUserDuringForcedRefresh = switchesUserDuringForcedRefresh
+    }
 
     func refreshSession() async {}
     func signOut() async throws {}
@@ -1607,21 +2165,110 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
 
     func refreshSupabaseAccessToken() async throws -> String {
         forcedTokenRequestCount += 1
-        return "fresh-token"
+        if pausesForcedRefresh, !forcedRefreshGateIsOpen {
+            await withCheckedContinuation { continuation in
+                pausedForcedRefreshes.append(continuation)
+            }
+        }
+        if forcedRefreshFailuresRemaining > 0 {
+            forcedRefreshFailuresRemaining -= 1
+            throw AuthSessionError.tokenUnavailable
+        }
+        if switchesUserDuringForcedRefresh {
+            state = .signedIn(
+                AuthSession(userID: "user_other", displayName: "Other", handle: "other")
+            )
+        }
+        if forcedTokens.count > 1 {
+            return forcedTokens.removeFirst()
+        }
+        return forcedTokens.first ?? "fresh-token"
+    }
+
+    func waitForForcedRefreshToStart() async throws {
+        for _ in 0..<1_000 {
+            if forcedTokenRequestCount > 0 {
+                return
+            }
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("Timed out waiting for the forced token refresh to start")
+        throw URLError(.timedOut)
+    }
+
+    func releaseForcedRefreshes() {
+        forcedRefreshGateIsOpen = true
+        let pausedRefreshes = pausedForcedRefreshes
+        pausedForcedRefreshes = []
+        pausedRefreshes.forEach { $0.resume() }
+    }
+
+    func switchUser(to userID: String) {
+        state = .signedIn(
+            AuthSession(userID: userID, displayName: "Other", handle: "other")
+        )
     }
 }
 
 private final class FeedRPCURLProtocol: URLProtocol {
+    private struct HeldResponse {
+        let loader: FeedRPCURLProtocol
+        let statusCode: Int
+        let data: Data
+    }
+
+    private static let lock = NSLock()
     nonisolated(unsafe) private static var queuedResponses: [(statusCode: Int, data: Data)] = []
     nonisolated(unsafe) private static var requests: [URLRequest] = []
+    nonisolated(unsafe) private static var bodies: [Data?] = []
+    nonisolated(unsafe) private static var heldResponseIndices: Set<Int> = []
+    nonisolated(unsafe) private static var heldResponses: [HeldResponse] = []
 
-    static func reset(responses: [(Int, Data)]) {
+    static func reset(
+        responses: [(Int, Data)],
+        heldResponseIndices: Set<Int> = []
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
         queuedResponses = responses.map { (statusCode: $0.0, data: $0.1) }
         requests = []
+        bodies = []
+        self.heldResponseIndices = heldResponseIndices
+        heldResponses = []
     }
 
     static var authorizationHeaders: [String] {
-        requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+    }
+
+    static var requestPaths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap { $0.url?.path }
+    }
+
+    static var requestBodies: [Data] {
+        lock.lock()
+        defer { lock.unlock() }
+        return bodies.compactMap { $0 }
+    }
+
+    static var requestCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.count
+    }
+
+    static func releaseHeldResponses() {
+        lock.lock()
+        let responses = heldResponses
+        heldResponses = []
+        lock.unlock()
+        responses.forEach { response in
+            response.loader.deliver(statusCode: response.statusCode, data: response.data)
+        }
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -1633,21 +2280,62 @@ private final class FeedRPCURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
+        let body = Self.bodyData(from: request)
+        Self.lock.lock()
+        let requestIndex = Self.requests.count
         Self.requests.append(request)
-        guard !Self.queuedResponses.isEmpty else {
+        Self.bodies.append(body)
+        let next = Self.queuedResponses.isEmpty ? nil : Self.queuedResponses.removeFirst()
+        if let next, Self.heldResponseIndices.contains(requestIndex) {
+            Self.heldResponses.append(
+                HeldResponse(loader: self, statusCode: next.statusCode, data: next.data)
+            )
+            Self.lock.unlock()
+            return
+        }
+        Self.lock.unlock()
+
+        guard let next else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
 
-        let next = Self.queuedResponses.removeFirst()
+        deliver(statusCode: next.statusCode, data: next.data)
+    }
+
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+
+        stream.open()
+        defer { stream.close() }
+        let bufferSize = 4_096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        var body = Data()
+        while true {
+            let bytesRead = stream.read(buffer, maxLength: bufferSize)
+            guard bytesRead > 0 else {
+                break
+            }
+            body.append(buffer, count: bytesRead)
+        }
+        return body
+    }
+
+    private func deliver(statusCode: Int, data: Data) {
         let response = HTTPURLResponse(
             url: request.url!,
-            statusCode: next.statusCode,
+            statusCode: statusCode,
             httpVersion: nil,
             headerFields: ["Content-Type": "application/json"]
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: next.data)
+        client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)
     }
 
