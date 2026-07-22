@@ -17321,3 +17321,52 @@ Final outcome:
 - No known release-blocking issue remains. Expanded More options content may
   scroll on smaller devices or at larger Dynamic Type sizes by design; the
   collapsed Been and Wanna flows remain compact and visually parallel.
+## 2026-07-22 15:44 PDT - Codex - REC-112 Calendar Results Map
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-112-calendar-map`
+Worktree: `/private/tmp/recme-rec112-calendar-map`
+Linear: `REC-112` (moved from Backlog to In Progress)
+
+Goal: show the full-width interactive saved-place map from REC-111 above the
+search field when a populated Profile calendar date opens its place list, with
+the same pin, clustering, filtering, and place-detail behavior.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `6d717d23b`, which includes the merged REC-111 implementation.
+- The root checkout has unrelated user-owned `.gitignore` and `.pnpm-store/`
+  changes and will not be edited. Existing active worktrees do not overlap this
+  REC-112 branch.
+- REC-111 already routes calendar and map-summary collections through the same
+  `SavedPlacesListScreen`; the source policy currently enables its interactive
+  map only for map-summary routes. The intended narrow change is to opt calendar
+  routes into that existing map and update its regression contract.
+- Expected files are `Wander/Features/Profile/ProfileScreen.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this coordination log.
+  No backend, schema/RLS, analytics, build-number, or TestFlight change is in
+  scope.
+
+Implementation and validation checkpoint, 2026-07-22 15:51 PDT:
+
+- Calendar collection routes now opt into the REC-111 interactive map already
+  rendered full-width above the search/filter/list content. The existing map
+  projection limits pins to the selected date's place IDs, follows search and
+  filter changes, clusters crowded coordinates, and opens existing place detail
+  from a pin without duplicating map code.
+- Updated the route-policy regression to require interactive maps for both map
+  summary and calendar sources. `xcodegen generate` completed with no generated
+  project-file diff, and `git diff --check` passed.
+- Focused `ProfilePlaceCollectionMapTests` passed 10/10 on iPhone 17 Pro / iOS
+  26.5. Full suite passed 570/570 with zero failures. Result bundles:
+  `/private/tmp/DerivedData-rec112-focused/Logs/Test/Test-Wander-2026.07.22_15-45-39--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec112-focused/Logs/Test/Test-Wander-2026.07.22_15-49-29--0700.xcresult`.
+- The documented iPhone 16 Plus / iOS 18.6 runtime is not installed; the current
+  available iPhone 17 Pro / iOS 26.5 target was used. Existing Swift concurrency
+  warnings in `WanderSupabaseClient` and unrelated simulator/keychain/location
+  diagnostics remain unchanged.
+- No new visual layout was introduced: REC-112 activates the exact map surface
+  already visually validated for REC-111 on large and small phones. No build
+  number, TestFlight upload, or tester announcement was requested or performed.
