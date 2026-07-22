@@ -17217,3 +17217,24 @@ Starting status and coordination:
   and the required `#testflight-feedback` note. Expected pre-merge edits are
   limited to this append-only log and conflict resolution; release edits will
   use a separate clean worktree from the exact merged `main`.
+
+REC-116 final review and landing gate, 2026-07-22 15:56 PDT:
+
+- Rebased the full PR #151 branch onto current `origin/main` at `6d717d23b`.
+  The only conflict was this append-only coordination log; preserved both the
+  upstream release history and the complete REC-116 history. Regenerating with
+  XcodeGen produced no tracked project changes, and `git diff --check` passed.
+- Completed a manual pre-landing review of the full diff plus Greptile and
+  existing-review triage. No blocking correctness, data-loss, security,
+  persistence, accessibility, or performance issues were found. The change is
+  local SwiftUI/form-state work with no schema, RPC, RLS, or hosted-data change.
+  The optional gstack review-history write could not run because its validator
+  requires `bun`, which is not installed; the review result is recorded here.
+- The complete post-rebase suite passed 572/572 with zero failures on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec116-merge-final/Logs/Test/Test-Wander-2026.07.22_15-47-20--0700.xcresult`.
+  The required generic iOS Simulator build also succeeded. Existing Supabase
+  date-formatter concurrency warnings remain unrelated and pre-existing.
+- Next: commit this gate note, force-update PR #151 with lease protection,
+  confirm GitHub still reports a clean ready PR, and squash-merge it. Keep
+  Linear REC-116 in `In Review` until build 91 is actually available to testers.
