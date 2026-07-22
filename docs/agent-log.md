@@ -18020,3 +18020,29 @@ Implementation checkpoint, 2026-07-22 16:03 PDT:
   REC-116 changes to the high-conflict `MapScreen.swift`. Commit the isolated
   work, rebase it onto current `origin/main`, resolve the overlap carefully,
   and rerun focused plus full validation before publication.
+
+Latest-main validation and publication, 2026-07-22 16:38 PDT:
+
+- Rebased the implementation onto current `origin/main` at `116318c69`. The
+  only manual conflict was this append-only coordination log; both upstream
+  release history and REC-119 history were preserved. XcodeGen then generated
+  no tracked changes, `git diff --check` passed, and the branch remained one
+  focused commit ahead of main.
+- The post-rebase focused test passed 1/1 at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-31-17--0700.xcresult`.
+  The complete current-main suite passed 573/573 with zero failures at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-34-33--0700.xcresult`.
+  Existing traditional-headermap and Supabase formatter concurrency warnings
+  remain unrelated; iPhone 16 Plus / iOS 18.6 is still unavailable locally.
+- Final closed-state layout QA passed on iPhone 17 Pro and the smaller iPhone
+  17e at `/private/tmp/rec119-17pro-final.png` and
+  `/private/tmp/rec119-17e-final.png`; both retain full metric labels and the
+  original card hierarchy. The anchored rec.me popover capture remains at
+  `/private/tmp/rec119-17pro-recme-popover.png`.
+- Pushed `codex/rec-119-ratings-info` and opened ready PR
+  [#169](https://github.com/joelipshutz/wander/pull/169). The rebased
+  implementation commit is `9560c446d`.
+- Linked PR #169 to Linear REC-119, moved it from In Progress to In Review, and
+  added comment `559f62c5-5429-419a-ae1c-f043693fdf04` with the validation and
+  hands-on review checklist. No build-number bump, TestFlight upload, or Slack
+  release note was requested or performed.
