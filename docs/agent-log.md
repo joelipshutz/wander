@@ -15220,3 +15220,62 @@ Release scope and preflight:
   currently has `CURRENT_PROJECT_VERSION: "86"`. This explicit release will
   increment the build exactly once to 87, regenerate the Xcode project, then
   validate, archive, upload, attach, and record the TestFlight result.
+
+## 2026-07-22 12:26 PDT - Codex - REC-121 Feed Activity Layout
+
+Agent: Codex
+Branch: `codex/rec-121-feed-layout`
+Worktree: `/private/tmp/recme-rec121-feed-layout`
+Linear: `REC-121` (moved to In Progress)
+
+Goal: address Joe's physical-device Feed review: every activity break should
+run edge-to-edge across the screen and each activity module must retain the
+same visual height despite different title, note, or photo content.
+
+Source / decisions:
+
+- Reviewed Joe's device screenshot. The current `Divider()` is constrained by
+  the parent Feed content inset, and activity modules size themselves from
+  variable optional content.
+- Keep Feed items flat against the warm page surface. Only the dividers bleed
+  to the screen edge; content alignment stays unchanged.
+- Use one fixed row height, cap variable copy, reserve the action at the
+  bottom, and retain a compact horizontal photo rail inside that footprint.
+
+Planned files:
+
+- `Wander/Features/Feed/FeedScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Coordination:
+
+- A new clean worktree was created from `origin/main`; the existing
+  `codex/rec-121-historical-feed` backend work remains isolated in its own PR.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. No user worktree changes were touched.
+
+Outcome (2026-07-22 12:33 PDT):
+
+- Implemented full-bleed Feed dividers by extending only the separator beyond
+  the existing content inset. Feed content remains aligned with the rest of the
+  screen.
+- Added `FeedActivityLayout`: every activity module is a fixed 240 pt height;
+  titles cap at two lines, notes at one line, media remains an 88 x 56 pt
+  horizontal rail, and the save action stays pinned at the row bottom.
+- Extended the navigation/layout contract test to protect the full-bleed
+  divider and fixed-row structure.
+- Focused simulator test was attempted but could not reach compilation:
+  `UniformTypeIdentifiers` module output failed with `No space left on device`.
+  Removed only this run's temporary `/private/tmp/DerivedData-feed-layout`
+  cache afterward. The direct iPhone `xcodebuild build` succeeded using the
+  pre-existing device DerivedData cache (non-blocking existing Swift 6
+  isolation warnings only).
+- Installed the resulting Debug app on device `00008140-0018152C08A2201C`.
+  `devicectl` could not auto-launch it because the phone re-locked immediately
+  after installation; the tester can unlock and open rec.me manually.
+
+Next:
+
+- Push the layout branch and open a PR against `main`; keep `REC-121` in
+  review until Joe confirms the physical-device layout.

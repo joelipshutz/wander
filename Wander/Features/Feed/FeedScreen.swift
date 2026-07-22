@@ -883,10 +883,17 @@ private struct FeedActivityList: View {
                 if index < activity.count - 1 {
                     Divider()
                         .overlay(WanderTheme.borderHairline.color)
+                        .padding(.horizontal, -WanderTheme.spacing4)
                 }
             }
         }
     }
+}
+
+private enum FeedActivityLayout {
+    static let rowHeight: CGFloat = 240
+    static let photoWidth: CGFloat = 88
+    static let photoHeight: CGFloat = 56
 }
 
 private struct FeedActivityModule: View {
@@ -915,7 +922,8 @@ private struct FeedActivityModule: View {
                     Text(headline)
                         .font(.system(size: 16, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
 
                     HStack(spacing: WanderTheme.spacing1) {
                         Image(systemName: activity.list == nil ? "fork.knife" : "list.bullet")
@@ -949,7 +957,7 @@ private struct FeedActivityModule: View {
                 Text(note)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
                     .padding(.leading, 60)
             }
 
@@ -958,12 +966,20 @@ private struct FeedActivityModule: View {
                     .padding(.leading, 60)
             }
 
+            Spacer(minLength: 0)
+
             HStack {
                 Spacer(minLength: 0)
                 actionButton
             }
         }
         .padding(WanderTheme.spacing3)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: FeedActivityLayout.rowHeight,
+            maxHeight: FeedActivityLayout.rowHeight,
+            alignment: .top
+        )
     }
 
     @ViewBuilder
@@ -1042,7 +1058,10 @@ private struct FeedMediaRail: View {
                             FeedMediaPlaceholder()
                         }
                     }
-                    .frame(width: 152, height: 104)
+                    .frame(
+                        width: FeedActivityLayout.photoWidth,
+                        height: FeedActivityLayout.photoHeight
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     .accessibilityLabel(preview.accessibilityLabel)
                 }

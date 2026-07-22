@@ -46,8 +46,19 @@ final class NavigationContractTests: XCTestCase {
             feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
         )
         XCTAssertTrue(activityList.contains("Divider()"))
+        XCTAssertTrue(activityList.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
         XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
+
+        XCTAssertTrue(feed.contains("private enum FeedActivityLayout"))
+
+        let activityModule = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+        XCTAssertTrue(activityModule.contains("minHeight: FeedActivityLayout.rowHeight"))
+        XCTAssertTrue(activityModule.contains("maxHeight: FeedActivityLayout.rowHeight"))
+        XCTAssertTrue(activityModule.contains("Spacer(minLength: 0)"))
+        XCTAssertTrue(activityModule.contains(".lineLimit(2)"))
     }
 
     func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {
