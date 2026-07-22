@@ -15630,3 +15630,33 @@ Outcome:
   PR #152 is landed into the requested Build 89 batch. The earlier simulator
   test attempt did not run because local disk filled; the authoritative
   regression validation is the hosted Feed contract test above.
+
+## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-89`
+Worktree: `/private/tmp/recme-testflight-build-89`
+Linear: `REC-121` (In Review)
+
+Goal: package the exact latest `main` requested by Joe as TestFlight Build 89.
+
+Release scope:
+
+- Merged PR #152 (`a306b4c`): production-safe historical Feed-event backfill.
+- Merged PR #153 (`6982a7d`): compact Feed activity layout, full-bleed
+  separators, fixed Featured-card sizing, and separate actor/place navigation.
+- Build 88 is confirmed approved and attached to the public TestFlight group,
+  so this release increments once to 89 rather than reusing an accepted build.
+
+Preflight:
+
+- Created this clean release worktree from `origin/main` at `6982a7d`.
+- The host had only 115 MB free. Removed four locally archived, already-uploaded
+  old builds plus unused Build 82 DerivedData, raising it to about 819 MB; the
+  current release worktree leaves about 609 MB. Archive/test validation will
+  reuse the existing Build 86 archive cache where possible and record any
+  remaining capacity limit honestly.
+- Feature review found no release blocker. Two future test improvements are
+  recorded: interaction-level actor/place routing and Feed-specific visit
+  persistence coverage. They require test-harness work and do not alter the
+  shipped routes reviewed here.
