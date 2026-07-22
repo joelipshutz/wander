@@ -15184,3 +15184,14 @@ Validation, 2026-07-22 00:06 PDT:
 - No Supabase migration, RLS change, TestFlight build, or production backend
   mutation is included in this client repair. Next step: push and open the
   required PR for review.
+
+Completion, 2026-07-22 00:09 PDT:
+
+- Committed the repair as `f445cdd` (`fix: retry authenticated RPCs with fresh
+  Clerk token`), pushed `codex/rec-121-client-feed`, and opened PR #149:
+  https://github.com/joelipshutz/wander/pull/149.
+- Linear `REC-121` remains `In Progress` until the PR is reviewed, merged, and
+  a requested TestFlight build is available for device verification.
+- TestFlight has not been uploaded or requested in this handoff. To ship, land
+  PR #149, create the next build from current `main`, then test Feed after a
+  cold relaunch and after pressing Retry while signed in.
