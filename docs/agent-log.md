@@ -16745,3 +16745,13 @@ REC-106 final landing validation, 2026-07-22 15:10 PDT:
   media exists, with provenance-aware deduplication. REC-106's supplied
   regressions and acceptance criteria are covered by the current implementation;
   broader server-side/provider fallback work remains tracked in REC-120.
+
+REC-106 merge completion, 2026-07-22 15:12 PDT:
+
+- Squash-merged PR #137 into `main` as `c330825edebc530cf6a22b446249561bb22eb8a8`
+  and deleted remote branch `codex/rec-106-instagram-carousel`.
+- Fetched the merged remote and atomically fast-forwarded the local `main`
+  reference to the same commit. `main` and `origin/main` matched at handoff.
+- No TestFlight build number, archive, upload, group attachment, or Slack
+  release note was created; this fix will be included in the next explicitly
+  requested TestFlight release batch.
