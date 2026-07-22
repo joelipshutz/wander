@@ -15785,7 +15785,6 @@ Outcome:
   PR #152 is landed into the requested Build 89 batch. The earlier simulator
   test attempt did not run because local disk filled; the authoritative
   regression validation is the hosted Feed contract test above.
-
 ## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
 
 Agent: Codex
@@ -16935,3 +16934,72 @@ Starting status and coordination:
 - Expected branch edits are limited to this append-only log and any conflict
   resolution required by the rebase. Review scope remains the four PR files;
   no product expansion is authorized.
+## 2026-07-21 16:17 PDT - Codex - REC-116 default Been save flow
+
+Agent: Codex
+Branch: `codex/rec-116-save-flow`
+Worktree: `/private/tmp/recme-rec116-save-flow`
+Linear: `REC-116` (`In Progress`)
+
+Goal: update the canonical place-save editor so a selected Been save keeps
+place type, rating, visit friends, photos, and notes in the main flow; removes
+the duplicate Save as control after status confirmation; places optional
+questions/tags/labels/privacy behind More options; and starts tag-style options
+unselected without re-adding defaults after a user deselects them.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated branch from current
+  `origin/main` at `1c39e2c13`. The primary checkout is on an unrelated stale
+  REC-88 branch with user-owned `.gitignore` and `.pnpm-store/` changes, so it
+  will not be edited.
+- Read the latest coordination log and existing worktrees. Other active work
+  includes REC-121 on a separate worktree; the only expected coordination
+  overlap is append-only `docs/agent-log.md`. `MapScreen.swift` is a documented
+  high-conflict file, so all REC-116 changes stay isolated here and the branch
+  will be updated from latest `origin/main` before PR handoff.
+- Linear REC-116 was read in full and moved from Backlog to In Progress before
+  implementation. The shared `MapPlaceSaveFlowSheet` is the canonical editor
+  used by Add and Map/social/visit entry points, so no parallel save UI should
+  be introduced.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused regression
+  coverage in `WanderTests/WanderStoreTests.swift` and/or
+  `WanderTests/NavigationContractTests.swift`, plus this log. No schema/RLS,
+  persistence contract, build number, archive, upload, or TestFlight release is
+  in scope.
+
+REC-116 implementation and validation checkpoint, 2026-07-21 17:07 PDT:
+
+- Reworked the shared save sheet so Been details consistently render place
+  type, rating, eligible visit friends, photos, note, and a collapsed More
+  options disclosure in that order. Save as now appears only on the status
+  confirmation step; import, Add Visit, shared-visit, and edit contexts that
+  already know their status open directly on details and cannot navigate into a
+  synthetic picker.
+- More options now owns question blocks, tags, personal labels, and privacy.
+  Every new social save, Add Visit, and shared-visit context starts multi-tag
+  choices and personal labels empty, including values present on a source save
+  or prior visit. Single-choice context such as price/effort remains meaningful,
+  while edit visit/want contexts continue to preserve the user's saved answers.
+  Synchronization also preserves an explicit empty selection so catalog
+  defaults cannot reappear after a user deselects a chip.
+- Corrected the details-step subtitle to “add a few details.” after review found
+  that the old copy still instructed users to pick a status after the picker
+  had been removed. Added regression coverage for all seven context factories,
+  new-save tag/label clearing, explicit deselection, and the SwiftUI disclosure
+  structure/order.
+- Ran `xcodegen generate`, Swift parser checks, and `git diff --check`. Focused
+  REC-116 coverage passed 5/5. The complete suite passed 490/490 on iPhone 17
+  Pro / iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-rec116-focused/Logs/Test/Test-Wander-2026.07.21_17-06-16--0700.xcresult`.
+  The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine; no XCTest failure was hidden by the substitution. Existing headermap,
+  Supabase date-formatter concurrency, and two unused-Bool warnings remain
+  unrelated to REC-116.
+- Reviewed live simulator layouts on iPhone 17 Pro and the smaller iPhone 17e,
+  including the collapsed Been form and expanded More options state. Screenshots:
+  `/private/tmp/rec116-been-17pro.jpeg`,
+  `/private/tmp/rec116-been-17e.png`, and
+  `/private/tmp/rec116-been-17e-more-options.jpeg`. The expanded accessibility
+  tree confirms all tag and personal-label chips are unselected. Demo fixtures
+  are memory-only; the final Save and photo picker were not invoked.

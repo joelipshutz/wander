@@ -272,7 +272,8 @@ final class WanderStoreTests: XCTestCase {
 
     private func makeSharedVisitInvitation(
         participantID: String = "participant-1",
-        generation: Int = 1
+        generation: Int = 1,
+        attributeAnswers: [VisitAttributeAnswer] = []
     ) -> SharedVisitInvitation {
         SharedVisitInvitation(
             participantID: participantID,
@@ -302,7 +303,7 @@ final class WanderStoreTests: XCTestCase {
             visitedAt: Date(timeIntervalSince1970: 1_720_000_000),
             note: "Great table",
             ratingScore: 4,
-            attributeAnswers: [],
+            attributeAnswers: attributeAnswers,
             tags: ["group drinks"],
             photos: []
         )
@@ -1945,7 +1946,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredByKey[PlaceMemoryAttributeKeys.personalLabels]?.valueJSON, "[\"date night\"]")
     }
 
-    func testAddVisitContextDefaultsFromWantThenLatestVisit() throws {
+    func testAddVisitContextCarriesVisitDetailsWithoutPrefillingTagsOrLabels() throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let result = store.saveCandidate(
@@ -1979,8 +1980,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(wantContext.initialStatus, .been)
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "want because patio")
-        XCTAssertEqual(wantContext.initialAnswers["coffee_tags"], Set(["sunny"]))
-        XCTAssertEqual(wantContext.initialPersonalLabels, Set(["weekend"]))
+        XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
+        XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
 
         let latestVisit = try XCTUnwrap(store.createVisit(
             userPlaceID: result.userPlaceID,
@@ -2002,8 +2003,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visitContext.initialStatus, .been)
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
-        XCTAssertEqual(visitContext.initialAnswers["coffee_tags"], Set(["quiet"]))
-        XCTAssertEqual(visitContext.initialPersonalLabels, Set(["return"]))
+        XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
+        XCTAssertTrue(visitContext.initialPersonalLabels.isEmpty)
     }
 
     func testOldSnapshotWithoutVisitsBackfillsExistingBeenSaves() throws {
@@ -2594,7 +2595,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
     }
 
-    func testNewWannaGoSaveKeepsOptionalDetailsCollapsedAndUnselectedByDefault() {
+    func testNewSaveKeepsTagStyleOptionsUnselectedByDefault() throws {
         let candidate = PlaceCandidate(
             id: "mapkit_compact_want",
             name: "Compact Want Cafe",
@@ -2608,7 +2609,17 @@ final class WanderStoreTests: XCTestCase {
             sourceType: .manual,
             defaultVisibility: .followers
         )
-        let block = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)[0]
+        let preselectedImport = MapPlaceSaveContext.importCandidate(
+            candidate,
+            sourceType: .manual,
+            status: .been,
+            defaultVisibility: .followers
+        )
+        let wannaBlock = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)[0]
+        let beenBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
+        let price = try XCTUnwrap(beenBlocks.first { $0.key == "price" })
+        let bestFor = try XCTUnwrap(beenBlocks.first { $0.key == "occasion" })
+        let tags = try XCTUnwrap(beenBlocks.first { $0.key == "restaurant_tags" })
 
         XCTAssertTrue(
             MapPlaceSaveDetailsPolicy.usesCompactWannaGoLayout(
@@ -2622,9 +2633,14 @@ final class WanderStoreTests: XCTestCase {
                 status: .been
             )
         )
+        XCTAssertTrue(context.requiresStatusConfirmation)
+        XCTAssertFalse(context.startsOnDetails)
+        XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
+        XCTAssertTrue(preselectedImport.startsOnDetails)
+        XCTAssertEqual(preselectedImport.initialStatus, .been)
         XCTAssertEqual(
             MapPlaceSaveDetailsPolicy.suggestedSelections(
-                for: block,
+                for: wannaBlock,
                 context: context,
                 status: .wannaGo
             ),
@@ -2632,12 +2648,156 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertEqual(
             MapPlaceSaveDetailsPolicy.suggestedSelections(
-                for: block,
+                for: bestFor,
                 context: context,
                 status: .been
             ),
-            Set(block.defaultValues)
+            []
         )
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.suggestedSelections(
+                for: tags,
+                context: context,
+                status: .been
+            ),
+            []
+        )
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.suggestedSelections(
+                for: price,
+                context: context,
+                status: .been
+            ),
+            Set(price.defaultValues)
+        )
+
+        let synchronized = MapPlaceSaveDetailsPolicy.synchronizedSelections(
+            existing: [
+                bestFor.key: [],
+                tags.key: ["late-night"]
+            ],
+            blocks: beenBlocks,
+            context: context,
+            status: .been
+        )
+        XCTAssertEqual(synchronized[bestFor.key], [])
+        XCTAssertEqual(synchronized[tags.key], ["late-night"])
+        XCTAssertEqual(synchronized[price.key], Set(price.defaultValues))
+    }
+
+    func testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows() throws {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_context_matrix",
+            name: "Context Matrix Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let socialPlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.owner.id != store.currentUser.id }
+        )
+        let ownBeenPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.status == .been }
+        )
+        let ownVisit = try XCTUnwrap(store.visits(for: ownBeenPlace.userPlace.id).first)
+        let ownWantPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.status == .wannaGo }
+        )
+
+        let sharedVisitContext = MapPlaceSaveContext.sharedVisit(
+            makeSharedVisitInvitation(
+                attributeAnswers: [
+                    VisitAttributeAnswer(
+                        questionKey: "strenuousness",
+                        valueType: "single_choice",
+                        value: .string("easy")
+                    ),
+                    VisitAttributeAnswer(
+                        questionKey: "hike_tags",
+                        valueType: "multi_tag",
+                        value: .array([.string("views")])
+                    ),
+                    VisitAttributeAnswer(
+                        questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                        valueType: "personal_label",
+                        value: .array([.string("sunset list")])
+                    )
+                ]
+            ),
+            defaultVisibility: .followers
+        )
+        let contexts: [(name: String, context: MapPlaceSaveContext, requiresConfirmation: Bool)] = [
+            (
+                "new candidate",
+                .addCandidate(candidate, sourceType: .manual, defaultVisibility: .followers),
+                true
+            ),
+            (
+                "preselected import",
+                .importCandidate(
+                    candidate,
+                    sourceType: .manual,
+                    status: .been,
+                    defaultVisibility: .followers
+                ),
+                false
+            ),
+            (
+                "social save",
+                .addVisiblePlace(
+                    socialPlace,
+                    defaultVisibility: .followers,
+                    attributes: store.attributes(for: socialPlace.userPlace.id)
+                ),
+                true
+            ),
+            (
+                "add visit",
+                .addVisitVisiblePlace(
+                    ownBeenPlace,
+                    attributes: store.attributes(for: ownBeenPlace.userPlace.id),
+                    latestVisit: ownVisit
+                ),
+                false
+            ),
+            (
+                "shared visit",
+                sharedVisitContext,
+                false
+            ),
+            (
+                "edit visit",
+                .editVisit(ownVisit, visiblePlace: ownBeenPlace),
+                false
+            ),
+            (
+                "edit want",
+                .editWant(
+                    ownWantPlace,
+                    attributes: store.attributes(for: ownWantPlace.userPlace.id)
+                ),
+                false
+            )
+        ]
+
+        for entry in contexts {
+            XCTAssertEqual(
+                entry.context.requiresStatusConfirmation,
+                entry.requiresConfirmation,
+                entry.name
+            )
+            XCTAssertEqual(
+                entry.context.startsOnDetails,
+                !entry.requiresConfirmation,
+                entry.name
+            )
+        }
+
+        XCTAssertEqual(sharedVisitContext.initialAnswers["strenuousness"], ["easy"])
+        XCTAssertNil(sharedVisitContext.initialAnswers["hike_tags"])
+        XCTAssertTrue(sharedVisitContext.initialPersonalLabels.isEmpty)
     }
 
     func testQuickAddCoordinateParserAcceptsDecimalAndCardinalCoordinates() throws {
@@ -3699,7 +3859,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(matchingGroup?.primary.owner.id, store.currentUser.id)
     }
 
-    func testSocialSaveFlowContextPrefillsSourceStatusAndTags() {
+    func testSocialSaveFlowContextPrefillsStatusButLeavesTagsAndLabelsUnselected() {
         let store = makeStore()
         let socialPlace = store.visiblePlaces().first { $0.owner.id == "user_maya" }!
         let attributes = store.attributes(for: socialPlace.userPlace.id)
@@ -3713,7 +3873,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(context.initialStatus, .been)
         XCTAssertEqual(context.initialVisibility, .followers)
         XCTAssertEqual(context.initialAnswers["strenuousness"], Set(["easy"]))
-        XCTAssertEqual(context.initialAnswers["hike_tags"], Set(["sunset", "views"]))
+        XCTAssertNil(context.initialAnswers["hike_tags"])
+        XCTAssertTrue(context.initialPersonalLabels.isEmpty)
     }
 
     func testRemoteOwnPlaceSaveMarksLocalRowsSynced() async {

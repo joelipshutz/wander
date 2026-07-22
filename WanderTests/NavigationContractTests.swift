@@ -349,6 +349,66 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testCanonicalSaveDetailsHideStatusAndCollapseOptionalBeenQuestions() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertEqual(mapScreen.components(separatedBy: "private var detailsContent: some View").count, 2)
+        XCTAssertEqual(mapScreen.components(separatedBy: "private var noteSection: some View").count, 2)
+        XCTAssertEqual(mapScreen.components(separatedBy: "private var optionalDetailsDisclosure: some View").count, 2)
+        XCTAssertEqual(mapScreen.components(separatedBy: "private var removeSaveSection: some View").count, 2)
+        let detailsContent = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private var detailsContent: some View")
+                .last?
+                .components(separatedBy: "private var noteSection: some View")
+                .first
+        )
+        let optionalDetails = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private var optionalDetailsDisclosure: some View")
+                .last?
+                .components(separatedBy: "private var removeSaveSection: some View")
+                .first
+        )
+
+        XCTAssertFalse(detailsContent.contains("saveAsSection"))
+        XCTAssertTrue(detailsContent.contains("placeTypeSection"))
+        XCTAssertTrue(detailsContent.contains("if selectedStatus == .been"))
+        XCTAssertTrue(detailsContent.contains("ratingSection"))
+        XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
+        XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
+        XCTAssertTrue(detailsContent.contains("noteSection"))
+        XCTAssertTrue(detailsContent.contains("optionalDetailsDisclosure"))
+        XCTAssertFalse(detailsContent.contains("questionAndLabelSections"))
+        XCTAssertFalse(detailsContent.contains("visibilitySection"))
+
+        XCTAssertFalse(optionalDetails.contains("saveAsSection"))
+        XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
+        XCTAssertTrue(optionalDetails.contains("visibilitySection"))
+        XCTAssertTrue(optionalDetails.contains("details, tags, labels & privacy"))
+        XCTAssertEqual(
+            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"save as\")").count - 1,
+            1
+        )
+        XCTAssertTrue(mapScreen.contains("if step == .details && context.requiresStatusConfirmation"))
+        XCTAssertTrue(mapScreen.contains("@State private var isShowingOptionalDetails = false"))
+
+        let orderedMarkers = [
+            "placeTypeSection",
+            "ratingSection",
+            "sharedVisitInviteSection",
+            "MapSaveVisitPhotoSection(",
+            "noteSection",
+            "optionalDetailsDisclosure"
+        ]
+        let offsets = try orderedMarkers.map { marker in
+            let range = try XCTUnwrap(detailsContent.range(of: marker), "Missing \(marker)")
+            return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
+        }
+        XCTAssertEqual(offsets, offsets.sorted())
+    }
+
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),

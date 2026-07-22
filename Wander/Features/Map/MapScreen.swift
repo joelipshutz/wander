@@ -2766,6 +2766,7 @@ struct MapPlaceSaveContext: Identifiable {
     let id = UUID()
     let candidate: PlaceCandidate
     let mode: MapPlaceSaveMode
+    let requiresStatusConfirmation: Bool
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
     let initialRatingScore: Double?
@@ -2792,21 +2793,7 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var startsOnDetails: Bool {
-        switch mode {
-        case .add:
-            false
-        case .addVisit, .sharedVisit, .editVisit, .editWant:
-            true
-        }
-    }
-
-    var allowsStatusSelection: Bool {
-        switch mode {
-        case .add:
-            true
-        case .addVisit, .sharedVisit, .editVisit, .editWant:
-            false
-        }
+        !requiresStatusConfirmation
     }
 
     var allowsPhotoAttachments: Bool {
@@ -2870,7 +2857,9 @@ struct MapPlaceSaveContext: Identifiable {
     var subtitle: String {
         switch mode {
         case .add:
-            "pick status and a few details."
+            requiresStatusConfirmation
+                ? "pick status and a few details."
+                : "add a few details."
         case .addVisit:
             "save what happened this time."
         case .sharedVisit(let invitation):
@@ -2879,6 +2868,15 @@ struct MapPlaceSaveContext: Identifiable {
             "adjust this saved visit."
         case .editWant:
             "update why this is on your radar."
+        }
+    }
+
+    var detailsSubtitle: String {
+        switch mode {
+        case .add:
+            "add a few details."
+        case .addVisit, .sharedVisit, .editVisit, .editWant:
+            subtitle
         }
     }
 
@@ -2939,6 +2937,7 @@ struct MapPlaceSaveContext: Identifiable {
         MapPlaceSaveContext(
             candidate: candidate,
             mode: .add(sourceType),
+            requiresStatusConfirmation: true,
             initialStatus: .wannaGo,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -2959,6 +2958,7 @@ struct MapPlaceSaveContext: Identifiable {
         MapPlaceSaveContext(
             candidate: candidate,
             mode: .add(sourceType),
+            requiresStatusConfirmation: false,
             initialStatus: status,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -2978,12 +2978,13 @@ struct MapPlaceSaveContext: Identifiable {
         MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .add(.socialSave),
+            requiresStatusConfirmation: true,
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
-            initialAnswers: initialAnswers(from: attributes),
-            initialPersonalLabels: initialPersonalLabels(from: attributes),
+            initialAnswers: initialNewSaveAnswers(from: attributes),
+            initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: attributes),
             initialPhotoAttachments: []
         )
@@ -3000,12 +3001,13 @@ struct MapPlaceSaveContext: Identifiable {
         return MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .addVisit(visiblePlace),
+            requiresStatusConfirmation: false,
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: latestVisit?.ratingScore,
             initialNote: note,
-            initialAnswers: initialAnswers(from: defaultAttributes),
-            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
+            initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
+            initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: defaultAttributes),
             initialPhotoAttachments: []
         )
@@ -3018,12 +3020,13 @@ struct MapPlaceSaveContext: Identifiable {
         MapPlaceSaveContext(
             candidate: invitation.candidate,
             mode: .sharedVisit(invitation),
+            requiresStatusConfirmation: false,
             initialStatus: .been,
             initialVisibility: defaultVisibility,
             initialRatingScore: invitation.ratingScore,
             initialNote: invitation.note ?? "",
-            initialAnswers: initialAnswers(from: invitation.attributeDrafts),
-            initialPersonalLabels: initialPersonalLabels(from: invitation.attributeDrafts),
+            initialAnswers: initialNewSaveAnswers(from: invitation.attributeDrafts),
+            initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: invitation.attributeDrafts),
             initialPhotoAttachments: []
         )
@@ -3037,6 +3040,7 @@ struct MapPlaceSaveContext: Identifiable {
         return MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .editVisit(visiblePlace, visit),
+            requiresStatusConfirmation: false,
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: visit.ratingScore,
@@ -3055,6 +3059,7 @@ struct MapPlaceSaveContext: Identifiable {
         MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .editWant(visiblePlace),
+            requiresStatusConfirmation: false,
             initialStatus: .wannaGo,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: nil,
@@ -3128,6 +3133,18 @@ struct MapPlaceSaveContext: Identifiable {
         }
 
         return answers
+    }
+
+    private static func initialNewSaveAnswers(
+        from attributes: [LocalPlaceAttribute]
+    ) -> [String: Set<String>] {
+        initialAnswers(from: attributes.filter { $0.valueType != "multi_tag" })
+    }
+
+    private static func initialNewSaveAnswers(
+        from attributes: [PlaceAttributeDraft]
+    ) -> [String: Set<String>] {
+        initialAnswers(from: attributes.filter { $0.valueType != "multi_tag" })
     }
 
     private static func initialPersonalLabels(from attributes: [LocalPlaceAttribute]) -> Set<String> {
@@ -3411,9 +3428,30 @@ enum MapPlaceSaveDetailsPolicy {
         context: MapPlaceSaveContext,
         status: PlaceStatus
     ) -> Set<String> {
-        usesCompactWannaGoLayout(context: context, status: status)
+        guard block.kind != .multiTag else { return [] }
+
+        return usesCompactWannaGoLayout(context: context, status: status)
             ? []
             : Set(block.defaultValues)
+    }
+
+    static func synchronizedSelections(
+        existing: [String: Set<String>],
+        blocks: [AddQuestionBlock],
+        context: MapPlaceSaveContext,
+        status: PlaceStatus
+    ) -> [String: Set<String>] {
+        var selections = existing
+
+        for block in blocks where selections[block.key] == nil {
+            selections[block.key] = suggestedSelections(
+                for: block,
+                context: context,
+                status: status
+            )
+        }
+
+        return selections
     }
 }
 
@@ -3616,7 +3654,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack {
-                if step == .details && !context.isEditing && context.sharedVisitInvitation == nil {
+                if step == .details && context.requiresStatusConfirmation {
                     Button {
                         errorMessage = nil
                         step = .confirm
@@ -3647,7 +3685,7 @@ struct MapPlaceSaveFlowSheet: View {
             Text(context.title)
                 .font(.system(size: 28, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
-            Text(context.subtitle)
+            Text(step == .details ? context.detailsSubtitle : context.subtitle)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
@@ -3679,34 +3717,23 @@ struct MapPlaceSaveFlowSheet: View {
             candidateCard
             placeTypeSection
 
-            if usesCompactWannaGoDetails {
-                noteSection
-                optionalDetailsDisclosure
-            } else {
-                if context.allowsStatusSelection {
-                    saveAsSection
-                }
-
-                if selectedStatus == .been {
-                    ratingSection
-                }
+            if selectedStatus == .been {
+                ratingSection
 
                 if canInviteFriends {
                     sharedVisitInviteSection
                 }
 
-                questionAndLabelSections
-
                 if context.allowsPhotoAttachments {
                     MapSaveVisitPhotoSection(
-                        canAddPhotos: selectedStatus == .been,
+                        canAddPhotos: true,
                         photos: $visitPhotoAttachments
                     )
                 }
-
-                noteSection
-                visibilitySection
             }
+
+            noteSection
+            optionalDetailsDisclosure
 
             if let errorMessage {
                 Text(errorMessage)
@@ -3730,13 +3757,6 @@ struct MapPlaceSaveFlowSheet: View {
                 removeSaveSection
             }
         }
-    }
-
-    private var usesCompactWannaGoDetails: Bool {
-        MapPlaceSaveDetailsPolicy.usesCompactWannaGoLayout(
-            context: context,
-            status: selectedStatus
-        )
     }
 
     private var noteSection: some View {
@@ -3815,7 +3835,7 @@ struct MapPlaceSaveFlowSheet: View {
                         Text("more options")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text("status, tags, labels & privacy")
+                        Text("details, tags, labels & privacy")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(WanderTheme.textMuted.color)
                     }
@@ -3843,9 +3863,6 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityHint("Optional. Save without opening this section.")
 
             if isShowingOptionalDetails {
-                if context.allowsStatusSelection {
-                    saveAsSection
-                }
                 questionAndLabelSections
                 visibilitySection
             }
@@ -3949,24 +3966,6 @@ struct MapPlaceSaveFlowSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 
-    private var saveAsSection: some View {
-        MapSavePickerBlock(title: "save as") {
-            HStack(spacing: WanderTheme.spacing2) {
-                MapSaveChoicePill(title: "been", isSelected: selectedStatus == .been) {
-                    selectedStatus = .been
-                    syncAnswersForCurrentQuestions()
-                }
-                MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
-                    selectedStatus = .wannaGo
-                    syncAnswersForCurrentQuestions()
-                }
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-
     private var candidateCard: some View {
         HStack(spacing: WanderTheme.spacing3) {
             CategoryThumb(
@@ -4025,30 +4024,12 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func syncAnswersForCurrentQuestions() {
-        var nextAnswers = selectedAnswers
-
-        for block in questionBlocks {
-            var values = nextAnswers[block.key] ?? MapPlaceSaveDetailsPolicy.suggestedSelections(
-                for: block,
-                context: context,
-                status: selectedStatus
-            )
-            if values.isEmpty {
-                values = MapPlaceSaveDetailsPolicy.suggestedSelections(
-                    for: block,
-                    context: context,
-                    status: selectedStatus
-                )
-            } else if block.kind == .multiTag, !usesCompactWannaGoDetails {
-                values.formUnion(block.defaultValues)
-            }
-            nextAnswers[block.key] = values
-        }
-
-        selectedAnswers = nextAnswers
-        if !usesCompactWannaGoDetails {
-            personalLabels.formUnion(personalLabelBlock.defaultValues)
-        }
+        selectedAnswers = MapPlaceSaveDetailsPolicy.synchronizedSelections(
+            existing: selectedAnswers,
+            blocks: questionBlocks,
+            context: context,
+            status: selectedStatus
+        )
     }
 
     private func handlePlaceTypeSelection() {
