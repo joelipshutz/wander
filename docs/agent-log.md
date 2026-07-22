@@ -15586,3 +15586,24 @@ Build 88 release completion, 2026-07-22 13:07 PDT:
   usable user photo or Google place photo. The documented iPhone 16 Plus /
   iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
   checkout and all user-owned changes remained untouched.
+
+## 2026-07-22 14:10 PDT - Codex - REC-121 Historical Feed Backfill
+
+Agent: Codex
+Branch: `codex/rec-121-historical-feed`
+Worktree: `/private/tmp/recme-build87-clean-device`
+Linear: `REC-121` (In Review)
+
+Outcome:
+
+- Backfill migration `20260722121000_backfill_feed_activity.sql` is already
+  applied to production. It idempotently restores historical user-place, list,
+  and list-item Feed events without exposing its security-definer maintenance
+  function to `public`, `anon`, or `authenticated`.
+- Hosted verification passed 27/27 assertions. Followed Feed rows increased
+  from 1 to 61, historical gaps fell from 50 to 0, and 35 Featured for you
+  candidates became available.
+- This branch is now updated with Build 88's completed release state before
+  PR #152 is landed into the requested Build 89 batch. The earlier simulator
+  test attempt did not run because local disk filled; the authoritative
+  regression validation is the hosted Feed contract test above.

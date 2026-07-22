@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(22);
+select plan(27);
 
 select ok(
   exists (
@@ -136,6 +136,81 @@ select ok(
   (public.followed_feed(null, 1)->>'next_cursor') is not null,
   'limited feed returns a keyset cursor when more activity exists'
 );
+
+insert into public.places (
+  id, canonical_name, category, latitude, longitude, source_provider, source_provider_place_id
+)
+values
+  ('70000000-0000-0000-0000-000000000003', 'Legacy Bakery', 'restaurant', 34.0410, -118.2450, 'mapkit', 'feed-legacy-bakery');
+
+insert into public.user_places (
+  id, user_id, place_id, status, visibility, source_type, saved_at, visited_at
+)
+values
+  (
+    '71000000-0000-0000-0000-000000000003',
+    'feed_actor',
+    '70000000-0000-0000-0000-000000000003',
+    'been',
+    'followers',
+    'manual',
+    '2026-06-01T12:00:00Z',
+    '2026-06-02T12:00:00Z'
+  );
+
+delete from public.feed_events
+where user_place_id = '71000000-0000-0000-0000-000000000003'
+  and event_type = 'place_been';
+
+select is(
+  (
+    select count(*)::integer
+    from public.feed_events
+    where user_place_id = '71000000-0000-0000-0000-000000000003'
+      and event_type = 'place_been'
+  ),
+  0,
+  'legacy place fixture intentionally has no Feed event before projection backfill'
+);
+
+select app.backfill_feed_events();
+
+select lives_ok(
+  $$ select app.backfill_feed_events() $$,
+  'historical Feed backfill is safe to run repeatedly'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.feed_events
+    where user_place_id = '71000000-0000-0000-0000-000000000003'
+      and event_type = 'place_been'
+  ),
+  1,
+  'historical place receives exactly one backfilled Feed event'
+);
+
+select is(
+  jsonb_array_length(public.followed_feed()->'activity'),
+  5,
+  'backfilled historical place appears in the followed Feed'
+);
+
+select is(
+  jsonb_array_length(public.followed_feed()->'featured_places'),
+  3,
+  'backfilled historical place is eligible for the Featured for you rail'
+);
+
+delete from public.feed_events
+where user_place_id = '71000000-0000-0000-0000-000000000003';
+
+delete from public.user_places
+where id = '71000000-0000-0000-0000-000000000003';
+
+delete from public.places
+where id = '70000000-0000-0000-0000-000000000003';
 
 update public.user_places
 set visibility = 'self'
