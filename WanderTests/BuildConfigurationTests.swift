@@ -212,6 +212,13 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.isConfigured)
     }
 
+    func testUnauthorizedRPCStatusRequiresOneFreshTokenRetry() {
+        XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 401))
+        XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 403))
+        XCTAssertFalse(WanderSupabaseClient.requiresFreshToken(after: 400))
+        XCTAssertFalse(WanderSupabaseClient.requiresFreshToken(after: 500))
+    }
+
     private var projectRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

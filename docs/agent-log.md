@@ -15130,3 +15130,68 @@ Completion, 2026-07-21 18:37 PDT:
   `WanderSupabaseClient` noted for Build 85. No new compiler or XCTest failure
   occurred. Disposable Xcode DerivedData caches were cleared during the
   release because the local disk had only 116 MB free.
+
+## 2026-07-21 23:52 PDT - Codex - REC-121 Client Feed Recovery
+
+Agent: Codex
+Branch: `codex/rec-121-client-feed`
+Worktree: `/private/tmp/recme-rec121-client-feed`
+Linear: `REC-121` (reopened, In Progress)
+
+Goal: resolve the continued TestFlight Feed unavailable state reported by Joe
+after Build 86.
+
+Pre-edit evidence and plan:
+
+- The root checkout is on an unrelated stale branch and was left untouched;
+  this clean, isolated worktree was created from `origin/main` at `6af3939`.
+- Read the current agent log and confirmed no overlapping active worktree.
+- Verified `followed_feed` directly under Joe's authenticated database role;
+  it returns a valid empty envelope.
+- Minted a short-lived token for Joe's active Clerk session and called the
+  exact production REST RPC. It returned HTTP 200 with the same valid empty
+  envelope. No token, email, note, coordinate, or raw private payload was
+  recorded.
+- The device was not reachable through Xcode at investigation time. Build 86
+  has no configured PostHog project token, so the client-side error class is
+  not available from release analytics.
+- Completed `docs/reviews/2026-07-21-rec121-client-feed-plan-eng-review.md`.
+  The planned bounded client repair is: on an authenticated RPC's 401/403,
+  force one fresh Clerk token and retry that exact request once. It does not
+  change RLS or convert a failure into a false empty Feed.
+
+Checkpoint, 2026-07-22 00:01 PDT:
+
+- Generated the Xcode project and ran the focused simulator command. Xcode
+  compiled the project but cancelled testing because the new static retry
+  predicate inherited `WanderSupabaseClient`'s main-actor isolation while its
+  test is synchronous. Marked the stateless predicate `nonisolated`; this is a
+  compile-time correction, not a product/runtime failure. Re-running the same
+  focused tests next.
+
+- Added a focused HTTP-level regression test that queues a 401 followed by a
+  200 and asserts both the cached and forced Clerk-token request exactly once.
+
+Validation, 2026-07-22 00:06 PDT:
+
+- Regenerated `Wander.xcodeproj` with XcodeGen and checked the diff for
+  whitespace errors.
+- Focused iPhone 16 Plus, iOS 18.6 tests passed 4/4, including the new HTTP
+  401 -> forced-token-refresh -> 200 path, the hosted empty Feed envelope
+  decode, and the Feed's existing auth-readiness retry.
+- The complete required iPhone 16 Plus, iOS 18.6 suite passed 490/490:
+  `/private/tmp/DerivedData-rec121-client-feed/Logs/Test/Test-Wander-2026.07.22_00-04-06--0700.xcresult`.
+- No Supabase migration, RLS change, TestFlight build, or production backend
+  mutation is included in this client repair. Next step: push and open the
+  required PR for review.
+
+Completion, 2026-07-22 00:09 PDT:
+
+- Committed the repair as `f445cdd` (`fix: retry authenticated RPCs with fresh
+  Clerk token`), pushed `codex/rec-121-client-feed`, and opened PR #149:
+  https://github.com/joelipshutz/wander/pull/149.
+- Linear `REC-121` remains `In Progress` until the PR is reviewed, merged, and
+  a requested TestFlight build is available for device verification.
+- TestFlight has not been uploaded or requested in this handoff. To ship, land
+  PR #149, create the next build from current `main`, then test Feed after a
+  cold relaunch and after pressing Retry while signed in.
