@@ -15784,3 +15784,45 @@ REC-106 physical-device handoff completed, 2026-07-22 11:43 PDT:
 - Started a fresh Run from Xcode. The build completed, Xcode reports `Running
   Wander on Ry’s iPhone`, and the debugger attached to process `Wander`.
   Ryan can now clear prior imports and physically retest the supplied links.
+
+REC-106 Instagram metadata provenance audit, 2026-07-22 12:18 PDT:
+
+- Goal: compare the live Open Graph and embedded Instagram metadata for the
+  three reported posts against the exact fields the importer selects, derives,
+  discards, and persists. Continued on `codex/rec-106-instagram-carousel` in
+  `/private/tmp/recme-rec106-instagram-carousel`; tracked files were clean and
+  only the previously documented DerivedData folders were untracked. No agent
+  log overlap or implementation-file overlap was present.
+- Captured fresh public HTML for the 100-shop guide `DU6kxigDOD-`, Wyoming
+  carousel `Dak2JCClKkF`, and Frank N Frank’s reel `Da9EdCzBFuw` using the
+  importer’s current request headers. All three returned HTTP 200; all 35
+  `application/json` scripts on each page parsed successfully. The temporary
+  captures and audit script remain outside the repository under
+  `/tmp/rec106-metadata-audit.RGilRI` and contain no authenticated session or
+  private API payload.
+- Traced each live field through `SocialPlaceImportMetadata.swift`,
+  `PlaceImportStore.swift`, and `PlaceImportModels.swift`. The carousel path
+  selects embedded `caption.text` and still-image candidates, then uses Vision
+  OCR plus caption grammar to create place hints. Raw caption, OCR, image
+  metadata, and accessibility text are not persisted; only the source URL/raw
+  input and derived/resolved import-item fields survive in the snapshot.
+- The largest unused signal is each carousel child’s
+  `accessibility_caption`: the Wyoming response names multiple destinations in
+  this field, the parser collects it, but no downstream import code reads it.
+  Reel `Da9EdCzBFuw` has no object matching the current exact-code-plus-
+  `carousel_media` predicate, so it takes the OG-only path and OCRs one 640×640
+  cover. OG title is also appended as primary evidence even when it duplicates
+  the selected caption.
+- The 100-shop response currently omits width/height on all 19 image candidates
+  per slide. The max-area selector therefore keeps the first candidate; that
+  candidate is currently the original-resolution URL, but the behavior depends
+  on Instagram preserving candidate order. The Wyoming response includes
+  dimensions and deterministically selects 720×960 stills from all 12 slides.
+- Built and validated the thread-local interactive comparison
+  `instagram-import-metadata-map.html`, with one selectable table per reported
+  post and columns for live value, selection rule, actual use, and persistence.
+  The fragment is 18.8 KB, contains no document wrapper or network calls, and
+  renders successfully through the bundled visualization wrapper.
+- This was an evidence/documentation-only pass: no app source changed and no
+  new build/test run was necessary. The branch’s last source validation remains
+  542/542 tests plus the clean generic iOS Simulator build recorded above.
