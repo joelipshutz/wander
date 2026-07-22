@@ -15903,3 +15903,47 @@ Build 90 validation and upload checkpoint, 2026-07-22 14:25 PDT:
   followed by:
   `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 90 --archive-path /private/tmp/Wander-0.1-build90.xcarchive --what-to-test-file /private/tmp/recme-build90-what-to-test.md`
   with `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH` (or `--env`) supplied.
+
+## 2026-07-22 14:48 PDT - Codex - TestFlight Build 90 Completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/build90-final-log`
+Worktree: `/private/tmp/recme-build90-final-log`
+Linear: `REC-110` (In Review pending App Store Connect completion)
+
+Goal: complete App Store Connect processing and public TestFlight release for
+the already-uploaded rec.me 0.1 build 90, publish the tester note, close
+REC-110, and correct the earlier upload-blocked checkpoint.
+
+Preflight:
+
+- Started from clean `origin/main` at `47e04fd3e`; the primary checkout still
+  contains unrelated `.gitignore` and `.pnpm-store/` changes and was not used.
+- Build 90 upload succeeded after Ryan signed into Xcode. Archive upload
+  metadata confirms the uploaded binary is build 90 from
+  `/private/tmp/Wander-0.1-build90.xcarchive`.
+- The release helper cannot authenticate because this Mac has no configured
+  `ASC_KEY_ID`, `ASC_ISSUER_ID`, or `ASC_KEY_PATH`; completing the same required
+  metadata and public-group steps through App Store Connect's web UI.
+
+Completion:
+
+- Retried `xcodebuild -exportArchive` after Ryan signed into Xcode. Export and
+  upload succeeded with `manageAppVersionAndBuildNumber=false`; Xcode reported
+  `Upload succeeded`, and archive upload metadata confirmed build 90.
+- App Store Connect build `fc434d7d-54e9-492d-a3c3-3ba206093a44` is validated,
+  reports `App Uses Non-Exempt Encryption: No`, and has the build-90 What to
+  Test copy saved.
+- Attached build 90 to the public external `rec.me Alpha` group, submitted it
+  for beta review with automatic tester notifications, and verified the final
+  status is `Testing` (live/approved).
+- Posted the required tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784757478230379
+- Added the PR, merge, validation, archive, TestFlight, and Slack details to
+  `REC-110`, then moved the issue from In Review to Done.
+- Release validation remains 506/506 tests with zero failures or skips on
+  iPhone 17 Pro / iOS 26.5 plus a successful generic iOS Simulator build. The
+  requested iPhone 16 Plus / iOS 18.6 runtime was unavailable on this Mac.
+
+Outcome: REC-110 is shipped in public TestFlight build 90. No release follow-up
+is required beyond tester feedback.
