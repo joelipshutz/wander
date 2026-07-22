@@ -1,3 +1,4 @@
+import MapKit
 import XCTest
 @testable import Wander
 
@@ -522,5 +523,463 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         let places: [LocalPlace]
         let userPlaces: [LocalUserPlace]
         let visits: [LocalPlaceVisit]
+    }
+}
+
+final class ProfilePlaceCollectionMapTests: XCTestCase {
+    func testMapSummaryRouteOptsIntoInteractiveMapWhileCalendarDoesNot() {
+        let summary = ProfileSummaryItem(
+            id: "united-states",
+            title: "United States",
+            count: 2,
+            total: 2,
+            placeIDs: ["coffee", "dinner"]
+        )
+
+        let mapRoute = ProfilePlaceCollectionRoute.mapSummary(kind: .countries, item: summary)
+        let calendarRoute = ProfilePlaceCollectionRoute.calendar(
+            date: Date(timeIntervalSince1970: 0),
+            placeIDs: summary.placeIDs
+        )
+
+        XCTAssertEqual(mapRoute.source, .mapSummary)
+        XCTAssertTrue(mapRoute.source.presentsInteractiveMap)
+        XCTAssertEqual(calendarRoute.source, .calendar)
+        XCTAssertFalse(calendarRoute.source.presentsInteractiveMap)
+    }
+
+    func testCollectionMatcherAcceptsCanonicalLocalAndServerPlaceIDs() {
+        let owner = profile(id: "owner")
+        let visiblePlace = visiblePlace(
+            owner: owner,
+            userPlaceID: "saved-place",
+            placeLocalID: "local-place",
+            placeServerID: "server-place",
+            name: "Woodcat Coffee",
+            latitude: 34.06,
+            longitude: -118.24,
+            status: .been
+        )
+
+        XCTAssertTrue(
+            ProfilePlaceCollectionMatcher.matches(
+                visiblePlace,
+                acceptedPlaceIDs: [visiblePlace.place.id]
+            )
+        )
+        XCTAssertTrue(
+            ProfilePlaceCollectionMatcher.matches(
+                visiblePlace,
+                acceptedPlaceIDs: ["local-place"]
+            )
+        )
+        XCTAssertTrue(
+            ProfilePlaceCollectionMatcher.matches(
+                visiblePlace,
+                acceptedPlaceIDs: ["server-place"]
+            )
+        )
+        XCTAssertFalse(
+            ProfilePlaceCollectionMatcher.matches(
+                visiblePlace,
+                acceptedPlaceIDs: ["another-place"]
+            )
+        )
+    }
+
+    func testProjectionGroupsDuplicateSavesAndKeepsInvalidPlaceInTotalCount() throws {
+        let currentUser = profile(id: "current")
+        let friend = profile(id: "friend")
+        let currentSave = visiblePlace(
+            owner: currentUser,
+            userPlaceID: "current-save",
+            placeLocalID: "current-mutsu",
+            placeServerID: "server-current-mutsu",
+            name: "Mutsu",
+            address: "123 Main Street",
+            latitude: 34.05,
+            longitude: -118.25,
+            status: .been
+        )
+        let socialSave = visiblePlace(
+            owner: friend,
+            userPlaceID: "friend-save",
+            placeLocalID: "friend-mutsu",
+            placeServerID: "server-friend-mutsu",
+            name: "Mutsu",
+            address: "123 Main Street",
+            latitude: 34.0502,
+            longitude: -118.2502,
+            status: .wannaGo
+        )
+        let invalidSave = visiblePlace(
+            owner: currentUser,
+            userPlaceID: "invalid-save",
+            placeLocalID: "invalid-place",
+            placeServerID: nil,
+            name: "Missing Pin",
+            latitude: 0,
+            longitude: 0,
+            status: .been
+        )
+
+        let presentation = ProfilePlaceCollectionMapProjection.presentation(
+            for: [socialSave, invalidSave, currentSave],
+            currentUserID: currentUser.id
+        )
+
+        XCTAssertEqual(presentation.totalCount, 2)
+        XCTAssertEqual(presentation.items.count, 1)
+        XCTAssertEqual(presentation.contentState, .partial(mapped: 1, total: 2))
+
+        let item = try XCTUnwrap(presentation.items.first)
+        XCTAssertEqual(item.visiblePlace.id, currentSave.id)
+        XCTAssertEqual(item.outlines.map(\.ownership), [.currentUser, .social])
+        XCTAssertEqual(item.outlines.map(\.status), [.been, .wannaGo])
+        XCTAssertTrue(item.accessibilityLabel.contains("Your and social saved place"))
+        XCTAssertTrue(item.accessibilityLabel.contains("Mutsu"))
+        XCTAssertNotNil(presentation.fittedRegion)
+    }
+
+    func testProjectionTreatsNearZeroAndInvalidCoordinatesAsUnmapped() {
+        let owner = profile(id: "owner")
+        let nearZero = visiblePlace(
+            owner: owner,
+            userPlaceID: "near-zero-save",
+            placeLocalID: "near-zero-place",
+            placeServerID: nil,
+            name: "Near Zero",
+            latitude: 0.000_000_1,
+            longitude: -0.000_000_1,
+            status: .been
+        )
+        let invalid = visiblePlace(
+            owner: owner,
+            userPlaceID: "invalid-save",
+            placeLocalID: "invalid-place",
+            placeServerID: nil,
+            name: "Invalid",
+            latitude: 91,
+            longitude: 181,
+            status: .been
+        )
+
+        let presentation = ProfilePlaceCollectionMapProjection.presentation(
+            for: [nearZero, invalid],
+            currentUserID: owner.id
+        )
+
+        XCTAssertEqual(presentation.totalCount, 2)
+        XCTAssertTrue(presentation.items.isEmpty)
+        XCTAssertEqual(presentation.contentState, .unresolved(total: 2))
+        XCTAssertNil(presentation.fittedRegion)
+    }
+
+    func testNineHundredAnnotationClusteringStaysWithinDebugBudget() throws {
+        let coordinates = (0..<900).map { index in
+            let row = index / 30
+            let column = index % 30
+            return ListMapCoordinate(
+                id: "place-\(index)",
+                coordinate: CLLocationCoordinate2D(
+                    latitude: 25 + Double(row) * 0.7,
+                    longitude: -124 + Double(column) * 2
+                )
+            )
+        }
+        let region = try XCTUnwrap(
+            MapRegionFitter.region(
+                fitting: coordinates.map(\.coordinate),
+                minimumSpan: 0.012,
+                paddingMultiplier: 1.65
+            )
+        )
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let clusters = ProfilePlaceCollectionMapClusterer.clusters(
+            for: coordinates,
+            in: region,
+            viewportSize: CGSize(width: 390, height: 280)
+        )
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+        XCTAssertEqual(clusters.flatMap(\.memberIDs).count, 900)
+        XCTAssertEqual(Set(clusters.flatMap(\.memberIDs)).count, 900)
+        XCTAssertGreaterThan(clusters.count, 1)
+        XCTAssertLessThan(clusters.map(\.memberIDs.count).max() ?? 900, 900)
+
+        let memberCoordinates = Dictionary(uniqueKeysWithValues: coordinates.map { ($0.id, $0.coordinate) })
+        let largestCluster = try XCTUnwrap(clusters.max { $0.memberIDs.count < $1.memberIDs.count })
+        let zoomRegion = try XCTUnwrap(
+            MapRegionFitter.region(
+                fitting: largestCluster.memberIDs.compactMap { memberCoordinates[$0] },
+                minimumSpan: 0.0015,
+                paddingMultiplier: 1.75
+            )
+        )
+        XCTAssertLessThan(zoomRegion.span.latitudeDelta, region.span.latitudeDelta)
+        XCTAssertLessThan(zoomRegion.span.longitudeDelta, region.span.longitudeDelta)
+        XCTAssertLessThan(
+            elapsed,
+            0.25,
+            "Clustering 900 annotations took \(elapsed)s; REC-111 caches this work but camera-end updates must stay responsive"
+        )
+    }
+
+    func testClusteringCrossesGridBoundariesWithoutJoiningTransitiveChains() {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 10, longitude: 0),
+            span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 100)
+        )
+        let viewport = CGSize(width: 100, height: 100)
+        let boundaryCoordinates = [
+            ListMapCoordinate(
+                id: "left",
+                coordinate: CLLocationCoordinate2D(latitude: 10, longitude: 1)
+            ),
+            ListMapCoordinate(
+                id: "right",
+                coordinate: CLLocationCoordinate2D(latitude: 10, longitude: 3)
+            )
+        ]
+
+        let boundaryClusters = ProfilePlaceCollectionMapClusterer.clusters(
+            for: boundaryCoordinates,
+            in: region,
+            viewportSize: viewport
+        )
+
+        XCTAssertEqual(boundaryClusters.count, 1)
+        XCTAssertEqual(boundaryClusters[0].memberIDs, ["left", "right"])
+
+        let chainCoordinates = [
+            ListMapCoordinate(
+                id: "a",
+                coordinate: CLLocationCoordinate2D(latitude: 10, longitude: -40)
+            ),
+            ListMapCoordinate(
+                id: "b",
+                coordinate: CLLocationCoordinate2D(latitude: 10, longitude: 10)
+            ),
+            ListMapCoordinate(
+                id: "c",
+                coordinate: CLLocationCoordinate2D(latitude: 10, longitude: 60)
+            )
+        ]
+
+        let chainClusters = ProfilePlaceCollectionMapClusterer.clusters(
+            for: chainCoordinates,
+            in: region,
+            viewportSize: viewport
+        )
+
+        XCTAssertEqual(chainClusters.map(\.memberIDs), [["a", "b"], ["c"]])
+        XCTAssertEqual(chainClusters.map(\.longitude), [-40, 60])
+    }
+
+    func testCameraFitAccountsForWideMapViewport() {
+        let baseRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 38, longitude: -150),
+            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 300)
+        )
+
+        let fittedRegion = ProfilePlaceCollectionMapCamera.region(
+            fitting: baseRegion,
+            viewportSize: CGSize(width: 390, height: 280)
+        )
+
+        XCTAssertEqual(fittedRegion.span.latitudeDelta, 180, accuracy: 0.000_001)
+        XCTAssertEqual(fittedRegion.span.longitudeDelta, 300, accuracy: 0.000_001)
+        XCTAssertEqual(fittedRegion.center.latitude, 0, accuracy: 0.000_001)
+    }
+
+    func testClusterActivationZoomsDistinctCoordinatesAndOpensUnseparablePlaces() {
+        let distinctCluster = ListMapCluster(
+            id: "a|b",
+            memberIDs: ["a", "b"],
+            latitude: 34,
+            longitude: -118
+        )
+        let distinctCoordinates = [
+            "a": ListMapCoordinate(
+                id: "a",
+                coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118)
+            ),
+            "b": ListMapCoordinate(
+                id: "b",
+                coordinate: CLLocationCoordinate2D(latitude: 37, longitude: -122)
+            )
+        ]
+        XCTAssertEqual(
+            ProfilePlaceCollectionMapClusterActivationResolver.activation(
+                for: distinctCluster,
+                coordinatesByID: distinctCoordinates,
+                visibleRegion: MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 35.5, longitude: -120),
+                    span: MKCoordinateSpan(latitudeDelta: 20, longitudeDelta: 20)
+                ),
+                viewportSize: CGSize(width: 390, height: 280)
+            ),
+            .zoom
+        )
+
+        let coincidentCoordinates = [
+            "a": ListMapCoordinate(
+                id: "a",
+                coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118)
+            ),
+            "b": ListMapCoordinate(
+                id: "b",
+                coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118)
+            )
+        ]
+        XCTAssertEqual(
+            ProfilePlaceCollectionMapClusterActivationResolver.activation(
+                for: distinctCluster,
+                coordinatesByID: coincidentCoordinates,
+                visibleRegion: MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+                    span: MKCoordinateSpan(latitudeDelta: 20, longitudeDelta: 20)
+                ),
+                viewportSize: CGSize(width: 390, height: 280)
+            ),
+            .open("a")
+        )
+
+        let nearCoincidentCoordinates = [
+            "a": ListMapCoordinate(
+                id: "a",
+                coordinate: CLLocationCoordinate2D(latitude: 34, longitude: -118)
+            ),
+            "b": ListMapCoordinate(
+                id: "b",
+                coordinate: CLLocationCoordinate2D(latitude: 34.000_01, longitude: -118.000_01)
+            )
+        ]
+        XCTAssertEqual(
+            ProfilePlaceCollectionMapClusterActivationResolver.activation(
+                for: distinctCluster,
+                coordinatesByID: nearCoincidentCoordinates,
+                visibleRegion: MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+                    span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0021)
+                ),
+                viewportSize: CGSize(width: 390, height: 280)
+            ),
+            .open("a")
+        )
+
+        let highLatitudeCoordinates = [
+            "a": ListMapCoordinate(
+                id: "a",
+                coordinate: CLLocationCoordinate2D(latitude: 60, longitude: 10)
+            ),
+            "b": ListMapCoordinate(
+                id: "b",
+                coordinate: CLLocationCoordinate2D(latitude: 60.000_01, longitude: 10.000_01)
+            )
+        ]
+        XCTAssertEqual(
+            ProfilePlaceCollectionMapClusterActivationResolver.activation(
+                for: distinctCluster,
+                coordinatesByID: highLatitudeCoordinates,
+                visibleRegion: MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 60, longitude: 10),
+                    span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0042)
+                ),
+                viewportSize: CGSize(width: 390, height: 280)
+            ),
+            .open("a")
+        )
+    }
+
+    func testUnseparableClusterAccessibilityNamesTheOpenedPlace() {
+        let accessibility = ProfilePlaceCollectionMapClusterAccessibility.presentation(
+            count: 3,
+            activation: .open("a"),
+            destinationName: "Mutsu"
+        )
+
+        XCTAssertEqual(accessibility.label, "Mutsu, one of 3 saved places at this location")
+        XCTAssertEqual(
+            accessibility.hint,
+            "Shows Mutsu details. Every place remains in the list below."
+        )
+    }
+
+    func testCameraLifecycleReappliesOverviewAfterAvailabilityCycle() {
+        var lifecycle = ProfilePlaceCollectionMapCameraLifecycle(hasOverviewRegion: true)
+
+        XCTAssertFalse(lifecycle.reconcileOverview(isAvailable: true))
+        XCTAssertFalse(lifecycle.hasAppliedViewportFit)
+        lifecycle.markViewportFitApplied()
+        XCTAssertTrue(lifecycle.hasAppliedViewportFit)
+
+        XCTAssertFalse(lifecycle.reconcileOverview(isAvailable: false))
+        XCTAssertFalse(lifecycle.hasAppliedOverviewRegion)
+        XCTAssertFalse(lifecycle.hasAppliedViewportFit)
+
+        XCTAssertTrue(lifecycle.reconcileOverview(isAvailable: true))
+        XCTAssertTrue(lifecycle.hasAppliedOverviewRegion)
+        XCTAssertFalse(lifecycle.hasAppliedViewportFit)
+
+        XCTAssertFalse(lifecycle.reconcileOverview(isAvailable: false))
+        lifecycle.markViewportFitApplied()
+        XCTAssertFalse(lifecycle.reconcileOverview(isAvailable: true))
+        XCTAssertTrue(lifecycle.hasAppliedOverviewRegion)
+        XCTAssertTrue(lifecycle.hasAppliedViewportFit)
+    }
+
+    private func profile(id: String) -> LocalProfile {
+        LocalProfile(
+            localID: "local-\(id)",
+            serverID: id,
+            handle: id,
+            displayName: id.capitalized,
+            syncState: .synced
+        )
+    }
+
+    private func visiblePlace(
+        owner: LocalProfile,
+        userPlaceID: String,
+        placeLocalID: String,
+        placeServerID: String?,
+        name: String,
+        address: String? = nil,
+        latitude: Double,
+        longitude: Double,
+        status: PlaceStatus
+    ) -> VisiblePlace {
+        let place = LocalPlace(
+            localID: placeLocalID,
+            serverID: placeServerID,
+            canonicalName: name,
+            category: WanderPlaceCategory.restaurantsFood,
+            address: address,
+            locality: "Los Angeles",
+            country: "United States",
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: placeServerID ?? placeLocalID,
+            syncState: placeServerID == nil ? .localOnly : .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: userPlaceID,
+            serverID: "server-\(userPlaceID)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            sourceType: "test",
+            syncState: .synced
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
     }
 }
