@@ -14748,3 +14748,175 @@ Instagram relevance and geographic-resolution publication, 2026-07-21 12:06 PDT:
   waiting on `Unlock Ry’s iPhone to Continue`. The project/branch and pending
   run are intentionally left open so Ryan can unlock the phone and test. Do not
   claim a fresh device launch until that lock-screen gate completes.
+
+## 2026-07-21 16:09 PDT - Codex - REC-106 100-place Instagram guide regression
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-106-instagram-carousel`
+Worktree: `/private/tmp/recme-rec106-instagram-carousel`
+Linear: `REC-106` (reopened as `In Progress`, priority raised to Urgent)
+PR: https://github.com/joelipshutz/wander/pull/137
+
+Goal: reproduce and fix the exact public Instagram guide at
+`https://www.instagram.com/p/DU6kxigDOD-/`, which explicitly lists 100 coffee
+shops with geographic context but produced only 24 review rows, including
+neighboring entries merged into malformed names.
+
+Starting status:
+
+- Fetched `origin`; this isolated branch is synchronized with its remote at
+  `c422dcd3a`. The only worktree changes are two untracked REC-106 DerivedData
+  directories from prior green validation. They will remain untracked and will
+  not be removed or committed. The main checkout has unrelated user/agent
+  changes on `codex/rec-88-visit-friends-mockup`; no files there will be edited.
+- Reviewed the supplied 16:05 physical-device screenshot. It proves the failure
+  begins before MapKit: entries such as `NOMADIC SPECIALTY COFFEE / EGYPT` and
+  `CASA CANELA / VENEZUELA` are fused into one import hint, and other rows lose
+  their supplied country boundary. Apple Maps cannot reliably resolve corrupted
+  candidate names, and repeated lookups can then hit provider limits.
+- REC-106 now records the exact URL, malformed examples, observed 24/100 count,
+  and acceptance criteria: preserve all 100 ordered entries as distinct hints,
+  retain source geography, avoid cross-entry fusion, keep ordinary no-match
+  rows honest, and verify the full path with a production-faithful golden
+  fixture before returning the build to Xcode.
+- Investigation will trace live carousel/media discovery, per-slide OCR line
+  ordering, delimiter and candidate segmentation, hint/search caps, MapKit
+  request scheduling/throttling, and persistence. No Swift edit will be made
+  until the exact fixture reproduces the 24-row truncation and fused names.
+- Expected implementation scope is
+  `Wander/Services/SocialPlaceImportMetadata.swift`,
+  `Wander/Services/PlaceImportStore.swift`, related import parsing/matching
+  services as evidence requires, `WanderTests/PlaceImportTests.swift`, fixture
+  resources, and this log. `project.yml`, schema/RLS, auth, release metadata,
+  and unrelated product surfaces are out of scope.
+
+Investigation checkpoint, 2026-07-21 16:47 PDT:
+
+- Reproduced the public source outside the app with the same anonymous iPhone
+  request shape. Instagram returned the complete post and exactly two original
+  1440 x 1795 carousel images. The caption and accessibility text contain none
+  of the shop names; ranks 1-50 are rasterized in slide one and ranks 51-100 in
+  slide two.
+- The exact 24-row device result is deterministic: the embedded parser chooses
+  each 513 x 640 `display_uri` before the original image candidate; generic OCR
+  emits at most 12 search queries per slide; `socialResolution` requests a
+  global maximum of 24 hints; and the extractor then returns `prefix(24)`.
+- The malformed rows have a separate confirmed cause. Vision bounding boxes are
+  discarded, adjacent flattened lines are blindly concatenated across a dense
+  two-column layout, and `NAME / COUNTRY` is not a recognized import schema.
+  Full-resolution Vision OCR on isolated columns recovered 25 + 25 rows from
+  slide one and 25 + 25 from slide two, including wrapped entries such as Ditta
+  Artigianale, Momos, and Casa Barista, proving all 100 rows are available.
+- MapKit is downstream of extraction and must not be asked to repair corrupted
+  names. It also cannot safely receive a foreground burst of 100 searches; the
+  prior physical-device run observed throttling near 50 searches per minute.
+  The implementation will therefore persist all explicit source rows first and
+  enrich large guide rows through one shared paced automatic queue. Explicit
+  user searches remain immediate.
+- The bounded implementation stays within five files including this log:
+  `SocialPlaceImportMetadata.swift` for full-resolution selection, geometry-
+  aware guide OCR, slash-country parsing, and country normalization;
+  `PlaceImportStore.swift` for durable 100-row expansion, pacing, and country-
+  compatible candidates; `PlaceImportModels.swift` for resolver version 7;
+  `PlaceImportTests.swift` for the exact 100-row regression; and this log.
+  OpenAI is not required for this deterministic guide layout, and no client API
+  key or unrelated server architecture will be added in this patch.
+
+Implementation and validation checkpoint, 2026-07-21 17:12 PDT:
+
+- Implemented full-resolution Instagram media selection instead of preferring
+  the 513 x 640 `display_uri`. Dense guide OCR now retains Vision geometry,
+  isolates the two columns, reconstructs wrapped name/country fragments, and
+  parses explicit `NAME / COUNTRY` rows without the generic adjacent-line
+  heuristic fusing neighboring entries.
+- Added country-name/ISO normalization and hard rejection of MapKit candidates
+  from a conflicting explicit country. U.S. state areas are evaluated first so
+  values such as `CA` remain California rather than becoming Canada. This edge
+  case was caught by the complete import suite before publication.
+- Raised the extraction budget to 150, but do not issue a 100-request MapKit
+  burst. Guides larger than 24 entries expand into durable ordered rows first.
+  The store then enriches those queued social rows through one shared automatic
+  lookup pacer at 1.5 seconds between starts (40/minute); explicit user searches
+  bypass the pacer and remain immediate.
+- Bumped the social resolver version from 6 to 7 so prior REC-106 imports are
+  collapsed back to their source URL and reprocessed rather than remaining
+  stuck with the old truncated/corrupted result.
+- Ran the production Vision recognizer against the exact two original 1440 x
+  1795 images from `DU6kxigDOD-`. It reconstructed 100 ordered shops and all 100
+  country values. Vision normalized two accents (`CAFÉ` to `CAFE`), which the
+  existing matcher intentionally treats as equivalent. The temporary
+  absolute-path test used for this live verification was removed; no downloaded
+  Instagram asset or local path is part of the branch.
+- Permanent regression coverage includes the complete ordered 100-shop golden
+  list, durable 100-row expansion before any map request, persistence/order and
+  batch counts, full-resolution media choice, split/wrapped row geometry,
+  wrong-country rejection, and the existing small-post behavior.
+- Validation after the final state/country fix:
+  - `SocialPlaceImportMetadataTests`: 40/40 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_16-54-51--0700.xcresult`.
+  - Complete import regression set: 79/79 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-03-24--0700.xcresult`.
+  - Full `WanderTests`: 514/514 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-04-07--0700.xcresult`.
+  - Generic iOS Simulator build completed with `** BUILD SUCCEEDED **`.
+  - One temporary live-image retry caused the iOS Simulator test runner to exit
+    after the earlier Vision stress runs. `simctl shutdown all` restored the
+    runtime; the focused regression, 79-test import suite, 514-test full suite,
+    and generic build all passed afterward. This was simulator infrastructure,
+    not an app assertion or compile failure.
+- OpenAI is deliberately not used for this exact guide. Its source has a
+  deterministic two-column schema and all 100 names/countries are present in
+  pixels; adding a client API key would introduce security, latency, cost, and
+  hallucination risk without addressing the confirmed truncation/geometry bug.
+  Server-side relevance classification for ambiguous prose remains separate
+  REC-120/REC-97 architecture work.
+- Changed files remain limited to
+  `PlaceImportModels.swift`, `PlaceImportStore.swift`,
+  `SocialPlaceImportMetadata.swift`, `PlaceImportTests.swift`, and this log.
+  `DerivedData-rec106*` remains untracked and must not be staged. PR #137 is the
+  durable review link; the branch will be updated from latest `origin/main`,
+  committed, pushed, and reopened in Xcode for physical-device testing.
+
+Reviewer-hardening checkpoint, 2026-07-21 17:31 PDT:
+
+- Independent review identified and the implementation now fixes four
+  downstream correctness gaps before publication: concurrent automatic batches
+  cannot burst through the MapKit pacer; manual searches jump ahead of a
+  100-row automatic backlog and return when that row finishes rather than when
+  the entire batch finishes; manual-search intent is persisted across app
+  termination; and an explicit country rejects candidates whose country is
+  conflicting, missing, or unrecognized.
+- The pacer records the last actual grant and rechecks spacing after every
+  suspension, preserving its 1.5-second minimum even when multiple waiters wake
+  together after app suspension. A cancelled waiter does not consume a slot.
+  Manual priority and relaunch behavior are durable through the optional
+  `pendingManualSearch` item field; synthesized Codable keeps old v1 snapshots
+  backward compatible when that key is absent.
+- All 100 guide children keep the pasted Instagram URL's original source line.
+  Stable store offsets keep those children contiguous ahead of the next pasted
+  URL rather than synthesizing source-line values that collide and interleave
+  with later sources.
+- Added the 10.5 KB text-only fixture
+  `WanderTests/Fixtures/rec-106-guide-observations.tsv`, containing 191 real
+  Vision strings and normalized bounding boxes captured from the four columns
+  of the supplied two slides. It contains no Instagram pixels. The permanent
+  regression passes those noisy observations through the production geometry
+  parser and asserts all 100 ordered names/countries, including wrapped and
+  split rows. Ran `xcodegen generate` so the generated Xcode project bundles the
+  fixture; the four-line project change is intentional.
+- Focused reviewer regressions passed on the available iPhone 17 / iOS 26.5
+  simulator:
+  - 5/5 guide expansion/manual priority/pacer/country tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-23-31--0700.xcresult`.
+  - 4/4 captured-geometry/manual durability/pacer tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-27-39--0700.xcresult`.
+  - 3/3 pre-lookup persistence/relaunch, multi-source ordering, and exact
+    geometry tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-29-24--0700.xcresult`.
+  - Complete import regression suite: 84/84 passed at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-31-11--0700.xcresult`.
+- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator became unavailable
+  after the local Xcode runtime update; the prior complete 514-test pass ran on
+  that destination before it disappeared, and current focused validation uses
+  the installed iPhone 17 / iOS 26.5 runtime. A fresh complete import/full suite
+  and build will run again after integrating latest `origin/main`.

@@ -1,6 +1,37 @@
 import CoreLocation
 import Foundation
 
+actor SocialImportAutomaticLookupPacer {
+    static let shared = SocialImportAutomaticLookupPacer()
+
+    private let minimumInterval: Duration
+    private let clock = ContinuousClock()
+    private var lastGrant: ContinuousClock.Instant?
+
+    init(minimumInterval: Duration = .milliseconds(1_500)) {
+        self.minimumInterval = minimumInterval
+    }
+
+    func waitForTurn() async throws {
+        while true {
+            try Task.checkCancellation()
+            let now = clock.now
+            if let lastGrant {
+                let earliestGrant = lastGrant.advanced(by: minimumInterval)
+                if now < earliestGrant {
+                    try await clock.sleep(until: earliestGrant)
+                    // Recheck after every suspension. Multiple callers—or an app
+                    // resume after all deadlines elapsed—must not pass together.
+                    continue
+                }
+            }
+            // Record only an actual grant. A cancelled waiter never consumes a slot.
+            lastGrant = now
+            return
+        }
+    }
+}
+
 struct PlaceImportResolvedEntry: Equatable {
     let seed: PlaceImportSeed
     let candidates: [PlaceCandidate]
@@ -36,6 +67,9 @@ extension PlaceImportResolving {
 
 @MainActor
 final class DevicePlaceImportResolver: PlaceImportResolving {
+    private static let maximumExtractedSocialHints = 150
+    private static let maximumImmediateSocialLookups = 24
+
     private struct SocialMediaRecognition {
         let recognizedTexts: [String]
         let attemptedCount: Int
@@ -63,6 +97,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         if let name = normalized(seed.nameHint) {
             if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
                 return await googleSeedResolution(seed, name: name)
+            }
+            if [.instagram, .tiktok].contains(source), seed.sourceURLString != nil {
+                try await SocialImportAutomaticLookupPacer.shared.waitForTurn()
             }
             return try await manualResolution(
                 name: name,
@@ -134,8 +171,30 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         let hints = SocialPlaceHintExtractor.hints(
             from: metadata,
             recognizedTexts: recognition.recognizedTexts,
-            limit: 24
+            limit: Self.maximumExtractedSocialHints
         )
+
+        let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
+        if durableHints.count > Self.maximumImmediateSocialLookups {
+            let expandedSeeds = durableHints.map { hint in
+                socialSeed(
+                    from: seed,
+                    hint: hint,
+                    candidate: nil,
+                    // Keep the expanded rows at their source link's line. The
+                    // store's stable array order keeps the guide contiguous and
+                    // avoids collisions with subsequent pasted links.
+                    sourceLine: seed.sourceLine
+                )
+            }
+            let discoveredMediaCount = metadata.mediaItems.isEmpty
+                ? (metadata.thumbnailURL == nil ? 0 : 1)
+                : metadata.mediaItems.count
+            WanderDebugLog.imports.notice(
+                "social guide expansion source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) durable_row_count=\(expandedSeeds.count, privacy: .public) deferred_lookup_count=\(expandedSeeds.count, privacy: .public)"
+            )
+            return .expanded(expandedSeeds, sourceName: nil)
+        }
 
         var entries: [PlaceImportResolvedEntry] = []
         var seenResolvedCandidates = Set<String>()
@@ -149,13 +208,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var lookupFailureCount = 0
         for hint in hints {
             try Task.checkCancellation()
-            let candidates: [PlaceCandidate]
+            let fetchedCandidates: [PlaceCandidate]
             do {
-                candidates = try await placeResolver.resolveManualEntry(
+                fetchedCandidates = try await placeResolver.resolveManualEntry(
                     ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
                 )
             } catch PlaceResolutionError.noCandidates {
-                candidates = []
+                fetchedCandidates = []
             } catch {
                 try Task.checkCancellation()
                 lookupFailureCount += 1
@@ -173,6 +232,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 continue
             }
             try Task.checkCancellation()
+            let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
+                fetchedCandidates,
+                areaHint: hint.area
+            )
             guard !candidates.isEmpty else {
                 noCandidateCount += 1
                 if !appendUnresolvedSocialHint(
@@ -350,8 +413,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         preserveUnselectedCandidates: Bool = false
     ) async throws -> PlaceImportResolution {
         do {
-            let candidates = try await placeResolver.resolveManualEntry(
-                ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+            let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
+                try await placeResolver.resolveManualEntry(
+                    ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+                ),
+                areaHint: area
             )
             let match = PlaceImportCandidateMatcher.match(
                 candidates,
@@ -492,14 +558,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     private func socialSeed(
         from original: PlaceImportSeed,
         hint: SocialPlaceSearchHint,
-        candidate: PlaceCandidate?
+        candidate: PlaceCandidate?,
+        sourceLine: Int? = nil
     ) -> PlaceImportSeed {
         PlaceImportSeed(
             rawText: original.rawText,
             nameHint: hint.name,
             areaHint: candidate?.address ?? hint.area,
             sourceURLString: original.sourceURLString,
-            sourceLine: original.sourceLine,
+            sourceLine: sourceLine ?? original.sourceLine,
             latitude: candidate?.latitude,
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
@@ -627,7 +694,6 @@ final class PlaceImportStore: ObservableObject {
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
     private var processingTasks: [String: Task<Void, Never>] = [:]
-    private var manualSearchItemIDs = Set<String>()
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
     init(
@@ -694,6 +760,7 @@ final class PlaceImportStore: ObservableObject {
             upgraded.helpMessage = nil
             upgraded.duplicateUserPlaceID = nil
             upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
+            upgraded.pendingManualSearch = nil
             return upgraded
         }
         return LoadedItemUpgrade(
@@ -770,7 +837,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].candidates.contains(where: { $0.id == candidateID })
         else { return }
-        manualSearchItemIDs.remove(itemID)
+        items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
         items[index].state = .ready
         items[index].helpMessage = nil
@@ -780,7 +847,7 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
-        manualSearchItemIDs.remove(itemID)
+        items[index].pendingManualSearch = nil
         items[index].state = .queued
         items[index].candidates = []
         items[index].selectedCandidateID = nil
@@ -798,10 +865,10 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func search(itemID: String, name: String, area: String?) async -> PlaceImportManualSearchOutcome {
-        guard let batchID = queueManualSearch(itemID: itemID, name: name, area: area) else {
+        guard queueManualSearch(itemID: itemID, name: name, area: area) != nil else {
             return .failed("Enter a place name before searching.")
         }
-        await waitForProcessing(batchID: batchID)
+        await waitForResolution(itemID: itemID)
         guard let item = item(id: itemID) else {
             return .failed("This import is no longer available.")
         }
@@ -847,7 +914,7 @@ final class PlaceImportStore: ObservableObject {
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
-        manualSearchItemIDs.insert(itemID)
+        items[index].pendingManualSearch = true
         let batchID = items[index].batchID
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
@@ -856,7 +923,7 @@ final class PlaceImportStore: ObservableObject {
 
     func markSaved(itemID: String, userPlaceID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
-        manualSearchItemIDs.remove(itemID)
+        items[index].pendingManualSearch = nil
         items[index].state = .saved
         items[index].savedUserPlaceID = userPlaceID
         items[index].duplicateUserPlaceID = nil
@@ -869,7 +936,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
             return
         }
-        manualSearchItemIDs.remove(itemID)
+        items[index].pendingManualSearch = nil
         items[index].state = .dismissed
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
@@ -878,8 +945,6 @@ final class PlaceImportStore: ObservableObject {
     func cancel(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
-        let batchItemIDs = Set(items.lazy.filter { $0.batchID == batchID }.map(\.id))
-        manualSearchItemIDs.subtract(batchItemIDs)
         let upgradePlaceholderIDs = replacedSocialItemsByPlaceholderID.compactMap { placeholderID, oldItems in
             oldItems.first?.batchID == batchID ? placeholderID : nil
         }
@@ -889,6 +954,7 @@ final class PlaceImportStore: ObservableObject {
         }
         for index in items.indices where items[index].batchID == batchID && [.queued, .resolving].contains(items[index].state) {
             items[index].state = .dismissed
+            items[index].pendingManualSearch = nil
             items[index].updatedAt = .now
         }
         if let index = batches.firstIndex(where: { $0.id == batchID }) {
@@ -901,8 +967,6 @@ final class PlaceImportStore: ObservableObject {
     func deleteBatch(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
-        let batchItemIDs = Set(items.lazy.filter { $0.batchID == batchID }.map(\.id))
-        manualSearchItemIDs.subtract(batchItemIDs)
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
             $0.value.first?.batchID != batchID
         }
@@ -916,7 +980,6 @@ final class PlaceImportStore: ObservableObject {
             task.cancel()
         }
         processingTasks.removeAll()
-        manualSearchItemIDs.removeAll()
         replacedSocialItemsByPlaceholderID.removeAll()
         items.removeAll()
         batches.removeAll()
@@ -962,6 +1025,14 @@ final class PlaceImportStore: ObservableObject {
         await processingTasks[batchID]?.value
     }
 
+    private func waitForResolution(itemID: String) async {
+        while !Task.isCancelled,
+              let item = item(id: itemID),
+              [.queued, .resolving].contains(item.state) {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     private func startProcessing(batchID: String) {
         guard processingTasks[batchID] == nil,
               items.contains(where: { $0.batchID == batchID && $0.state == .queued })
@@ -974,13 +1045,13 @@ final class PlaceImportStore: ObservableObject {
 
     private func process(batchID: String) async {
         while !Task.isCancelled,
-              let index = items.firstIndex(where: { $0.batchID == batchID && $0.state == .queued }) {
+              let index = nextQueuedItemIndex(batchID: batchID) {
             items[index].state = .resolving
             items[index].updatedAt = .now
             let itemID = items[index].id
             let seed = items[index].seed
             let source = items[index].source
-            let isManualSearch = manualSearchItemIDs.remove(itemID) != nil
+            let isManualSearch = items[index].pendingManualSearch == true
             let isSocialUpgrade = replacedSocialItemsByPlaceholderID[itemID] != nil
             // Keep the pre-upgrade snapshot durable until its network-dependent refresh succeeds.
             synchronizeBatch(batchID, persist: !isSocialUpgrade)
@@ -1013,6 +1084,7 @@ final class PlaceImportStore: ObservableObject {
                     // A transient metadata failure must not erase previously useful rows.
                 } else {
                     replacedSocialItemsByPlaceholderID[itemID] = nil
+                    items[resolvedIndex].pendingManualSearch = nil
                     apply(resolution, at: resolvedIndex)
                 }
             } catch {
@@ -1028,6 +1100,7 @@ final class PlaceImportStore: ObservableObject {
                 }
                 if !restoreReplacedSocialItems(placeholderID: itemID, at: failedIndex) {
                     items[failedIndex].state = .failed
+                    items[failedIndex].pendingManualSearch = nil
                     items[failedIndex].helpMessage = error.localizedDescription
                     items[failedIndex].updatedAt = .now
                 }
@@ -1037,6 +1110,14 @@ final class PlaceImportStore: ObservableObject {
         }
         processingTasks[batchID] = nil
         synchronizeBatch(batchID)
+    }
+
+    private func nextQueuedItemIndex(batchID: String) -> Int? {
+        items.firstIndex(where: {
+            $0.batchID == batchID && $0.state == .queued && $0.pendingManualSearch == true
+        }) ?? items.firstIndex(where: {
+            $0.batchID == batchID && $0.state == .queued
+        })
     }
 
     @discardableResult

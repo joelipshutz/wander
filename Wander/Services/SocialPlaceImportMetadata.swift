@@ -462,19 +462,22 @@ enum InstagramEmbeddedPostParser {
     }
 
     private static func imageURL(from media: [String: Any]) -> URL? {
-        if let url = validatedHTTPSURL(media["display_uri"]) {
-            return url
+        if let versions = media["image_versions2"] as? [String: Any],
+           let candidates = versions["candidates"] as? [Any] {
+            let largestCandidate = candidates.compactMap { candidate -> (url: URL, pixels: Int)? in
+                guard let dictionary = candidate as? [String: Any],
+                      let url = validatedHTTPSURL(dictionary["url"])
+                else { return nil }
+                let width = dictionary["width"] as? Int ?? 0
+                let height = dictionary["height"] as? Int ?? 0
+                return (url, width * height)
+            }
+            .max { lhs, rhs in lhs.pixels < rhs.pixels }
+            if let largestCandidate {
+                return largestCandidate.url
+            }
         }
-        guard let versions = media["image_versions2"] as? [String: Any],
-              let candidates = versions["candidates"] as? [Any]
-        else { return nil }
-        for candidate in candidates {
-            guard let dictionary = candidate as? [String: Any],
-                  let url = validatedHTTPSURL(dictionary["url"])
-            else { continue }
-            return url
-        }
-        return nil
+        return validatedHTTPSURL(media["display_uri"])
     }
 
     private static func validatedHTTPSURL(_ value: Any?) -> URL? {
@@ -489,6 +492,273 @@ enum InstagramEmbeddedPostParser {
 @MainActor
 protocol SocialThumbnailTextRecognizing: Sendable {
     func recognizedText(at url: URL) async -> String?
+}
+
+struct SocialTextObservation: Equatable {
+    let text: String
+    let boundingBox: CGRect
+}
+
+enum SocialImportCountry {
+    static func isoCode(for value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return nil }
+        return countryCodesByName[normalized(value)]
+    }
+
+    static func candidatesCompatibleWithExactCountry(
+        _ candidates: [PlaceCandidate],
+        areaHint: String?
+    ) -> [PlaceCandidate] {
+        guard let areaHint,
+              !areaHint.contains(","),
+              PlaceImportGeography.stateCode(in: areaHint) == nil,
+              normalized(areaHint) != "georgia",
+              let expectedCode = isoCode(for: areaHint)
+        else { return candidates }
+
+        return candidates.filter { candidate in
+            guard let candidateCode = isoCode(for: candidate.country) else { return false }
+            return candidateCode == expectedCode
+        }
+    }
+
+    private static let countryCodesByName: [String: String] = {
+        var result: [String: String] = [:]
+        let locale = Locale(identifier: "en_US_POSIX")
+        for region in Locale.Region.isoRegions {
+            let code = region.identifier
+            result[normalized(code)] = code
+            if let name = locale.localizedString(forRegionCode: code) {
+                result[normalized(name)] = code
+            }
+        }
+        let aliases = [
+            "usa": "US",
+            "unitedstatesofamerica": "US",
+            "uae": "AE",
+            "thephilippines": "PH",
+            "china": "CN",
+            "republicofkorea": "KR",
+            "southkorea": "KR",
+            "czechrepublic": "CZ",
+            "turkey": "TR",
+            "vietnam": "VN",
+            "bolivia": "BO",
+            "venezuela": "VE",
+            "tanzania": "TZ",
+            "russia": "RU",
+            "iran": "IR",
+            "syria": "SY",
+            "laos": "LA",
+            "moldova": "MD",
+            "brunei": "BN",
+            "capeverde": "CV",
+            "ivorycoast": "CI"
+        ]
+        for (name, code) in aliases {
+            result[name] = code
+        }
+        return result
+    }()
+
+    private static func normalized(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+enum SocialGuideTextParser {
+    private struct WorkingRow {
+        var name: String
+        var area: String
+        let observation: SocialTextObservation
+    }
+
+    static func components(from line: String) -> (name: String, area: String)? {
+        guard let components = rawComponents(from: line),
+              SocialImportCountry.isoCode(for: components.area) != nil
+        else { return nil }
+        return components
+    }
+
+    static func rows(from observations: [SocialTextObservation]) -> [String] {
+        var consumedContinuationIndices = Set<Int>()
+        var workingRows = observations.enumerated().compactMap { index, observation -> WorkingRow? in
+            if let components = rawComponents(from: observation.text) {
+                return WorkingRow(
+                    name: components.name,
+                    area: components.area,
+                    observation: observation
+                )
+            }
+            guard let area = slashOnlyArea(from: observation.text) else { return nil }
+            let maximumDistance = max(0.026, observation.boundingBox.height * 2)
+            let nameFragments = observations.enumerated()
+                .filter { candidateIndex, candidate in
+                    candidateIndex != index
+                        && !candidate.text.contains("/")
+                        && candidate.boundingBox.minX < observation.boundingBox.minX
+                        && abs(candidate.boundingBox.midY - observation.boundingBox.midY) <= maximumDistance
+                        && isPossibleContinuation(cleanedLine(candidate.text))
+                }
+                .sorted { observationOrder($0.element, $1.element) }
+            guard !nameFragments.isEmpty else { return nil }
+            consumedContinuationIndices.formUnion(nameFragments.map { $0.offset })
+            return WorkingRow(
+                name: nameFragments.map { cleanedLine($0.element.text) }.joined(separator: " "),
+                area: area,
+                observation: observation
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.observation.boundingBox.midY != rhs.observation.boundingBox.midY {
+                return lhs.observation.boundingBox.midY > rhs.observation.boundingBox.midY
+            }
+            return lhs.observation.boundingBox.minX < rhs.observation.boundingBox.minX
+        }
+        guard !workingRows.isEmpty else { return [] }
+
+        var continuations = Array(repeating: [SocialTextObservation](), count: workingRows.count)
+        for (index, observation) in observations.enumerated()
+        where !observation.text.contains("/") && !consumedContinuationIndices.contains(index) {
+            let text = cleanedLine(observation.text)
+            guard isPossibleContinuation(text) else { continue }
+            guard let nearestIndex = workingRows.indices.min(by: { lhs, rhs in
+                abs(workingRows[lhs].observation.boundingBox.midY - observation.boundingBox.midY)
+                    < abs(workingRows[rhs].observation.boundingBox.midY - observation.boundingBox.midY)
+            }) else { continue }
+            let row = workingRows[nearestIndex]
+            let distance = abs(row.observation.boundingBox.midY - observation.boundingBox.midY)
+            let maximumDistance = max(0.02, row.observation.boundingBox.height * 1.35)
+            guard distance <= maximumDistance else { continue }
+            continuations[nearestIndex].append(observation)
+        }
+
+        for index in workingRows.indices {
+            let continuationTexts = continuations[index]
+                .sorted(by: observationOrder)
+                .map { cleanedLine($0.text) }
+            let countryIndices = countryContinuationIndices(
+                area: workingRows[index].area,
+                continuations: continuationTexts
+            )
+            for (continuationIndex, text) in continuationTexts.enumerated() {
+                if countryIndices.contains(continuationIndex) {
+                    workingRows[index].area = joined(workingRows[index].area, text)
+                } else {
+                    workingRows[index].name = joined(workingRows[index].name, text)
+                }
+            }
+        }
+
+        return workingRows.compactMap { row in
+            guard SocialImportCountry.isoCode(for: row.area) != nil else { return nil }
+            return "\(row.name) / \(row.area)"
+        }
+    }
+
+    private static func rawComponents(from line: String) -> (name: String, area: String)? {
+        let value = cleanedLine(line)
+        guard let slashRange = value.range(of: "/", options: .backwards),
+              let name = String(value[..<slashRange.lowerBound]).trimmedNil,
+              let area = String(value[slashRange.upperBound...]).trimmedNil
+        else { return nil }
+        return (name, area)
+    }
+
+    private static func slashOnlyArea(from line: String) -> String? {
+        let value = cleanedLine(line)
+        guard value.hasPrefix("/"),
+              let area = String(value.dropFirst()).trimmedNil,
+              area.rangeOfCharacter(from: .letters) != nil,
+              area == area.uppercased()
+        else { return nil }
+        return area
+    }
+
+    private static func cleanedLine(_ rawValue: String) -> String {
+        rawValue
+            .replacingOccurrences(of: "•", with: "·")
+            .replacingOccurrences(
+                of: #"(?i)\s+NEW\s+ENTRY\s*$"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"^\s*[$#]?\d{1,3}[.)]?\s+"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isPossibleContinuation(_ value: String) -> Bool {
+        guard !value.isEmpty,
+              value.rangeOfCharacter(from: .letters) != nil,
+              value == value.uppercased()
+        else { return false }
+        let normalized = value.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        ).uppercased()
+        let lettersOnly = normalized.filter(\.isLetter)
+        return !entryFragments.contains(lettersOnly)
+            && !normalized.contains("NEW ENTRY")
+            && !normalized.contains("SPONSORED")
+            && !normalized.contains("BEST COFFEE SHOP")
+            && !normalized.contains("CAFETEROS DE COLOMBIA")
+    }
+
+    private static func countryContinuationIndices(
+        area: String,
+        continuations: [String]
+    ) -> Set<Int> {
+        if SocialImportCountry.isoCode(for: area) != nil {
+            return []
+        }
+        let searchableCount = min(continuations.count, 8)
+        guard searchableCount > 0 else { return [] }
+        let masks = (1..<(1 << searchableCount)).sorted { lhs, rhs in
+            if lhs.nonzeroBitCount != rhs.nonzeroBitCount {
+                return lhs.nonzeroBitCount < rhs.nonzeroBitCount
+            }
+            return lhs < rhs
+        }
+        for mask in masks {
+            let indices = (0..<searchableCount).filter { mask & (1 << $0) != 0 }
+            let candidate = indices.reduce(area) { partial, index in
+                joined(partial, continuations[index])
+            }
+            if SocialImportCountry.isoCode(for: candidate) != nil {
+                return Set(indices)
+            }
+        }
+        return []
+    }
+
+    private static func joined(_ first: String, _ second: String) -> String {
+        [first, second]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    private static func observationOrder(
+        _ lhs: SocialTextObservation,
+        _ rhs: SocialTextObservation
+    ) -> Bool {
+        if lhs.boundingBox.midY != rhs.boundingBox.midY {
+            return lhs.boundingBox.midY > rhs.boundingBox.midY
+        }
+        return lhs.boundingBox.minX < rhs.boundingBox.minX
+    }
+
+    private static let entryFragments: Set<String> = [
+        "ENTRY", "INTRY", "ITRY", "NTRY", "TRY"
+    ]
 }
 
 @MainActor
@@ -516,18 +786,48 @@ final class VisionSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing 
                   let image = UIImage(data: data),
                   let cgImage = image.cgImage
             else { return nil }
-            let request = VNRecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            let handler = VNImageRequestHandler(
-                cgImage: cgImage,
-                orientation: cgImageOrientation(for: image.imageOrientation),
-                options: [:]
-            )
-            try? handler.perform([request])
+            let orientation = cgImageOrientation(for: image.imageOrientation)
+            let fullObservations = socialTextObservations(in: cgImage, orientation: orientation)
             guard !Task.isCancelled else { return nil }
-            let text = (request.results ?? [])
-                .compactMap { $0.topCandidates(1).first?.string }
+
+            var guideRows: [String] = []
+            if orientation == .up {
+                let leftRows = SocialGuideTextParser.rows(
+                    from: fullObservations.filter { $0.boundingBox.midX < 0.5 }
+                )
+                let rightRows = SocialGuideTextParser.rows(
+                    from: fullObservations.filter { $0.boundingBox.midX >= 0.5 }
+                )
+                guideRows = leftRows + rightRows
+
+                if guideRows.count >= 12,
+                   let cropRectangles = denseGuideCropRectangles(
+                       for: cgImage,
+                       observations: fullObservations
+                   ) {
+                    let croppedRows = cropRectangles.flatMap { rectangle -> [String] in
+                        guard let croppedImage = cgImage.cropping(to: rectangle) else { return [] }
+                        return SocialGuideTextParser.rows(
+                            from: socialTextObservations(in: croppedImage, orientation: .up)
+                        )
+                    }
+                    if croppedRows.count >= guideRows.count {
+                        guideRows = croppedRows
+                    }
+                }
+            }
+
+            if guideRows.count >= 12 {
+                return guideRows.joined(separator: "\n")
+            }
+            let text = fullObservations
+                .sorted { lhs, rhs in
+                    if lhs.boundingBox.midY != rhs.boundingBox.midY {
+                        return lhs.boundingBox.midY > rhs.boundingBox.midY
+                    }
+                    return lhs.boundingBox.minX < rhs.boundingBox.minX
+                }
+                .map(\.text)
                 .joined(separator: "\n")
             return text.trimmedNil
         }
@@ -537,6 +837,53 @@ final class VisionSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing 
             recognitionTask.cancel()
         }
     }
+}
+
+private func socialTextObservations(
+    in image: CGImage,
+    orientation: CGImagePropertyOrientation
+) -> [SocialTextObservation] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    let handler = VNImageRequestHandler(cgImage: image, orientation: orientation, options: [:])
+    try? handler.perform([request])
+    return (request.results ?? []).compactMap { observation in
+        guard let text = observation.topCandidates(1).first?.string.trimmedNil else { return nil }
+        return SocialTextObservation(text: text, boundingBox: observation.boundingBox)
+    }
+}
+
+private func denseGuideCropRectangles(
+    for image: CGImage,
+    observations: [SocialTextObservation]
+) -> [CGRect]? {
+    let rowBoxes = observations
+        .filter { $0.text.contains("/") }
+        .map(\.boundingBox)
+    guard rowBoxes.count >= 12,
+          let minimumY = rowBoxes.map(\.minY).min(),
+          let maximumY = rowBoxes.map(\.maxY).max()
+    else { return nil }
+
+    let width = CGFloat(image.width)
+    let height = CGFloat(image.height)
+    let paddedTop = max(0, 1 - maximumY - 0.035)
+    let paddedBottom = min(1, 1 - minimumY + 0.035)
+    let snappedTop = (paddedTop * 100).rounded(.up) / 100
+    let snappedBottom = (paddedBottom * 100).rounded(.down) / 100
+    let top = snappedBottom - snappedTop >= 0.35 ? snappedTop : paddedTop
+    let bottom = snappedBottom - snappedTop >= 0.35 ? snappedBottom : paddedBottom
+    guard bottom - top >= 0.35 else { return nil }
+
+    let y = floor(height * top)
+    let cropHeight = floor(height * (bottom - top))
+    let half = floor(width * 0.5)
+    let overlap = floor(width * 0.025)
+    return [
+        CGRect(x: 0, y: y, width: half + overlap, height: cropHeight).integral,
+        CGRect(x: half - overlap, y: y, width: width - half + overlap, height: cropHeight).integral
+    ]
 }
 
 struct SocialPlaceSearchHint: Equatable {
@@ -594,7 +941,7 @@ enum SocialPlaceHintExtractor {
     static func hints(
         from metadata: SocialImportMetadata,
         recognizedTexts: [String],
-        limit: Int = 12
+        limit: Int = 150
     ) -> [SocialPlaceSearchHint] {
         let primaryEvidence = metadata.primaryEvidenceText
         var results: [SocialPlaceSearchHint] = []
@@ -689,6 +1036,23 @@ enum SocialPlaceHintExtractor {
         from text: String,
         to output: inout [SocialPlaceSearchHint]
     ) {
+        let guideHints = text.components(separatedBy: .newlines).compactMap { line -> SocialPlaceSearchHint? in
+            guard let components = SocialGuideTextParser.components(from: line) else { return nil }
+            return SocialPlaceSearchHint(
+                name: components.name,
+                area: components.area,
+                evidence: .imageText
+            )
+        }
+        for hint in guideHints {
+            append(hint, to: &output)
+        }
+        if guideHints.count >= 2 {
+            // A dense, country-delimited guide already supplies authoritative row
+            // boundaries. Generic adjacent-line guesses would merge neighboring shops.
+            return
+        }
+
         for value in captures(pattern: itineraryPattern, in: text) {
             let cleaned = trimPhrase(value)
             guard !isAttributionPhrase(cleaned) else { continue }

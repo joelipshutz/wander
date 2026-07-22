@@ -98,7 +98,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 6
+    static let currentResolverVersion = 7
 
     let id: String
     let batchID: String
@@ -111,6 +111,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var savedUserPlaceID: String?
     var duplicateUserPlaceID: String?
     var resolverVersion: Int?
+    var pendingManualSearch: Bool?
     let createdAt: Date
     var updatedAt: Date
 
@@ -126,6 +127,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         savedUserPlaceID: String? = nil,
         duplicateUserPlaceID: String? = nil,
         resolverVersion: Int? = PlaceImportItem.currentResolverVersion,
+        pendingManualSearch: Bool? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -140,6 +142,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.savedUserPlaceID = savedUserPlaceID
         self.duplicateUserPlaceID = duplicateUserPlaceID
         self.resolverVersion = resolverVersion
+        self.pendingManualSearch = pendingManualSearch
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
