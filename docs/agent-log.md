@@ -15848,3 +15848,29 @@ REC-106 OG-cover OCR check, 2026-07-22 12:55 PDT:
   available and as the active image source when they are absent; retain source
   provenance and require normal parsing/corroboration so cropped fragments do
   not become false place rows. No app source changed in this diagnostic pass.
+
+## 2026-07-22 15:00 PDT - Codex - REC-106 PR #137 Landing
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-106-instagram-carousel`
+Worktree: `/private/tmp/recme-rec106-instagram-carousel`
+Linear: `REC-106` (`In Review`)
+
+Goal: review PR #137 against the latest `origin/main`, resolve its current
+merge conflicts, run the required final validation, squash-merge it to `main`,
+and synchronize local `main` as explicitly requested. No TestFlight upload or
+build-number bump is in scope.
+
+Preflight:
+
+- Fetched `origin`; `main` is `ad0fc9695` and TestFlight build 90 is already
+  recorded as live/approved, so there is no unfinished explicit release to
+  complete before this merge.
+- The REC-106 worktree has no tracked changes before this log entry. Only the
+  previously documented `DerivedData-rec106*` directories are untracked and
+  will remain excluded.
+- PR #137 is open, ready rather than draft, targets `main`, and has no hold or
+  do-not-merge label. GitHub currently reports it conflicting because `main`
+  advanced from build 86 to build 90. Expected conflict-resolution files are
+  `Wander.xcodeproj/project.pbxproj` and `docs/agent-log.md`; XcodeGen output
+  will be regenerated from current `project.yml` if project metadata differs.
