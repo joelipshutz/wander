@@ -3,6 +3,38 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testRPCRefreshesTheClerkTokenOnceAfterUnauthorizedResponse() async throws {
+        FeedRPCURLProtocol.reset(
+            responses: [
+                (401, #"{"message":"JWT expired"}"#.data(using: .utf8)!),
+                (200, #"{"value":"fresh-token-response"}"#.data(using: .utf8)!)
+            ]
+        )
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let auth = FeedTokenAuthSession()
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: auth,
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let response: FeedRPCProbe = try await client.call("followed_feed", params: FeedRPCProbeParameters())
+
+        XCTAssertEqual(response.value, "fresh-token-response")
+        XCTAssertEqual(auth.cachedTokenRequestCount, 1)
+        XCTAssertEqual(auth.forcedTokenRequestCount, 1)
+        XCTAssertEqual(
+            FeedRPCURLProtocol.authorizationHeaders,
+            ["Bearer cached-token", "Bearer fresh-token"]
+        )
+    }
+
     func testFollowedFeedCallsExpectedRPCAndDecodesTheHostedEmptyEnvelope() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """
@@ -1547,6 +1579,79 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
     }
+}
+
+private struct FeedRPCProbeParameters: Encodable {}
+
+private struct FeedRPCProbe: Decodable, Equatable {
+    let value: String
+}
+
+@MainActor
+private final class FeedTokenAuthSession: AuthSessionProviding {
+    private(set) var state: AuthState = .signedIn(
+        AuthSession(userID: "user_test", displayName: "Test", handle: "test")
+    )
+    let canPresentNativeAuth = false
+    private(set) var cachedTokenRequestCount = 0
+    private(set) var forcedTokenRequestCount = 0
+
+    func refreshSession() async {}
+    func signOut() async throws {}
+    func deleteAccount() async throws {}
+
+    func supabaseAccessToken() async throws -> String {
+        cachedTokenRequestCount += 1
+        return "cached-token"
+    }
+
+    func refreshSupabaseAccessToken() async throws -> String {
+        forcedTokenRequestCount += 1
+        return "fresh-token"
+    }
+}
+
+private final class FeedRPCURLProtocol: URLProtocol {
+    nonisolated(unsafe) private static var queuedResponses: [(statusCode: Int, data: Data)] = []
+    nonisolated(unsafe) private static var requests: [URLRequest] = []
+
+    static func reset(responses: [(Int, Data)]) {
+        queuedResponses = responses.map { (statusCode: $0.0, data: $0.1) }
+        requests = []
+    }
+
+    static var authorizationHeaders: [String] {
+        requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.requests.append(request)
+        guard !Self.queuedResponses.isEmpty else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        let next = Self.queuedResponses.removeFirst()
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: next.statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: next.data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 
 @MainActor

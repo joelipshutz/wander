@@ -182,7 +182,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         try RemoteEncoding.encoder.encode(value)
     }
 
-    func authenticatedHeaders() async throws -> [String: String] {
+    func authenticatedHeaders(forceTokenRefresh: Bool = false) async throws -> [String: String] {
         guard self.configuration.isSupabaseConfigured else {
             #if DEBUG
             WanderDebugLog.remote.error("auth headers failed reason=not_configured")
@@ -192,9 +192,13 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
         let token: String
         do {
-            token = try await self.authSession.supabaseAccessToken()
+            if forceTokenRefresh {
+                token = try await self.authSession.refreshSupabaseAccessToken()
+            } else {
+                token = try await self.authSession.supabaseAccessToken()
+            }
             #if DEBUG
-            WanderDebugLog.remote.debug("auth headers ready supabase_url_configured=\((self.configuration.supabaseURL != nil), privacy: .public)")
+            WanderDebugLog.remote.debug("auth headers ready supabase_url_configured=\((self.configuration.supabaseURL != nil), privacy: .public) forced_token_refresh=\(forceTokenRefresh, privacy: .public)")
             #endif
         } catch {
             #if DEBUG
@@ -214,6 +218,48 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         params: Params,
         decoder: JSONDecoder = RemoteDecoding.decoder
     ) async throws -> Value {
+        let initialResponse = try await rpcResponse(
+            name,
+            params: params,
+            forceTokenRefresh: false
+        )
+
+        if Self.requiresFreshToken(after: initialResponse.response.statusCode) {
+            #if DEBUG
+            WanderDebugLog.remote.notice("rpc retrying with fresh token name=\(name, privacy: .public) status=\(initialResponse.response.statusCode, privacy: .public)")
+            #endif
+            let refreshedResponse = try await rpcResponse(
+                name,
+                params: params,
+                forceTokenRefresh: true
+            )
+            return try decodeRPCResponse(
+                Value.self,
+                data: refreshedResponse.data,
+                response: refreshedResponse.response,
+                name: name,
+                decoder: decoder
+            )
+        }
+
+        return try decodeRPCResponse(
+            Value.self,
+            data: initialResponse.data,
+            response: initialResponse.response,
+            name: name,
+            decoder: decoder
+        )
+    }
+
+    nonisolated static func requiresFreshToken(after statusCode: Int) -> Bool {
+        statusCode == 401 || statusCode == 403
+    }
+
+    private func rpcResponse<Params: Encodable>(
+        _ name: String,
+        params: Params,
+        forceTokenRefresh: Bool
+    ) async throws -> (data: Data, response: HTTPURLResponse) {
         guard let supabaseURL = self.configuration.supabaseURL else {
             #if DEBUG
             WanderDebugLog.remote.error("rpc skipped name=\(name, privacy: .public) reason=missing_supabase_url")
@@ -224,7 +270,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         #if DEBUG
         WanderDebugLog.remote.debug("rpc preparing name=\(name, privacy: .public)")
         #endif
-        let headers = try await authenticatedHeaders()
+        let headers = try await authenticatedHeaders(forceTokenRefresh: forceTokenRefresh)
         let endpoint = supabaseURL
             .appendingPathComponent("rest")
             .appendingPathComponent("v1")
@@ -262,19 +308,29 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("Missing HTTP response for \(name)")
         }
 
-        guard (200..<300).contains(httpResponse.statusCode) else {
+        return (data, httpResponse)
+    }
+
+    private func decodeRPCResponse<Value: Decodable>(
+        _: Value.Type,
+        data: Data,
+        response: HTTPURLResponse,
+        name: String,
+        decoder: JSONDecoder
+    ) throws -> Value {
+        guard (200..<300).contains(response.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "unreadable response"
             #if DEBUG
-            WanderDebugLog.remote.error("rpc failed name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            WanderDebugLog.remote.error("rpc failed name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
             #endif
-            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            if Self.requiresFreshToken(after: response.statusCode) {
                 throw WanderRemoteError.notAuthenticated
             }
-            throw WanderRemoteError.invalidResponse("RPC \(name) failed with \(httpResponse.statusCode): \(body)")
+            throw WanderRemoteError.invalidResponse("RPC \(name) failed with \(response.statusCode): \(body)")
         }
 
         #if DEBUG
-        WanderDebugLog.remote.debug("rpc success name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
+        WanderDebugLog.remote.debug("rpc success name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
         #endif
 
         if Value.self == EmptyRPCResponse.self {

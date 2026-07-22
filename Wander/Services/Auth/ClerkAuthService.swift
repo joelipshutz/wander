@@ -107,6 +107,17 @@ final class ClerkAuthService: AuthSessionProviding {
     }
 
     func supabaseAccessToken() async throws -> String {
+        try await fetchSupabaseAccessToken(forceRefresh: false)
+    }
+
+    /// The default Clerk token cache is ideal for ordinary requests. After a
+    /// server explicitly rejects one, however, obtain a new claim set instead
+    /// of replaying the cached token.
+    func refreshSupabaseAccessToken() async throws -> String {
+        try await fetchSupabaseAccessToken(forceRefresh: true)
+    }
+
+    private func fetchSupabaseAccessToken(forceRefresh: Bool) async throws -> String {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
             #if DEBUG
@@ -121,7 +132,7 @@ final class ClerkAuthService: AuthSessionProviding {
             throw AuthSessionError.notSignedIn
         }
         do {
-            guard let token = try await Clerk.shared.auth.getToken() else {
+            guard let token = try await Clerk.shared.auth.getToken(.init(skipCache: forceRefresh)) else {
                 #if DEBUG
                 WanderDebugLog.remote.error("clerk supabase token failed reason=nil_token")
                 #endif
