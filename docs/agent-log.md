@@ -17410,3 +17410,29 @@ Starting status and coordination:
   REC-112's narrow policy/test changes; the expected rebase conflict is the
   append-only coordination log. Preserve both histories, rerun the full merge
   gate on the exact rebased head, then squash-merge if clean.
+
+Review and validation checkpoint, 2026-07-22 16:36 PDT:
+
+- Rebased the branch onto current `origin/main` at `9dfc5e9d6`. The only
+  conflict was the expected append-only `docs/agent-log.md` overlap; both the
+  completed build-91 history and REC-112 history were preserved. Product and
+  test changes rebased without conflict.
+- Completed the gstack review checklist against the exact rebased diff. Scope
+  is clean, there are no SQL/data/auth/backend/API/concurrency or migration
+  changes, the UI activates the already-reviewed REC-111 map path, and the
+  route-policy regression directly covers the behavior. No blocking or
+  informational finding remains. No specialist review was warranted for this
+  three-line product/test policy change.
+- The gstack local review-history helper could not persist the clean result
+  because its required `bun` runtime is unavailable on this Mac; the durable
+  review result is recorded here instead.
+- Regenerated the project with XcodeGen; there is no generated project diff and
+  `git diff --check origin/main...HEAD` passes.
+- Full tests passed 572/572 with zero failures on iPhone 17 Pro / iOS 26.5.
+  Result bundle:
+  `/tmp/DerivedData-rec112-merge-final/Logs/Test/Test-Wander-2026.07.22_16-26-39--0700.xcresult`.
+- The generic iOS Simulator build passed. Existing Supabase formatter
+  actor-isolation warnings remain unchanged and non-blocking.
+- PR #165 is clear to update and squash-merge. This remains merge-only work;
+  no build-number change, archive/upload, TestFlight action, or Slack release
+  note was performed.
