@@ -1,6 +1,37 @@
 import CoreLocation
 import Foundation
 
+actor SocialImportAutomaticLookupPacer {
+    static let shared = SocialImportAutomaticLookupPacer()
+
+    private let minimumInterval: Duration
+    private let clock = ContinuousClock()
+    private var lastGrant: ContinuousClock.Instant?
+
+    init(minimumInterval: Duration = .milliseconds(1_500)) {
+        self.minimumInterval = minimumInterval
+    }
+
+    func waitForTurn() async throws {
+        while true {
+            try Task.checkCancellation()
+            let now = clock.now
+            if let lastGrant {
+                let earliestGrant = lastGrant.advanced(by: minimumInterval)
+                if now < earliestGrant {
+                    try await clock.sleep(until: earliestGrant)
+                    // Recheck after every suspension. Multiple callers—or an app
+                    // resume after all deadlines elapsed—must not pass together.
+                    continue
+                }
+            }
+            // Record only an actual grant. A cancelled waiter never consumes a slot.
+            lastGrant = now
+            return
+        }
+    }
+}
+
 struct PlaceImportResolvedEntry: Equatable {
     let seed: PlaceImportSeed
     let candidates: [PlaceCandidate]
@@ -13,15 +44,38 @@ enum PlaceImportResolution: Equatable {
     case needsHelp(String)
     case expanded([PlaceImportSeed], sourceName: String?)
     case expandedResolved([PlaceImportResolvedEntry], sourceName: String?)
+    case partialExpandedResolved([PlaceImportResolvedEntry], sourceName: String?)
+}
+
+enum PlaceImportManualSearchOutcome: Equatable {
+    case matched
+    case needsReview(candidateCount: Int)
+    case failed(String)
 }
 
 @MainActor
 protocol PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+    func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
+}
+
+extension PlaceImportResolving {
+    func resolveManualSearch(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        try await resolve(seed: seed, source: source)
+    }
 }
 
 @MainActor
 final class DevicePlaceImportResolver: PlaceImportResolving {
+    private static let maximumExtractedSocialHints = 150
+    private static let maximumImmediateSocialLookups = 24
+
+    private struct SocialMediaRecognition {
+        let recognizedTexts: [String]
+        let attemptedCount: Int
+        let emptyOrFailedCount: Int
+    }
+
     private let placeResolver: any PlaceCandidateResolving
     private let metadataProvider: any SocialImportMetadataProviding
     private let googleListLoader: any GoogleMapsSharedListLoading
@@ -43,6 +97,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         if let name = normalized(seed.nameHint) {
             if source == .googleMaps, isAuthoritativeGoogleSeed(seed) {
                 return await googleSeedResolution(seed, name: name)
+            }
+            if [.instagram, .tiktok].contains(source), seed.sourceURLString != nil {
+                try await SocialImportAutomaticLookupPacer.shared.waitForTurn()
             }
             return try await manualResolution(
                 name: name,
@@ -76,66 +133,158 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .needsHelp(message)
             }
         case .tiktok, .instagram:
-            return await socialResolution(url: sourceURL, source: source, seed: seed)
+            return try await socialResolution(url: sourceURL, source: source, seed: seed)
         case .textNotes:
             return .needsHelp("Add a place name and nearby city to match this line.")
         }
+    }
+
+    func resolveManualSearch(
+        seed: PlaceImportSeed,
+        source _: PlaceImportSource
+    ) async throws -> PlaceImportResolution {
+        guard let name = normalized(seed.nameHint) else {
+            return .needsHelp("Enter a place name before searching.")
+        }
+        return try await manualResolution(
+            name: name,
+            area: seed.areaHint,
+            latitude: seed.latitude,
+            longitude: seed.longitude,
+            preserveUnselectedCandidates: true
+        )
     }
 
     private func socialResolution(
         url: URL,
         source: PlaceImportSource,
         seed: PlaceImportSeed
-    ) async -> PlaceImportResolution {
-        guard let metadata = await metadataProvider.metadata(for: url, source: source) else {
+    ) async throws -> PlaceImportResolution {
+        let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
+        try Task.checkCancellation()
+        guard let metadata = fetchedMetadata else {
             return .needsHelp(
                 "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
             )
         }
-        let recognizedText: String? = if let thumbnailURL = metadata.thumbnailURL {
-            await thumbnailRecognizer.recognizedText(at: thumbnailURL)
-        } else {
-            nil
-        }
+        let recognition = try await recognizeSocialMedia(in: metadata)
         let hints = SocialPlaceHintExtractor.hints(
             from: metadata,
-            recognizedText: recognizedText,
-            limit: 8
+            recognizedTexts: recognition.recognizedTexts,
+            limit: Self.maximumExtractedSocialHints
         )
 
-        var resolvedEntries: [PlaceImportResolvedEntry] = []
-        var plausibleEntries: [PlaceImportResolvedEntry] = []
+        let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
+        if durableHints.count > Self.maximumImmediateSocialLookups {
+            let expandedSeeds = durableHints.map { hint in
+                socialSeed(
+                    from: seed,
+                    hint: hint,
+                    candidate: nil,
+                    // Keep the expanded rows at their source link's line. The
+                    // store's stable array order keeps the guide contiguous and
+                    // avoids collisions with subsequent pasted links.
+                    sourceLine: seed.sourceLine
+                )
+            }
+            let discoveredMediaCount = metadata.mediaItems.isEmpty
+                ? (metadata.thumbnailURL == nil ? 0 : 1)
+                : metadata.mediaItems.count
+            WanderDebugLog.imports.notice(
+                "social guide expansion source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) durable_row_count=\(expandedSeeds.count, privacy: .public) deferred_lookup_count=\(expandedSeeds.count, privacy: .public)"
+            )
+            return .expanded(expandedSeeds, sourceName: nil)
+        }
+
+        var entries: [PlaceImportResolvedEntry] = []
         var seenResolvedCandidates = Set<String>()
         var seenPlausibleHints = Set<String>()
         var strongest: PlaceImportCandidateMatch?
+        var resolvedCount = 0
+        var unresolvedCount = 0
+        var noCandidateCount = 0
+        var lowConfidenceCount = 0
+        var rejectedHintCount = 0
+        var lookupFailureCount = 0
         for hint in hints {
-            guard let candidates = try? await placeResolver.resolveManualEntry(
-                ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
-            ), !candidates.isEmpty else { continue }
+            try Task.checkCancellation()
+            let fetchedCandidates: [PlaceCandidate]
+            do {
+                fetchedCandidates = try await placeResolver.resolveManualEntry(
+                    ManualPlaceInput(name: hint.name, areaHint: hint.area, category: nil)
+                )
+            } catch PlaceResolutionError.noCandidates {
+                fetchedCandidates = []
+            } catch {
+                try Task.checkCancellation()
+                lookupFailureCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints,
+                    helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
+                }
+                continue
+            }
+            try Task.checkCancellation()
+            let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
+                fetchedCandidates,
+                areaHint: hint.area
+            )
+            guard !candidates.isEmpty else {
+                noCandidateCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
+                }
+                continue
+            }
             let match = PlaceImportCandidateMatcher.match(
                 candidates,
                 nameHint: hint.name,
-                areaHint: hint.area
+                areaHint: hint.area,
+                allowNearSpellingMatch: hint.evidence == .imageText
             )
             if let selectedCandidateID = match.selectedCandidateID,
-               let selectedCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
+               let providerCandidate = match.candidates.first(where: { $0.id == selectedCandidateID }) {
+                let selectedCandidate = socialCandidate(
+                    from: providerCandidate,
+                    preservingCreatorNameFrom: hint
+                )
+                let resolvedCandidates = match.candidates.map { candidate in
+                    candidate.id == selectedCandidateID ? selectedCandidate : candidate
+                }
                 let identity = candidateIdentity(selectedCandidate)
                 if seenResolvedCandidates.insert(identity).inserted {
-                    resolvedEntries.append(
+                    entries.append(
                         PlaceImportResolvedEntry(
                             seed: socialSeed(from: seed, hint: hint, candidate: selectedCandidate),
-                            candidates: match.candidates,
+                            candidates: resolvedCandidates,
                             selectedCandidateID: selectedCandidateID,
                             helpMessage: nil
                         )
                     )
+                    resolvedCount += 1
+                } else {
+                    rejectedHintCount += 1
                 }
                 continue
             }
             if match.candidates.count > 1, match.bestScore >= 0.7 {
                 let identity = hintIdentity(hint)
                 if seenPlausibleHints.insert(identity).inserted {
-                    plausibleEntries.append(
+                    entries.append(
                         PlaceImportResolvedEntry(
                             seed: socialSeed(from: seed, hint: hint, candidate: nil),
                             candidates: match.candidates,
@@ -143,6 +292,19 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                             helpMessage: "Choose the matching venue from this post."
                         )
                     )
+                    unresolvedCount += 1
+                }
+            } else {
+                lowConfidenceCount += 1
+                if !appendUnresolvedSocialHint(
+                    hint,
+                    originalSeed: seed,
+                    to: &entries,
+                    seenHints: &seenPlausibleHints
+                ) {
+                    rejectedHintCount += 1
+                } else {
+                    unresolvedCount += 1
                 }
             }
             if match.bestScore > (strongest?.bestScore ?? 0) {
@@ -150,9 +312,25 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
         }
 
-        let entries = resolvedEntries + plausibleEntries
+        let discoveredMediaCount = metadata.mediaItems.isEmpty
+            ? (metadata.thumbnailURL == nil ? 0 : 1)
+            : metadata.mediaItems.count
+        WanderDebugLog.imports.notice(
+            "social import resolution source=\(source.rawValue, privacy: .public) discovered_media_count=\(discoveredMediaCount, privacy: .public) ocr_attempt_count=\(recognition.attemptedCount, privacy: .public) ocr_empty_or_failed_count=\(recognition.emptyOrFailedCount, privacy: .public) extracted_hint_count=\(hints.count, privacy: .public) resolved_count=\(resolvedCount, privacy: .public) unresolved_count=\(unresolvedCount, privacy: .public) no_candidate_count=\(noCandidateCount, privacy: .public) low_confidence_count=\(lowConfidenceCount, privacy: .public) lookup_failure_count=\(lookupFailureCount, privacy: .public) rejected_hint_count=\(rejectedHintCount, privacy: .public)"
+        )
+        if lookupFailureCount > 0 {
+            if !entries.isEmpty {
+                return .partialExpandedResolved(entries, sourceName: nil)
+            }
+            return .needsHelp(
+                "Apple Maps matching was temporarily unavailable. Retry later."
+            )
+        }
         if entries.count == 1, let entry = entries.first {
-            return .candidates(entry.candidates, selectedCandidateID: entry.selectedCandidateID)
+            if entry.selectedCandidateID != nil {
+                return .candidates(entry.candidates, selectedCandidateID: entry.selectedCandidateID)
+            }
+            return .expandedResolved(entries, sourceName: nil)
         }
         if entries.count > 1 {
             return .expandedResolved(entries, sourceName: nil)
@@ -165,15 +343,81 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         )
     }
 
+    private func recognizeSocialMedia(in metadata: SocialImportMetadata) async throws -> SocialMediaRecognition {
+        var seenURLs = Set<String>()
+        var urls = metadata.mediaItems.compactMap(\.imageURL).filter {
+            seenURLs.insert($0.absoluteString).inserted
+        }
+        if urls.isEmpty, let thumbnailURL = metadata.thumbnailURL {
+            urls = [thumbnailURL]
+        }
+        guard !urls.isEmpty else {
+            return SocialMediaRecognition(recognizedTexts: [], attemptedCount: 0, emptyOrFailedCount: 0)
+        }
+
+        var recognized = Array<String?>(repeating: nil, count: urls.count)
+        let maximumConcurrentRecognitions = 4
+        for chunkStart in stride(from: 0, to: urls.count, by: maximumConcurrentRecognitions) {
+            let chunkEnd = min(chunkStart + maximumConcurrentRecognitions, urls.count)
+            try await withThrowingTaskGroup(of: (Int, String?).self) { group in
+                for index in chunkStart..<chunkEnd {
+                    let url = urls[index]
+                    group.addTask { [thumbnailRecognizer] in
+                        try Task.checkCancellation()
+                        let text = await thumbnailRecognizer.recognizedText(at: url)
+                        try Task.checkCancellation()
+                        return (index, text)
+                    }
+                }
+                for try await (index, text) in group {
+                    recognized[index] = text
+                }
+            }
+        }
+
+        let recognizedTexts = recognized.compactMap { normalized($0) }
+        return SocialMediaRecognition(
+            recognizedTexts: recognizedTexts,
+            attemptedCount: urls.count,
+            emptyOrFailedCount: recognized.filter { normalized($0) == nil }.count
+        )
+    }
+
+    @discardableResult
+    private func appendUnresolvedSocialHint(
+        _ hint: SocialPlaceSearchHint,
+        originalSeed: PlaceImportSeed,
+        to entries: inout [PlaceImportResolvedEntry],
+        seenHints: inout Set<String>,
+        helpMessage: String = "This place was named in the post, but Apple Maps needs your help matching it."
+    ) -> Bool {
+        guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
+        let identity = hintIdentity(hint)
+        guard seenHints.insert(identity).inserted else { return false }
+        entries.append(
+            PlaceImportResolvedEntry(
+                seed: socialSeed(from: originalSeed, hint: hint, candidate: nil),
+                candidates: [],
+                selectedCandidateID: nil,
+                helpMessage: helpMessage
+            )
+        )
+        return true
+    }
+
     private func manualResolution(
         name: String,
         area: String?,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        preserveUnselectedCandidates: Bool = false
     ) async throws -> PlaceImportResolution {
         do {
-            let candidates = try await placeResolver.resolveManualEntry(
-                ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+            let candidates = SocialImportCountry.candidatesCompatibleWithExactCountry(
+                try await placeResolver.resolveManualEntry(
+                    ManualPlaceInput(name: name, areaHint: normalized(area), category: nil)
+                ),
+                areaHint: area
             )
             let match = PlaceImportCandidateMatcher.match(
                 candidates,
@@ -182,6 +426,14 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 latitude: latitude,
                 longitude: longitude
             )
+            if preserveUnselectedCandidates, !match.candidates.isEmpty {
+                // A typed search is an explicit user request. Keep even one weak
+                // MapKit result available for review instead of silently dropping it.
+                return .candidates(
+                    match.candidates,
+                    selectedCandidateID: match.selectedCandidateID
+                )
+            }
             return candidateResolution(match)
         } catch let error as LocalizedError {
             return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
@@ -205,6 +457,9 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     }
 
     private func candidateResolution(_ match: PlaceImportCandidateMatch) -> PlaceImportResolution {
+        guard !match.candidates.isEmpty else {
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
+        }
         if let selectedCandidateID = match.selectedCandidateID {
             return .candidates(match.candidates, selectedCandidateID: selectedCandidateID)
         }
@@ -303,18 +558,53 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     private func socialSeed(
         from original: PlaceImportSeed,
         hint: SocialPlaceSearchHint,
-        candidate: PlaceCandidate?
+        candidate: PlaceCandidate?,
+        sourceLine: Int? = nil
     ) -> PlaceImportSeed {
         PlaceImportSeed(
             rawText: original.rawText,
-            nameHint: candidate?.name ?? hint.name,
+            nameHint: hint.name,
             areaHint: candidate?.address ?? hint.area,
             sourceURLString: original.sourceURLString,
-            sourceLine: original.sourceLine,
+            sourceLine: sourceLine ?? original.sourceLine,
             latitude: candidate?.latitude,
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
             sourceProviderPlaceID: candidate?.sourceProviderPlaceID
+        )
+    }
+
+    private func socialCandidate(
+        from candidate: PlaceCandidate,
+        preservingCreatorNameFrom hint: SocialPlaceSearchHint
+    ) -> PlaceCandidate {
+        guard hint.evidence.preservesCreatorNameWhenMatched,
+              PlaceImportCandidateMatcher.namesAreEquivalent(candidate.name, hint.name)
+        else { return candidate }
+
+        return PlaceCandidate(
+            id: candidate.id,
+            name: hint.name,
+            category: candidate.category,
+            primaryCategory: candidate.primaryCategory,
+            subcategory: candidate.subcategory,
+            categorySource: candidate.categorySource,
+            categoryConfidence: candidate.categoryConfidence,
+            rawProviderType: candidate.rawProviderType,
+            address: candidate.address,
+            locality: candidate.locality,
+            region: candidate.region,
+            country: candidate.country,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            sourceProvider: candidate.sourceProvider,
+            sourceProviderPlaceID: candidate.sourceProviderPlaceID,
+            distanceMeters: candidate.distanceMeters,
+            websiteURLString: candidate.websiteURLString,
+            phoneNumber: candidate.phoneNumber,
+            timeZoneIdentifier: candidate.timeZoneIdentifier,
+            actionLinksJSON: candidate.actionLinksJSON,
+            confidence: candidate.confidence
         )
     }
 
@@ -392,6 +682,11 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
 
 @MainActor
 final class PlaceImportStore: ObservableObject {
+    private struct LoadedItemUpgrade {
+        let items: [PlaceImportItem]
+        let replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
+    }
+
     @Published private(set) var batches: [PlaceImportBatch]
     @Published private(set) var items: [PlaceImportItem]
     @Published private(set) var persistenceError: String?
@@ -399,6 +694,7 @@ final class PlaceImportStore: ObservableObject {
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
     private var processingTasks: [String: Task<Void, Never>] = [:]
+    private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
     init(
         persistence: any PlaceImportPersisting = FilePlaceImportPersistence(),
@@ -408,21 +704,32 @@ final class PlaceImportStore: ObservableObject {
         self.resolver = resolver
         do {
             let snapshot = try persistence.load()
+            let upgrade = Self.upgradedLoadedItems(snapshot.items)
             batches = snapshot.batches
-            items = Self.upgradedLoadedItems(snapshot.items)
+            items = upgrade.items
+            replacedSocialItemsByPlaceholderID = upgrade.replacedSocialItemsByPlaceholderID
             persistenceError = nil
         } catch {
             batches = []
             items = []
+            replacedSocialItemsByPlaceholderID = [:]
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
     }
 
-    private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> [PlaceImportItem] {
+    private static func upgradedLoadedItems(_ loadedItems: [PlaceImportItem]) -> LoadedItemUpgrade {
         var seenSocialSources = Set<String>()
+        let socialItemsBySource = Dictionary(grouping: loadedItems.filter { item in
+            shouldUpgradeResolution(for: item)
+                && [.instagram, .tiktok].contains(item.source)
+                && item.seed.sourceURLString != nil
+        }) { item in
+            "\(item.batchID)|\(item.seed.sourceURLString ?? "")"
+        }
+        var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]] = [:]
 
-        return loadedItems.compactMap { item in
+        let upgradedItems = loadedItems.compactMap { item -> PlaceImportItem? in
             guard shouldUpgradeResolution(for: item) else {
                 var resumed = item
                 if item.state == .resolving {
@@ -436,6 +743,7 @@ final class PlaceImportStore: ObservableObject {
                let sourceURLString = item.seed.sourceURLString {
                 let sourceKey = "\(item.batchID)|\(sourceURLString)"
                 guard seenSocialSources.insert(sourceKey).inserted else { return nil }
+                replacedSocialItemsByPlaceholderID[item.id] = socialItemsBySource[sourceKey] ?? [item]
                 upgraded.seed = PlaceImportSeed(
                     id: item.seed.id,
                     rawText: sourceURLString,
@@ -452,8 +760,13 @@ final class PlaceImportStore: ObservableObject {
             upgraded.helpMessage = nil
             upgraded.duplicateUserPlaceID = nil
             upgraded.resolverVersion = PlaceImportItem.currentResolverVersion
+            upgraded.pendingManualSearch = nil
             return upgraded
         }
+        return LoadedItemUpgrade(
+            items: upgradedItems,
+            replacedSocialItemsByPlaceholderID: replacedSocialItemsByPlaceholderID
+        )
     }
 
     var primaryBatch: PlaceImportBatch? {
@@ -505,12 +818,15 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func items(for batchID: String) -> [PlaceImportItem] {
-        items.filter { $0.batchID == batchID }.sorted {
-            if $0.seed.sourceLine == $1.seed.sourceLine {
-                return $0.createdAt < $1.createdAt
+        items.enumerated()
+            .filter { $0.element.batchID == batchID }
+            .sorted {
+                if $0.element.seed.sourceLine == $1.element.seed.sourceLine {
+                    return $0.offset < $1.offset
+                }
+                return $0.element.seed.sourceLine < $1.element.seed.sourceLine
             }
-            return $0.seed.sourceLine < $1.seed.sourceLine
-        }
+            .map(\.element)
     }
 
     func item(id: String) -> PlaceImportItem? {
@@ -521,6 +837,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].candidates.contains(where: { $0.id == candidateID })
         else { return }
+        items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
         items[index].state = .ready
         items[index].helpMessage = nil
@@ -530,6 +847,7 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        items[index].pendingManualSearch = nil
         items[index].state = .queued
         items[index].candidates = []
         items[index].selectedCandidateID = nil
@@ -543,9 +861,39 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func retry(itemID: String, name: String, area: String?) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        _ = queueManualSearch(itemID: itemID, name: name, area: area)
+    }
+
+    func search(itemID: String, name: String, area: String?) async -> PlaceImportManualSearchOutcome {
+        guard queueManualSearch(itemID: itemID, name: name, area: area) != nil else {
+            return .failed("Enter a place name before searching.")
+        }
+        await waitForResolution(itemID: itemID)
+        guard let item = item(id: itemID) else {
+            return .failed("This import is no longer available.")
+        }
+        switch item.state {
+        case .ready:
+            return .matched
+        case .ambiguous:
+            return .needsReview(candidateCount: item.candidates.count)
+        case .needsHelp, .failed:
+            return .failed(
+                item.helpMessage
+                    ?? "No matching Apple Maps place was found. Try a nearby city or neighborhood."
+            )
+        case .queued, .resolving:
+            return .failed("Apple Maps is still searching. Try again in a moment.")
+        case .duplicate, .saved, .dismissed:
+            return .failed("This import is no longer waiting for a place match.")
+        }
+    }
+
+    @discardableResult
+    private func queueManualSearch(itemID: String, name: String, area: String?) -> String? {
+        guard let index = items.firstIndex(where: { $0.id == itemID }) else { return nil }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        guard !trimmedName.isEmpty else { return nil }
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -566,13 +914,16 @@ final class PlaceImportStore: ObservableObject {
         items[index].duplicateUserPlaceID = nil
         items[index].updatedAt = .now
         items[index].resolverVersion = PlaceImportItem.currentResolverVersion
+        items[index].pendingManualSearch = true
         let batchID = items[index].batchID
         synchronizeBatch(batchID)
         startProcessing(batchID: batchID)
+        return batchID
     }
 
     func markSaved(itemID: String, userPlaceID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        items[index].pendingManualSearch = nil
         items[index].state = .saved
         items[index].savedUserPlaceID = userPlaceID
         items[index].duplicateUserPlaceID = nil
@@ -585,6 +936,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
             return
         }
+        items[index].pendingManualSearch = nil
         items[index].state = .dismissed
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
@@ -593,8 +945,16 @@ final class PlaceImportStore: ObservableObject {
     func cancel(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        let upgradePlaceholderIDs = replacedSocialItemsByPlaceholderID.compactMap { placeholderID, oldItems in
+            oldItems.first?.batchID == batchID ? placeholderID : nil
+        }
+        for placeholderID in upgradePlaceholderIDs {
+            guard let index = items.firstIndex(where: { $0.id == placeholderID }) else { continue }
+            restoreReplacedSocialItems(placeholderID: placeholderID, at: index)
+        }
         for index in items.indices where items[index].batchID == batchID && [.queued, .resolving].contains(items[index].state) {
             items[index].state = .dismissed
+            items[index].pendingManualSearch = nil
             items[index].updatedAt = .now
         }
         if let index = batches.firstIndex(where: { $0.id == batchID }) {
@@ -607,6 +967,9 @@ final class PlaceImportStore: ObservableObject {
     func deleteBatch(batchID: String) {
         processingTasks[batchID]?.cancel()
         processingTasks[batchID] = nil
+        replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
+            $0.value.first?.batchID != batchID
+        }
         items.removeAll(where: { $0.batchID == batchID })
         batches.removeAll(where: { $0.id == batchID })
         persist()
@@ -617,6 +980,7 @@ final class PlaceImportStore: ObservableObject {
             task.cancel()
         }
         processingTasks.removeAll()
+        replacedSocialItemsByPlaceholderID.removeAll()
         items.removeAll()
         batches.removeAll()
         persist()
@@ -661,6 +1025,14 @@ final class PlaceImportStore: ObservableObject {
         await processingTasks[batchID]?.value
     }
 
+    private func waitForResolution(itemID: String) async {
+        while !Task.isCancelled,
+              let item = item(id: itemID),
+              [.queued, .resolving].contains(item.state) {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     private func startProcessing(batchID: String) {
         guard processingTasks[batchID] == nil,
               items.contains(where: { $0.batchID == batchID && $0.state == .queued })
@@ -673,33 +1045,88 @@ final class PlaceImportStore: ObservableObject {
 
     private func process(batchID: String) async {
         while !Task.isCancelled,
-              let index = items.firstIndex(where: { $0.batchID == batchID && $0.state == .queued }) {
+              let index = nextQueuedItemIndex(batchID: batchID) {
             items[index].state = .resolving
             items[index].updatedAt = .now
             let itemID = items[index].id
             let seed = items[index].seed
             let source = items[index].source
-            synchronizeBatch(batchID)
+            let isManualSearch = items[index].pendingManualSearch == true
+            let isSocialUpgrade = replacedSocialItemsByPlaceholderID[itemID] != nil
+            // Keep the pre-upgrade snapshot durable until its network-dependent refresh succeeds.
+            synchronizeBatch(batchID, persist: !isSocialUpgrade)
 
             do {
-                let resolution = try await resolver.resolve(seed: seed, source: source)
+                let resolution = if isManualSearch {
+                    try await resolver.resolveManualSearch(seed: seed, source: source)
+                } else {
+                    try await resolver.resolve(seed: seed, source: source)
+                }
                 guard !Task.isCancelled,
                       let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
-                apply(resolution, at: resolvedIndex)
+                guard items[resolvedIndex].state == .resolving,
+                      items[resolvedIndex].seed == seed
+                else {
+                    // A newer search, retry, or dismissal superseded this request.
+                    await Task.yield()
+                    continue
+                }
+                let shouldRestorePreviousRows: Bool
+                switch resolution {
+                case .needsHelp, .partialExpandedResolved:
+                    shouldRestorePreviousRows = true
+                case .candidates, .expanded, .expandedResolved:
+                    shouldRestorePreviousRows = false
+                }
+                if shouldRestorePreviousRows,
+                   restoreReplacedSocialItems(placeholderID: itemID, at: resolvedIndex) {
+                    // A transient metadata failure must not erase previously useful rows.
+                } else {
+                    replacedSocialItemsByPlaceholderID[itemID] = nil
+                    items[resolvedIndex].pendingManualSearch = nil
+                    apply(resolution, at: resolvedIndex)
+                }
             } catch {
                 guard !Task.isCancelled,
                       let failedIndex = items.firstIndex(where: { $0.id == itemID })
                 else { break }
-                items[failedIndex].state = .failed
-                items[failedIndex].helpMessage = error.localizedDescription
-                items[failedIndex].updatedAt = .now
+                guard items[failedIndex].state == .resolving,
+                      items[failedIndex].seed == seed
+                else {
+                    // Do not let an older failure overwrite newer user intent.
+                    await Task.yield()
+                    continue
+                }
+                if !restoreReplacedSocialItems(placeholderID: itemID, at: failedIndex) {
+                    items[failedIndex].state = .failed
+                    items[failedIndex].pendingManualSearch = nil
+                    items[failedIndex].helpMessage = error.localizedDescription
+                    items[failedIndex].updatedAt = .now
+                }
             }
             synchronizeBatch(batchID)
             await Task.yield()
         }
         processingTasks[batchID] = nil
         synchronizeBatch(batchID)
+    }
+
+    private func nextQueuedItemIndex(batchID: String) -> Int? {
+        items.firstIndex(where: {
+            $0.batchID == batchID && $0.state == .queued && $0.pendingManualSearch == true
+        }) ?? items.firstIndex(where: {
+            $0.batchID == batchID && $0.state == .queued
+        })
+    }
+
+    @discardableResult
+    private func restoreReplacedSocialItems(placeholderID: String, at index: Int) -> Bool {
+        guard let replacedItems = replacedSocialItemsByPlaceholderID.removeValue(forKey: placeholderID) else {
+            return false
+        }
+        items.replaceSubrange(index...index, with: replacedItems)
+        return true
     }
 
     private func apply(_ resolution: PlaceImportResolution, at index: Int) {
@@ -710,7 +1137,7 @@ final class PlaceImportStore: ObservableObject {
             if selectedCandidateID != nil {
                 items[index].state = .ready
                 items[index].helpMessage = nil
-            } else if candidates.count > 1 {
+            } else if !candidates.isEmpty {
                 items[index].state = .ambiguous
                 items[index].helpMessage = nil
             } else {
@@ -740,13 +1167,14 @@ final class PlaceImportStore: ObservableObject {
                 batches[batchIndex].sourceName = sourceName
             }
             return
-        case .expandedResolved(let entries, let sourceName):
+        case .expandedResolved(let entries, let sourceName),
+             .partialExpandedResolved(let entries, let sourceName):
             let original = items[index]
             let expandedItems = entries.map { entry in
                 let state: PlaceImportItemState
                 if entry.selectedCandidateID != nil {
                     state = .ready
-                } else if entry.candidates.count > 1 {
+                } else if !entry.candidates.isEmpty {
                     state = .ambiguous
                 } else {
                     state = .needsHelp
@@ -808,7 +1236,13 @@ final class PlaceImportStore: ObservableObject {
 
     private func persist() {
         do {
-            try persistence.save(PlaceImportSnapshot(batches: batches, items: items))
+            // A resolver upgrade is intentionally staged in memory. Persist each group's
+            // previous rows until its network-dependent refresh commits so an unrelated
+            // save or app termination cannot make a temporary placeholder durable.
+            let durableItems = items.flatMap { item in
+                replacedSocialItemsByPlaceholderID[item.id] ?? [item]
+            }
+            try persistence.save(PlaceImportSnapshot(batches: batches, items: durableItems))
             persistenceError = nil
         } catch {
             persistenceError = "Import progress could not be saved. Keep rec.me open and try again."
@@ -843,7 +1277,8 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private static func shouldUpgradeResolution(for item: PlaceImportItem) -> Bool {
-        guard (item.resolverVersion ?? 0) < PlaceImportItem.currentResolverVersion,
+        let requiredVersion = item.source == .googleMaps ? 4 : PlaceImportItem.currentResolverVersion
+        guard (item.resolverVersion ?? 0) < requiredVersion,
               [.googleMaps, .instagram, .tiktok].contains(item.source),
               [.ready, .ambiguous, .needsHelp, .failed].contains(item.state)
         else { return false }

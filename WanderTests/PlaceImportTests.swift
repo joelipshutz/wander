@@ -338,6 +338,409 @@ final class PlaceImportStoreTests: XCTestCase {
         })
     }
 
+    func testFreshSocialImportKeepsResolvedPlacesWhenAnotherHintHasNoMapCandidate() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: RoutingNoCandidateThrowingDevicePlaceResolver(routes: [
+                    "fremont lake": [placeImportCandidate(
+                        name: "Fremont Lake",
+                        locality: "Pinedale",
+                        region: "WY"
+                    )]
+                ]),
+                metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/p/fresh-no-candidate/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(items.map(\.state), [.ready, .needsHelp])
+        XCTAssertFalse(items.contains { $0.displayName == "instagram.com" })
+        XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
+    }
+
+    func testFreshSocialImportKeepsPartialResultsDuringTransientMapFailure() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: PartiallyThrowingDevicePlaceResolver(
+                    successfulName: "Fremont Lake",
+                    candidate: placeImportCandidate(
+                        name: "Fremont Lake",
+                        locality: "Pinedale",
+                        region: "WY"
+                    )
+                ),
+                metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let batchID = try store.enqueue(
+            source: .instagram,
+            text: "https://www.instagram.com/p/fresh-partial-map-failure/"
+        )
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.map(\.displayName), ["Fremont Lake", "Half Moon Lake Lodge"])
+        XCTAssertEqual(items.map(\.state), [.ready, .needsHelp])
+        XCTAssertFalse(items.contains { $0.displayName == "instagram.com" })
+        XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
+    }
+
+    func testManualSearchReturnsVisibleFailureFromDeviceSnapshot() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = RecordingPlaceImportResolver(
+            resolution: .needsHelp("Apple Maps search is temporarily unavailable.")
+        )
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "  Farson Mercantile  ",
+            area: "Farson, Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .failed("Apple Maps search is temporarily unavailable."))
+        XCTAssertEqual(resolver.lastSeed?.nameHint, "Farson Mercantile")
+        XCTAssertEqual(resolver.lastSeed?.areaHint, "Farson, Wyoming")
+        XCTAssertEqual(resolver.lastSource, .instagram)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .needsHelp)
+        XCTAssertEqual(
+            store.item(id: "rec-106-farson-manual-search")?.helpMessage,
+            "Apple Maps search is temporarily unavailable."
+        )
+        XCTAssertEqual(persistence.snapshot.items.first?.helpMessage, "Apple Maps search is temporarily unavailable.")
+    }
+
+    func testManualSearchPreservesOneWeakMapKitCandidateForReview() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let weakCandidate = placeImportCandidate(
+            name: "Farson Ice Cream",
+            locality: "Farson",
+            region: "WY"
+        )
+        let placeResolver = FakeDevicePlaceResolver(candidates: [weakCandidate])
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "Farson Mercantile",
+            area: "Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .needsReview(candidateCount: 1))
+        XCTAssertEqual(placeResolver.manualInputs, [
+            ManualPlaceInput(name: "Farson Mercantile", areaHint: "Wyoming", category: nil)
+        ])
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .ambiguous)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.candidates, [weakCandidate])
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID)
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.helpMessage)
+    }
+
+    func testManualSearchAutoSelectsAnExactMapKitCandidate() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let exactCandidate = placeImportCandidate(
+            name: "Farson Mercantile",
+            locality: "Farson",
+            region: "WY"
+        )
+        let placeResolver = FakeDevicePlaceResolver(candidates: [exactCandidate])
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: snapshot),
+            resolver: DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        let outcome = await store.search(
+            itemID: "rec-106-farson-manual-search",
+            name: "Farson Mercantile",
+            area: "Wyoming"
+        )
+
+        XCTAssertEqual(outcome, .matched)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .ready)
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID, exactCandidate.id)
+    }
+
+    func testNewManualSearchSupersedesAnInFlightResult() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = ControllablePlaceImportResolver()
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+        let firstCandidate = placeImportCandidate(name: "First Place")
+        let secondCandidate = placeImportCandidate(name: "Second Place")
+
+        let firstSearch = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "First Place",
+                area: "Wyoming"
+            )
+        }
+        let receivedFirstRequest = await waitForManualRequestCount(1, resolver: resolver)
+        XCTAssertTrue(receivedFirstRequest)
+
+        let secondSearch = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "Second Place",
+                area: "Wyoming"
+            )
+        }
+        let queuedSecondRequest = await waitForImportItem(
+            id: "rec-106-farson-manual-search",
+            nameHint: "Second Place",
+            state: .queued,
+            store: store
+        )
+        XCTAssertTrue(queuedSecondRequest)
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([firstCandidate], selectedCandidateID: firstCandidate.id)
+            )
+        )
+        let receivedSecondRequest = await waitForManualRequestCount(2, resolver: resolver)
+        XCTAssertTrue(receivedSecondRequest)
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([secondCandidate], selectedCandidateID: secondCandidate.id)
+            )
+        )
+
+        let secondOutcome = await secondSearch.value
+        let firstOutcome = await firstSearch.value
+        XCTAssertEqual(secondOutcome, .matched)
+        XCTAssertEqual(firstOutcome, .matched)
+        XCTAssertEqual(resolver.manualSeeds.map(\.nameHint), ["First Place", "Second Place"])
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.seed.nameHint, "Second Place")
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID, secondCandidate.id)
+        XCTAssertEqual(persistence.snapshot.items.first?.selectedCandidateID, secondCandidate.id)
+    }
+
+    func testDismissedManualSearchIgnoresItsInFlightResult() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let resolver = ControllablePlaceImportResolver()
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: snapshot),
+            resolver: resolver
+        )
+        let candidate = placeImportCandidate(name: "Farson Mercantile")
+
+        let search = Task {
+            await store.search(
+                itemID: "rec-106-farson-manual-search",
+                name: "Farson Mercantile",
+                area: "Wyoming"
+            )
+        }
+        let receivedRequest = await waitForManualRequestCount(1, resolver: resolver)
+        XCTAssertTrue(receivedRequest)
+        store.dismiss(itemID: "rec-106-farson-manual-search")
+        XCTAssertTrue(
+            resolver.completeNext(
+                .candidates([candidate], selectedCandidateID: candidate.id)
+            )
+        )
+
+        let outcome = await search.value
+        XCTAssertEqual(
+            outcome,
+            .failed("This import is no longer waiting for a place match.")
+        )
+        XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .dismissed)
+        XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID)
+    }
+
+    func testManualSearchJumpsAheadOfAutomaticGuideBacklogAndReturnsForItsItem() async throws {
+        let batch = PlaceImportBatch(
+            id: "manual-priority-batch",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 3
+        )
+        let sourceURL = "https://www.instagram.com/p/guide/"
+        let items = ["Automatic One", "Automatic Two", "Manual Target"].enumerated().map { offset, name in
+            PlaceImportItem(
+                id: "priority-item-\(offset)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "USA",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                )
+            )
+        }
+        let resolver = BackloggedManualSearchResolver()
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: items)
+            ),
+            resolver: resolver
+        )
+
+        store.resumePendingImports()
+        let receivedAutomaticRequest = await resolver.waitForAutomaticRequestCount(1)
+        XCTAssertTrue(receivedAutomaticRequest)
+
+        let search = Task {
+            await store.search(
+                itemID: "priority-item-2",
+                name: "Manual Target",
+                area: "USA"
+            )
+        }
+        let queuedManualRequest = await waitForImportItem(
+            id: "priority-item-2",
+            nameHint: "Manual Target",
+            state: .queued,
+            store: store
+        )
+        XCTAssertTrue(queuedManualRequest)
+        XCTAssertTrue(resolver.completeAutomatic(.needsHelp("Automatic lookup paused")))
+        let receivedManualRequest = await resolver.waitForManualRequestCount(1)
+        XCTAssertTrue(receivedManualRequest)
+        XCTAssertEqual(resolver.manualSeeds.first?.id, items[2].seed.id)
+
+        let candidate = placeImportCandidate(name: "Manual Target", country: "US")
+        XCTAssertTrue(
+            resolver.completeManual(
+                .candidates([candidate], selectedCandidateID: candidate.id)
+            )
+        )
+        let outcome = await search.value
+        XCTAssertEqual(outcome, .matched)
+        XCTAssertEqual(store.item(id: "priority-item-2")?.selectedCandidateID, candidate.id)
+        XCTAssertTrue([.queued, .resolving].contains(store.item(id: "priority-item-1")?.state))
+        store.cancel(batchID: batch.id)
+        _ = resolver.completeAutomatic(.needsHelp("Cancelled"))
+        await Task.yield()
+    }
+
+    func testPendingManualSearchSurvivesRelaunchAndResumesAsManual() async {
+        let batch = PlaceImportBatch(
+            id: "durable-manual-batch",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 1
+        )
+        let item = PlaceImportItem(
+            id: "durable-manual-item",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Farson Mercantile / USA",
+                nameHint: "Farson Mercantile",
+                areaHint: "USA",
+                sourceURLString: "https://www.instagram.com/p/guide/",
+                sourceLine: 1
+            ),
+            state: .needsHelp
+        )
+        let firstResolver = ControllablePlaceImportResolver()
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+        )
+        let firstStore = PlaceImportStore(persistence: persistence, resolver: firstResolver)
+
+        let search = Task {
+            await firstStore.search(
+                itemID: item.id,
+                name: "Farson Mercantile",
+                area: "USA"
+            )
+        }
+        let queuedRequest = await waitForManualRequestCount(1, resolver: firstResolver)
+        XCTAssertTrue(queuedRequest)
+        XCTAssertEqual(persistence.snapshot.items.first?.state, .resolving)
+        XCTAssertEqual(persistence.snapshot.items.first?.pendingManualSearch, true)
+        let interruptedSnapshot = persistence.snapshot
+
+        firstStore.cancel(batchID: batch.id)
+        XCTAssertTrue(firstResolver.completeNext(.needsHelp("Cancelled")))
+        _ = await search.value
+
+        let resumedResolver = ControllablePlaceImportResolver()
+        let resumedPersistence = InMemoryPlaceImportPersistence(snapshot: interruptedSnapshot)
+        let resumedStore = PlaceImportStore(
+            persistence: resumedPersistence,
+            resolver: resumedResolver
+        )
+
+        XCTAssertEqual(resumedStore.item(id: item.id)?.state, .queued)
+        XCTAssertEqual(resumedStore.item(id: item.id)?.pendingManualSearch, true)
+        resumedStore.resumePendingImports()
+        let receivedManualRequest = await waitForManualRequestCount(1, resolver: resumedResolver)
+        XCTAssertTrue(receivedManualRequest)
+        XCTAssertTrue(resumedResolver.completeNext(.needsHelp("No match")))
+        await resumedStore.waitForProcessing(batchID: batch.id)
+
+        XCTAssertNil(resumedStore.item(id: item.id)?.pendingManualSearch)
+        XCTAssertNil(resumedPersistence.snapshot.items.first?.pendingManualSearch)
+    }
+
+    func testAutomaticLookupPacerDoesNotBurstConcurrentCallers() async throws {
+        let pacer = SocialImportAutomaticLookupPacer(minimumInterval: .milliseconds(60))
+        let clock = ContinuousClock()
+        let starts = try await withThrowingTaskGroup(of: ContinuousClock.Instant.self) { group in
+            for _ in 0..<4 {
+                group.addTask {
+                    try await pacer.waitForTurn()
+                    return clock.now
+                }
+            }
+            var values: [ContinuousClock.Instant] = []
+            for try await value in group {
+                values.append(value)
+            }
+            return values.sorted()
+        }
+
+        XCTAssertEqual(starts.count, 4)
+        for (earlier, later) in zip(starts, starts.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(later - earlier, .milliseconds(35))
+        }
+    }
+
     func testSocialResolverRejectsGenericCoffeeHintsAroundOneNamedVenue() async throws {
         let oneCedar = placeImportCandidate(name: "One Cedar")
         let resolver = DevicePlaceImportResolver(
@@ -403,6 +806,475 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.items.first?.state, .queued)
         XCTAssertNil(store.items.first?.seed.nameHint)
         XCTAssertEqual(store.items.first?.seed.sourceURLString, sourceURL)
+    }
+
+    func testSocialResolverUpgradeKeepsOldRowsWhenMetadataRefreshFails() async {
+        let batch = PlaceImportBatch(id: "social-fallback", source: .instagram, sourceName: nil, totalCount: 2)
+        let sourceURL = "https://www.instagram.com/p/temporarily-unavailable/"
+        let oldItems = ["Fremont Lake", "Pine Coffee Supply"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "fallback-old-\(index)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Wyoming",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: 4
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: oldItems)
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: RoutingDevicePlaceResolver(routes: [:]),
+                metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        XCTAssertEqual(Set(store.items.map(\.displayName)), ["Fremont Lake", "Pine Coffee Supply"])
+        XCTAssertEqual(store.items.map(\.resolverVersion), [4, 4])
+        XCTAssertEqual(Set(persistence.snapshot.items.map(\.displayName)), ["Fremont Lake", "Pine Coffee Supply"])
+    }
+
+    func testCompletingOneSocialUpgradeKeepsOtherUpgradeBackupAcrossRelaunch() async {
+        let firstBatch = PlaceImportBatch(
+            id: "durable-upgrade-first",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 1
+        )
+        let secondBatch = PlaceImportBatch(
+            id: "durable-upgrade-second",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 2
+        )
+        let firstURL = "https://www.instagram.com/p/durable-first/"
+        let secondURL = "https://www.instagram.com/p/durable-second/"
+        let firstCandidate = placeImportCandidate(name: "Old First Place")
+        let firstOldItem = PlaceImportItem(
+            id: "durable-first-old",
+            batchID: firstBatch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: firstURL,
+                nameHint: firstCandidate.name,
+                areaHint: "Wyoming",
+                sourceURLString: firstURL,
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [firstCandidate],
+            selectedCandidateID: firstCandidate.id,
+            resolverVersion: 4
+        )
+        let secondOldItems = ["Old Second Place", "Old Third Place"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "durable-second-old-\(index)",
+                batchID: secondBatch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: secondURL,
+                    nameHint: name,
+                    areaHint: "Wyoming",
+                    sourceURLString: secondURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: 4
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                batches: [firstBatch, secondBatch],
+                items: [firstOldItem] + secondOldItems
+            )
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+
+        // Process only the first batch. The second placeholder remains staged in memory
+        // while the first success saves the whole snapshot.
+        store.retry(itemID: firstOldItem.id)
+        await store.waitForProcessing(batchID: firstBatch.id)
+
+        XCTAssertEqual(
+            persistence.snapshot.items.filter { $0.batchID == secondBatch.id },
+            secondOldItems
+        )
+        XCTAssertTrue(
+            persistence.snapshot.items.filter { $0.batchID == secondBatch.id }
+                .allSatisfy { $0.resolverVersion == 4 }
+        )
+
+        // Simulate terminating and relaunching before the second refresh. A failed retry
+        // must still restore both original rows from the durable snapshot.
+        let reloaded = PlaceImportStore(
+            persistence: persistence,
+            resolver: NeedsHelpPlaceImportResolver()
+        )
+        reloaded.resumePendingImports()
+        await reloaded.waitForProcessing(batchID: secondBatch.id)
+
+        XCTAssertEqual(reloaded.items(for: secondBatch.id), secondOldItems)
+        XCTAssertEqual(
+            persistence.snapshot.items.filter { $0.batchID == secondBatch.id },
+            secondOldItems
+        )
+    }
+
+    func testCancellingSocialUpgradeRestoresOldRowsBeforePersisting() {
+        let batch = PlaceImportBatch(id: "social-cancel", source: .instagram, sourceName: nil, totalCount: 2)
+        let sourceURL = "https://www.instagram.com/p/cancel-upgrade/"
+        let oldItems = ["Fremont Lake", "Pine Coffee Supply"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "cancel-old-\(index)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Wyoming",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: 4
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: oldItems)
+        )
+        let store = PlaceImportStore(persistence: persistence, resolver: SuspendedPlaceImportResolver())
+
+        store.resumePendingImports()
+        store.cancel(batchID: batch.id)
+
+        XCTAssertEqual(store.items, oldItems)
+        XCTAssertEqual(persistence.snapshot.items, oldItems)
+        XCTAssertEqual(store.batches.first?.state, .cancelled)
+    }
+
+    func testSocialUpgradeKeepsOldRowsWhenEveryMapLookupThrows() async {
+        let batch = PlaceImportBatch(id: "social-map-failure", source: .instagram, sourceName: nil, totalCount: 1)
+        let sourceURL = "https://www.instagram.com/p/map-failure/"
+        let candidate = placeImportCandidate(name: "Fremont Lake")
+        let oldItem = PlaceImportItem(
+            id: "map-failure-old",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: "Fremont Lake",
+                areaHint: "Wyoming",
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            resolverVersion: 4
+        )
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: [oldItem])
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: ThrowingDevicePlaceResolver(),
+                metadataProvider: FakeSocialImportMetadataProvider(
+                    metadata: SocialImportMetadata(
+                        title: "Wyoming itinerary",
+                        caption: "Stop at Fremont Lake!",
+                        authorName: "Creator",
+                        thumbnailURL: nil
+                    )
+                ),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        XCTAssertEqual(store.items, [oldItem])
+        XCTAssertEqual(persistence.snapshot.items, [oldItem])
+    }
+
+    func testSocialUpgradeKeepsOldRowsWhenMapLookupFailsAfterOneSuccess() async {
+        let batch = PlaceImportBatch(
+            id: "social-partial-map-failure",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 2
+        )
+        let sourceURL = "https://www.instagram.com/p/partial-map-failure/"
+        let oldItems = ["Fremont Lake", "Half Moon Lake Lodge"].enumerated().map { index, name in
+            let candidate = placeImportCandidate(name: name)
+            return PlaceImportItem(
+                id: "partial-map-failure-old-\(index)",
+                batchID: batch.id,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: sourceURL,
+                    nameHint: name,
+                    areaHint: "Wyoming",
+                    sourceURLString: sourceURL,
+                    sourceLine: 1
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id,
+                resolverVersion: 4
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: oldItems)
+        )
+        let placeResolver = PartiallyThrowingDevicePlaceResolver(
+            successfulName: "Fremont Lake",
+            candidate: placeImportCandidate(
+                name: "Fremont Lake",
+                locality: "Pinedale",
+                region: "WY"
+            )
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: DevicePlaceImportResolver(
+                placeResolver: placeResolver,
+                metadataProvider: FakeSocialImportMetadataProvider(
+                    metadata: SocialImportMetadata(
+                        title: "Wyoming itinerary",
+                        caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+                        authorName: "Creator",
+                        thumbnailURL: nil
+                    )
+                ),
+                thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+            )
+        )
+
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batch.id)
+
+        XCTAssertTrue(placeResolver.manualInputs.contains { $0.name == "Fremont Lake" })
+        XCTAssertTrue(placeResolver.manualInputs.contains { $0.name == "Half Moon Lake Lodge" })
+        XCTAssertEqual(store.items, oldItems)
+        XCTAssertEqual(persistence.snapshot.items, oldItems)
+    }
+
+    func testCurrentGoogleResolverVersionIsNotRequeuedBySocialVersionBump() {
+        let batch = PlaceImportBatch(id: "google-current", source: .googleMaps, sourceName: nil, totalCount: 1)
+        let candidate = placeImportCandidate(name: "Maru Coffee")
+        let item = PlaceImportItem(
+            id: "google-current-item",
+            batchID: batch.id,
+            source: .googleMaps,
+            seed: PlaceImportSeed(
+                rawText: "Maru Coffee",
+                nameHint: "Maru Coffee",
+                areaHint: "Los Angeles",
+                sourceURLString: "https://maps.app.goo.gl/maru",
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            resolverVersion: 4
+        )
+
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(
+                snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
+            ),
+            resolver: SuspendedPlaceImportResolver()
+        )
+
+        XCTAssertEqual(store.items, [item])
+    }
+
+    func testInstagramCarouselUpgradeProcessesEverySlideAndPersistsNineNamedPlaces() async throws {
+        let destinationNames = [
+            "Fremont Lake",
+            "Green River Lakes",
+            "Half Moon Lake Lodge",
+            "White Mountain Petroglyphs",
+            "Flaming Gorge",
+            "Wind River Range",
+            "Skyline Drive Overlook",
+            "Pine Coffee Supply",
+            "Farson Mercantile"
+        ]
+        // Captured from the live REC-106 post on July 20, 2026. These intentionally
+        // include OCR mistakes, slogans, split business names, and noisy all-caps copy.
+        let slideText: [String?] = [
+            "an ~off the beaten path~ road trip through\nWYOMING",
+            "@shoreline fishing at Fremont Lake",
+            "Spaddle & hike at Green River Lakes",
+            "g stay at\nHalf Moon Lake Lodge",
+            "White Mountain Petroglyphs",
+            "© cool off at Flaming Gorge",
+            "Wind Riyer Range",
+            "Skyline Drive Overlook",
+            "PINE\nCOFFEE & SUPPLY\nmake sure you grab\na coffee because...\nCOFFEE",
+            "you may stay up late admiring the night sky",
+            nil,
+            "FARSON\nMERCANTILE\nHome of the Big Cone\nGOURMET COFFEE,\nSANDWICHES & ICE CREAM\nnish\nthe adventure"
+        ]
+        let accessibilityText = [
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of poster, mountain and text that says 'an ~off the beaten path~ road trip through WYOMING 0 W Y M I N G 醬 ዮ は谷'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of standing, towel, raft, lake and text that says '@shoreline fishing at Fremont Lake'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of kayak, raft and text.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of campsite, fire, outdoors and text that says 'stay at Half stay+Half-MoonLakeLod Moon Lake Lodge'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of the Great Sphinx of Giza, Stone Henge and text that says 'S White Mountain WhiteMountainPetroglyphs Petroglyphs Aby'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of raft, Lake Powell and text that says '@cooloffa+FlamingGorge o! off at Flaming Gorge'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of mountain and text that says 'Wind RiverRange WindRiyerRange River Range'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of mountain and text that says 'Skyline Drive SkylineDriveOverlook Overlook'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of bolo tie, miniskirt and text that says 'PINE COFFEE COFFEE@SUPPLY 樂 SUPPLY COFFEE make makesuryougrab sure you grab acoffeebecause... a coffee because...'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of night, sky and text that says '...you may stay иp late admiring the night sky'.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of rearview mirror and text.",
+            "Video by Rachel ☼ Travel | Adventure on July 09, 2026. May be an image of ice cream, signboard and text that says 'FARSON MERCANTILE Home of the Big Cone GOURMET COFFEE, SANDWICHES & ICE CREAM finish the adventure at Farson Farson_Mercantile! Mercantile! tile!'."
+        ]
+        let slideURLs = (1...12).compactMap {
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/carousel-\($0).jpg")
+        }
+        let mediaItems = zip(slideURLs, accessibilityText).map { url, text in
+            SocialImportMediaEvidence(
+                accessibilityText: text,
+                imageURL: url
+            )
+        }
+        var recognizedText: [URL: String] = [:]
+        for (url, text) in zip(slideURLs, slideText) {
+            if let text {
+                recognizedText[url] = text
+            }
+        }
+        let recognizer = FakeSocialThumbnailTextRecognizer(textByURL: recognizedText)
+        let metadata = SocialImportMetadata(
+            title: "sunnrayy on Instagram",
+            caption: """
+            Here's my guide to an off the beaten path trip through Wyoming! @visitWyoming
+            Stop at Fremont Lake for some shoreline trout fishing!
+            Rent a paddle board from @greatoutdoorsshopwy and spend the day paddling at Green River Lakes!
+            Base camp at Half Moon Lake Lodge!
+            Explore rustic roads on the way to see the petroglyphs at White Mountain Petroglyphs!
+            Take a dip at Flaming Gorge!
+            Go for a hike in @windrivercountry and afterwards, stop for dinner at @windriverbrewing!
+            Enjoy the sunset at Skyline Drive Overlook!
+            Grab a coffee at @PineCoffeeSupply!
+            Reward yourself with a big cone at Farson Mercantile!
+            """,
+            authorName: "sunnrayy",
+            thumbnailURL: nil,
+            mediaItems: mediaItems
+        )
+        var routes = Dictionary(uniqueKeysWithValues: destinationNames.map { name in
+            (name.lowercased(), [placeImportCandidate(
+                name: name,
+                locality: "Pinedale",
+                region: "WY",
+                latitude: 42.8,
+                longitude: -109.8
+            )])
+        })
+        routes["wind riyer range"] = routes["wind river range"]
+        routes["pine coffee & supply"] = routes["pine coffee supply"]
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingNoCandidateThrowingDevicePlaceResolver(routes: routes),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: recognizer
+        )
+        let batchID = "wyoming-carousel"
+        let sourceURL = "https://www.instagram.com/p/Dak2JCClKkF/"
+        let oldItems = ["Pine Coffee Supply", "Fremont Lake", "Half Moon Lake Lodge"]
+            .enumerated()
+            .map { index, name in
+                let candidate = placeImportCandidate(name: name)
+                return PlaceImportItem(
+                    id: "wyoming-old-\(index)",
+                    batchID: batchID,
+                    source: .instagram,
+                    seed: PlaceImportSeed(
+                        rawText: sourceURL,
+                        nameHint: name,
+                        areaHint: "Wyoming",
+                        sourceURLString: sourceURL,
+                        sourceLine: 1
+                    ),
+                    state: .ready,
+                    candidates: [candidate],
+                    selectedCandidateID: candidate.id,
+                    resolverVersion: 4
+                )
+            }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                batches: [
+                    PlaceImportBatch(
+                        id: batchID,
+                        source: .instagram,
+                        sourceName: nil,
+                        state: .ready,
+                        totalCount: oldItems.count,
+                        processedCount: oldItems.count
+                    )
+                ],
+                items: oldItems
+            )
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: resolver
+        )
+
+        XCTAssertEqual(store.items.count, 1)
+        XCTAssertEqual(store.items.first?.state, .queued)
+        store.resumePendingImports()
+        await store.waitForProcessing(batchID: batchID)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(recognizer.requestedURLs.count, slideURLs.count)
+        XCTAssertEqual(Set(recognizer.requestedURLs), Set(slideURLs))
+        XCTAssertEqual(items.count, 9)
+        XCTAssertEqual(items.map(\.displayName), destinationNames)
+        XCTAssertTrue(items.allSatisfy { $0.state == .ready })
+        XCTAssertEqual(store.batches.first?.totalCount, 9)
+        XCTAssertEqual(store.batches.first?.processedCount, 9)
+        XCTAssertEqual(store.summary.totalCount, 9)
+        XCTAssertEqual(store.summary.readyCount, 9)
+        XCTAssertEqual(persistence.snapshot.items.count, 9)
+
+        let reloaded = PlaceImportStore(
+            persistence: persistence,
+            resolver: SuspendedPlaceImportResolver()
+        )
+        XCTAssertEqual(reloaded.items.count, 9)
+        XCTAssertEqual(reloaded.items(for: batchID).map(\.displayName), destinationNames)
+        XCTAssertEqual(reloaded.summary.readyCount, 9)
     }
 
     func testSummaryAggregatesUnresolvedItemsAcrossEveryImportBatch() async throws {
@@ -473,6 +1345,57 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store.item(id: item.id)?.state, .queued)
         XCTAssertEqual(store.item(id: item.id)?.candidates, [])
         XCTAssertEqual(store.item(id: item.id)?.resolverVersion, PlaceImportItem.currentResolverVersion)
+    }
+
+    private func manualSearchFixtureSnapshot() throws -> PlaceImportSnapshot {
+        let bundle = Bundle(for: PlaceImportStoreTests.self)
+        let url = try XCTUnwrap(
+            bundle.url(forResource: "rec-106-manual-place-search-pre", withExtension: "json")
+                ?? bundle.url(
+                    forResource: "rec-106-manual-place-search-pre",
+                    withExtension: "json",
+                    subdirectory: "Fixtures"
+                )
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var snapshot = try decoder.decode(PlaceImportSnapshot.self, from: Data(contentsOf: url))
+        snapshot.items = snapshot.items.map { item in
+            var currentItem = item
+            currentItem.resolverVersion = PlaceImportItem.currentResolverVersion
+            return currentItem
+        }
+        return snapshot
+    }
+
+    private func waitForManualRequestCount(
+        _ expectedCount: Int,
+        resolver: ControllablePlaceImportResolver
+    ) async -> Bool {
+        for _ in 0..<1_000 {
+            if resolver.manualSeeds.count >= expectedCount {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
+    }
+
+    private func waitForImportItem(
+        id: String,
+        nameHint: String,
+        state: PlaceImportItemState,
+        store: PlaceImportStore
+    ) async -> Bool {
+        for _ in 0..<1_000 {
+            if let item = store.item(id: id),
+               item.seed.nameHint == nameHint,
+               item.state == state {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
     }
 }
 
@@ -622,13 +1545,855 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
     }
+
+    func testSocialOCRCanCorrectOneCharacterWithoutEnablingFuzzyManualMatching() async throws {
+        let candidate = placeImportCandidate(name: "Wind River Range")
+        let imageURL = try XCTUnwrap(URL(string: "https://scontent-lax3-1.cdninstagram.com/wind-range.jpg"))
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [
+                "wind riyer range": [candidate]
+            ]),
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: nil,
+                    caption: nil,
+                    authorName: nil,
+                    thumbnailURL: imageURL
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(text: "Wind Riyer Range")
+        )
+        let seed = PlaceImportSeed(
+            rawText: "https://www.instagram.com/p/ocr-typo/",
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: "https://www.instagram.com/p/ocr-typo/",
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+    }
 }
 
 @MainActor
 final class SocialPlaceImportMetadataTests: XCTestCase {
+    func testDenseGuideParserReconstructsWrappedNamesAndCountries() {
+        let observations = [
+            SocialTextObservation(
+                text: "MOMOS COFFEE FLAGSHIP STORE / REPUBLIC",
+                boundingBox: CGRect(x: 0.16, y: 0.80, width: 0.66, height: 0.016)
+            ),
+            SocialTextObservation(
+                text: "OF KOREA",
+                boundingBox: CGRect(x: 0.70, y: 0.794, width: 0.12, height: 0.012)
+            ),
+            SocialTextObservation(
+                text: "DITTA ARTIGIANALE SPECIALTY",
+                boundingBox: CGRect(x: 0.16, y: 0.60, width: 0.46, height: 0.015)
+            ),
+            SocialTextObservation(
+                text: "COFFEE ROASTERS",
+                boundingBox: CGRect(x: 0.16, y: 0.593, width: 0.29, height: 0.013)
+            ),
+            SocialTextObservation(
+                text: "/ ITALY",
+                boundingBox: CGRect(x: 0.63, y: 0.596, width: 0.12, height: 0.016)
+            ),
+            SocialTextObservation(
+                text: "CASA BARISTA & CO., / DOMINICAN",
+                boundingBox: CGRect(x: 0.12, y: 0.40, width: 0.46, height: 0.016)
+            ),
+            SocialTextObservation(
+                text: "CASCO HISTORICO",
+                boundingBox: CGRect(x: 0.12, y: 0.390, width: 0.27, height: 0.012)
+            ),
+            SocialTextObservation(
+                text: "REPUBLIC",
+                boundingBox: CGRect(x: 0.46, y: 0.394, width: 0.11, height: 0.009)
+            ),
+            SocialTextObservation(
+                text: "OTTOMAN COFFEE HOUSE / UNITED KINGDOM NEW ENTRY",
+                boundingBox: CGRect(x: 0.12, y: 0.20, width: 0.77, height: 0.015)
+            ),
+            SocialTextObservation(
+                text: "THE BEST COFFEE SHOP IN EUROPE SPONSORED BY SLAYER",
+                boundingBox: CGRect(x: 0.16, y: 0.788, width: 0.78, height: 0.009)
+            )
+        ]
+
+        XCTAssertEqual(SocialGuideTextParser.rows(from: observations), [
+            "MOMOS COFFEE FLAGSHIP STORE / REPUBLIC OF KOREA",
+            "DITTA ARTIGIANALE SPECIALTY COFFEE ROASTERS / ITALY",
+            "CASA BARISTA & CO., CASCO HISTORICO / DOMINICAN REPUBLIC",
+            "OTTOMAN COFFEE HOUSE / UNITED KINGDOM"
+        ])
+    }
+
+    func testExactHundredCoffeeGuideKeepsEveryOrderedNameAndCountry() {
+        let expected = hundredCoffeeGuideRows()
+        let recognizedTexts = [
+            expected.prefix(50),
+            expected.suffix(50)
+        ].map { rows in
+            rows.map { "\($0.name) / \($0.country)" }.joined(separator: "\n")
+        }
+
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: "The World's 100 Best Coffee Shops",
+                caption: nil,
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: recognizedTexts
+        )
+
+        XCTAssertEqual(hints.count, 100)
+        XCTAssertEqual(hints.map(\.name), expected.map(\.name))
+        XCTAssertEqual(hints.map(\.area), expected.map { Optional($0.country) })
+        XCTAssertTrue(hints.allSatisfy { $0.evidence == .imageText })
+    }
+
+    func testExactHundredCoffeeGuideReconstructsCapturedVisionGeometry() throws {
+        let expected = hundredCoffeeGuideRows()
+        let observationColumns = try hundredCoffeeGuideObservationColumns()
+        let recognizedTexts = observationColumns.map {
+            SocialGuideTextParser.rows(from: $0).joined(separator: "\n")
+        }
+        let parsedRows = recognizedTexts
+            .flatMap { $0.split(separator: "\n").map(String.init) }
+            .compactMap(SocialGuideTextParser.components(from:))
+
+        XCTAssertEqual(parsedRows.count, 100)
+        XCTAssertEqual(
+            parsedRows.map { normalizedCoffeeGuideValue($0.name) },
+            expected.map { normalizedCoffeeGuideValue($0.name) }
+        )
+        XCTAssertEqual(parsedRows.map(\.area), expected.map(\.country))
+
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: "The World's 100 Best Coffee Shops",
+                caption: nil,
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: recognizedTexts
+        )
+        XCTAssertEqual(hints.count, 100)
+        XCTAssertEqual(
+            hints.map { normalizedCoffeeGuideValue($0.name) },
+            expected.map { normalizedCoffeeGuideValue($0.name) }
+        )
+        XCTAssertEqual(hints.map(\.area), expected.map { Optional($0.country) })
+    }
+
+    func testExactHundredCoffeeGuideExpandsBeforeAnyMapLookup() async throws {
+        let expected = hundredCoffeeGuideRows()
+        let slideURLs = [
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/coffee-guide-1.jpg")!,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/coffee-guide-2.jpg")!
+        ]
+        let recognizedTextByURL = Dictionary(uniqueKeysWithValues: zip(
+            slideURLs,
+            [expected.prefix(50), expected.suffix(50)].map { rows in
+                rows.map { "\($0.name) / \($0.country)" }.joined(separator: "\n")
+            }
+        ))
+        let placeResolver = RoutingDevicePlaceResolver(routes: [:])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(
+                metadata: SocialImportMetadata(
+                    title: "The World's 100 Best Coffee Shops",
+                    caption: nil,
+                    authorName: nil,
+                    thumbnailURL: nil,
+                    mediaItems: slideURLs.map {
+                        SocialImportMediaEvidence(accessibilityText: nil, imageURL: $0)
+                    }
+                )
+            ),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer(textByURL: recognizedTextByURL)
+        )
+        let sourceURL = "https://www.instagram.com/p/DU6kxigDOD-/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        guard case .expanded(let seeds, _) = resolution else {
+            return XCTFail("Expected a durable guide expansion, got \(resolution)")
+        }
+
+        XCTAssertEqual(seeds.count, 100)
+        XCTAssertEqual(seeds.map(\.nameHint), expected.map { Optional($0.name) })
+        XCTAssertEqual(seeds.map(\.areaHint), expected.map { Optional($0.country) })
+        XCTAssertEqual(seeds.map(\.sourceLine), Array(repeating: 1, count: 100))
+        XCTAssertTrue(placeResolver.manualInputs.isEmpty)
+    }
+
+    func testHundredRowSocialExpansionPersistsBeforeFirstChildLookupAndReloadsInOrder() async throws {
+        let sourceURL = "https://www.instagram.com/p/DU6kxigDOD-/"
+        let seeds = hundredCoffeeGuideRows().map { row in
+            PlaceImportSeed(
+                rawText: sourceURL,
+                nameHint: row.name,
+                areaHint: row.country,
+                sourceURLString: sourceURL,
+                sourceLine: 1
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence()
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: ExpandingThenSuspendingPlaceImportResolver(seeds: seeds)
+        )
+
+        let batchID = try store.enqueue(source: .instagram, text: sourceURL)
+        let persistedEveryRow = await waitForPersistedItemCount(100, persistence: persistence)
+        XCTAssertTrue(persistedEveryRow)
+
+        let items = store.items(for: batchID)
+        XCTAssertEqual(items.count, 100)
+        XCTAssertEqual(items.map(\.displayName), seeds.compactMap(\.nameHint))
+        XCTAssertEqual(items.map(\.seed.sourceLine), Array(repeating: 1, count: 100))
+        XCTAssertEqual(store.summary.totalCount, 100)
+        XCTAssertEqual(store.batches.first?.totalCount, 100)
+        XCTAssertEqual(persistence.snapshot.items.count, 100)
+
+        let relaunchedStore = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(snapshot: persistence.snapshot),
+            resolver: SuspendedPlaceImportResolver()
+        )
+        XCTAssertEqual(relaunchedStore.items(for: batchID).map(\.displayName), seeds.compactMap(\.nameHint))
+        XCTAssertTrue(relaunchedStore.items(for: batchID).allSatisfy { $0.state == .queued })
+        store.cancel(batchID: batchID)
+    }
+
+    func testGuideExpansionStaysAheadOfTheNextPastedSource() async {
+        let batch = PlaceImportBatch(
+            id: "multi-source-guide",
+            source: .instagram,
+            sourceName: nil,
+            totalCount: 2
+        )
+        let firstURL = "https://www.instagram.com/p/guide/"
+        let secondURL = "https://www.instagram.com/p/second/"
+        let placeholder = PlaceImportItem(
+            id: "guide-placeholder",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: firstURL,
+                nameHint: nil,
+                areaHint: nil,
+                sourceURLString: firstURL,
+                sourceLine: 1
+            )
+        )
+        let secondCandidate = placeImportCandidate(name: "Second Source")
+        let secondItem = PlaceImportItem(
+            id: "second-source",
+            batchID: batch.id,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: secondURL,
+                nameHint: "Second Source",
+                areaHint: "USA",
+                sourceURLString: secondURL,
+                sourceLine: 2
+            ),
+            state: .ready,
+            candidates: [secondCandidate],
+            selectedCandidateID: secondCandidate.id
+        )
+        let expandedSeeds = ["Guide One", "Guide Two", "Guide Three"].map { name in
+            PlaceImportSeed(
+                rawText: firstURL,
+                nameHint: name,
+                areaHint: "USA",
+                sourceURLString: firstURL,
+                sourceLine: 1
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(batches: [batch], items: [placeholder, secondItem])
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: ExpandingThenSuspendingPlaceImportResolver(seeds: expandedSeeds)
+        )
+
+        store.resumePendingImports()
+        let persistedExpansion = await waitForPersistedItemCount(4, persistence: persistence)
+        XCTAssertTrue(persistedExpansion)
+        XCTAssertEqual(
+            store.items(for: batch.id).map(\.displayName),
+            ["Guide One", "Guide Two", "Guide Three", "Second Source"]
+        )
+        store.cancel(batchID: batch.id)
+    }
+
+    func testManualSearchRejectsCandidatesFromTheWrongCountry() async throws {
+        let wrongCountry = placeImportCandidate(
+            name: "GOTA Coffee Experts",
+            locality: "Los Angeles",
+            region: "CA",
+            country: "US"
+        )
+        let correctCountry = placeImportCandidate(
+            name: "GOTA Coffee Experts",
+            locality: "Vienna",
+            region: "Vienna",
+            country: "AT"
+        )
+        let unknownCountry = PlaceCandidate(
+            id: "unknown-country-gota",
+            name: "GOTA Coffee Experts",
+            category: "cafe",
+            locality: "Unknown",
+            region: nil,
+            country: nil,
+            latitude: 0,
+            longitude: 0,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "unknown-country-gota",
+            confidence: 0.9
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: FakeDevicePlaceResolver(
+                candidates: [wrongCountry, unknownCountry, correctCountry]
+            )
+        )
+        let seed = PlaceImportSeed(
+            rawText: "GOTA Coffee Experts / Austria",
+            nameHint: "GOTA Coffee Experts",
+            areaHint: "Austria",
+            sourceURLString: "https://www.instagram.com/p/DU6kxigDOD-/",
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolveManualSearch(seed: seed, source: .instagram)
+        guard case .candidates(let candidates, _) = resolution else {
+            return XCTFail("Expected the Austrian candidate, got \(resolution)")
+        }
+        XCTAssertEqual(candidates.map(\.id), [correctCountry.id])
+    }
+
+    func testEmbeddedInstagramParserPrefersLargestImageCandidate() throws {
+        let post: [String: Any] = [
+            "code": "DU6kxigDOD-",
+            "caption": ["text": "The World's 100 Best Coffee Shops"],
+            "carousel_media": [[
+                "display_uri": "https://scontent-lax3-1.cdninstagram.com/display-513.jpg",
+                "image_versions2": [
+                    "candidates": [
+                        [
+                            "url": "https://scontent-lax3-1.cdninstagram.com/medium-750.jpg",
+                            "width": 750,
+                            "height": 935
+                        ],
+                        [
+                            "url": "https://scontent-lax3-1.cdninstagram.com/original-1440.jpg",
+                            "width": 1440,
+                            "height": 1795
+                        ]
+                    ]
+                ]
+            ]]
+        ]
+        let json = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: post), encoding: .utf8)
+        )
+
+        let evidence = try XCTUnwrap(
+            InstagramEmbeddedPostParser.evidence(
+                from: "<script type='application/json'>\(json)</script>",
+                expectedCode: "DU6kxigDOD-"
+            )
+        )
+
+        XCTAssertEqual(
+            evidence.mediaItems.first?.imageURL,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/original-1440.jpg")
+        )
+    }
+
+    func testInstagramReelDoesNotTreatCreatorAttributionAsAPlace() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Frank N Frank's on Instagram",
+            caption: "@franknfranks is the latest Chinatown spot from veterans of Amboy and Howlin’s Ray’s, serving stacked sandwiches on house-made focaccia.",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let frank = placeImportCandidate(name: "Frank N Frank's")
+        let incidental = placeImportCandidate(name: "Veterans of Amboy")
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "franknfranks": [frank],
+            "veterans of amboy": [incidental]
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/reel/Da9EdCzBFuw/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["franknfranks"])
+        XCTAssertEqual(resolution, .candidates([frank], selectedCandidateID: frank.id))
+    }
+
+    func testAcquisitionFromPhraseStillProducesAPlaceHint() {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Grab a sandwich from Maru Coffee.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        XCTAssertEqual(hints.map(\.name), ["Maru Coffee"])
+    }
+
+    func testAcquisitionFromPhraseRejectsPeopleAndCreatorAttribution() {
+        let captions = [
+            "Get restaurant recommendations from my friend Sara.",
+            "Get this from the veterans of Amboy.",
+            "Get the recipe from the team behind Maru Coffee."
+        ]
+
+        for caption in captions {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: nil,
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            XCTAssertTrue(hints.isEmpty, "Unexpected place hint for: \(caption)")
+        }
+    }
+
+    func testAcquisitionFromPhraseKeepsDistinctiveNameNonDurable() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Grab lunch from Gjusta.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        let hint = try XCTUnwrap(hints.first)
+        XCTAssertEqual(hint.name, "Gjusta")
+        XCTAssertEqual(hint.evidence, .acquisitionPhrase)
+        XCTAssertFalse(hint.evidence.shouldRemainVisibleWithoutCandidates)
+    }
+
+    func testAcquisitionFromPhraseKeepsVenueNamesBeginningWithFriend() {
+        let captions = [
+            "Grab pastries from Friends & Family.": "Friends & Family",
+            "Get coffee from Friendship Coffee.": "Friendship Coffee"
+        ]
+
+        for (caption, expectedName) in captions {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: nil,
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            XCTAssertEqual(hints.map(\.name), [expectedName], "Unexpected hints for: \(caption)")
+        }
+    }
+
+    func testOneOCRSlideStateDoesNotConstrainTheWholeCarousel() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: "Summer road trip guide",
+                caption: nil,
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: [
+                "an off the beaten path road trip through WYOMING",
+                "Skyline Drive Overlook"
+            ]
+        )
+
+        let skyline = try XCTUnwrap(hints.first { $0.name == "Skyline Drive Overlook" })
+        XCTAssertNil(skyline.area)
+    }
+
+    func testVenueNameContainingStateDoesNotBecomePostWideArea() throws {
+        for caption in [
+            "Dinner at California Grill.",
+            "Visit California Grill.",
+            "Disney World travel guide for dinner at California Grill."
+        ] {
+            let hints = SocialPlaceHintExtractor.hints(
+                from: SocialImportMetadata(
+                    title: "Disney World travel guide",
+                    caption: caption,
+                    authorName: nil,
+                    thumbnailURL: nil
+                ),
+                recognizedTexts: []
+            )
+
+            let grill = try XCTUnwrap(hints.first { $0.name == "California Grill" })
+            XCTAssertNil(grill.area, "Unexpected post-wide area for: \(caption)")
+        }
+    }
+
+    func testWyomingCarouselCaptionKeepsEveryNamedDestination() async throws {
+        let metadata = SocialImportMetadata(
+            title: "sunnrayy on Instagram",
+            caption: """
+            Here’s my guide to an off the beaten path trip through Wyoming!🌄🛶🗺️🌞 @visitWyoming #ThatsWY
+
+            ‼️Remember that traveling to these beautiful places is a privilege - we must preserve and protect these areas for future generations! Leave no trace, adhere to local regulations and always leave places better than you found them! #WYresponsbily
+
+            🎣 Stop at Fremont Lake for some shoreline trout fishing!
+            🏔️ Rent a paddle board from @greatoutdoorsshopwy and spend the day paddling at Green River Lakes!
+            🏕️ Base camp at Half Moon Lake Lodge!
+            🗺️ Explore rustic roads on the way to see the petroglyphs at White Mountain Petroglyphs!
+            💦 Take a dip at Flaming Gorge!
+            🏞️ Go for a hike in @windrivercountry and afterwards, stop for dinner at @windriverbrewing!
+            🌅 Enjoy the sunset at Skyline Drive Overlook!
+            ☕️ Grab a coffee at @PineCoffeeSupply!
+            🌌 Stargaze in Wyoming’s dark sky country!
+            🗺️ Be ready to get a little dusty!
+            🍦 Reward yourself for exploring the path less traveled with a big cone at Farson Mercantile!
+            """,
+            authorName: "sunnrayy",
+            thumbnailURL: nil
+        )
+        let destinationNames = [
+            "Fremont Lake",
+            "Green River Lakes",
+            "Half Moon Lake Lodge",
+            "White Mountain Petroglyphs",
+            "Flaming Gorge",
+            "Skyline Drive Overlook",
+            "Pine Coffee Supply",
+            "Farson Mercantile"
+        ]
+        let routes = Dictionary(uniqueKeysWithValues: destinationNames.map { name in
+            (name.lowercased(), [placeImportCandidate(
+                name: name,
+                locality: "Pinedale",
+                region: "WY",
+                latitude: 42.8,
+                longitude: -109.8
+            )])
+        })
+        let placeResolver = RoutingDevicePlaceResolver(routes: routes)
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/p/Dak2JCClKkF/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected every itinerary destination to expand, got \(resolution)")
+        }
+        XCTAssertEqual(Set(entries.compactMap(\.seed.nameHint)), Set(destinationNames))
+        XCTAssertEqual(Set(placeResolver.manualInputs.compactMap(\.areaHint)), ["Wyoming"])
+        XCTAssertTrue(placeResolver.manualInputs.allSatisfy { $0.areaHint == "Wyoming" })
+    }
+
+    func testSocialResolutionNormalizesMapKitAliasesAndRejectsWrongStateResults() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Here’s my guide to a road trip through Wyoming! Stop at Farson Mercantile. Take a dip at Flaming Gorge. Enjoy the sunset at Skyline Drive Overlook!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let farson = placeImportCandidate(
+            name: "Farson Merc",
+            address: "4048 U.S. Highway 191, Farson, WY",
+            locality: "Farson",
+            region: "WY",
+            latitude: 42.109160,
+            longitude: -109.448601
+        )
+        let flamingGorge = placeImportCandidate(
+            name: "Flaming Gorge Reservoir",
+            locality: "Green River",
+            region: "WY",
+            latitude: 41.084987,
+            longitude: -109.545341
+        )
+        let skylineLosAngeles = (1...8).map { index in
+            placeImportCandidate(
+                name: "Skyline Drive Overlook",
+                locality: "Los Angeles",
+                region: "CA",
+                latitude: 34.0 + Double(index) / 1_000,
+                longitude: -118.2
+            )
+        }
+        let placeResolver = RoutingDevicePlaceResolver(routes: [
+            "farson mercantile": [farson],
+            "flaming gorge": [flamingGorge],
+            "skyline drive overlook": skylineLosAngeles
+        ])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/p/Dak2JCClKkF/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected three review entries, got \(resolution)")
+        }
+
+        XCTAssertEqual(placeResolver.manualInputs.map(\.areaHint), ["Wyoming", "Wyoming", "Wyoming"])
+        XCTAssertEqual(entries.map(\.seed.nameHint), [
+            "Farson Mercantile",
+            "Flaming Gorge",
+            "Skyline Drive Overlook"
+        ])
+        XCTAssertEqual(entries.map { $0.selectedCandidateID != nil }, [true, true, false])
+        XCTAssertEqual(entries[0].candidates.first?.name, "Farson Mercantile")
+        XCTAssertEqual(entries[0].candidates.first?.sourceProviderPlaceID, farson.sourceProviderPlaceID)
+        XCTAssertEqual(entries[1].candidates.first?.name, "Flaming Gorge")
+        XCTAssertTrue(entries[2].candidates.isEmpty)
+        XCTAssertNotNil(entries[2].helpMessage)
+    }
+
+    func testNamedCaptionDestinationRemainsVisibleWhenMapKitReturnsNoCandidates() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Explore the petroglyphs at White Mountain Petroglyphs!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [:]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/p/unresolved-example/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected an honest unresolved entry, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.seed.nameHint, "White Mountain Petroglyphs")
+        XCTAssertEqual(entries.first?.candidates, [])
+        XCTAssertNotNil(entries.first?.helpMessage)
+    }
+
+    func testEmbeddedInstagramParserSelectsExpectedPostAndKeepsTwelveSlidesInOrder() throws {
+        let children: [[String: Any]] = (1...12).map { index in
+            var child: [String: Any] = [
+                "id": "slide-\(index)",
+                "accessibility_caption": "Slide \(index) text"
+            ]
+            if index.isMultiple(of: 2) {
+                child["image_versions2"] = [
+                    "candidates": [[
+                        "url": "https://scontent-lax3-1.cdninstagram.com/fallback-\(index).jpg",
+                        "width": 640,
+                        "height": 853
+                    ]]
+                ]
+            } else {
+                child["display_uri"] = "https://scontent-lax3-1.cdninstagram.com/display-\(index).jpg"
+            }
+            return child
+        }
+        let root: [String: Any] = [
+            "require": [
+                ["nested": [
+                    "code": "decoy-post",
+                    "caption": ["text": "Wrong caption"],
+                    "carousel_media": [["display_uri": "https://scontent-lax3-1.cdninstagram.com/decoy.jpg"]]
+                ]],
+                ["relay": ["payload": [
+                    "code": "Dak2JCClKkF",
+                    "caption": ["text": "Line one\nCoffee at @PineCoffeeSupply"],
+                    "carousel_media": children
+                ]]]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: root)
+        var body = try XCTUnwrap(String(data: data, encoding: .utf8))
+        body = body.replacingOccurrences(of: "@PineCoffeeSupply", with: "\\u0040PineCoffeeSupply")
+        let html = """
+        <html><head></head><body>
+        <script type='application/json' data-sjs>\(body)</script>
+        </body></html>
+        """
+
+        let evidence = try XCTUnwrap(
+            InstagramEmbeddedPostParser.evidence(
+                from: html,
+                expectedCode: "Dak2JCClKkF"
+            )
+        )
+
+        XCTAssertEqual(evidence.caption, "Line one\nCoffee at @PineCoffeeSupply")
+        XCTAssertEqual(evidence.mediaItems.count, 12)
+        XCTAssertEqual(evidence.mediaItems.map(\.accessibilityText), (1...12).map { "Slide \($0) text" })
+        XCTAssertEqual(
+            evidence.mediaItems.first?.imageURL,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/display-1.jpg")
+        )
+        XCTAssertEqual(
+            evidence.mediaItems[1].imageURL,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/fallback-2.jpg")
+        )
+    }
+
+    func testEmbeddedInstagramParserFindsFullPostAfterBudgetHeavyPartialDuplicate() throws {
+        let partial: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Partial duplicate"],
+            "carousel_media": [],
+            "unrelated_nodes": Array(repeating: 0, count: 100_100)
+        ]
+        let full: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Full caption"],
+            "carousel_media": [
+                ["display_uri": "https://scontent-lax3-1.cdninstagram.com/1.jpg"],
+                ["display_uri": "https://scontent-lax3-1.cdninstagram.com/2.jpg"]
+            ]
+        ]
+        let partialJSON = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: partial), encoding: .utf8)
+        )
+        let fullJSON = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: full), encoding: .utf8)
+        )
+        let html = """
+        <script type="application/json">\(partialJSON)</script>
+        <script type="application/json">\(fullJSON)</script>
+        """
+
+        let evidence = try XCTUnwrap(
+            InstagramEmbeddedPostParser.evidence(from: html, expectedCode: "POST123")
+        )
+
+        XCTAssertEqual(evidence.caption, "Full caption")
+        XCTAssertEqual(evidence.mediaItems.count, 2)
+    }
+
+    func testEmbeddedInstagramParserPrefersUsableImagesOverMoreAccessibilityOnlyRows() throws {
+        let accessibilityOnly: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Accessibility-only duplicate"],
+            "carousel_media": (1...12).map { index in
+                ["accessibility_caption": "Slide \(index)"]
+            }
+        ]
+        let usable: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Usable duplicate"],
+            "carousel_media": (1...11).map { index in
+                ["display_uri": "https://scontent-lax3-1.cdninstagram.com/usable-\(index).jpg"]
+            }
+        ]
+        let accessibilityJSON = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: accessibilityOnly), encoding: .utf8)
+        )
+        let usableJSON = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: usable), encoding: .utf8)
+        )
+        let html = """
+        <script type="application/json">\(accessibilityJSON)</script>
+        <script type="application/json">\(usableJSON)</script>
+        """
+
+        let evidence = try XCTUnwrap(
+            InstagramEmbeddedPostParser.evidence(from: html, expectedCode: "POST123")
+        )
+
+        XCTAssertEqual(evidence.caption, "Usable duplicate")
+        XCTAssertEqual(evidence.mediaItems.count, 11)
+        XCTAssertTrue(evidence.mediaItems.allSatisfy { $0.imageURL != nil })
+    }
+
+    func testEmbeddedInstagramParserRejectsNonMetaMediaHosts() throws {
+        let post: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Caption"],
+            "carousel_media": [["display_uri": "https://attacker.example/image.jpg"]]
+        ]
+        let json = try XCTUnwrap(
+            String(data: JSONSerialization.data(withJSONObject: post), encoding: .utf8)
+        )
+
+        let evidence = try XCTUnwrap(
+            InstagramEmbeddedPostParser.evidence(
+                from: "<script type='application/json'>\(json)</script>",
+                expectedCode: "POST123"
+            )
+        )
+
+        XCTAssertEqual(evidence.caption, "Caption")
+        XCTAssertTrue(evidence.mediaItems.isEmpty)
+    }
+
     func testInstagramMetaParserPreservesApostrophesAndReversedAttributeOrder() throws {
         let html = """
         <html><head>
+        <meta name="twitter:title" content="Generic Instagram profile">
         <meta content="Ryan's lunch at @mendocinofarms &amp; a great patio" property="og:description">
         <meta property="og:title" content="Ryan on Instagram">
         <meta content="https://example.com/cover.jpg" property="og:image">
@@ -638,6 +2403,7 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         let metadata = try XCTUnwrap(PublicSocialHTMLMetadataParser.metadata(from: html))
 
         XCTAssertEqual(metadata.caption, "Ryan's lunch at @mendocinofarms & a great patio")
+        XCTAssertEqual(metadata.title, "Ryan on Instagram")
         XCTAssertEqual(metadata.authorName, "Ryan")
         XCTAssertEqual(metadata.thumbnailURL, URL(string: "https://example.com/cover.jpg"))
     }
@@ -652,6 +2418,162 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         )
 
         XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testCandidateMatcherTreatsMercAsMercantileAcrossStateNameFormats() {
+        let candidate = placeImportCandidate(
+            name: "Farson Merc",
+            address: "4048 U.S. Highway 191, Farson, WY",
+            locality: "Farson",
+            region: "WY",
+            latitude: 42.109160,
+            longitude: -109.448601
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Farson Mercantile",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testExplicitStateCodeWinsOverStateNameInsideCity() {
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Kansas City, MO"), "MO")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Washington, DC"), "DC")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Jackson, wy"), "WY")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Kansas City, Mo"), "MO")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "Washington, D.C."), "DC")
+        XCTAssertEqual(PlaceImportGeography.stateCode(in: "NE Portland, OR"), "OR")
+    }
+
+    func testLosAngelesShorthandDoesNotBecomeLouisianaSearchRegion() {
+        let losAngeles = ManualPlaceSearchPlan(name: "Gjusta", areaHint: "LA")
+        let downtown = ManualPlaceSearchPlan(name: "Gjusta", areaHint: "Downtown LA")
+        let batonRouge = ManualPlaceSearchPlan(name: "Coffee Call", areaHint: "Baton Rouge, LA")
+
+        XCTAssertEqual(losAngeles.query, "Gjusta LA")
+        XCTAssertNil(losAngeles.regionHint)
+        XCTAssertEqual(downtown.query, "Gjusta Downtown LA")
+        XCTAssertNil(downtown.regionHint)
+        XCTAssertEqual(batonRouge.query, "Coffee Call Baton Rouge")
+        XCTAssertNotNil(batonRouge.regionHint)
+    }
+
+    func testGeorgiaCountryDoesNotBecomeUSStateSearchRegion() {
+        let country = ManualPlaceSearchPlan(name: "Cafe Littera", areaHint: "Tbilisi, Georgia")
+        let ambiguous = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Georgia")
+        let postalState = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Savannah, GA")
+        let namedState = ManualPlaceSearchPlan(name: "The Grey", areaHint: "Savannah, Georgia, USA")
+
+        XCTAssertEqual(country.query, "Cafe Littera Tbilisi, Georgia")
+        XCTAssertNil(country.regionHint)
+        XCTAssertEqual(ambiguous.query, "The Grey Georgia")
+        XCTAssertNil(ambiguous.regionHint)
+        XCTAssertEqual(postalState.query, "The Grey Savannah")
+        XCTAssertNotNil(postalState.regionHint)
+        XCTAssertEqual(namedState.query, "The Grey Savannah")
+        XCTAssertNotNil(namedState.regionHint)
+    }
+
+    func testGeorgiaCountryDoesNotBecomePostWideUSStateContext() throws {
+        let hints = SocialPlaceHintExtractor.hints(
+            from: SocialImportMetadata(
+                title: nil,
+                caption: "Road trip through Georgia. Dinner at Cafe Littera.",
+                authorName: nil,
+                thumbnailURL: nil
+            ),
+            recognizedTexts: []
+        )
+
+        let cafe = try XCTUnwrap(hints.first { $0.name == "Cafe Littera" })
+        XCTAssertNil(cafe.area)
+    }
+
+    func testCandidateMatcherRejectsAnExactNameInAConflictingState() {
+        let candidate = placeImportCandidate(
+            name: "Skyline Drive Overlook",
+            locality: "Los Angeles",
+            region: "CA"
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Skyline Drive Overlook",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertTrue(match.candidates.isEmpty)
+        XCTAssertNil(match.selectedCandidateID)
+    }
+
+    func testCandidateMatcherAcceptsGeographicProviderSuffixInTheRightState() {
+        let candidate = placeImportCandidate(
+            name: "Flaming Gorge Reservoir",
+            locality: "Green River",
+            region: "WY",
+            latitude: 41.084987,
+            longitude: -109.545341
+        )
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Flaming Gorge",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(match.selectedCandidateID, candidate.id)
+    }
+
+    func testStateAreaHintUsesMapRegionWithoutPollutingSearchText() {
+        let plan = ManualPlaceSearchPlan(
+            name: "Farson Mercantile",
+            areaHint: "Wyoming"
+        )
+
+        XCTAssertEqual(plan.query, "Farson Mercantile")
+    }
+
+    func testStateRegionSearchKeepsCityInQuery() {
+        let jackson = ManualPlaceSearchPlan(
+            name: "Starbucks",
+            areaHint: "Jackson, Wyoming"
+        )
+        let kansasCity = ManualPlaceSearchPlan(
+            name: "Cafe Gratitude",
+            areaHint: "Kansas City, MO"
+        )
+        let washington = ManualPlaceSearchPlan(
+            name: "Compass Coffee",
+            areaHint: "Washington, D.C."
+        )
+        let portland = ManualPlaceSearchPlan(
+            name: "Proud Mary Coffee",
+            areaHint: "NE Portland, OR"
+        )
+
+        XCTAssertEqual(jackson.query, "Starbucks Jackson")
+        XCTAssertEqual(kansasCity.query, "Cafe Gratitude Kansas City")
+        XCTAssertEqual(washington.query, "Compass Coffee Washington")
+        XCTAssertEqual(portland.query, "Proud Mary Coffee NE Portland")
+        XCTAssertNotNil(jackson.regionHint)
+        XCTAssertNotNil(kansasCity.regionHint)
+        XCTAssertNotNil(washington.regionHint)
+        XCTAssertNotNil(portland.regionHint)
+    }
+
+    func testCandidateMatcherDoesNotApplyOneCharacterOCRCorrectionByDefault() {
+        let candidate = placeImportCandidate(name: "Hotel Juno")
+
+        let match = PlaceImportCandidateMatcher.match(
+            [candidate],
+            nameHint: "Hotel June",
+            areaHint: nil
+        )
+
+        XCTAssertNil(match.selectedCandidateID)
     }
 
     func testCandidateMatcherUsesAddressAndCoordinatesToChooseAChainBranch() {
@@ -708,7 +2630,7 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         {
           "title": "Lunch at @mendocinofarms in Los Angeles",
           "author_name": "LA Food Guide",
-          "thumbnail_url": "https://example.com/tiktok-cover.jpg"
+          "thumbnail_url": "https://p16-sign.tiktokcdn.com/tiktok-cover.jpg"
         }
         """
         let client = FakePlaceImportHTTPClient(responses: [
@@ -728,7 +2650,10 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         XCTAssertEqual(metadata?.caption, "Lunch at @mendocinofarms in Los Angeles")
         XCTAssertEqual(metadata?.authorName, "LA Food Guide")
-        XCTAssertEqual(metadata?.thumbnailURL, URL(string: "https://example.com/tiktok-cover.jpg"))
+        XCTAssertEqual(
+            metadata?.thumbnailURL,
+            URL(string: "https://p16-sign.tiktokcdn.com/tiktok-cover.jpg")
+        )
         XCTAssertEqual(client.requests.first?.url?.host, "www.tiktok.com")
         XCTAssertEqual(client.requests.first?.url?.path, "/oembed")
     }
@@ -737,7 +2662,7 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         let html = """
         <meta property="og:title" content="LA Food Guide on Instagram">
         <meta property="og:description" content="Dinner at Mendocino Farms restaurant">
-        <meta property="og:image" content="https://example.com/instagram-cover.jpg">
+        <meta property="og:image" content="https://scontent-lax3-1.cdninstagram.com/instagram-cover.jpg">
         """
         let reelURL = URL(string: "https://www.instagram.com/reel/example/")!
         let client = FakePlaceImportHTTPClient(responses: [
@@ -754,7 +2679,110 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         XCTAssertEqual(metadata?.caption, "Dinner at Mendocino Farms restaurant")
         XCTAssertEqual(metadata?.authorName, "LA Food Guide")
-        XCTAssertEqual(metadata?.thumbnailURL, URL(string: "https://example.com/instagram-cover.jpg"))
+        XCTAssertEqual(
+            metadata?.thumbnailURL,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/instagram-cover.jpg")
+        )
+    }
+
+    func testInstagramProviderPrefersExactEmbeddedCarouselOverOpenGraphCaption() async throws {
+        let post: [String: Any] = [
+            "code": "POST123",
+            "caption": ["text": "Stop at North Lake"],
+            "carousel_media": [
+                [
+                    "accessibility_caption": "North Lake slide",
+                    "display_uri": "https://scontent-lax3-1.cdninstagram.com/1.jpg"
+                ],
+                [
+                    "accessibility_caption": "Pine Cafe slide",
+                    "display_uri": "https://scontent-lax3-1.cdninstagram.com/2.jpg"
+                ]
+            ]
+        ]
+        let json = try JSONSerialization.data(withJSONObject: ["nested": post])
+        let body = try XCTUnwrap(String(data: json, encoding: .utf8))
+        let html = """
+        <meta property="og:title" content="Creator on Instagram">
+        <meta property="og:description" content="Generic fallback caption">
+        <meta property="og:image" content="https://scontent-lax3-1.cdninstagram.com/fallback-cover.jpg">
+        <script data-sjs type="application/json">\(body)</script>
+        """
+        let postURL = URL(string: "https://www.instagram.com/p/POST123/")!
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data(html.utf8),
+                finalURL: postURL,
+                statusCode: 200,
+                mimeType: "text/html"
+            )
+        ])
+        let provider = PublicSocialImportMetadataProvider(httpClient: client)
+
+        let metadata = await provider.metadata(for: postURL, source: .instagram)
+
+        XCTAssertEqual(metadata?.caption, "Stop at North Lake")
+        XCTAssertEqual(metadata?.mediaItems.count, 2)
+        XCTAssertEqual(
+            metadata?.mediaItems.map(\.imageURL),
+            [
+                URL(string: "https://scontent-lax3-1.cdninstagram.com/1.jpg"),
+                URL(string: "https://scontent-lax3-1.cdninstagram.com/2.jpg")
+            ]
+        )
+        XCTAssertEqual(
+            metadata?.thumbnailURL,
+            URL(string: "https://scontent-lax3-1.cdninstagram.com/fallback-cover.jpg")
+        )
+    }
+
+    func testInstagramProviderRejectsNonInstagramSourceBeforeFetching() async {
+        let client = FakePlaceImportHTTPClient(responses: [])
+        let provider = PublicSocialImportMetadataProvider(httpClient: client)
+
+        let metadata = await provider.metadata(
+            for: URL(string: "https://attacker.example/p/POST123/")!,
+            source: .instagram
+        )
+
+        XCTAssertNil(metadata)
+        XCTAssertTrue(client.requests.isEmpty)
+    }
+
+    func testInstagramProviderRejectsRedirectAwayFromInstagram() async {
+        let sourceURL = URL(string: "https://www.instagram.com/p/POST123/")!
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data("<meta property='og:title' content='Wrong host'>".utf8),
+                finalURL: URL(string: "https://attacker.example/p/POST123/")!,
+                statusCode: 200,
+                mimeType: "text/html"
+            )
+        ])
+        let provider = PublicSocialImportMetadataProvider(httpClient: client)
+
+        let metadata = await provider.metadata(for: sourceURL, source: .instagram)
+
+        XCTAssertNil(metadata)
+        XCTAssertEqual(client.requests.count, 1)
+    }
+
+    func testThumbnailRecognizerRejectsRedirectAwayFromTrustedMediaFamily() async {
+        let sourceURL = URL(string: "https://scontent-lax3-1.cdninstagram.com/image.jpg")!
+        let client = FakePlaceImportHTTPClient(responses: [
+            PlaceImportHTTPResponse(
+                data: Data([0, 1, 2]),
+                finalURL: URL(string: "https://attacker.example/image.jpg")!,
+                statusCode: 200,
+                mimeType: "image/jpeg"
+            )
+        ])
+        let recognizer = VisionSocialThumbnailTextRecognizer(httpClient: client)
+
+        let text = await recognizer.recognizedText(at: sourceURL)
+
+        XCTAssertNil(text)
+        XCTAssertEqual(client.requests.count, 1)
     }
 }
 
@@ -772,6 +2800,20 @@ private final class InMemoryPlaceImportPersistence: PlaceImportPersisting {
     func save(_ snapshot: PlaceImportSnapshot) throws {
         self.snapshot = snapshot
     }
+}
+
+@MainActor
+private func waitForPersistedItemCount(
+    _ expectedCount: Int,
+    persistence: InMemoryPlaceImportPersistence
+) async -> Bool {
+    for _ in 0..<1_000 {
+        if persistence.snapshot.items.count == expectedCount {
+            return true
+        }
+        await Task.yield()
+    }
+    return false
 }
 
 @MainActor
@@ -825,6 +2867,106 @@ private final class FakePlaceImportResolver: PlaceImportResolving {
 }
 
 @MainActor
+private final class RecordingPlaceImportResolver: PlaceImportResolving {
+    let resolution: PlaceImportResolution
+    private(set) var lastSeed: PlaceImportSeed?
+    private(set) var lastSource: PlaceImportSource?
+
+    init(resolution: PlaceImportResolution) {
+        self.resolution = resolution
+    }
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        lastSeed = seed
+        lastSource = source
+        return resolution
+    }
+}
+
+@MainActor
+private final class ControllablePlaceImportResolver: PlaceImportResolving {
+    private(set) var manualSeeds: [PlaceImportSeed] = []
+    private var continuations: [CheckedContinuation<PlaceImportResolution, Never>] = []
+
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        .needsHelp("Automatic resolution was not expected in this test.")
+    }
+
+    func resolveManualSearch(
+        seed: PlaceImportSeed,
+        source _: PlaceImportSource
+    ) async throws -> PlaceImportResolution {
+        manualSeeds.append(seed)
+        return await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func completeNext(_ resolution: PlaceImportResolution) -> Bool {
+        guard !continuations.isEmpty else { return false }
+        continuations.removeFirst().resume(returning: resolution)
+        return true
+    }
+}
+
+@MainActor
+private final class BackloggedManualSearchResolver: PlaceImportResolving {
+    private(set) var automaticSeeds: [PlaceImportSeed] = []
+    private(set) var manualSeeds: [PlaceImportSeed] = []
+    private var automaticContinuations: [CheckedContinuation<PlaceImportResolution, Never>] = []
+    private var manualContinuations: [CheckedContinuation<PlaceImportResolution, Never>] = []
+
+    func resolve(seed: PlaceImportSeed, source _: PlaceImportSource) async throws -> PlaceImportResolution {
+        automaticSeeds.append(seed)
+        return await withCheckedContinuation { continuation in
+            automaticContinuations.append(continuation)
+        }
+    }
+
+    func resolveManualSearch(
+        seed: PlaceImportSeed,
+        source _: PlaceImportSource
+    ) async throws -> PlaceImportResolution {
+        manualSeeds.append(seed)
+        return await withCheckedContinuation { continuation in
+            manualContinuations.append(continuation)
+        }
+    }
+
+    func completeAutomatic(_ resolution: PlaceImportResolution) -> Bool {
+        guard !automaticContinuations.isEmpty else { return false }
+        automaticContinuations.removeFirst().resume(returning: resolution)
+        return true
+    }
+
+    func completeManual(_ resolution: PlaceImportResolution) -> Bool {
+        guard !manualContinuations.isEmpty else { return false }
+        manualContinuations.removeFirst().resume(returning: resolution)
+        return true
+    }
+
+    func waitForAutomaticRequestCount(_ expectedCount: Int) async -> Bool {
+        for _ in 0..<1_000 {
+            if automaticSeeds.count >= expectedCount {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
+    }
+
+    func waitForManualRequestCount(_ expectedCount: Int) async -> Bool {
+        for _ in 0..<1_000 {
+            if manualSeeds.count >= expectedCount {
+                return true
+            }
+            await Task.yield()
+        }
+        return false
+    }
+}
+
+@MainActor
 private final class ExpandingPlaceImportResolver: PlaceImportResolving {
     private let seeds: [PlaceImportSeed]
     private var hasExpanded = false
@@ -844,10 +2986,36 @@ private final class ExpandingPlaceImportResolver: PlaceImportResolving {
 }
 
 @MainActor
+private final class ExpandingThenSuspendingPlaceImportResolver: PlaceImportResolving {
+    private let seeds: [PlaceImportSeed]
+    private var hasExpanded = false
+
+    init(seeds: [PlaceImportSeed]) {
+        self.seeds = seeds
+    }
+
+    func resolve(seed: PlaceImportSeed, source _: PlaceImportSource) async throws -> PlaceImportResolution {
+        if !hasExpanded {
+            hasExpanded = true
+            return .expanded(seeds, sourceName: nil)
+        }
+        try await Task.sleep(for: .seconds(60))
+        return .needsHelp("Unexpected completion for \(seed.nameHint ?? "guide row")")
+    }
+}
+
+@MainActor
 private final class SuspendedPlaceImportResolver: PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         try await Task.sleep(for: .seconds(60))
         return .needsHelp("Unexpected completion")
+    }
+}
+
+@MainActor
+private final class NeedsHelpPlaceImportResolver: PlaceImportResolving {
+    func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
+        .needsHelp("Temporary refresh failure")
     }
 }
 
@@ -872,6 +3040,7 @@ private final class FakeDevicePlaceResolver: PlaceCandidateResolving {
 @MainActor
 private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
     let routes: [String: [PlaceCandidate]]
+    private(set) var manualInputs: [ManualPlaceInput] = []
 
     init(routes: [String: [PlaceCandidate]]) {
         self.routes = routes
@@ -880,7 +3049,62 @@ private final class RoutingDevicePlaceResolver: PlaceCandidateResolving {
     func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
     func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
-        routes[input.name.lowercased()] ?? []
+        manualInputs.append(input)
+        return routes[input.name.lowercased()] ?? []
+    }
+    func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
+}
+
+@MainActor
+private final class RoutingNoCandidateThrowingDevicePlaceResolver: PlaceCandidateResolving {
+    let routes: [String: [PlaceCandidate]]
+
+    init(routes: [String: [PlaceCandidate]]) {
+        self.routes = routes
+    }
+
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        guard let candidates = routes[input.name.lowercased()] else {
+            throw PlaceResolutionError.noCandidates
+        }
+        return candidates
+    }
+    func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
+}
+
+@MainActor
+private final class ThrowingDevicePlaceResolver: PlaceCandidateResolving {
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { throw URLError(.timedOut) }
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] {
+        throw URLError(.timedOut)
+    }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        throw URLError(.timedOut)
+    }
+    func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { throw URLError(.timedOut) }
+}
+
+@MainActor
+private final class PartiallyThrowingDevicePlaceResolver: PlaceCandidateResolving {
+    let successfulName: String
+    let candidate: PlaceCandidate
+    private(set) var manualInputs: [ManualPlaceInput] = []
+
+    init(successfulName: String, candidate: PlaceCandidate) {
+        self.successfulName = successfulName
+        self.candidate = candidate
+    }
+
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveNearbyPlaces(near coordinate: CLLocationCoordinate2D) async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
+        manualInputs.append(input)
+        if input.name == successfulName {
+            return [candidate]
+        }
+        throw URLError(.timedOut)
     }
     func resolveLink(_ input: LinkPlaceInput) async throws -> [PlaceCandidate] { [] }
 }
@@ -901,14 +3125,172 @@ private final class FakeSocialImportMetadataProvider: SocialImportMetadataProvid
 @MainActor
 private final class FakeSocialThumbnailTextRecognizer: SocialThumbnailTextRecognizing {
     let text: String?
+    let textByURL: [URL: String]?
+    private(set) var requestedURLs: [URL] = []
 
     init(text: String? = nil) {
         self.text = text
+        textByURL = nil
+    }
+
+    init(textByURL: [URL: String]) {
+        text = nil
+        self.textByURL = textByURL
     }
 
     func recognizedText(at url: URL) async -> String? {
-        text
+        requestedURLs.append(url)
+        return textByURL?[url] ?? text
     }
+}
+
+private func hundredCoffeeGuideRows() -> [(name: String, country: String)] {
+    [
+        ("ONYX COFFEE LAB", "USA"),
+        ("TIM WENDELBOE", "NORWAY"),
+        ("ALQUIMIA COFFEE", "EL SALVADOR"),
+        ("ONLY COFFEE PROJECT CROWS NEST", "AUSTRALIA"),
+        ("TOBY'S ESTATE COFFEE ROASTERS", "AUSTRALIA"),
+        ("APARTMENT COFFEE", "SINGAPORE"),
+        ("GOTA COFFEE EXPERTS", "AUSTRIA"),
+        ("STORY OF ONO", "MALAYSIA"),
+        ("TROPICALIA COFFEE", "COLOMBIA"),
+        ("TANAT", "FRANCE"),
+        ("FANKØR", "ECUADOR"),
+        ("ARCANE ESTATE COFFEE", "USA"),
+        ("BETA COFFEE", "AUSTRALIA"),
+        ("NOMADIC SPECIALTY COFFEE", "EGYPT"),
+        ("NEMESIS COFFEE", "CANADA"),
+        ("NOMAD FRUTAS SELECTAS", "SPAIN"),
+        ("KAFI WASI CAFÉ TOSTADURÍA", "PERU"),
+        ("BENCHMARK COFFEE", "UAE"),
+        ("HOLA LAGASCA", "SPAIN"),
+        ("BLENDIN COFFEE CLUB", "USA"),
+        ("HOLASTE! SPECIALTY COFFEE", "CHILE"),
+        ("MOMOS COFFEE FLAGSHIP STORE", "REPUBLIC OF KOREA"),
+        ("MONOTONO SPECIALTY COFFEE", "PERU"),
+        ("ULT COFFEE", "JAPAN"),
+        ("EL INJERTO", "GUATEMALA"),
+        ("THREE MONKEYS COFFEE", "PERU"),
+        ("PROUD MARY COFFEE", "AUSTRALIA"),
+        ("KOFFEE MAMEYA KAKERU", "JAPAN"),
+        ("COFFEE ANTHOLOGY", "AUSTRALIA"),
+        ("7G ROASTER", "PORTUGAL"),
+        ("ESPRESSO ALCHEMY", "CHINA"),
+        ("COFFEEWERK + PRESS", "IRELAND"),
+        ("TYPICA CAFÉ", "BOLIVIA"),
+        ("YARDSTICK", "THE PHILIPPINES"),
+        ("HISTÓRICO", "MEXICO"),
+        ("COFFEE SIND", "TAIWAN"),
+        ("DELAFINCA SPECIALTY COFFEE", "NICARAGUA"),
+        ("OTTOMAN COFFEE HOUSE", "UNITED KINGDOM"),
+        ("CASA CANELA", "VENEZUELA"),
+        ("ESPRESSO LAB", "SOUTH AFRICA"),
+        ("SEVEN MYSTERY", "CANADA"),
+        ("FARO", "ITALY"),
+        ("DOMESTIQUE", "USA"),
+        ("HARVEST COFFEE", "QATAR"),
+        ("ORIGEN TOSTADORES DE CAFÉ", "PERU"),
+        ("KEEP COFFEE ROASTERY", "TAIWAN"),
+        ("MEET LAB COFFEE", "TURKEY"),
+        ("MULANO COFFEE SHOP", "ECUADOR"),
+        ("LA CABRA", "DENMARK"),
+        ("BIRCH COFFEE", "UNITED KINGDOM"),
+        ("RULI COFFEE", "REPUBLIC OF KOREA"),
+        ("ATTE FOR COFFEE", "GUATEMALA"),
+        ("SINGLE O", "AUSTRALIA"),
+        ("RUBIA COFFEE ROASTERS", "RWANDA"),
+        ("BOB COFFEE LAB", "ROMANIA"),
+        ("UNFILTERED COFFEE", "IRELAND"),
+        ("TOMORROW COFFEE ROASTERS", "TAIWAN"),
+        ("CA PASSE CREME", "SWITZERLAND"),
+        ("ECO MAPU", "CHILE"),
+        ("43.12 COFFEE", "BULGARIA"),
+        ("FIKA & CO. CAFE", "THAILAND"),
+        ("DITTA ARTIGIANALE SPECIALTY COFFEE ROASTERS", "ITALY"),
+        ("CAFÉ NATIVO", "HONDURAS"),
+        ("CAFERATTO", "COLOMBIA"),
+        ("KROSS COFFEE ROASTERS", "GREECE"),
+        ("PREVAIL COFFEE", "USA"),
+        ("MOK COFFEE", "BELGIUM"),
+        ("AZURA - THE COFFEE COMPANY", "OMAN"),
+        ("PUKU PUKU", "PERU"),
+        ("THE GOLDEN PIG", "HONDURAS"),
+        ("LITTLE VICTORIES COFFEE", "CANADA"),
+        ("PUSH X PULL", "USA"),
+        ("GALANI COFFEE", "ETHIOPIA"),
+        ("WAKE UP", "CHILE"),
+        ("BOUCHE", "BELGIUM"),
+        ("CAFÉ DE REYES", "GUATEMALA"),
+        ("SAVAYA COFFEE MARKET", "USA"),
+        ("COFFEE STOPOVER BLACK", "TAIWAN"),
+        ("FUKU", "NETHERLANDS"),
+        ("THE MINERS COFFEE", "CZECH REPUBLIC"),
+        ("CUPPING CAFÉ", "BRAZIL"),
+        ("COFFEA GUATEMALA", "GUATEMALA"),
+        ("D·ORIGEN COFFEE ROASTERS BARCELONA", "SPAIN"),
+        ("COFFEE STAIN", "MALAYSIA"),
+        ("THE DUDE SPECIALTY COFFEE", "NORTH MACEDONIA"),
+        ("STORY AND SOIL COFFEE", "USA"),
+        ("EXPLORADORES", "MEXICO"),
+        ("THE FOLKS", "PORTUGAL"),
+        ("CASA BARISTA & CO., CASCO HISTORICO", "DOMINICAN REPUBLIC"),
+        ("CYPHER URBAN ROASTERY", "UAE"),
+        ("CAFETANO", "HONDURAS"),
+        ("COFFEE FIVE", "BRAZIL"),
+        ("KIMA COFFEE", "SPAIN"),
+        ("NEGRO", "ARGENTINA"),
+        ("METRIC", "USA"),
+        ("EL TERRIBLE JUAN CAFÉ", "MEXICO"),
+        ("FLAT WHITE SPECIALTY COFFEE", "QATAR"),
+        ("CAFEOTECA", "COSTA RICA"),
+        ("SURRY HILLS PALERMO", "ARGENTINA"),
+        ("VACATION COFFEE", "AUSTRALIA")
+    ]
+}
+
+private func hundredCoffeeGuideObservationColumns() throws -> [[SocialTextObservation]] {
+    let bundle = Bundle(for: SocialPlaceImportMetadataTests.self)
+    let url = try XCTUnwrap(
+        bundle.url(forResource: "rec-106-guide-observations", withExtension: "tsv")
+            ?? bundle.url(
+                forResource: "rec-106-guide-observations",
+                withExtension: "tsv",
+                subdirectory: "Fixtures"
+            )
+    )
+    var observationsByColumn: [String: [SocialTextObservation]] = [:]
+    let contents = try String(contentsOf: url, encoding: .utf8)
+    for line in contents.split(separator: "\n") where !line.hasPrefix("#") {
+        let fields = line.split(separator: "|", maxSplits: 6, omittingEmptySubsequences: false)
+        guard fields.count == 7,
+              let x = Double(fields[2]),
+              let y = Double(fields[3]),
+              let width = Double(fields[4]),
+              let height = Double(fields[5])
+        else {
+            throw NSError(
+                domain: "SocialPlaceImportMetadataTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid captured Vision observation: \(line)"]
+            )
+        }
+        let key = "\(fields[0])-\(fields[1])"
+        observationsByColumn[key, default: []].append(
+            SocialTextObservation(
+                text: String(fields[6]),
+                boundingBox: CGRect(x: x, y: y, width: width, height: height)
+            )
+        )
+    }
+    return try ["1-0", "1-1", "2-0", "2-1"].map { key in
+        try XCTUnwrap(observationsByColumn[key], "Missing captured Vision column \(key)")
+    }
+}
+
+private func normalizedCoffeeGuideValue(_ value: String) -> String {
+    value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        .filter { $0.isLetter || $0.isNumber }
 }
 
 private func googleSharedListPayload(count: Int) throws -> Data {
@@ -942,6 +3324,9 @@ private func googleSharedListPayload(count: Int) throws -> Data {
 private func placeImportCandidate(
     name: String,
     address: String? = nil,
+    locality: String = "Los Angeles",
+    region: String = "CA",
+    country: String = "United States",
     latitude: Double = 34.0522,
     longitude: Double = -118.2437
 ) -> PlaceCandidate {
@@ -950,9 +3335,9 @@ private func placeImportCandidate(
         name: name,
         category: "restaurant",
         address: address,
-        locality: "Los Angeles",
-        region: "CA",
-        country: "United States",
+        locality: locality,
+        region: region,
+        country: country,
         latitude: latitude,
         longitude: longitude,
         sourceProvider: "mapkit",

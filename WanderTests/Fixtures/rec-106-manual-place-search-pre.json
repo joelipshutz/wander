@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "batches": [
+    {
+      "createdAt": "2026-07-21T06:26:40Z",
+      "id": "rec-106-manual-search-batch",
+      "processedCount": 1,
+      "source": "instagram",
+      "state": "ready",
+      "totalCount": 1,
+      "updatedAt": "2026-07-21T06:27:24Z"
+    }
+  ],
+  "items": [
+    {
+      "batchID": "rec-106-manual-search-batch",
+      "candidates": [],
+      "createdAt": "2026-07-21T06:26:40Z",
+      "helpMessage": "No matching Apple Maps place was found. Try a nearby city or neighborhood.",
+      "id": "rec-106-farson-manual-search",
+      "resolverVersion": 5,
+      "seed": {
+        "areaHint": "Wyoming",
+        "id": "rec-106-farson-seed",
+        "nameHint": "FARSON MERCANTILE",
+        "rawText": "https://www.instagram.com/p/Dak2JCClKkF/?igsh=NTc4MTIwNjQ2YQ==",
+        "sourceLine": 1,
+        "sourceURLString": "https://www.instagram.com/p/Dak2JCClKkF/?igsh=NTc4MTIwNjQ2YQ=="
+      },
+      "source": "instagram",
+      "state": "needs_help",
+      "updatedAt": "2026-07-21T06:27:24Z"
+    }
+  ]
+}

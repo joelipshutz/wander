@@ -98,6 +98,12 @@ For non-trivial feature, fix, refactor, release, or docs/process changes, agents
 
 This applies especially to Ryan-owned work on `ryan/<short-task>` branches. Ryan's agent should push its branch and open or update the PR before stopping without waiting for a separate human prompt, unless Ryan explicitly says not to push or not to open a PR.
 
+When a pushed branch is intended for local Xcode testing, the handoff is not
+complete until the agent opens that branch's worktree `Wander.xcodeproj` in
+Xcode and verifies that Xcode's Branch Chooser shows the intended branch. Open
+the isolated worktree as its own Xcode project instead of switching or
+overwriting another active checkout.
+
 Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and update `docs/agent-log.md` with outcome, tests, known issues, and next steps. Prefer squash merging PRs into `main`, then delete the branch.
 
 ## Shared Agent Skills
