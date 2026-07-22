@@ -15550,3 +15550,33 @@ Build 88 validation checkpoint, 2026-07-22 12:56 PDT:
 - Existing ISO-8601 actor-isolation, unused test-expression, simulator-strip,
   and traditional-headermap warnings remain non-blocking and unchanged. The
   documented iPhone 16 Plus, iOS 18.6 runtime is not installed on this Mac.
+
+Build 88 release completion, 2026-07-22 13:07 PDT:
+
+- Clarification: the earlier 502-test result recorded at 12:51 predated the
+  REC-115 merge. The later exact build-88 branch run supersedes it: all 503/503
+  tests passed on iPhone 17 Pro, iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- PR #156 was squash-merged to `main` as `0cf93035a` with build number 88.
+  The signed archive was produced from that exact detached `main` commit at
+  `/private/tmp/Wander-0.1-build88.xcarchive`; its embedded version is 0.1 (88),
+  code-signature verification passed, and the signing team is `Y7TVK75RZ8`.
+- `xcodebuild -exportArchive` uploaded successfully with
+  `manageAppVersionAndBuildNumber=false`. App Store Connect indexed build id
+  `159b65bc-63ed-4827-b69f-532bac1bc6c2` as `VALID`, retained build number 88,
+  and reports `usesNonExemptEncryption=false`.
+- `scripts/testflight-release.mjs` set the en-US What to Test copy and attached
+  build 88 to public group `rec.me Alpha`
+  (`219f52d8-c202-4407-ba55-53eb41d40526`). Its final summary reports beta
+  review `APPROVED` and public link
+  `https://testflight.apple.com/join/knEhRa6t`. The explicit submit call returned
+  `INVALID_QC_STATE` because the build was already in a non-submittable approved
+  state; no additional review transition was required.
+- `REC-113` is `Done` with PR, validation, TestFlight, archive, and known-fallback
+  evidence in Linear comment `bef8fb0e-0fbe-408d-98b8-c3ecb6af5e39`.
+- Posted the required tester-facing announcement in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750818801029`.
+- Known behavior: category emoji remains the final fallback when a place has no
+  usable user photo or Google place photo. The documented iPhone 16 Plus /
+  iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
+  checkout and all user-owned changes remained untouched.
