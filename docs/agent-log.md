@@ -15602,3 +15602,17 @@ REC-106 latest-main validation checkpoint, 2026-07-21 17:42 PDT:
   `codex/rec-106-instagram-carousel`, updating PR #137 and Linear REC-106, and
   opening/running that exact branch in Xcode on Ry's connected iPhone. No
   TestFlight build or release was requested.
+
+REC-106 Xcode handoff checkpoint, 2026-07-21 17:44 PDT:
+
+- Concluded the latest-main merge as `69a3f1340`; `origin/main` is an ancestor
+  of the branch and the working tree contains no tracked changes after the
+  merge. Generated `DerivedData-rec106*` folders remain intentionally
+  untracked and are excluded from publication.
+- Xcode's device tools currently report `Ry’s iPhone` (iPhone 15 Pro) as
+  `unavailable`, and the Mac is locked. The exact branch is therefore ready to
+  open/run, but deployment cannot begin until the Mac and phone are unlocked
+  and the device becomes an available Xcode destination.
+- Next action: push the branch, update ready PR #137 and REC-106 to In Review,
+  then open `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` and
+  Run on `Ry’s iPhone` as soon as the device-side blocker is cleared.
