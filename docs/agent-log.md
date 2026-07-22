@@ -17020,3 +17020,22 @@ REC-116 push handoff blocker, 2026-07-21 17:09 PDT:
   the PR/commit handoff here, and move Linear REC-116 from In Progress to In
   Review with the 490/490 and visual-validation evidence. No TestFlight release
   is part of this request.
+
+REC-116 ready-for-test handoff, 2026-07-22 11:44 PDT:
+
+- Ryan explicitly approved publishing the branch to the verified public origin.
+  Pushed `codex/rec-116-save-flow` and opened ready PR #151:
+  https://github.com/joelipshutz/wander/pull/151. Implementation commit:
+  `3d177ab7e`; initial coordination/blocker log commit: `5d9b93712`.
+- Final validation remains green: focused REC-116 regressions 5/5, complete
+  iPhone 17 Pro / iOS 26.5 suite 490/490, Swift parse, `xcodegen generate`,
+  `git diff --check`, and visual review on iPhone 17 Pro plus iPhone 17e. The
+  screenshots and XCTest result bundle are recorded in the preceding checkpoint.
+- Known constraints: visit-friend selection remains intentionally eligibility
+  gated (signed in, non-private profile, non-Self visibility, and a supported
+  add/edit-visit mode); edit-visit photos remain managed by the existing photo
+  surface rather than attached in this editor. No schema, hosted data, build
+  number, TestFlight upload, or Slack release note was created.
+- Next step: review and test PR #151. REC-116 should stay In Review until the PR
+  is merged and the requested behavior is accepted; a separate explicit request
+  is required for any TestFlight release.
