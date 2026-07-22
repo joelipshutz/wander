@@ -17172,3 +17172,19 @@ REC-116 final Build-89-main gate, 2026-07-22 13:32 PDT:
   confirm GitHub reports a clean ready PR, move Linear REC-116 to `In Review`,
   and run this exact branch on Ry's iPhone from Xcode. No TestFlight action is
   part of the request.
+
+REC-116 compact-save final handoff, 2026-07-22 13:35 PDT:
+
+- Force-updated ready PR #151 after the Build-89-main rebase and confirmed
+  GitHub reports `mergeStateStatus: CLEAN` with no checks configured:
+  https://github.com/joelipshutz/wander/pull/151.
+- Returned Linear REC-116 to `In Review` and added comment
+  `b6c1fe67-7355-4b55-8343-c04521818fd4` with the final implementation,
+  506/506 suite, visual-device review, screenshot paths, and PR link.
+- Opened `/private/tmp/recme-rec116-save-flow/Wander.xcodeproj` in Xcode,
+  confirmed the active branch is `codex/rec-116-save-flow` and destination is
+  `Ry’s iPhone`, then built, installed, and launched the app. Xcode reports
+  `Running Wander on Ry’s iPhone`; the exact PR branch is ready for hands-on
+  device testing.
+- No build-number bump, archive, TestFlight upload, hosted data mutation, or
+  tester-facing Slack post was performed for this PR-only device handoff.
