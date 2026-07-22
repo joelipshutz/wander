@@ -15326,6 +15326,161 @@ Release scope and preflight:
   increment the build exactly once to 87, regenerate the Xcode project, then
   validate, archive, upload, attach, and record the TestFlight result.
 
+## 2026-07-22 11:57 PDT - Codex - REC-110 Profile Map Sharing
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-110-profile-map-share`
+Worktree: `/private/tmp/recme-rec110-profile-map-share`
+Linear: `REC-110` (`In Progress`)
+
+Goal: make Profile > Your Map share both the stable rec.me profile link and a
+PNG of the same static map shown in the app, then validate the flow and prepare
+a ready PR for testing.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `67a8bd7cc`; the primary checkout has unrelated `.gitignore`
+  and `.pnpm-store/` changes that will not be touched.
+- Existing worktrees include an active TestFlight Build 87 release whose scope
+  overlaps only this required coordination log, not the expected runtime files.
+  Any latest-main log additions will be preserved when the branch is updated.
+- REC-110 is assigned to Ryan and was moved from `Backlog` to `In Progress`.
+- Expected implementation scope is
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, the shared activity/share
+  component under `Wander/DesignSystem/`, focused profile/share tests under
+  `WanderTests/`, and this log. `project.yml`, schema/RLS, auth, and app build
+  number are out of scope unless source membership proves necessary.
+- Current source already contains a static Profile map snapshot cache and a
+  centralized `WanderShareButton`; implementation will preserve those shared
+  boundaries and verify the generated share items instead of introducing a
+  competing share path.
+
+Triage and scope checkpoint, 2026-07-22 12:06 PDT:
+
+- Classified REC-110 as a P2 Profile/native-sharing enhancement. The concrete
+  gap is the single-item `ShareLink`: it sends only the profile deep link while
+  the exact rendered `UIImage` remains child-local state.
+- The engineering review gate is not needed after the scope challenge. This is
+  a tiny one-screen affordance that reuses the existing MapKit renderer and
+  centralized native share boundary, adds no shared app state, persistence,
+  backend, auth, privacy, or cross-screen semantics, and can preserve every
+  existing URL-only caller. The skip reason and plan are also recorded on
+  Linear REC-110.
+- Existing code to reuse: `ProfileMapSnapshotView` already displays a
+  request-keyed, bounded-cache `UIImage`; `WanderShareContent.profileMap`
+  already owns the stable route/copy; and the iOS 17 SwiftUI SDK provides
+  `ShareLink(items:)` for a homogeneous collection of transferable URLs.
+- Locked data flow:
+
+  ```text
+  ProfileMapSnapshotView
+      -> exact request-keyed UIImage shown on screen
+      -> lossless PNG data
+      -> unique temp .png URL (aged-file pruning only)
+      -> ProfileMapSection current attachment state
+      -> WanderShareButton [recme profile URL, PNG file URL]
+      -> native multi-item ShareLink
+  ```
+
+- Failure handling: a request-key change clears the old attachment before the
+  next render; a render/encode/write failure leaves the map share disabled so a
+  link-only payload cannot falsely satisfy the issue; old temporary files are
+  not deleted while an activity extension may still be reading them and are
+  pruned on later writes after a retention window.
+- Test plan: stable remote-id eligibility, exactly ordered profile-link + PNG
+  items, actual PNG bytes/dimensions, unique filenames, aged cleanup that keeps
+  fresh files, stale attachment clearing/current-image handoff, existing
+  single-item share regression, full XCTest/build, and simulator share-sheet
+  parity on current and smaller iPhone sizes.
+- Not in scope: public HTTPS/universal-link fallback (already captured in
+  `TODOS.md`), a second MapKit render, card chrome/rounded-corner screenshot,
+  backend or schema work, build-number/TestFlight release work, or changes to
+  place sharing.
+
+Implementation and validation checkpoint, 2026-07-22 12:39 PDT:
+
+- Extended the shared share-content boundary to preserve every existing
+  URL-only caller while allowing the map flow to provide exactly two native
+  activity items: `recme://profiles/<server-id>` and a local `.png` file URL.
+  Profile links now require the remote `serverID`, so guest/local-only ids are
+  never emitted as unusable shared routes.
+- Reused the exact request-keyed `UIImage` already displayed by
+  `ProfileMapSnapshotView`. A request change clears the previous attachment;
+  after the current render succeeds, the image is encoded losslessly and
+  written off the main actor to a uniquely named temporary PNG. Files receive
+  an explicit retention timestamp, and writes prune only regular attachments
+  older than 24 hours so activity extensions can read the selected file
+  asynchronously.
+- The Your Map share affordance remains visually unchanged, is disabled while
+  its current image is being prepared, and now carries an accessibility hint
+  that it shares both the profile link and PNG. Encoding/write failure cannot
+  silently fall back to a link-only payload.
+- Added focused coverage for stable-id eligibility, exact item ordering and
+  route parsing, local-PNG validation, lossless bytes and dimensions, unique
+  attachment names, expired-only pruning, and the view's current-image/stale
+  attachment handoff. Existing single-item sharing remains covered.
+- `xcodegen generate` completed and produced no tracked project-file churn;
+  `git diff --check` passes.
+- Focused `NavigationContractTests` passed 47/47 on iPhone 17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec110-focused/Logs/Test/Test-Wander-2026.07.22_12-20-05--0700.xcresult`.
+- The complete test suite passed 492/492 on iPhone 17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec110-focused/Logs/Test/Test-Wander-2026.07.22_12-20-39--0700.xcresult`.
+  The repo's documented iPhone 16 Plus, iOS 18.6 destination is not installed
+  on this machine, so the available current runtime was used instead.
+- Compact-device regression passed 1/1 on a clean temporary iPhone SE (3rd
+  generation), iOS 26.5 simulator. The pre-existing iPhone 17e simulator was
+  rejected after Xcode reported an early bootstrapping crash; the temporary SE
+  was deleted after capture.
+- Manual simulator QA on iPhone 17 Pro confirmed the live activity sheet says
+  `1 Link and 1 Image`, shows `recme://profiles/user_joe`, and receives the
+  generated map PNG. The emitted PNG was inspected and matches the displayed
+  static Apple Maps snapshot. Screenshots were captured at
+  `/private/tmp/rec110-map-17pro.png` and
+  `/private/tmp/rec110-profile-iphone-se.png`.
+- A fresh read-only adversarial review checked ShareLink behavior, Swift 6
+  concurrency, identity, file lifecycle/privacy, stale-render races,
+  accessibility, and test coverage and found no actionable issues or blockers.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the implementation and validation record as `d9d40f5fa`
+  (`feat: share profile map as PNG`) and pushed
+  `codex/rec-110-profile-map-share`.
+- Opened ready PR #155 and linked it to Linear:
+  https://github.com/joelipshutz/wander/pull/155.
+- Moved Linear REC-110 to `In Review`; it is intentionally not marked `Done`
+  until the ready PR is reviewed/landed and the requested behavior is accepted.
+- No TestFlight build, build-number change, merge, or tester-facing Slack post
+  was requested or performed. Next test: Profile > Your Map > share, confirm
+  the activity sheet reports one link and one image, then save/open the image
+  and verify it matches the on-screen static map.
+
+Post-main-sync validation, 2026-07-22 12:55 PDT:
+
+- Fetched and merged current `origin/main` at `c0b4c33a8` before handoff. The
+  only conflict was this shared coordination log; both REC-110 and REC-113
+  records were preserved in full. Main's app/test changes do not overlap the
+  REC-110 share implementation.
+- The combined post-merge suite passed 504/504 on iPhone 17 Pro / iOS 26.5
+  with zero failures or skips. Result bundle:
+  `/private/tmp/DerivedData-rec110-postmerge-final/Logs/Test/Test-Wander-2026.07.22_12-47-01--0700.xcresult`.
+- Existing Swift concurrency warnings in `WanderSupabaseClient` and unused
+  result warnings in `WanderStoreTests` remain unchanged and non-blocking.
+
+Final base refresh, 2026-07-22 13:05 PDT:
+
+- `origin/main` advanced again through `d0d4060ef` (REC-115 native new-list
+  back affordance) and `0cf93035a` (TestFlight Build 88 metadata). Merged both;
+  the navigation contract additions auto-merged and the only conflict was this
+  log, where the full REC-110 and REC-115 entries were retained.
+- The combined `NavigationContractTests` passed 48/48 on iPhone 17 Pro /
+  iOS 26.5:
+  `/private/tmp/DerivedData-rec110-final-main/Logs/Test/Test-Wander-2026.07.22_12-58-25--0700.xcresult`.
+- The final complete suite passed 505/505 with zero failures or skips on the
+  same destination:
+  `/private/tmp/DerivedData-rec110-final-main/Logs/Test/Test-Wander-2026.07.22_13-04-10--0700.xcresult`.
+
 ## 2026-07-22 12:18 PDT - Codex - REC-115 native back correction and explicit TestFlight release
 
 Agent: Codex using the Linear and `recme-pr-review-merge-release` workflows

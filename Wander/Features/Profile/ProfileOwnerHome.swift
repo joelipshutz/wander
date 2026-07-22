@@ -124,7 +124,7 @@ struct ProfileOwnerHome: View {
                     }
 
                     if let shareContent = WanderShareContent.profile(
-                        id: profile.id,
+                        serverID: profile.serverID,
                         displayName: profile.displayName,
                         handle: profile.handle
                     ) {
@@ -666,6 +666,7 @@ private struct ProfileMapSection: View {
     let ownerLabel: String
     let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
+    @State private var shareImageFileURL: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -678,25 +679,33 @@ private struct ProfileMapSection: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 Spacer()
-                if let shareContent = WanderShareContent.profileMap(
-                    id: profile.id,
-                    displayName: profile.displayName,
-                    handle: profile.handle
-                ) {
+                if let shareContent = mapShareContent {
                     WanderShareButton(content: shareContent) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Share \(profile.displayName)'s map")
+                    .accessibilityHint("Shares the profile link and this map as a PNG")
+                } else if profile.serverID != nil {
+                    Button {} label: {
+                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(true)
+                    .accessibilityLabel("Share \(profile.displayName)'s map")
+                    .accessibilityHint("Available when the map image is ready")
                 }
             }
 
-            ProfileMapSnapshotView(points: insights.mapPoints)
-            .frame(height: 205)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-            .allowsHitTesting(false)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Map of \(ownerLabel) Been places")
+            ProfileMapSnapshotView(
+                points: insights.mapPoints,
+                shareImageFileURL: $shareImageFileURL
+            )
+                .frame(height: 205)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Map of \(ownerLabel) Been places")
 
             Picker("Map summary", selection: $selectedSummary) {
                 ForEach(ProfileMapSummaryKind.allCases) { kind in
@@ -738,6 +747,16 @@ private struct ProfileMapSection: View {
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
     }
 
+    private var mapShareContent: WanderShareContent? {
+        guard let shareImageFileURL else { return nil }
+        return WanderShareContent.profileMap(
+            serverID: profile.serverID,
+            displayName: profile.displayName,
+            handle: profile.handle,
+            imageFileURL: shareImageFileURL
+        )
+    }
+
     private var summaryItems: [ProfileSummaryItem] {
         switch selectedSummary {
         case .places: insights.placeSummaries
@@ -757,6 +776,7 @@ private struct ProfileMapSection: View {
 
 private struct ProfileMapSnapshotView: View {
     let points: [ProfileMapPoint]
+    @Binding var shareImageFileURL: URL?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @State private var renderedSnapshot: ProfileMapRenderedSnapshot?
@@ -787,10 +807,18 @@ private struct ProfileMapSnapshotView: View {
             }
             .clipped()
             .task(id: request.cacheKey) {
+                shareImageFileURL = nil
                 guard request.isRenderable else { return }
                 guard let image = await ProfileMapSnapshotCache.shared.image(for: request) else { return }
                 guard !Task.isCancelled else { return }
                 renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)
+
+                guard let pngData = image.pngData(),
+                      let imageFileURL = await WanderShareAttachmentStore.preparePNG(pngData),
+                      !Task.isCancelled,
+                      renderedSnapshot?.key == request.cacheKey
+                else { return }
+                shareImageFileURL = imageFileURL
             }
         }
     }
