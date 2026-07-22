@@ -17238,3 +17238,44 @@ REC-116 final review and landing gate, 2026-07-22 15:56 PDT:
 - Next: commit this gate note, force-update PR #151 with lease protection,
   confirm GitHub still reports a clean ready PR, and squash-merge it. Keep
   Linear REC-116 in `In Review` until build 91 is actually available to testers.
+
+## 2026-07-22 16:00 PDT - Codex - TestFlight Build 91 Release
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-91`
+Worktree: `/private/tmp/recme-testflight-build-91`
+Linear: `REC-116` (`In Review` through TestFlight availability)
+
+Goal: package the exact latest `main` after the REC-116 squash merge into the
+next explicit public TestFlight release.
+
+Preflight:
+
+- PR #151 was squash-merged to `main` as `3dac3a362` after a clean review,
+  572/572 passing tests, and a successful generic iOS Simulator build. The
+  remote feature branch was deleted after the merge was verified.
+- This isolated release worktree starts at exact `origin/main` commit
+  `3dac3a362`; the user-owned dirty root checkout remains untouched.
+- The last completed public TestFlight release is build 90. This release bumps
+  once to build 91 and includes all eligible app changes merged since build 90:
+  REC-106 Instagram carousel and large-guide imports, REC-111 interactive
+  filtered profile maps, and REC-116's compact parallel Been/Wanna save flows.
+- No schema, RPC, RLS, hosted-data reset, or signing-policy change is included.
+  REC-116 remains In Review until App Store Connect reports build 91 available
+  to the public tester group.
+
+Build 91 candidate validation, 2026-07-22 16:08 PDT:
+
+- XcodeGen changed only the two generated build-number settings. `project.yml`
+  and both Debug/Release Xcode settings declare build 91; `git diff --check` and
+  `plutil -lint Wander.xcodeproj/project.pbxproj` pass.
+- The exact build-91 candidate passed the complete iPhone 17 Pro / iOS 26.5
+  suite: 572/572 tests with zero failures. Result bundle:
+  `/tmp/DerivedData-build91/Logs/Test/Test-Wander-2026.07.22_15-59-31--0700.xcresult`.
+- The required generic iOS Simulator build succeeded after regeneration.
+  Existing Supabase formatter actor-isolation and unused-result test warnings
+  remain pre-existing and non-blocking.
+- Ready release PR #166 contains only the build bump, generated metadata, and
+  this durable release record. Next: merge it, archive the exact resulting
+  latest `main`, upload with build-number management disabled, and process build
+  91 for the public `rec.me Alpha` TestFlight group.
