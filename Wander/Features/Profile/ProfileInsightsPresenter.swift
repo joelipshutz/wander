@@ -2,7 +2,7 @@ import Foundation
 
 struct ProfileInsights: Equatable {
     let month: Date
-    let monthVisitCounts: [Date: Int]
+    let monthPlaceCounts: [Date: Int]
     let monthPlaceIDs: [Date: [String]]
     let monthSpotCount: Int
     let monthCategoryCount: Int
@@ -282,15 +282,15 @@ enum ProfileInsightsPresenter {
             monthInterval?.contains(visit.visitedAt) == true
         }
 
-        var monthVisitCounts: [Date: Int] = [:]
         var monthPlaceIDs: [Date: Set<String>] = [:]
         for visit in monthVisits {
             let day = calendar.startOfDay(for: visit.visitedAt)
-            monthVisitCounts[day, default: 0] += 1
             if let userPlace = userPlaceByID[visit.userPlaceID] {
-                monthPlaceIDs[day, default: []].insert(userPlace.placeID)
+                let canonicalPlaceID = placeByID[userPlace.placeID]?.id ?? userPlace.placeID
+                monthPlaceIDs[day, default: []].insert(canonicalPlaceID)
             }
         }
+        let monthPlaceCounts = monthPlaceIDs.mapValues(\.count)
 
         let monthUserPlaces = uniqueUserPlaces(
             monthVisits.compactMap { userPlaceByID[$0.userPlaceID] }
@@ -323,7 +323,7 @@ enum ProfileInsightsPresenter {
 
         return ProfileInsights(
             month: calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month,
-            monthVisitCounts: monthVisitCounts,
+            monthPlaceCounts: monthPlaceCounts,
             monthPlaceIDs: monthPlaceIDs.mapValues { $0.sorted() },
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,

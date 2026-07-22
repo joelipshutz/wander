@@ -515,14 +515,14 @@ private struct ProfileCalendarSection: View {
                         ForEach(Array(week.enumerated()), id: \.offset) { _, date in
                             if let date {
                                 let day = calendar.startOfDay(for: date)
-                                ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                                ProfileCalendarDayCell(date: date, placeCount: insights.monthPlaceCounts[day])
                                     .contentShape(Rectangle())
                                     .onTapGesture { selectDate(date, day: day) }
                                     .accessibilityAddTraits(.isButton)
                                     .accessibilityHint("Shows places from this date")
                                     .accessibilityAction { selectDate(date, day: day) }
                             } else {
-                                ProfileCalendarDayCell(date: nil, visitCount: nil)
+                                ProfileCalendarDayCell(date: nil, placeCount: nil)
                             }
                         }
                     }
@@ -613,23 +613,23 @@ private struct ProfileCalendarMetric: View {
 
 private struct ProfileCalendarDayCell: View {
     let date: Date?
-    let visitCount: Int?
+    let placeCount: Int?
 
     var body: some View {
         ZStack {
-            if visitCount != nil {
+            if placeCount != nil {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                     .fill(WanderTheme.terracotta.color)
             }
 
             if let date {
                 Text("\(Calendar.current.component(.day, from: date))")
-                    .font(.system(size: 14, weight: visitCount == nil ? .bold : .black))
-                    .foregroundStyle(visitCount == nil ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
+                    .font(.system(size: 14, weight: placeCount == nil ? .bold : .black))
+                    .foregroundStyle(placeCount == nil ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
             }
 
-            if let visitCount, visitCount > 1 {
-                Text("\(visitCount)")
+            if let placeCount, placeCount > 1 {
+                Text("\(placeCount)")
                     .font(.system(size: 10, weight: .black))
                     .frame(width: 18, height: 18)
                     .background(WanderTheme.textInk.color)
@@ -645,8 +645,8 @@ private struct ProfileCalendarDayCell: View {
     private var accessibilityLabel: String {
         guard let date else { return "" }
         let base = date.formatted(.dateTime.month(.wide).day())
-        guard let visitCount else { return base }
-        return "\(base), \(visitCount) \(visitCount == 1 ? "visit" : "visits")"
+        guard let placeCount else { return base }
+        return "\(base), \(placeCount) \(placeCount == 1 ? "place" : "places")"
     }
 }
 

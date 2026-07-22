@@ -17451,3 +17451,90 @@ Merge completion, 2026-07-22 16:37 PDT:
 - Per the merge-only request, the App Store build number remains unchanged and
   no TestFlight/Slack release action was taken. REC-112 is eligible for the next
   explicitly requested release batch.
+## 2026-07-22 15:52 PDT - Codex - REC-124 calendar badge counts
+
+Agent: Codex using the Linear, rec.me Feedback Feature/Bug Workflow, and
+`plan-eng-review` workflows
+Branch: `codex/rec-124-calendar-badges`
+Worktree: `/private/tmp/recme-rec124-calendar-badges`
+Linear: `REC-124` (`Backlog` at checkout; move to `In Progress` before editing)
+
+Goal: fix Profile calendar date badges so each day counts distinct places the
+displayed profile owner saved as Been, not raw visit rows or other users' saves;
+add regression coverage, validate the branch, and open a ready PR.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `6d717d23b`. The root checkout has unrelated user-owned
+  `.gitignore` and `.pnpm-store/` changes, so it will not be edited or switched.
+  No active worktree is editing the expected REC-124 files.
+- Linear REC-124 has no comments, attachments, screenshot, or backend timestamp.
+  Classified as a P2 local Profile presentation regression. PostHog/Supabase log
+  triage is not useful because the faulty aggregation is deterministic in the
+  pure presenter. Design review is not needed because layout, styling, copy,
+  affordances, and interaction remain unchanged.
+- Root cause is verified in
+  `Wander/Features/Profile/ProfileInsightsPresenter.swift`: active inputs are
+  already filtered to the owner, Been status, and non-deleted rows, but lines
+  285-292 increment `monthVisitCounts` once per visit while separately building
+  a distinct per-day `monthPlaceIDs` set. The existing regression fixture proves
+  two same-day visits to one owner save currently produce badge `2` with only
+  one drill-in place.
+
+Engineering review packet:
+
+- Scope challenge: reuse the existing owner/Been filter, month interval,
+  canonical place lookup, per-day place-ID set, and presenter cache. The
+  smallest complete fix derives each badge from the same distinct place set as
+  its drill-in and names the field for place-count semantics. Expected files are
+  `Wander/Features/Profile/ProfileInsightsPresenter.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this log.
+- Data flow:
+  `visits -> active owner Been user-place lookup -> selected month -> calendar
+  day -> canonical place-ID set -> badge count + drill-in IDs`.
+- Failure modes: duplicate visits for one place must count once; distinct owned
+  Been places on one day must each count; Wanna and other-user visits must count
+  zero; a temporarily missing place row retains its saved place ID rather than
+  dropping the date. Existing timezone/month filtering remains unchanged.
+- Test plan: replace the contradictory raw-visit-count assertion with a focused
+  distinct-place regression that includes duplicate owner visits, a second
+  owned Been place, an owner Wanna visit, and another user's Been visit on the
+  same date; keep the existing owner/status/timezone/cache coverage; then run
+  the focused presenter suite and full simulator suite.
+- Review sections: architecture 0 issues, code quality 0 issues after the field
+  rename is included, performance 0 issues (the set-based aggregation remains
+  O(visits)), test review 1 mandatory regression gap folded into the plan, 0
+  critical gaps, and no unresolved decisions. Sequential implementation only;
+  no parallel lane is useful for one presenter path.
+- Explicitly out of scope: month summary metrics, visit history semantics,
+  profile/map/list redesign, backend/schema/RLS, analytics, build number,
+  TestFlight, and Slack. Outside-voice and CEO/design reviews are not warranted
+  for this isolated, source-verified two-module regression.
+
+Implementation checkpoint, 2026-07-22 16:02 PDT:
+
+- Replaced the raw per-day visit-row counter with a count derived from the same
+  canonical place-ID set used by calendar drill-ins. Repeated visits to one
+  place now count once, local/server aliases collapse to the same place, and a
+  missing place row retains its referenced ID rather than erasing the day.
+- Renamed the presenter and view contract from visit-count to place-count
+  semantics and changed the day-cell accessibility label from visits to places.
+  The existing owner, Been-status, deletion, and month filters remain the
+  authoritative eligibility gate.
+- Added focused regressions covering duplicate visits, two distinct owner Been
+  places, an owner Wanna save, another user's Been save, local/server aliases,
+  a missing place reference, and the existing timezone boundary.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused `ProfileInsightsPresenterTests` suite
+  passed 14/14 on the installed iPhone 17 Pro / iOS 26.5 simulator:
+  `/private/tmp/DerivedData-rec124-focused/Logs/Test/Test-Wander-2026.07.22_15-57-28--0700.xcresult`.
+- The prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed. An
+  initial sandboxed attempt also stopped before app code because CoreSimulator
+  and dependency networking were unavailable; neither infrastructure attempt
+  is counted as validation. Existing `WanderSupabaseClient` concurrency
+  warnings remain unrelated.
+- `origin/main` advanced by one commit during implementation. Commit this
+  isolated change, update it onto current `origin/main`, then run the complete
+  suite as the final review gate before publication.
