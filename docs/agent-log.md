@@ -15279,3 +15279,12 @@ Next:
 
 - Push the layout branch and open a PR against `main`; keep `REC-121` in
   review until Joe confirms the physical-device layout.
+
+Handoff (2026-07-22 12:34 PDT):
+
+- PR: https://github.com/joelipshutz/wander/pull/153
+- Commit: `a041a51 fix: normalize feed activity layout`
+- `REC-121` is now In Review with the PR and validation details linked.
+- Known validation gap: the focused simulator test has not executed because
+  the host cannot allocate its module cache. The device build did complete and
+  the tester-installed app is ready for visual confirmation.
