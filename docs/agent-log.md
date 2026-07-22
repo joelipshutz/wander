@@ -15106,3 +15106,27 @@ Preflight:
   increment it exactly once to build `86`, regenerate the Xcode project,
   validate/archive/upload from the resulting latest main batch, then attach
   the uploaded build to TestFlight and update Linear/Slack.
+
+Completion, 2026-07-21 18:37 PDT:
+
+- Squash-merged the build-metadata PR #147 as `106093f`
+  (`chore: prepare TestFlight build 86`). The production archive was built
+  from that exact latest `main` commit. `project.yml` and the generated Xcode
+  project both carry build `86`.
+- Exact-source validation passed 488/488 tests on iPhone 16 Plus, iOS 18.6.
+  The archive succeeded and its metadata confirms `com.grayline.wander`,
+  marketing version `0.1`, build `86`, arm64, and team `Y7TVK75RZ8`.
+- App Store Connect accepted the upload after the export destination was
+  corrected from a local IPA export to `upload`; the same verified archive was
+  used and build-number management remained disabled. Build `0.1 (86)`, id
+  `a39445f5-8563-439e-a927-6db1990898f0`, is `VALID`, has
+  `usesNonExemptEncryption=false`, and includes the en-US What to Test copy.
+- Build 86 is attached to `rec.me Alpha`; external TestFlight review is
+  `APPROVED`. Public link: https://testflight.apple.com/join/knEhRa6t.
+- Updated Linear `REC-121` with the release evidence and posted the required
+  tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784684208014349.
+- The archive emitted the same non-blocking Swift concurrency warnings in
+  `WanderSupabaseClient` noted for Build 85. No new compiler or XCTest failure
+  occurred. Disposable Xcode DerivedData caches were cleared during the
+  release because the local disk had only 116 MB free.
