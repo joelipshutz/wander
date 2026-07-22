@@ -15771,3 +15771,16 @@ REC-106 publication handoff, 2026-07-21 17:53 PDT:
   external blocker. Exact restart: unlock both, open
   `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj`, select
   `Ry’s iPhone`, and Run; clear old imports before pasting the test links.
+
+REC-106 physical-device handoff completed, 2026-07-22 11:43 PDT:
+
+- Verified the isolated worktree is on pushed branch
+  `codex/rec-106-instagram-carousel` at `ae22189d8`; tracked files were clean
+  and only the previously documented DerivedData folders remain untracked.
+- Xcode is open on the exact project at
+  `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj`. Its toolbar
+  reports branch `codex/rec-106-instagram-carousel`, scheme `Wander`, and run
+  destination `Ry’s iPhone` (connected iPhone 15 Pro).
+- Started a fresh Run from Xcode. The build completed, Xcode reports `Running
+  Wander on Ry’s iPhone`, and the debugger attached to process `Wander`.
+  Ryan can now clear prior imports and physically retest the supplied links.
