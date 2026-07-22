@@ -17188,3 +17188,32 @@ REC-116 compact-save final handoff, 2026-07-22 13:35 PDT:
   device testing.
 - No build-number bump, archive, TestFlight upload, hosted data mutation, or
   tester-facing Slack post was performed for this PR-only device handoff.
+
+## 2026-07-22 15:43 PDT - Codex - REC-116 Merge And TestFlight Release
+
+Agent: Codex
+Branch: `codex/rec-116-save-flow`
+Worktree: `/private/tmp/recme-rec116-save-flow`
+Linear: `REC-116` (`In Review`)
+Pull request: [#151](https://github.com/joelipshutz/wander/pull/151)
+
+Goal: perform the user-requested final review, squash-merge REC-116 into
+`main`, then package all eligible app changes currently on `main` into a new
+TestFlight build and make it available to the public tester group.
+
+Starting status and coordination:
+
+- Fetched `origin`; the existing isolated REC-116 worktree is clean at
+  `72b8a6999`. The root checkout remains on unrelated stale REC-88 work with
+  user-owned `.gitignore` and `.pnpm-store/` changes and will not be edited or
+  switched.
+- `origin/main` is `6d717d23b` and currently declares build 90. The durable
+  release log records build 90 as completed, so there is no unfinished release
+  to resume. Main has advanced with REC-106 and REC-111 since the last REC-116
+  validation; update the PR onto latest main and rerun the landing gate before
+  merge.
+- The explicit release request authorizes one build-number increment after the
+  merge, archive/upload, TestFlight helper/group attachment, Linear completion,
+  and the required `#testflight-feedback` note. Expected pre-merge edits are
+  limited to this append-only log and conflict resolution; release edits will
+  use a separate clean worktree from the exact merged `main`.
