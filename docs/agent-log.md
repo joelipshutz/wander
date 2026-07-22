@@ -17129,3 +17129,27 @@ REC-116 compact-save current-main gate, 2026-07-22 13:19 PDT:
 - Next: commit this gate note, safely force-update the rebased PR branch, verify
   GitHub's merge state, update Linear, and run the branch from Xcode on Ry's
   iPhone. No TestFlight release is requested.
+
+REC-116 second current-main validation, 2026-07-22 13:29 PDT:
+
+- `origin/main` advanced again to `a306b4ca1` (`fix: backfill historical feed
+  activity (#152)`). Rebased PR #151 a second time; the only conflict was this
+  append-only coordination log, and both histories were retained. The compact
+  implementation commit is now `698a798c1`; branch head before this note is
+  `afd369734`.
+- Two warmed test attempts were interrupted by an iOS Simulator runner/channel
+  disconnect. One surfaced while the performance fixture was running; that
+  exact test passed independently in 0.709 seconds. After shutting down the
+  extra iPhone 17e simulator and clean-booting the iPhone 17 Pro destination, a
+  fresh full suite passed 505/505 with zero failures. Result bundle:
+  `/tmp/DerivedData-rec116-final/Logs/Test/Test-Wander-2026.07.22_13-24-04--0700.xcresult`.
+  The runner interruptions were infrastructure-only and did not reproduce after
+  the clean boot.
+- `git diff --check` remains clean. Visual acceptance is unchanged from the
+  prior iPhone 17 Pro and iPhone 17e review: collapsed Been fits without a
+  scroll, Wanna shares the same hierarchy, and Notes appears only inside More
+  options for both flows.
+- Next: commit this latest-main validation, safely force-update PR #151, verify
+  its merge state, return Linear REC-116 to `In Review` with the new evidence,
+  and run the final branch from Xcode on Ry's iPhone. No build-number or
+  TestFlight action was requested.
