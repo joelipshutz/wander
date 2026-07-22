@@ -17575,3 +17575,19 @@ Build-91-main publication gate, 2026-07-22 16:12 PDT:
   `/private/tmp/DerivedData-rec124-postrebase/Logs/Test/Test-Wander-2026.07.22_16-10-40--0700.xcresult`.
 - A final `git fetch origin` confirms the branch is current with main and
   `git diff --check` passes. This is the publication gate for the ready PR.
+
+Publication and review handoff, 2026-07-22 16:14 PDT:
+
+- Pushed `codex/rec-124-calendar-badges` and opened ready PR
+  [#167](https://github.com/joelipshutz/wander/pull/167) against `main`.
+  GitHub reports the PR open, non-draft, `CLEAN`, with exactly the two Profile
+  source files, presenter tests, and this log; no checks are configured.
+- Attached PR #167 to Linear REC-124 and moved the issue from In Progress to
+  In Review. Validation for reviewer handoff is 14/14 focused presenter tests
+  and 573/573 complete tests on the exact build-91 main base.
+- Review acceptance: one badge count per distinct owner-saved Been place on a
+  date; repeat visits do not inflate it; Wanna and other users' saves do not
+  contribute; tapping the date yields the same distinct place set named by the
+  badge. Keep REC-124 In Review until the behavior and PR are accepted.
+- No release was requested or performed. Any TestFlight packaging of this app
+  change requires a separate explicit release request after merge.
