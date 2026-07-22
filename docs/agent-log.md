@@ -16755,3 +16755,118 @@ REC-106 merge completion, 2026-07-22 15:12 PDT:
 - No TestFlight build number, archive, upload, group attachment, or Slack
   release note was created; this fix will be included in the next explicitly
   requested TestFlight release batch.
+## 2026-07-22 12:00 PDT - Codex - REC-111 Filtered Place Map
+
+Agent: Codex
+Branch: `codex/rec-111-filtered-map`
+Worktree: `/private/tmp/recme-rec111-filtered-map`
+Linear: `REC-111` (Backlog at start; move to In Progress before implementation)
+
+Goal: add the requested full-width, interactive Apple map to filtered
+place-list pages (for example, United States), scoped to the places represented
+by that filter, and deliver a validated PR that is ready for Ryan to test.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `67a8bd7cc`. The root checkout remains on an unrelated stale
+  REC-88 branch with user-owned `.gitignore` and `.pnpm-store/` changes; they
+  are untouched.
+- REC-95 already shipped the separate saved-list detail/full-screen map flow in
+  PR #124. Its old local worktree is clean and eight commits behind main; this
+  task will reuse that production MapKit vocabulary where appropriate rather
+  than edit the completed branch.
+- REC-111 is a feature/UX enhancement with a new interactive surface, so the
+  repo-required engineering-review gate and plan-design-review lens will run
+  before runtime edits. No backend/schema, auth, visibility, persistence,
+  global Map-tab redesign, build-number bump, or TestFlight upload is in scope.
+- Expected implementation is limited to the filtered-place destination and
+  existing reusable map/list components, focused tests, any deterministic QA
+  launch fixture needed for screenshots, and this coordination log. Exact files
+  will be locked after code reconnaissance; high-conflict Map/store files will
+  not be edited unless the reviewed design proves they are required.
+
+Planning checkpoint, 2026-07-22 12:38 PDT:
+
+- Traced REC-111 to Profile → Your map → Places/Cities/Countries →
+  `SavedPlacesListScreen`; it is not a global Map-tab filter. The existing route
+  carries exact place IDs and already opens the correct private place detail.
+- Reviewed the shipped REC-95 map implementation, its engineering plan, and its
+  approved design audit. REC-111 will reuse its MapKit fitting, grouping,
+  clustering, outline, accessibility, attribution, and partial/unmapped
+  semantics without refactoring REC-95's private screen hierarchy.
+- Locked the smallest complete scope in
+  `docs/plans/2026-07-22-rec-111-filtered-place-map.md`: an explicit
+  map-summary route source, a full-width embedded overview, pin-to-existing
+  detail, cluster-to-zoom, stable upstream collection pins, and truthful row
+  fallback for invalid/coincident coordinates.
+- Active REC-110 work is editing `ProfileOwnerHome.swift`,
+  `WanderShareButton.swift`, and `NavigationContractTests.swift`. REC-111 will
+  avoid those files and limit runtime/test edits to `ProfileScreen.swift` and
+  `ProfileInsightsPresenterTests.swift` unless validation exposes a concrete
+  need.
+- PostHog/Supabase triage remains intentionally skipped: this is a deterministic
+  local UI enhancement with no auth, sync, visibility, backend, data-loss, or
+  timestamp-dependent failure report.
+- An independent adversarial plan pass found one product-contract mismatch in
+  the first draft: stable upstream pins would diverge from rows after secondary
+  filtering. The reviewed plan now makes pins and mapped counts follow the
+  current rows while keeping the camera stable. It also makes route/matcher
+  helpers internal for real tests, caches clustering on input/viewport/camera
+  events, adds a synthetic 900-annotation/250 ms budget, and requires a real
+  small-phone VoiceOver pass including Apple/Legal focusability.
+
+Implementation and validation checkpoint, 2026-07-22 13:21 PDT:
+
+- Implemented the map only for explicit Profile map-summary routes; calendar
+  drill-ins and the existing Been/Wanna list destinations remain map-free. The
+  destination now places a full-width, pan/zoom Apple map before its existing
+  search, type/tag filters, and complete place rows. A pin uses the grouped
+  current/social save outlines and opens the exact existing place detail.
+- Added pure route, canonical/local/server ID matching, annotation projection,
+  invalid-coordinate, camera, clustering, terminal-activation, and
+  accessibility seams. Search/type/tag results drive pins and mapped/total copy
+  without resetting a person's camera; the first camera still fits the full
+  upstream summary.
+- Replaced the destination-local pairwise clustering experiment with a bounded
+  spatial hash and deterministic anchor clusters. Neighboring cells are checked
+  so overlapping pins cannot escape at a grid boundary, while anchor membership
+  prevents transitive map-spanning chains. The 900-annotation regression takes
+  about 10 ms against its 250 ms debug budget.
+- A cluster zoom target is fitted to the measured viewport before its action and
+  VoiceOver hint are chosen. If another tap would not materially change the
+  camera, it deterministically opens the named representative place instead of
+  becoming a dead "Zooms in" control. Camera availability state also resets and
+  refits across valid -> unavailable -> valid cycles, including either SwiftUI
+  callback ordering.
+- `xcodegen generate` completed with no generated project membership diff.
+  Final focused tests passed 10/10, including the high-latitude Mercator
+  no-op guard:
+  `/private/tmp/DerivedData-rec111-focused/Logs/Test/Test-Wander-2026.07.22_13-25-24--0700.xcresult`.
+  The final complete suite passed 500/500:
+  `/private/tmp/DerivedData-rec111-focused/Logs/Test/Test-Wander-2026.07.22_13-18-47--0700.xcresult`.
+  One preceding focused attempt compiled but its XCTest process was killed
+  before bootstrap; the identical retry passed and the interrupted run is not
+  counted as validation.
+- The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed. Visual and
+  interaction QA used the installed iPhone 17 Pro and smaller iPhone 17e on
+  iOS 26.5, plus Accessibility Extra Large on the 17e. Retained screenshots:
+  `/private/tmp/rec111-qa/iphone17pro-map.jpg`,
+  `/private/tmp/rec111-qa/iphone17e-map.jpg`, and
+  `/private/tmp/rec111-qa/iphone17e-accessibility-extra-large-map.jpg`.
+- Final iPhone 17e accessibility-tree interaction on the final code verified
+  the full-width map, truthful 106-place count, search/filters and rows, native
+  Legal link, cluster zoom from 35 to 18/17, terminal copy naming "Bakery 0026,
+  one of 4 saved places at this location," and activation into Bakery 0026's
+  existing detail. The 17e content-size category was restored to Large.
+- Independent implementation review findings were fixed before this gate:
+  eliminate clustering from view initialization, prevent transitive clusters,
+  handle first/returning valid cameras, avoid duplicate unavailable-state
+  announcements, cluster across cell boundaries, prevent no-op zoom promises,
+  name deterministic terminal destinations, and account for viewport aspect.
+  No remaining actionable review issue is known.
+- Existing unrelated Swift concurrency warnings in
+  `WanderSupabaseClient` remain. No backend, schema, RLS, analytics, build-number,
+  TestFlight, or tester-message change is included. `origin/main` advanced by
+  four commits during validation; update this branch and rerun the merge gate
+  before the ready PR.

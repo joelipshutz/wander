@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -1139,17 +1140,28 @@ private enum SavedPlacesListMode: String, Identifiable {
     }
 }
 
-private struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
+enum ProfilePlaceCollectionSource: String, Hashable {
+    case calendar
+    case mapSummary
+
+    var presentsInteractiveMap: Bool {
+        self == .mapSummary
+    }
+}
+
+struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let id: String
     let title: String
     let placeIDs: [String]
+    let source: ProfilePlaceCollectionSource
 
     static func calendar(date: Date, placeIDs: [String], calendar: Calendar = .current) -> Self {
         let day = calendar.startOfDay(for: date)
         return ProfilePlaceCollectionRoute(
             id: "calendar-\(day.timeIntervalSince1970)",
             title: date.formatted(.dateTime.month(.wide).day().year()),
-            placeIDs: placeIDs
+            placeIDs: placeIDs,
+            source: .calendar
         )
     }
 
@@ -1157,8 +1169,836 @@ private struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
         ProfilePlaceCollectionRoute(
             id: "map-\(kind.rawValue)-\(item.id)",
             title: item.title,
-            placeIDs: item.placeIDs
+            placeIDs: item.placeIDs,
+            source: .mapSummary
         )
+    }
+}
+
+enum ProfilePlaceCollectionMatcher {
+    static func matches(_ visiblePlace: VisiblePlace, acceptedPlaceIDs: Set<String>) -> Bool {
+        var placeIDs = [visiblePlace.place.id, visiblePlace.place.localID]
+        if let serverID = visiblePlace.place.serverID {
+            placeIDs.append(serverID)
+        }
+        return !acceptedPlaceIDs.isDisjoint(with: placeIDs)
+    }
+}
+
+struct ProfilePlaceCollectionMapItem: Identifiable {
+    let id: String
+    let visiblePlace: VisiblePlace
+    let mapCoordinate: ListMapCoordinate
+    let saveStates: [MapPinSaveState]
+    let outlines: [MapPinOutline]
+    let accessibilityLabel: String
+
+    var coordinate: CLLocationCoordinate2D {
+        mapCoordinate.coordinate
+    }
+}
+
+struct ProfilePlaceCollectionMapPresentation {
+    let items: [ProfilePlaceCollectionMapItem]
+    let totalCount: Int
+
+    var contentState: ListMapContentState {
+        ListMapContentState(
+            totalItemCount: totalCount,
+            resolvedPlaceCount: totalCount,
+            mappedPlaceCount: items.count
+        )
+    }
+
+    var fittedRegion: MKCoordinateRegion? {
+        MapRegionFitter.region(
+            fitting: items.map(\.coordinate),
+            minimumSpan: 0.012,
+            paddingMultiplier: 1.65
+        )
+    }
+}
+
+enum ProfilePlaceCollectionMapProjection {
+    static func presentation(
+        for visiblePlaces: [VisiblePlace],
+        currentUserID: String
+    ) -> ProfilePlaceCollectionMapPresentation {
+        let groups = VisiblePlaceGrouping.groups(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let items = groups.compactMap { group -> ProfilePlaceCollectionMapItem? in
+            guard let mappedPlace = group.places.first(where: isMappable) else {
+                return nil
+            }
+
+            let saveStates = group.places.map { visiblePlace in
+                MapPinSaveState(
+                    ownership: visiblePlace.owner.id == currentUserID ? .currentUser : .social,
+                    status: visiblePlace.userPlace.status
+                )
+            }
+            let outlines = MapPinOutlineBuilder.outlines(for: saveStates)
+            let primary = group.primary
+            let mapCoordinate = ListMapCoordinate(
+                id: group.id,
+                coordinate: CLLocationCoordinate2D(
+                    latitude: mappedPlace.place.latitude,
+                    longitude: mappedPlace.place.longitude
+                )
+            )
+
+            return ProfilePlaceCollectionMapItem(
+                id: group.id,
+                visiblePlace: primary,
+                mapCoordinate: mapCoordinate,
+                saveStates: saveStates,
+                outlines: outlines,
+                accessibilityLabel: accessibilityLabel(for: primary, outlines: outlines)
+            )
+        }
+
+        return ProfilePlaceCollectionMapPresentation(
+            items: items,
+            totalCount: groups.count
+        )
+    }
+
+    private static func isMappable(_ visiblePlace: VisiblePlace) -> Bool {
+        ListMapCoordinate(
+            id: visiblePlace.id,
+            coordinate: CLLocationCoordinate2D(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
+        ).isMappable
+    }
+
+    private static func accessibilityLabel(
+        for visiblePlace: VisiblePlace,
+        outlines: [MapPinOutline]
+    ) -> String {
+        let hasCurrentUser = outlines.contains { $0.ownership == .currentUser }
+        let hasSocial = outlines.contains { $0.ownership == .social }
+        let ownership: String
+        if hasCurrentUser && hasSocial {
+            ownership = "Your and social saved place"
+        } else if hasCurrentUser {
+            ownership = "Your saved place"
+        } else {
+            ownership = "Social saved place"
+        }
+
+        return "\(ownership) \(visiblePlace.effectiveCategoryDisplay.compactTitle), \(visiblePlace.place.canonicalName)"
+    }
+}
+
+enum ProfilePlaceCollectionMapClusterer {
+    private struct GridCell: Hashable {
+        let column: Int
+        let row: Int
+    }
+
+    private struct ClusterAccumulator {
+        let anchorPoint: CGPoint
+        let anchorCoordinate: ListMapCoordinate
+        var memberIDs: [String]
+    }
+
+    static func clusters(
+        for coordinates: [ListMapCoordinate],
+        in region: MKCoordinateRegion,
+        viewportSize: CGSize,
+        minimumScreenDistance: CGFloat = 52
+    ) -> [ListMapCluster] {
+        let validCoordinates = coordinates.filter(\.isMappable)
+        guard !validCoordinates.isEmpty else { return [] }
+
+        let width = max(viewportSize.width, 1)
+        let height = max(viewportSize.height, 1)
+        let latitudeSpan = max(region.span.latitudeDelta, 0.000_001)
+        let longitudeSpan = max(region.span.longitudeDelta, 0.000_001)
+        let resolvedDistance = max(minimumScreenDistance, 1)
+        let squaredDistanceThreshold = resolvedDistance * resolvedDistance
+        var clusterIndicesByCell: [GridCell: [Int]] = [:]
+        var accumulators: [ClusterAccumulator] = []
+
+        for item in validCoordinates {
+            let point = CGPoint(
+                x: width * (0.5 + normalizedLongitudeDelta(
+                    item.longitude - region.center.longitude
+                ) / longitudeSpan),
+                y: height * (0.5 - (item.latitude - region.center.latitude) / latitudeSpan)
+            )
+            let cell = GridCell(
+                column: Int(floor(point.x / resolvedDistance)),
+                row: Int(floor(point.y / resolvedDistance))
+            )
+
+            var nearestCluster: (index: Int, squaredDistance: CGFloat)?
+            for rowOffset in -1...1 {
+                for columnOffset in -1...1 {
+                    let neighbor = GridCell(
+                        column: cell.column + columnOffset,
+                        row: cell.row + rowOffset
+                    )
+                    for clusterIndex in clusterIndicesByCell[neighbor] ?? [] {
+                        let anchor = accumulators[clusterIndex].anchorPoint
+                        let x = point.x - anchor.x
+                        let y = point.y - anchor.y
+                        let squaredDistance = x * x + y * y
+                        guard squaredDistance <= squaredDistanceThreshold else { continue }
+
+                        if let currentNearest = nearestCluster {
+                            if squaredDistance < currentNearest.squaredDistance
+                                || (squaredDistance == currentNearest.squaredDistance
+                                    && clusterIndex < currentNearest.index) {
+                                nearestCluster = (clusterIndex, squaredDistance)
+                            }
+                        } else {
+                            nearestCluster = (clusterIndex, squaredDistance)
+                        }
+                    }
+                }
+            }
+
+            if let nearestCluster {
+                accumulators[nearestCluster.index].memberIDs.append(item.id)
+            } else {
+                let clusterIndex = accumulators.count
+                accumulators.append(
+                    ClusterAccumulator(
+                        anchorPoint: point,
+                        anchorCoordinate: item,
+                        memberIDs: [item.id]
+                    )
+                )
+                clusterIndicesByCell[cell, default: []].append(clusterIndex)
+            }
+        }
+
+        return accumulators.map { accumulator in
+            return ListMapCluster(
+                id: accumulator.memberIDs.sorted().joined(separator: "|"),
+                memberIDs: accumulator.memberIDs,
+                latitude: accumulator.anchorCoordinate.latitude,
+                longitude: accumulator.anchorCoordinate.longitude
+            )
+        }
+    }
+
+    private static func normalizedLongitudeDelta(_ longitude: CLLocationDegrees) -> CLLocationDegrees {
+        var result = longitude.truncatingRemainder(dividingBy: 360)
+        if result > 180 {
+            result -= 360
+        } else if result < -180 {
+            result += 360
+        }
+        return result
+    }
+
+}
+
+enum ProfilePlaceCollectionMapCamera {
+    static func region(
+        fitting region: MKCoordinateRegion,
+        viewportSize: CGSize
+    ) -> MKCoordinateRegion {
+        let width = max(viewportSize.width, 1)
+        let height = max(viewportSize.height, 1)
+        let viewportAspectRatio = Double(width / height)
+        var latitudeDelta = max(region.span.latitudeDelta, 0.000_001)
+        var longitudeDelta = max(region.span.longitudeDelta, 0.000_001)
+
+        if longitudeDelta / latitudeDelta > viewportAspectRatio {
+            latitudeDelta = max(latitudeDelta, longitudeDelta / viewportAspectRatio)
+        } else {
+            longitudeDelta = max(longitudeDelta, latitudeDelta * viewportAspectRatio)
+        }
+
+        latitudeDelta = min(latitudeDelta, 180)
+        longitudeDelta = min(longitudeDelta, 360)
+        let latitudeCenterLimit = (180 - latitudeDelta) / 2
+        let latitude = min(
+            max(region.center.latitude, -latitudeCenterLimit),
+            latitudeCenterLimit
+        )
+
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: latitude,
+                longitude: region.center.longitude
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: latitudeDelta,
+                longitudeDelta: longitudeDelta
+            )
+        )
+    }
+}
+
+enum ProfilePlaceCollectionMapClusterActivation: Equatable {
+    case zoom
+    case open(String)
+}
+
+enum ProfilePlaceCollectionMapZoomTarget {
+    private static let absoluteMinimumSpan: CLLocationDegrees = 0.0015
+    private static let zoomScale: CLLocationDegrees = 0.32
+    private static let paddingMultiplier: CLLocationDegrees = 1.75
+    private static let expansionTolerance: CLLocationDegrees = 1.02
+    private static let materialReductionRatio: CLLocationDegrees = 0.90
+
+    static func region(
+        for cluster: ListMapCluster,
+        coordinatesByID: [String: ListMapCoordinate],
+        visibleRegion: MKCoordinateRegion,
+        viewportSize: CGSize
+    ) -> MKCoordinateRegion? {
+        let coordinates = cluster.memberIDs.compactMap { coordinatesByID[$0]?.coordinate }
+        let minimumSpan = max(
+            min(visibleRegion.span.latitudeDelta, visibleRegion.span.longitudeDelta) * zoomScale,
+            absoluteMinimumSpan
+        )
+        guard let fittedRegion = MapRegionFitter.region(
+            fitting: coordinates,
+            minimumSpan: minimumSpan,
+            paddingMultiplier: paddingMultiplier
+        ) else {
+            return nil
+        }
+        return ProfilePlaceCollectionMapCamera.region(
+            fitting: fittedRegion,
+            viewportSize: viewportSize
+        )
+    }
+
+    static func makesMaterialProgress(
+        from visibleRegion: MKCoordinateRegion,
+        to targetRegion: MKCoordinateRegion
+    ) -> Bool {
+        let currentLatitude = visibleRegion.span.latitudeDelta
+        let currentLongitude = visibleRegion.span.longitudeDelta
+        let targetLatitude = targetRegion.span.latitudeDelta
+        let targetLongitude = targetRegion.span.longitudeDelta
+        guard currentLatitude.isFinite, currentLatitude > 0,
+              currentLongitude.isFinite, currentLongitude > 0,
+              targetLatitude.isFinite, targetLatitude > 0,
+              targetLongitude.isFinite, targetLongitude > 0,
+              targetLatitude <= currentLatitude * expansionTolerance,
+              targetLongitude <= currentLongitude * expansionTolerance
+        else {
+            return false
+        }
+
+        // MapKit's Mercator projection can expand one degree span again,
+        // especially at high latitudes. Requiring both spans to tighten keeps
+        // a cluster from promising a zoom that renders as a no-op.
+        return targetLatitude <= currentLatitude * materialReductionRatio
+            && targetLongitude <= currentLongitude * materialReductionRatio
+    }
+}
+
+enum ProfilePlaceCollectionMapClusterActivationResolver {
+    static func activation(
+        for cluster: ListMapCluster,
+        coordinatesByID: [String: ListMapCoordinate],
+        visibleRegion: MKCoordinateRegion,
+        viewportSize: CGSize
+    ) -> ProfilePlaceCollectionMapClusterActivation? {
+        guard let firstID = cluster.memberIDs.first,
+              let firstCoordinate = coordinatesByID[firstID] else { return nil }
+        let coordinates = cluster.memberIDs.compactMap { coordinatesByID[$0] }
+        let hasDistinctCoordinate = coordinates.dropFirst().contains { coordinate in
+            coordinate.latitude != firstCoordinate.latitude
+                || coordinate.longitude != firstCoordinate.longitude
+        }
+        guard hasDistinctCoordinate,
+              let targetRegion = ProfilePlaceCollectionMapZoomTarget.region(
+                for: cluster,
+                coordinatesByID: coordinatesByID,
+                visibleRegion: visibleRegion,
+                viewportSize: viewportSize
+              ),
+              ProfilePlaceCollectionMapZoomTarget.makesMaterialProgress(
+                from: visibleRegion,
+                to: targetRegion
+              )
+        else {
+            return .open(firstID)
+        }
+        return .zoom
+    }
+}
+
+struct ProfilePlaceCollectionMapClusterAccessibility: Equatable {
+    let label: String
+    let hint: String
+
+    static func presentation(
+        count: Int,
+        activation: ProfilePlaceCollectionMapClusterActivation?,
+        destinationName: String?
+    ) -> Self {
+        switch activation {
+        case .open:
+            if let destinationName {
+                return Self(
+                    label: "\(destinationName), one of \(count) saved places at this location",
+                    hint: "Shows \(destinationName) details. Every place remains in the list below."
+                )
+            }
+            return Self(
+                label: "\(count) saved places at this location",
+                hint: "Shows one saved place. Every place remains in the list below."
+            )
+        case .zoom:
+            return Self(
+                label: "\(count) places close together",
+                hint: "Zooms in"
+            )
+        case nil:
+            return Self(
+                label: "\(count) saved places",
+                hint: "Every place remains in the list below."
+            )
+        }
+    }
+}
+
+struct ProfilePlaceCollectionMapCameraLifecycle: Equatable {
+    private(set) var hasAppliedOverviewRegion: Bool
+    private(set) var hasAppliedViewportFit = false
+
+    init(hasOverviewRegion: Bool) {
+        hasAppliedOverviewRegion = hasOverviewRegion
+    }
+
+    mutating func reconcileOverview(isAvailable: Bool) -> Bool {
+        guard isAvailable else {
+            hasAppliedOverviewRegion = false
+            hasAppliedViewportFit = false
+            return false
+        }
+        guard !hasAppliedOverviewRegion else { return false }
+        hasAppliedOverviewRegion = true
+        hasAppliedViewportFit = false
+        return true
+    }
+
+    mutating func markViewportFitApplied() {
+        hasAppliedOverviewRegion = true
+        hasAppliedViewportFit = true
+    }
+}
+
+private struct ProfilePlaceCollectionMap: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let presentation: ProfilePlaceCollectionMapPresentation
+    let overviewRegion: MKCoordinateRegion?
+    let overviewTotalCount: Int
+    let onSelect: (VisiblePlace) -> Void
+    @State private var position: MapCameraPosition
+    @State private var visibleRegion: MKCoordinateRegion
+    @State private var clusters: [ListMapCluster]
+    @State private var cameraLifecycle: ProfilePlaceCollectionMapCameraLifecycle
+
+    private static let fallbackRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
+        span: MKCoordinateSpan(latitudeDelta: 120, longitudeDelta: 300)
+    )
+
+    init(
+        presentation: ProfilePlaceCollectionMapPresentation,
+        overviewRegion: MKCoordinateRegion?,
+        overviewTotalCount: Int,
+        onSelect: @escaping (VisiblePlace) -> Void
+    ) {
+        self.presentation = presentation
+        self.overviewRegion = overviewRegion
+        self.overviewTotalCount = overviewTotalCount
+        self.onSelect = onSelect
+
+        let initialRegion = overviewRegion ?? Self.fallbackRegion
+        _position = State(initialValue: .region(initialRegion))
+        _visibleRegion = State(initialValue: initialRegion)
+        _clusters = State(initialValue: [])
+        _cameraLifecycle = State(
+            initialValue: ProfilePlaceCollectionMapCameraLifecycle(
+                hasOverviewRegion: overviewRegion != nil
+            )
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if overviewRegion != nil {
+                mapSurface
+                statusBar
+            } else {
+                unavailablePanel
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(WanderTheme.surfaceBone.color)
+        .onChange(of: overviewRegionSignature) { _, signature in
+            let shouldApplyOverview = cameraLifecycle.reconcileOverview(
+                isAvailable: signature != nil
+            )
+            guard shouldApplyOverview, let overviewRegion else {
+                if signature == nil {
+                    clusters = []
+                }
+                return
+            }
+            visibleRegion = overviewRegion
+            position = .region(overviewRegion)
+            clusters = []
+        }
+    }
+
+    private var mapSurface: some View {
+        GeometryReader { proxy in
+            let itemByID = Dictionary(
+                uniqueKeysWithValues: presentation.items.map { ($0.id, $0) }
+            )
+            let coordinatesByID = Dictionary(
+                uniqueKeysWithValues: presentation.items.map { ($0.id, $0.mapCoordinate) }
+            )
+            let currentClusters = clusters.filter { cluster in
+                !cluster.memberIDs.isEmpty
+                    && cluster.memberIDs.allSatisfy { itemByID[$0] != nil }
+            }
+
+            Map(position: $position, interactionModes: [.pan, .zoom]) {
+                ForEach(currentClusters) { cluster in
+                    Annotation("", coordinate: cluster.coordinate) {
+                        if cluster.isCluster {
+                            Button {
+                                activate(
+                                    cluster,
+                                    itemByID: itemByID,
+                                    coordinatesByID: coordinatesByID,
+                                    viewportSize: proxy.size
+                                )
+                            } label: {
+                                ProfilePlaceCollectionClusterMarker(
+                                    count: cluster.memberIDs.count,
+                                    outlines: outlines(for: cluster, itemByID: itemByID)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(
+                                clusterAccessibilityLabel(
+                                    cluster,
+                                    itemByID: itemByID,
+                                    coordinatesByID: coordinatesByID,
+                                    viewportSize: proxy.size
+                                )
+                            )
+                            .accessibilityHint(
+                                clusterAccessibilityHint(
+                                    cluster,
+                                    itemByID: itemByID,
+                                    coordinatesByID: coordinatesByID,
+                                    viewportSize: proxy.size
+                                )
+                            )
+                        } else if let itemID = cluster.memberIDs.first,
+                                  let item = itemByID[itemID] {
+                            Button {
+                                onSelect(item.visiblePlace)
+                            } label: {
+                                ProfilePlaceCollectionMapMarker(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(item.accessibilityLabel)
+                            .accessibilityHint("Shows saved place details")
+                        }
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+            .onAppear {
+                let region = applyInitialCameraIfNeeded(viewportSize: proxy.size)
+                refreshClusters(in: region, viewportSize: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in
+                refreshClusters(viewportSize: size)
+            }
+            .onChange(of: presentation.items.map(\.mapCoordinate)) { _, _ in
+                refreshClusters(viewportSize: proxy.size)
+            }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                visibleRegion = context.region
+                refreshClusters(in: context.region, viewportSize: proxy.size)
+            }
+        }
+        .frame(height: mapHeight)
+    }
+
+    private var unavailablePanel: some View {
+        VStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "map")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Text(mapStatusText)
+                .font(.system(size: 17, weight: .black))
+                .multilineTextAlignment(.center)
+            Text(unavailableSubtitle)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: mapHeight)
+        .padding(.horizontal, WanderTheme.spacing6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var statusBar: some View {
+        HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+            Image(systemName: "mappin.and.ellipse")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            Text(mapStatusText)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+        .padding(.horizontal, WanderTheme.spacing4)
+        .background(WanderTheme.surfaceBone.color)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(WanderTheme.borderHairline.color)
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var mapHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 240 : 280
+    }
+
+    private var overviewRegionSignature: [Double]? {
+        overviewRegion.map { region in
+            [
+                region.center.latitude,
+                region.center.longitude,
+                region.span.latitudeDelta,
+                region.span.longitudeDelta
+            ]
+        }
+    }
+
+    private var mapStatusText: String {
+        switch presentation.contentState {
+        case .empty:
+            overviewTotalCount > 0 ? "No matching places to map" : "No places to map"
+        case .unresolved(let total):
+            "Locations unavailable for \(total) \(total == 1 ? "place" : "places")"
+        case .partial(let mapped, let total):
+            "\(mapped) mapped of \(total)"
+        case .mapped(let count):
+            "\(count) \(count == 1 ? "place" : "places")"
+        }
+    }
+
+    private var unavailableSubtitle: String {
+        if presentation.totalCount == 0, overviewTotalCount > 0 {
+            return "Clear search or filters to restore map pins."
+        }
+        if overviewTotalCount > 0 {
+            return "Every place remains available in the list below."
+        }
+        return "This collection does not have any places yet."
+    }
+
+    private func refreshClusters(viewportSize: CGSize) {
+        refreshClusters(in: visibleRegion, viewportSize: viewportSize)
+    }
+
+    private func refreshClusters(in region: MKCoordinateRegion, viewportSize: CGSize) {
+        clusters = ProfilePlaceCollectionMapClusterer.clusters(
+            for: presentation.items.map(\.mapCoordinate),
+            in: region,
+            viewportSize: viewportSize
+        )
+    }
+
+    private func applyInitialCameraIfNeeded(viewportSize: CGSize) -> MKCoordinateRegion {
+        guard !cameraLifecycle.hasAppliedViewportFit, let overviewRegion else {
+            return visibleRegion
+        }
+        let fittedRegion = ProfilePlaceCollectionMapCamera.region(
+            fitting: overviewRegion,
+            viewportSize: viewportSize
+        )
+        cameraLifecycle.markViewportFitApplied()
+        visibleRegion = fittedRegion
+        position = .region(fittedRegion)
+        return fittedRegion
+    }
+
+    private func outlines(
+        for cluster: ListMapCluster,
+        itemByID: [String: ProfilePlaceCollectionMapItem]
+    ) -> [MapPinOutline] {
+        MapPinOutlineBuilder.outlines(
+            for: cluster.memberIDs.flatMap { itemByID[$0]?.saveStates ?? [] }
+        )
+    }
+
+    private func zoom(to region: MKCoordinateRegion) {
+        if reduceMotion {
+            position = .region(region)
+        } else {
+            withAnimation(.easeInOut(duration: 0.24)) {
+                position = .region(region)
+            }
+        }
+    }
+
+    private func activate(
+        _ cluster: ListMapCluster,
+        itemByID: [String: ProfilePlaceCollectionMapItem],
+        coordinatesByID: [String: ListMapCoordinate],
+        viewportSize: CGSize
+    ) {
+        switch ProfilePlaceCollectionMapClusterActivationResolver.activation(
+            for: cluster,
+            coordinatesByID: coordinatesByID,
+            visibleRegion: visibleRegion,
+            viewportSize: viewportSize
+        ) {
+        case .zoom:
+            if let targetRegion = ProfilePlaceCollectionMapZoomTarget.region(
+                for: cluster,
+                coordinatesByID: coordinatesByID,
+                visibleRegion: visibleRegion,
+                viewportSize: viewportSize
+            ) {
+                zoom(to: targetRegion)
+            }
+        case .open(let itemID):
+            if let item = itemByID[itemID] {
+                onSelect(item.visiblePlace)
+            }
+        case nil:
+            break
+        }
+    }
+
+    private func clusterAccessibilityLabel(
+        _ cluster: ListMapCluster,
+        itemByID: [String: ProfilePlaceCollectionMapItem],
+        coordinatesByID: [String: ListMapCoordinate],
+        viewportSize: CGSize
+    ) -> String {
+        clusterAccessibilityPresentation(
+            for: cluster,
+            itemByID: itemByID,
+            coordinatesByID: coordinatesByID,
+            viewportSize: viewportSize
+        ).label
+    }
+
+    private func clusterAccessibilityHint(
+        _ cluster: ListMapCluster,
+        itemByID: [String: ProfilePlaceCollectionMapItem],
+        coordinatesByID: [String: ListMapCoordinate],
+        viewportSize: CGSize
+    ) -> String {
+        clusterAccessibilityPresentation(
+            for: cluster,
+            itemByID: itemByID,
+            coordinatesByID: coordinatesByID,
+            viewportSize: viewportSize
+        ).hint
+    }
+
+    private func clusterAccessibilityPresentation(
+        for cluster: ListMapCluster,
+        itemByID: [String: ProfilePlaceCollectionMapItem],
+        coordinatesByID: [String: ListMapCoordinate],
+        viewportSize: CGSize
+    ) -> ProfilePlaceCollectionMapClusterAccessibility {
+        let activation = ProfilePlaceCollectionMapClusterActivationResolver.activation(
+            for: cluster,
+            coordinatesByID: coordinatesByID,
+            visibleRegion: visibleRegion,
+            viewportSize: viewportSize
+        )
+        let destinationName: String?
+        if case .open(let itemID) = activation {
+            destinationName = itemByID[itemID]?.visiblePlace.place.canonicalName
+        } else {
+            destinationName = nil
+        }
+        return ProfilePlaceCollectionMapClusterAccessibility.presentation(
+            count: cluster.memberIDs.count,
+            activation: activation,
+            destinationName: destinationName
+        )
+    }
+}
+
+private struct ProfilePlaceCollectionMapMarker: View {
+    let item: ProfilePlaceCollectionMapItem
+
+    var body: some View {
+        WanderCategoryEmoji(emoji: item.visiblePlace.categoryEmoji, size: 16)
+            .frame(width: 38, height: 38)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(Circle())
+            .overlay(outlineLayer)
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .contentShape(Circle())
+            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+    }
+
+    private var outlineLayer: some View {
+        ForEach(Array(item.outlines.indices), id: \.self) { index in
+            MapPinOutlineStroke(
+                outline: item.outlines[index],
+                lineWidth: item.outlines.count > 1 ? 2.5 : 3
+            )
+            .padding(item.outlines.count > 1 && index > 0 ? -5 : 0)
+        }
+    }
+}
+
+private struct ProfilePlaceCollectionClusterMarker: View {
+    let count: Int
+    let outlines: [MapPinOutline]
+
+    var body: some View {
+        Text("\(count)")
+            .font(.system(size: 14, weight: .black, design: .rounded))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .frame(width: 38, height: 38)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(Circle())
+            .overlay(outlineLayer)
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .contentShape(Circle())
+            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
+    }
+
+    private var outlineLayer: some View {
+        ForEach(Array(outlines.indices), id: \.self) { index in
+            MapPinOutlineStroke(
+                outline: outlines[index],
+                lineWidth: outlines.count > 1 ? 2.5 : 3
+            )
+            .padding(outlines.count > 1 && index > 0 ? -5 : 0)
+        }
     }
 }
 
@@ -1228,28 +2068,55 @@ private struct SavedPlacesListScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                searchField
-                filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                tagFilterDropdown
+        let filteredPlaces = places
+        let overviewPlaces = allModePlaces
+        let mapPresentation = collection?.source.presentsInteractiveMap == true
+            ? ProfilePlaceCollectionMapProjection.presentation(
+                for: filteredPlaces,
+                currentUserID: store.currentUser.id
+            )
+            : nil
+        let mapOverview = collection?.source.presentsInteractiveMap == true
+            ? ProfilePlaceCollectionMapProjection.presentation(
+                for: overviewPlaces,
+                currentUserID: store.currentUser.id
+            )
+            : nil
 
-                if places.isEmpty {
-                    SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
-                } else {
-                    ForEach(places) { visiblePlace in
-                        Button {
-                            selectedPlace = visiblePlace
-                        } label: {
-                            ProfilePlaceRow(visiblePlace: visiblePlace)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows saved place details")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let mapPresentation, let mapOverview {
+                    ProfilePlaceCollectionMap(
+                        presentation: mapPresentation,
+                        overviewRegion: mapOverview.fittedRegion,
+                        overviewTotalCount: mapOverview.totalCount
+                    ) { visiblePlace in
+                        selectedPlace = visiblePlace
                     }
                 }
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    searchField
+                    filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                    tagFilterDropdown
+
+                    if filteredPlaces.isEmpty {
+                        SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                    } else {
+                        ForEach(filteredPlaces) { visiblePlace in
+                            Button {
+                                selectedPlace = visiblePlace
+                            } label: {
+                                ProfilePlaceRow(visiblePlace: visiblePlace)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows saved place details")
+                        }
+                    }
+                }
+                .padding(WanderTheme.spacing4)
+                .padding(.bottom, WanderTheme.spacing8)
             }
-            .padding(WanderTheme.spacing4)
-            .padding(.bottom, WanderTheme.spacing8)
         }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
@@ -1272,12 +2139,10 @@ private struct SavedPlacesListScreen: View {
 
     private func matchesCollection(_ visiblePlace: VisiblePlace) -> Bool {
         guard let collection else { return true }
-        let acceptedIDs = Set(collection.placeIDs)
-        var placeIDs = [visiblePlace.place.id, visiblePlace.place.localID]
-        if let serverID = visiblePlace.place.serverID {
-            placeIDs.append(serverID)
-        }
-        return !acceptedIDs.isDisjoint(with: placeIDs)
+        return ProfilePlaceCollectionMatcher.matches(
+            visiblePlace,
+            acceptedPlaceIDs: Set(collection.placeIDs)
+        )
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
