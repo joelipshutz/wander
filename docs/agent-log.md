@@ -15753,3 +15753,21 @@ REC-106 final latest-main validation, 2026-07-21 17:50 PDT:
 - The implementation remains `111e600ab`; branch publication and PR/Linear
   updates are next. Xcode deployment remains device-blocked only because the
   Mac is locked and `Ry’s iPhone` is currently reported as unavailable.
+
+REC-106 publication handoff, 2026-07-21 17:53 PDT:
+
+- Concluded the final latest-main merge as `4d6fbf9fb` and pushed
+  `codex/rec-106-instagram-carousel` to origin. The branch is based on current
+  `origin/main` `106093f6a`; generated DerivedData remains untracked.
+- Updated ready PR #137 with the expanded large-guide scope, exact root causes,
+  final 542/542 validation, all three supplied Instagram regressions, and
+  physical-device retest steps:
+  https://github.com/joelipshutz/wander/pull/137.
+- Updated Linear REC-106 to `In Review`, linked PR #137, and added the complete
+  validation/device-handoff comment. No TestFlight upload, merge to main, or
+  Slack announcement was performed.
+- Retried Xcode access after publication. The Mac remains locked and
+  `Ry’s iPhone` remains unavailable, so opening/running the branch is the sole
+  external blocker. Exact restart: unlock both, open
+  `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj`, select
+  `Ry’s iPhone`, and Run; clear old imports before pasting the test links.
