@@ -17263,3 +17263,19 @@ Preflight:
 - No schema, RPC, RLS, hosted-data reset, or signing-policy change is included.
   REC-116 remains In Review until App Store Connect reports build 91 available
   to the public tester group.
+
+Build 91 candidate validation, 2026-07-22 16:08 PDT:
+
+- XcodeGen changed only the two generated build-number settings. `project.yml`
+  and both Debug/Release Xcode settings declare build 91; `git diff --check` and
+  `plutil -lint Wander.xcodeproj/project.pbxproj` pass.
+- The exact build-91 candidate passed the complete iPhone 17 Pro / iOS 26.5
+  suite: 572/572 tests with zero failures. Result bundle:
+  `/tmp/DerivedData-build91/Logs/Test/Test-Wander-2026.07.22_15-59-31--0700.xcresult`.
+- The required generic iOS Simulator build succeeded after regeneration.
+  Existing Supabase formatter actor-isolation and unused-result test warnings
+  remain pre-existing and non-blocking.
+- Ready release PR #166 contains only the build bump, generated metadata, and
+  this durable release record. Next: merge it, archive the exact resulting
+  latest `main`, upload with build-number management disabled, and process build
+  91 for the public `rec.me Alpha` TestFlight group.
