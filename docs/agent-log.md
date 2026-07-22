@@ -15070,3 +15070,39 @@ Completion, 2026-07-21 16:33 PDT:
   pulling to refresh or tapping Retry now calls the corrected Feed RPC.
 - No TestFlight upload, App Store build-number change, or production app
   submission was performed for this server-contract repair.
+
+## 2026-07-21 17:35 PDT - Codex - TestFlight Build 86 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-86`
+Worktree: `/private/tmp/recme-build85-release` (reused only after confirming
+the prior Build 85 release worktree was clean)
+Linear: `REC-121`
+
+Goal: fulfill Joe's explicit request to publish the latest `main` to
+TestFlight.
+
+Release scope:
+
+- PR #145, squash-merged to `main` as `6c3d689`: restores authenticated Feed
+  RPC access, keeps the private projection uncallable by clients, and makes
+  the final recovery state honest if a later request fails.
+- The database permission migration is already live and verified; Build 86
+  packages the client-facing recovery-copy update and the exact current
+  `main` source. No marketing-version change or App Store production submission
+  is in scope.
+
+Preflight:
+
+- Reviewed the clean PR #145 diff, migration security posture, hosted
+  authenticated RPC check, and its 22/22 pgTAP regression suite. The focused
+  iPhone 16 Plus recovery test passed; the prior complete-suite runner gap is
+  recorded as an Xcode zero-tests-executed issue, not a pass.
+- PR #145 had a clean merge state and was merged before this release. The
+  GitHub checks endpoint stalled without reporting a failing check; direct PR
+  metadata remained clean and all required focused/hosted validation had
+  passed.
+- `project.yml` is marketing version `0.1`, build `85`; this release will
+  increment it exactly once to build `86`, regenerate the Xcode project,
+  validate/archive/upload from the resulting latest main batch, then attach
+  the uploaded build to TestFlight and update Linear/Slack.
