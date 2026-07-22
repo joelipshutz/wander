@@ -17112,3 +17112,20 @@ REC-116 compact-save implementation and validation, 2026-07-22 13:15 PDT:
   validated changes, update from current `origin/main`, push PR #151, return
   Linear REC-116 to `In Review`, and relaunch the updated branch on Ry's iPhone
   from Xcode.
+
+REC-116 compact-save current-main gate, 2026-07-22 13:19 PDT:
+
+- Committed the compact form work, then rebased the complete PR #151 branch onto
+  current `origin/main` at `0afaf34e5` (the build-88 completion log). Preserved
+  the complete upstream and REC-116 append-only agent-log histories through the
+  only conflict. The compact implementation commit is now `ed4226f34`.
+- Regenerated the project with no tracked diff; Swift parse and `git diff
+  --check` remain clean. The complete post-rebase suite passed 505/505 on
+  iPhone 17 Pro / iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-rec116-compact/Logs/Test/Test-Wander-2026.07.22_13-17-12--0700.xcresult`.
+  A separate cold-cache attempt was intentionally interrupted during dependency
+  compilation after the warmed current-main run was chosen; it did not report
+  an app or test failure.
+- Next: commit this gate note, safely force-update the rebased PR branch, verify
+  GitHub's merge state, update Linear, and run the branch from Xcode on Ry's
+  iPhone. No TestFlight release is requested.
