@@ -15396,3 +15396,88 @@ Pre-landing review checkpoint, 2026-07-22 12:44 PDT:
   installed. The review itself completed; the durable result is recorded here
   instead. Installing unrelated tooling was intentionally left out of this app
   release.
+
+## 2026-07-22 11:54 PDT - Codex - REC-113 Authenticated Photo Retry
+
+Agent: Codex
+Branch: `codex/rec-113-photo-auth-retry`
+Worktree: `/private/tmp/recme-rec113-photo-auth-retry`
+Linear: `REC-113` (reopened, In Progress)
+
+Goal: restore list-tile user photos and Google Maps fallback photos when an
+authenticated TestFlight session presents a stale Clerk token, then land the
+fix and publish the next TestFlight build requested by Ryan.
+
+Pre-edit evidence and coordination:
+
+- The root checkout is a dirty stale branch with unrelated `.gitignore` and
+  `.pnpm-store/` changes, so it is untouched. This clean isolated worktree was
+  created from `origin/main` at `67a8bd7`.
+- Live inspection of the connected build 86 device found six referenced local
+  visit photos; all six files exist and decode. None maps to the current list
+  places, so those tiles necessarily use the authenticated remote user-photo
+  RPC or Google `place-photo` Edge Function.
+- Build 86 predates the one-time fresh-token retry added for authenticated RPC
+  401/403 responses. Current `main` carries that RPC-only fix, but Edge
+  Functions and protected storage downloads still replay the cached token and
+  the list resolver intentionally falls back to emoji after the error.
+- No active worktree overlaps the intended client/test files. Build 87 is
+  already bumped on `main`, but the agent log has no archive/upload/helper
+  completion entry and the connected phone remains on build 86. Before upload,
+  release state will be queried and the build number will not be reused if App
+  Store Connect has already accepted it.
+
+Expected files:
+
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `WanderTests/RemoteRepositoryTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-22 12:19 PDT:
+
+- Implemented one-time fresh-Clerk-token recovery for the idempotent
+  `place-photo` Edge Function and authenticated private photo downloads. Other
+  Edge Function POSTs do not replay automatically.
+- Bound every initial request and retry to the initiating signed-in user,
+  discarded responses that complete after an account switch, and added
+  cancellation checks before retrying.
+- Coalesced simultaneous 401/403 responses by rejected token and user so a row
+  of list tiles shares one Clerk refresh. Successful refreshes are cached for
+  late failures, failed/rejected replacements are cleared, and refresh state is
+  bounded.
+- Independent reviews identified and drove fixes for non-idempotent replay,
+  cross-account response delivery, duplicate concurrent refreshes, rejected
+  replacement reuse, and cancellation cleanup.
+- The required iPhone 16 Plus / iOS 18.6 destination is not installed in this
+  Xcode environment. The available iPhone 17 / iOS 26.5 focused suite passed
+  57/57 tests after the final hardening. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry/Logs/Test/Test-Wander-2026.07.22_12-18-10--0700.xcresult`.
+
+Validation checkpoint, 2026-07-22 12:38 PDT:
+
+- Final auth/photo coverage is 58/58 on the available iPhone 17 / iOS 26.5
+  simulator, including request-body preservation, storage-token invalidation,
+  account-switch rejection, bounded concurrency cleanup, and one shared token
+  refresh. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-35-28--0700.xcresult`.
+- The complete suite passed 502/502 on the same destination. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-30-08--0700.xcresult`.
+- The first full-suite launch attempt compiled successfully but the simulator
+  service exited with Mach error `-308`; the warmed rerun above completed
+  normally. The generic iOS Simulator build also succeeded. Existing
+  ISO-8601 actor-isolation and legacy headermap warnings remain unchanged.
+- Final independent security, implementation-quality, and test reviews report
+  no remaining findings. `git diff --check` is clean. Next step: commit the
+  three intentional files, open/link the PR, squash-merge it, then package the
+  latest `main` as TestFlight build 88.
+
+REC-115 current-main merge gate, 2026-07-22 12:46 PDT:
+
+- While PR #146 was indexing, `origin/main` advanced to `c0b4c33` with the
+  REC-113 authenticated photo retry from PR #154. Merged that exact current
+  main into `codex/rec-115-back-arrow`, preserving both append-only log entries.
+- Regenerated the Xcode project and reran the complete suite after the merge.
+  All 503/503 tests passed on iPhone 17 Pro, iOS 26.5 with no failures or skips:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-44-23--0700.xcresult`.
+- Existing ISO-8601 actor-isolation and traditional-headermap warnings remain
+  unchanged. The current-main merge added no REC-115 regression.
