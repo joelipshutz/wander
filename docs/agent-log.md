@@ -15296,3 +15296,14 @@ Implementation and hosted verification, 2026-07-22 12:18 PDT:
   real-device step; the already-installed app will fetch the repaired backend
   Feed on relaunch or pull-to-refresh. No TestFlight build is needed because
   no client binary changed.
+
+Completion, 2026-07-22 12:19 PDT:
+
+- Committed the repair as `5a52622` (`fix: backfill historical feed activity`),
+  pushed `codex/rec-121-historical-feed`, and opened PR #152:
+  https://github.com/joelipshutz/wander/pull/152
+- Linear `REC-121` is in review with the PR, production validation counts,
+  security metadata, and the outstanding device-unlock step recorded.
+- Next step: unlock Joe's connected iPhone, force-launch rec.me or pull to
+  refresh Feed, and confirm the recovered activity plus Featured for you rail
+  render. The branch remains ready for normal PR review and merge.
