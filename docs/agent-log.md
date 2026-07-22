@@ -15841,3 +15841,29 @@ Preflight:
 - App Store Connect credentials are not present at the documented local path
   on this host, so upload capability will be verified before archive work and
   any blocked state will retain exact continuation commands.
+
+Build 90 validation and upload checkpoint, 2026-07-22 14:25 PDT:
+
+- Regenerated XcodeGen metadata contains only the intended build-90 settings;
+  `git diff --check` and `plutil -lint Wander.xcodeproj/project.pbxproj` pass.
+- The exact release source passed the full iPhone 17 Pro / iOS 26.5 suite:
+  506/506 tests, zero failures or skips. Result bundle:
+  `/private/tmp/DerivedData-build90/Logs/Test/Test-Wander-2026.07.22_14-09-37--0700.xcresult`.
+- The generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`.
+  Existing Supabase actor-isolation and traditional-headermap warnings remain
+  unchanged and non-blocking.
+- Signed archive succeeded from exact merged main commit `5aae777acf2` at
+  `/private/tmp/Wander-0.1-build90.xcarchive`; embedded marketing version is
+  `0.1`, build `90`, and the archive uses the configured development identity
+  and provisioning profile. The strict local trust check reports
+  `CSSMERR_TP_NOT_TRUSTED` for that development certificate, but Xcode archive
+  validation itself succeeded.
+- `xcodebuild -exportArchive` was attempted with
+  `manageAppVersionAndBuildNumber=false` and stopped before upload with
+  `error: exportArchive Failed to Use Accounts`. No App Store Connect mutation,
+  TestFlight attachment, helper run, or Slack announcement was performed.
+- Resume after configuring App Store Connect credentials on this Mac with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build90.xcarchive -exportOptionsPlist /private/tmp/recme-build90-export-options.plist -exportPath /private/tmp/recme-build90-export -allowProvisioningUpdates`
+  followed by:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 90 --archive-path /private/tmp/Wander-0.1-build90.xcarchive --what-to-test-file /private/tmp/recme-build90-what-to-test.md`
+  with `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH` (or `--env`) supplied.
