@@ -59,7 +59,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
-        XCTAssertFalse(feed.contains("title: \"Couldn’t update Feed\""))
+        XCTAssertTrue(feed.contains("title: \"Couldn’t load Feed\""))
+        XCTAssertTrue(feed.contains("detail: \"Unavailable\""))
+        XCTAssertFalse(feed.contains("Feed is reconnecting"))
     }
 
     @MainActor
@@ -356,12 +358,22 @@ final class NavigationContractTests: XCTestCase {
             before: "private struct ListDestructiveButton: View"
         )
 
-        XCTAssertTrue(editor.contains("ToolbarItem(placement: .topBarLeading)"))
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .cancellationAction)"))
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .topBarLeading)"), "Older iOS versions should keep the leading placement")
         XCTAssertTrue(editor.contains("if !isEditing"), "Edit-list navigation should remain unchanged")
-        XCTAssertTrue(editor.contains("Image(systemName: \"chevron.right\")"))
-        XCTAssertTrue(editor.contains(".frame(width: 44, height: 44)"))
-        XCTAssertTrue(editor.contains(".accessibilityLabel(\"Back to lists\")"))
-        XCTAssertTrue(editor.contains("Button {\n                            dismiss()"))
+        XCTAssertTrue(editor.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(editor.contains(".font(.system(size: 17, weight: .regular))"))
+        XCTAssertTrue(editor.contains(".sharedBackgroundVisibility(.hidden)"))
+
+        let backButton = try sourceSection(
+            editor,
+            after: "private var newListBackButton: some View",
+            before: "private var isEditing: Bool"
+        )
+        XCTAssertTrue(backButton.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back to lists\")"))
+        XCTAssertTrue(backButton.contains("Button {\n            dismiss()"))
+        XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
     }
 
     func testListMapVisualQAScenariosResolveDeterministically() {

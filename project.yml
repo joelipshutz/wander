@@ -75,7 +75,7 @@ targets:
         PRODUCT_NAME: Wander
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander
         MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "85"
+        CURRENT_PROJECT_VERSION: "87"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Wander/Resources/Wander.entitlements
         LD_RUNPATH_SEARCH_PATHS:

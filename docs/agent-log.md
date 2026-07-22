@@ -15090,3 +15090,297 @@ GitHub authentication and PR completion, 2026-07-21 16:50 PDT:
 - Moved Linear REC-115 to `In Review`, attached PR #146, and recorded the
   validation evidence. Merging/release remains a separate workflow and was not
   requested here.
+
+## 2026-07-21 16:08 PDT - Codex - REC-121 Feed RPC Permission Regression
+
+Agent: Codex
+Branch: `codex/rec-121-feed-permissions`
+Worktree: `/private/tmp/recme-rec121-feed-permissions`
+Linear: `REC-121` (re-opened as P1)
+
+Goal: repair the authenticated Feed RPC permission denial reported from
+TestFlight build 85, then make the final offline/error state truthful and
+recoverable rather than an indefinite "Reconnecting" skeleton.
+
+Starting status and evidence:
+
+- Ran `git fetch origin`, inspected the shared root status/worktrees, and read
+  the latest coordination log before creating this clean isolated worktree from
+  `origin/main` at `1c39e2c`.
+- The TestFlight screenshot is Build 85's Feed-shaped recovery view, which only
+  renders after `refreshFollowedFeed` exhausts its request and has no cached
+  page.
+- Reproduced the hosted failure with a read-only transaction under Joe's
+  authenticated role and profile claim: `public.followed_feed(null, 25)` fails
+  with `permission denied for function followed_feed` from the SQL wrapper.
+- Metadata inspection confirms `authenticated` has execute on
+  `public.followed_feed(text, integer)` but not on the security-definer
+  `app.followed_feed(text, integer)` that the public security-invoker wrapper
+  calls. This is the root cause; it is neither a device/network issue nor the
+  previously fixed timestamp decoder failure.
+- The required P1 engineering review found the smallest complete change is one
+  additive grant migration, an authenticated hosted smoke query, a pgTAP
+  privilege assertion, and a Feed recovery-copy adjustment. It intentionally
+  excludes schema/RLS rewrites, retrying arbitrary server errors, or another
+  TestFlight build until requested.
+
+Expected files:
+
+- `supabase/migrations/20260721162000_fix_followed_feed_execute_grant.sql`
+- `supabase/tests/feed_activity.sql`
+- `Wander/Features/Feed/FeedScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Hosted repair and validation, 2026-07-21 16:30 PDT:
+
+- Applied `20260721162000_fix_followed_feed_execute_grant.sql` to the linked
+  hosted project and confirmed the remote migration ledger is aligned.
+- The public Feed wrapper now executes as its owner only to call the existing
+  private security-definer projection; the private function remains
+  non-executable by `authenticated`, so the client cannot bypass the public
+  boundary.
+- Re-ran the exact RPC in a read-only transaction as `authenticated` with
+  Joe's request claim. It now succeeds and returns a valid Feed envelope
+  (currently zero activity and featured items), replacing the reproduced
+  permission denial.
+- Hosted rollback pgTAP passed through its final assertion, now 22 checks,
+  including an authenticated execution check and a private-helper-denial
+  check. This is the security and behavior regression coverage for the fix.
+- The final iOS recovery view keeps the Feed-shaped placeholder but truthfully
+  says `Unavailable` / `Couldn't load Feed` with Retry rather than claiming it
+  is still reconnecting forever. Static parse and `git diff --check` passed.
+- Focused native validation passed 1/1 on the required iPhone 16 Plus,
+  iOS 18.6 simulator:
+  `NavigationContractTests.testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState`.
+  Result: `/private/tmp/DerivedData-rec121-feed-permissions/Logs/Test/Test-Wander-2026.07.21_16-26-35--0700.xcresult`.
+- Full native suite was attempted twice. The first clean-cache run was stopped
+  after the Xcode build system idled before launching tests; the warmed retry
+  produced a result bundle with zero executed tests and `result=unknown`, not
+  a test failure or a pass. This environment/tooling gap is recorded rather
+  than treated as validation. The focused test and hosted integration suite
+  above both passed.
+- Mission Control was unavailable at `http://localhost:4000`, so no duplicate
+  tracker task could be created. Linear `REC-121` was reopened as P1 and will
+  carry the hosted validation and PR link.
+
+Completion, 2026-07-21 16:33 PDT:
+
+- Committed the repair as `4ed11d2` (`fix: restore authenticated Feed RPC
+  access`), pushed `codex/rec-121-feed-permissions`, and opened PR #145:
+  https://github.com/joelipshutz/wander/pull/145.
+- Linear `REC-121` is `In Review`, includes the PR and complete hosted/native
+  validation notes, and explicitly records the full-suite Xcode runner gap.
+- The production migration is live. TestFlight build 85 needs no replacement:
+  pulling to refresh or tapping Retry now calls the corrected Feed RPC.
+- No TestFlight upload, App Store build-number change, or production app
+  submission was performed for this server-contract repair.
+
+## 2026-07-21 17:35 PDT - Codex - TestFlight Build 86 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-86`
+Worktree: `/private/tmp/recme-build85-release` (reused only after confirming
+the prior Build 85 release worktree was clean)
+Linear: `REC-121`
+
+Goal: fulfill Joe's explicit request to publish the latest `main` to
+TestFlight.
+
+Release scope:
+
+- PR #145, squash-merged to `main` as `6c3d689`: restores authenticated Feed
+  RPC access, keeps the private projection uncallable by clients, and makes
+  the final recovery state honest if a later request fails.
+- The database permission migration is already live and verified; Build 86
+  packages the client-facing recovery-copy update and the exact current
+  `main` source. No marketing-version change or App Store production submission
+  is in scope.
+
+Preflight:
+
+- Reviewed the clean PR #145 diff, migration security posture, hosted
+  authenticated RPC check, and its 22/22 pgTAP regression suite. The focused
+  iPhone 16 Plus recovery test passed; the prior complete-suite runner gap is
+  recorded as an Xcode zero-tests-executed issue, not a pass.
+- PR #145 had a clean merge state and was merged before this release. The
+  GitHub checks endpoint stalled without reporting a failing check; direct PR
+  metadata remained clean and all required focused/hosted validation had
+  passed.
+- `project.yml` is marketing version `0.1`, build `85`; this release will
+  increment it exactly once to build `86`, regenerate the Xcode project,
+  validate/archive/upload from the resulting latest main batch, then attach
+  the uploaded build to TestFlight and update Linear/Slack.
+
+Completion, 2026-07-21 18:37 PDT:
+
+- Squash-merged the build-metadata PR #147 as `106093f`
+  (`chore: prepare TestFlight build 86`). The production archive was built
+  from that exact latest `main` commit. `project.yml` and the generated Xcode
+  project both carry build `86`.
+- Exact-source validation passed 488/488 tests on iPhone 16 Plus, iOS 18.6.
+  The archive succeeded and its metadata confirms `com.grayline.wander`,
+  marketing version `0.1`, build `86`, arm64, and team `Y7TVK75RZ8`.
+- App Store Connect accepted the upload after the export destination was
+  corrected from a local IPA export to `upload`; the same verified archive was
+  used and build-number management remained disabled. Build `0.1 (86)`, id
+  `a39445f5-8563-439e-a927-6db1990898f0`, is `VALID`, has
+  `usesNonExemptEncryption=false`, and includes the en-US What to Test copy.
+- Build 86 is attached to `rec.me Alpha`; external TestFlight review is
+  `APPROVED`. Public link: https://testflight.apple.com/join/knEhRa6t.
+- Updated Linear `REC-121` with the release evidence and posted the required
+  tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784684208014349.
+- The archive emitted the same non-blocking Swift concurrency warnings in
+  `WanderSupabaseClient` noted for Build 85. No new compiler or XCTest failure
+  occurred. Disposable Xcode DerivedData caches were cleared during the
+  release because the local disk had only 116 MB free.
+
+## 2026-07-21 23:52 PDT - Codex - REC-121 Client Feed Recovery
+
+Agent: Codex
+Branch: `codex/rec-121-client-feed`
+Worktree: `/private/tmp/recme-rec121-client-feed`
+Linear: `REC-121` (reopened, In Progress)
+
+Goal: resolve the continued TestFlight Feed unavailable state reported by Joe
+after Build 86.
+
+Pre-edit evidence and plan:
+
+- The root checkout is on an unrelated stale branch and was left untouched;
+  this clean, isolated worktree was created from `origin/main` at `6af3939`.
+- Read the current agent log and confirmed no overlapping active worktree.
+- Verified `followed_feed` directly under Joe's authenticated database role;
+  it returns a valid empty envelope.
+- Minted a short-lived token for Joe's active Clerk session and called the
+  exact production REST RPC. It returned HTTP 200 with the same valid empty
+  envelope. No token, email, note, coordinate, or raw private payload was
+  recorded.
+- The device was not reachable through Xcode at investigation time. Build 86
+  has no configured PostHog project token, so the client-side error class is
+  not available from release analytics.
+- Completed `docs/reviews/2026-07-21-rec121-client-feed-plan-eng-review.md`.
+  The planned bounded client repair is: on an authenticated RPC's 401/403,
+  force one fresh Clerk token and retry that exact request once. It does not
+  change RLS or convert a failure into a false empty Feed.
+
+Checkpoint, 2026-07-22 00:01 PDT:
+
+- Generated the Xcode project and ran the focused simulator command. Xcode
+  compiled the project but cancelled testing because the new static retry
+  predicate inherited `WanderSupabaseClient`'s main-actor isolation while its
+  test is synchronous. Marked the stateless predicate `nonisolated`; this is a
+  compile-time correction, not a product/runtime failure. Re-running the same
+  focused tests next.
+
+- Added a focused HTTP-level regression test that queues a 401 followed by a
+  200 and asserts both the cached and forced Clerk-token request exactly once.
+
+Validation, 2026-07-22 00:06 PDT:
+
+- Regenerated `Wander.xcodeproj` with XcodeGen and checked the diff for
+  whitespace errors.
+- Focused iPhone 16 Plus, iOS 18.6 tests passed 4/4, including the new HTTP
+  401 -> forced-token-refresh -> 200 path, the hosted empty Feed envelope
+  decode, and the Feed's existing auth-readiness retry.
+- The complete required iPhone 16 Plus, iOS 18.6 suite passed 490/490:
+  `/private/tmp/DerivedData-rec121-client-feed/Logs/Test/Test-Wander-2026.07.22_00-04-06--0700.xcresult`.
+- No Supabase migration, RLS change, TestFlight build, or production backend
+  mutation is included in this client repair. Next step: push and open the
+  required PR for review.
+
+Completion, 2026-07-22 00:09 PDT:
+
+- Committed the repair as `f445cdd` (`fix: retry authenticated RPCs with fresh
+  Clerk token`), pushed `codex/rec-121-client-feed`, and opened PR #149:
+  https://github.com/joelipshutz/wander/pull/149.
+- Linear `REC-121` remains `In Progress` until the PR is reviewed, merged, and
+  a requested TestFlight build is available for device verification.
+- TestFlight has not been uploaded or requested in this handoff. To ship, land
+  PR #149, create the next build from current `main`, then test Feed after a
+  cold relaunch and after pressing Retry while signed in.
+
+## 2026-07-22 10:58 PDT - Codex - TestFlight Build 87 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-87`
+Worktree: `/private/tmp/recme-build87-release`
+Linear: `REC-121` (In Review)
+
+Goal: fulfill Joe's explicit request to put the Feed recovery fix on his phone
+through TestFlight.
+
+Release scope and preflight:
+
+- PR #149 was reviewed cleanly and squash-merged to `main` as `cf24bec`
+  (`fix: refresh stale Clerk token after RPC auth failure`). It is the only
+  app-code change since Build 86's release metadata commit; its docs-only
+  companion is excluded from binary behavior but remains on `main`.
+- The merged change retries one authenticated RPC after 401/403 using a fresh
+  Clerk token, keeps a second failure as a real Feed recovery state, and has a
+  focused HTTP regression test plus the complete 490/490 iPhone 16 Plus,
+  iOS 18.6 suite from the merge gate.
+- Build 86 is recorded as the last completed TestFlight build and `project.yml`
+  currently has `CURRENT_PROJECT_VERSION: "86"`. This explicit release will
+  increment the build exactly once to 87, regenerate the Xcode project, then
+  validate, archive, upload, attach, and record the TestFlight result.
+
+## 2026-07-22 12:18 PDT - Codex - REC-115 native back correction and explicit TestFlight release
+
+Agent: Codex using the Linear and `recme-pr-review-merge-release` workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Review`)
+
+Goal: apply Ryan's on-device acceptance correction to make the new-list back
+control a thin native left-facing iOS chevron with no visible background, land
+PR #146 to `main`, and publish a new TestFlight build from the resulting latest
+`main` batch.
+
+Starting status:
+
+- Fetched `origin`, confirmed this isolated worktree was clean at pushed head
+  `fe48595`, and left the shared checkout's unrelated branch/work untouched.
+- Reviewed Ryan's attached real-device screenshot. It confirms the existing
+  `chevron.right` is directionally wrong and receives iOS 26's automatic glass
+  toolbar background despite the button's plain style.
+- Updated REC-115's Linear title/description to the corrected left-facing,
+  background-free acceptance criteria and recorded the requested landing and
+  TestFlight release.
+- `origin/main` advanced five commits after PR #146 opened, through TestFlight
+  build-87 metadata commit `67a8bd7`; PR #146 reported `DIRTY`. Merged current
+  `origin/main` into the feature branch and preserved both sides of the only
+  conflict, the append-only agent log.
+- Build 87 has a start/bump entry on `main` but no recorded archive/upload/helper
+  completion and no local archive. Treat it as pending release work until App
+  Store Connect state is checked; do not silently reuse its build number.
+- Expected feature files remain `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log. Release metadata
+  will be handled from latest `main` only after PR #146 passes the merge gate.
+
+Implementation and visual checkpoint, 2026-07-22 12:41 PDT:
+
+- Replaced the new-list editor's right-facing filled chevron with the native
+  `chevron.left` at regular 17pt weight while retaining a 44pt accessible tap
+  target and the existing dismiss action.
+- On iOS 26, the back item uses native cancellation placement and hides its
+  shared toolbar background. Older iOS versions retain leading placement. No
+  custom background is applied to the back button.
+- Added a navigation contract regression covering direction, native weight,
+  background suppression, placement fallback, tap target, accessibility label,
+  and dismissal behavior.
+- XcodeGen completed and the focused regression passed on iPhone 17 Pro,
+  iOS 26.5. The repo's specified iPhone 16 Plus, iOS 18.6 runtime is not
+  installed on this Mac, so the current installed iOS 26.5 runtime is being
+  used for this release gate.
+- Visually verified the rendered editor on both iPhone 17 Pro and the smaller
+  iPhone 17e. Both show a visible thin left chevron without a background,
+  clipping, or overlap. Evidence:
+  `/private/tmp/recme-rec115-native-final-17pro.png` and
+  `/private/tmp/recme-rec115-native-final-17e.png`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 491/491 with no failures or
+  skips. Result bundle:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-38-42--0700.xcresult`.
+- Existing traditional-headermap build warnings remain unchanged; no new
+  warning or test failure was introduced by this correction.

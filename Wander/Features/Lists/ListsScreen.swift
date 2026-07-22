@@ -3237,19 +3237,16 @@ private struct ListEditorSheet: View {
                 editorActionButtons
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if !isEditing {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 16, weight: .black))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
+                if !isEditing {
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .cancellationAction) {
+                            newListBackButton
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .accessibilityLabel("Back to lists")
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarLeading) {
+                            newListBackButton
+                        }
                     }
                 }
 
@@ -3288,6 +3285,20 @@ private struct ListEditorSheet: View {
                 Text(deleteConfirmationMessage)
             }
         }
+    }
+
+    private var newListBackButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .regular))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(WanderTheme.textInk.color)
+        .accessibilityLabel("Back to lists")
     }
 
     private var isEditing: Bool {
