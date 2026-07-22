@@ -17562,3 +17562,16 @@ Final validation checkpoint, 2026-07-22 16:09 PDT:
   unrelated. No backend, schema, RLS, analytics, build-number, TestFlight, or
   Slack release action was performed. Next: push the branch, open a ready PR,
   link it to REC-124, and move the issue to In Review.
+
+Build-91-main publication gate, 2026-07-22 16:12 PDT:
+
+- `origin/main` advanced once more with the build-91 release metadata while the
+  first complete suite was running. Rebased onto exact current main
+  `9dfc5e9d6`, preserving its TestFlight release entry and the REC-124 history;
+  the implementation commit is now `da696752b`.
+- Regenerated the project with no tracked diff and reran the exact full suite
+  on the build-91 base. All 573/573 tests passed with zero failures on iPhone 17
+  Pro / iOS 26.5. Final result bundle:
+  `/private/tmp/DerivedData-rec124-postrebase/Logs/Test/Test-Wander-2026.07.22_16-10-40--0700.xcresult`.
+- A final `git fetch origin` confirms the branch is current with main and
+  `git diff --check` passes. This is the publication gate for the ready PR.
