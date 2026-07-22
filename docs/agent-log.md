@@ -16906,3 +16906,32 @@ Publication and handoff, 2026-07-22 13:36 PDT:
   opening existing place detail, small-phone layout, and accessibility). Keep
   the issue In Review until review/testing is complete; no TestFlight release
   was requested or performed.
+
+## 2026-07-22 15:24 PDT - Codex - REC-111 Squash-Merge Gate
+
+Agent: Codex
+Branch: `codex/rec-111-filtered-map`
+Worktree: `/private/tmp/recme-rec111-filtered-map`
+Linear: `REC-111` (`In Review` at start)
+Pull request: [#159](https://github.com/joelipshutz/wander/pull/159)
+
+Goal: perform the user-requested final review, update PR #159 onto current
+`main`, squash-merge it, push/verify `main`, and close durable status. This is a
+merge-only request: do not bump a build number, archive/upload TestFlight, or
+post a tester Slack release note.
+
+Starting status and coordination:
+
+- Fetched `origin`; this isolated worktree is clean at `10c62b53b`. The root
+  checkout remains on unrelated REC-88 work with user-owned `.gitignore` and
+  `.pnpm-store/` changes and will not be switched or edited.
+- PR #159 is open and non-draft with no hold label, review submission, inline
+  thread, or conversation comment. GitHub reports it non-mergeable because its
+  recorded base is `141c01999` while `origin/main` has advanced to `dbbbb98dd`.
+- Build 90 release work is complete on `main` (`ad0fc9695` records the release),
+  so there is no unfinished explicit release to resume. REC-106 also landed
+  after this branch. Rebase onto `dbbbb98dd`, resolve only real overlaps, and
+  rerun the landing gate before merging.
+- Expected branch edits are limited to this append-only log and any conflict
+  resolution required by the rebase. Review scope remains the four PR files;
+  no product expansion is authorized.
