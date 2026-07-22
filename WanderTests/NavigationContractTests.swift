@@ -59,7 +59,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
-        XCTAssertFalse(feed.contains("title: \"Couldn’t update Feed\""))
+        XCTAssertTrue(feed.contains("title: \"Couldn’t load Feed\""))
+        XCTAssertTrue(feed.contains("detail: \"Unavailable\""))
+        XCTAssertFalse(feed.contains("Feed is reconnecting"))
     }
 
     @MainActor

@@ -1123,18 +1123,18 @@ private struct FeedRefreshRecoveryState: View {
             FeedSectionHeading(title: "Featured for you")
             FeedRecoveryFeaturedRail()
 
-            FeedSectionHeading(title: "Your feed", detail: "Reconnecting")
+            FeedSectionHeading(title: "Your feed", detail: "Unavailable")
             FeedRecoveryActivityList()
 
             FeedRetryRow(
-                title: "Feed is reconnecting",
-                subtitle: "Your updates will appear here as soon as we’re back online.",
+                title: "Couldn’t load Feed",
+                subtitle: "Try again to reload updates from people you follow.",
                 actionTitle: "Retry",
                 retry: retry
             )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed couldn't update. Retry to reconnect.")
+        .accessibilityLabel("Feed couldn't load. Retry to reload updates.")
     }
 }
 
