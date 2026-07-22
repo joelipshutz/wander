@@ -17279,3 +17279,45 @@ Build 91 candidate validation, 2026-07-22 16:08 PDT:
   this durable release record. Next: merge it, archive the exact resulting
   latest `main`, upload with build-number management disabled, and process build
   91 for the public `rec.me Alpha` TestFlight group.
+
+## 2026-07-22 16:23 PDT - Codex - TestFlight Build 91 Completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/build91-final-log`
+Worktree: `/private/tmp/recme-build91-final-log`
+Linear: `REC-116` (`Done`)
+
+Final outcome:
+
+- Squash-merged REC-116 implementation PR
+  [#151](https://github.com/joelipshutz/wander/pull/151) as `3dac3a362`,
+  then squash-merged build-number PR
+  [#166](https://github.com/joelipshutz/wander/pull/166) as `9dfc5e9d6`.
+  The release candidate was the exact resulting `main` commit.
+- The exact build-91 candidate passed 572/572 tests on iPhone 17 Pro / iOS
+  26.5, with result bundle
+  `/tmp/DerivedData-build91/Logs/Test/Test-Wander-2026.07.22_15-59-31--0700.xcresult`.
+  The generic iOS Simulator build also passed. Pre-existing Supabase formatter
+  actor-isolation and unused-result test warnings remain non-blocking.
+- Created signed archive `/private/tmp/Wander-0.1-build91.xcarchive`; its
+  embedded marketing version/build are `0.1` / `91`. Export and App Store
+  Connect upload succeeded with `manageAppVersionAndBuildNumber=false`.
+- App Store Connect build `48615d8a-fe90-4b49-905f-38bdd7f20858` completed
+  processing. Export compliance was set to no listed encryption, What to Test
+  copy was saved, external group `rec.me Alpha` was attached with automatic
+  tester notification, and the authoritative final status is **Testing**.
+  The App Store Connect API helper could not run because this Mac has no API
+  credentials, so the same required metadata and group/review steps were
+  completed through the signed-in App Store Connect UI.
+- Build 91 packages all eligible app updates merged since build 90: REC-106
+  Instagram carousel and large-guide imports, REC-111 interactive filtered
+  profile maps, and REC-116 compact parallel Been/Wanna save flows. There are
+  no schema, RPC, RLS, hosted-data, or signing-policy changes in this release.
+- Linear REC-116 is Done and final release evidence is recorded in comment
+  `ea19639c-3a7a-46df-a76a-370ae2cd9d97`.
+- Posted the required tester announcement in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784762469251919.
+  Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- No known release-blocking issue remains. Expanded More options content may
+  scroll on smaller devices or at larger Dynamic Type sizes by design; the
+  collapsed Been and Wanna flows remain compact and visually parallel.
