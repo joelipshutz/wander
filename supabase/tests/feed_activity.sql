@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(20);
+select plan(22);
 
 select ok(
   exists (
@@ -177,6 +177,20 @@ select ok(
   has_function_privilege('authenticated', 'public.followed_feed(text, integer)', 'execute'),
   'authenticated can execute the public followed-feed RPC'
 );
+
+select ok(
+  not has_function_privilege('authenticated', 'app.followed_feed(text, integer)', 'execute'),
+  'authenticated cannot bypass the public followed-feed RPC boundary'
+);
+
+set local role authenticated;
+
+select lives_ok(
+  $$ select public.followed_feed(null, 1) $$,
+  'authenticated callers can execute the public RPC without requiring private helper access'
+);
+
+reset role;
 
 select ok(
   not has_function_privilege('anon', 'public.followed_feed(text, integer)', 'execute'),
