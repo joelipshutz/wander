@@ -3237,6 +3237,19 @@ private struct ListEditorSheet: View {
                 editorActionButtons
             }
             .toolbar {
+                if !isEditing {
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .cancellationAction) {
+                            newListBackButton
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                    } else {
+                        ToolbarItem(placement: .topBarLeading) {
+                            newListBackButton
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         saveAndDismiss()
@@ -3272,6 +3285,20 @@ private struct ListEditorSheet: View {
                 Text(deleteConfirmationMessage)
             }
         }
+    }
+
+    private var newListBackButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .regular))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(WanderTheme.textInk.color)
+        .accessibilityLabel("Back to lists")
     }
 
     private var isEditing: Bool {

@@ -14986,6 +14986,111 @@ TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
   https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
   Store production submission or marketing-version change was made.
 
+## 2026-07-21 16:15 PDT - Codex - REC-115 new-list back affordance
+
+Agent: Codex using the Linear, rec.me Feedback Feature/Bug, and `ios-fix`
+workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Progress`)
+
+Goal: add the requested right-facing back arrow to the upper-left of the new
+list sheet, preserve the existing unsaved-dismiss behavior, and leave the fix
+ready for Xcode testing with focused regression and simulator evidence.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` `1c39e2c13bfe43aac88abf58979acaa009579dee`. The shared checkout has
+  unrelated `.gitignore` and `.pnpm-store/` changes, which remain untouched.
+- No recent agent-log entry or active worktree reports overlapping REC-115 or
+  the intended source/test files. Expected files are
+  `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Triage: design/UX, P3, Lists create flow. The engineering-review gate is not
+  needed because this is a one-screen affordance using the existing dismissal
+  path, with no shared state, persistence, backend, or navigation-contract
+  change. The design lens requires the exact requested chevron direction, a
+  minimum 44pt tap target, and an explicit accessibility label.
+- The repo intentionally has no DebugBridge/StateServer snapshot/restore API,
+  so the literal `ios-fix` snapshot fixture cannot be captured without adding
+  unrelated debug infrastructure. The existing deterministic `create` Lists
+  launch scenario will be used to reproduce and screenshot the pre-fix state,
+  followed by a focused source-contract test and post-fix simulator screenshot.
+
+Implementation and visual checkpoint, 2026-07-21 16:23 PDT:
+
+- Reproduced the missing leading affordance from exact pre-fix `origin/main`
+  with `-WanderInitialTab lists -WanderListsScenario create`; the baseline
+  screenshot is `/private/tmp/recme-rec115-pre.png`.
+- `ListEditorSheet` now renders a create-only leading toolbar button with the
+  requested `chevron.right`. It calls the existing `dismiss()` path, has a
+  44x44 content target, uses the existing ink/surface toolbar treatment, and
+  exposes the VoiceOver label `Back to lists`. The edit-list presentation does
+  not render the new control.
+- Added a focused navigation source-contract regression covering placement,
+  create-only scope, direction, tap-target size, accessibility label, and the
+  dismissal call. The focused iPhone 17 Pro / iOS 26.5 run passed 1/1:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-20-59--0700.xcresult`.
+- Post-fix visual verification passed on iPhone 17 Pro and smaller iPhone 17e:
+  `/private/tmp/recme-rec115-post-17pro.png` and
+  `/private/tmp/recme-rec115-post-17e.png`. The control is fully visible,
+  right-facing, contrast-safe, and clear of both safe areas; no clipping or
+  toolbar overlap is present. `xcodegen generate` produced no project diff, and
+  `git diff --check` passed before the focused run.
+- The documented iPhone 16 Plus / iOS 18.6 runtime is not installed in this
+  Xcode environment; the currently available iPhone 17 Pro / iOS 26.5 runtime
+  is used for validation.
+
+Validation checkpoint, 2026-07-21 16:24 PDT:
+
+- The full iPhone 17 Pro / iOS 26.5 suite passed 489 tests with 0 failures and
+  0 skips:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-23-06--0700.xcresult`.
+- The full run compiled and linked the patched app after project regeneration.
+  Existing non-blocking runtime diagnostics remain: missing simulator location,
+  Clerk keychain cache access, and the already documented remote-decoder Swift
+  concurrency warnings. No REC-115 compiler warning or test failure occurred.
+- Final scope is limited to the Lists SwiftUI affordance, its focused navigation
+  regression, and this coordination log. No schema, persistence, auth, release,
+  build-number, or TestFlight change is included.
+
+Handoff, 2026-07-21 16:26 PDT:
+
+- Committed the complete REC-115 implementation as
+  `f338660c827beafb9f42569ce03e22c6008ea6a3` (`fix: add new-list back
+  affordance`) and pushed `codex/rec-115-back-arrow` to `origin`.
+- The GitHub connector rejected the required ready PR because the repository's
+  external trust status was not established and the first proposed body linked
+  internal Linear/Slack context. A safer draft with those links removed was
+  then attempted, but the GitHub integration returned `403 Resource not
+  accessible by integration`. The local `gh` session for `ryanlane23` is also
+  expired, so CLI fallback is unavailable without human re-authentication.
+- Linear REC-115 remains `In Progress`, with the pushed branch, commit, test
+  evidence, and PR-auth blocker recorded. Exact restart: run
+  `gh auth login -h github.com`, open a PR from `codex/rec-115-back-arrow` to
+  `main`, then move REC-115 to `In Review` and attach the final PR/head SHA.
+- The implementation itself is ready for Xcode testing now from
+  `/private/tmp/recme-rec115-back-arrow`. No TestFlight build, merge, release,
+  Slack reply, or build-number change was requested or performed.
+
+GitHub authentication and PR completion, 2026-07-21 16:50 PDT:
+
+- At Ryan's explicit request, reauthenticated GitHub CLI through the browser
+  device flow. `gh auth status` now confirms active account `ryanlane23` with
+  repository access; `gh repo view` confirms `WRITE` permission on
+  `joelipshutz/wander`. No credential value was printed or stored in the repo.
+- Confirmed the prior connector failures did not create a duplicate PR and
+  verified the branch is current with `origin/main` (zero commits behind, two
+  commits ahead). Opened ready PR #146 from `codex/rec-115-back-arrow` to
+  `main`: https://github.com/joelipshutz/wander/pull/146.
+- The PR body omits the internal Slack permalink while retaining the fix,
+  root-cause, impact, test, simulator, and runtime-gap evidence. PR #146 is
+  `OPEN`, is not a draft, and contains no TestFlight or release action.
+- Moved Linear REC-115 to `In Review`, attached PR #146, and recorded the
+  validation evidence. Merging/release remains a separate workflow and was not
+  requested here.
+
 ## 2026-07-21 16:08 PDT - Codex - REC-121 Feed RPC Permission Regression
 
 Agent: Codex
@@ -15221,89 +15326,284 @@ Release scope and preflight:
   increment the build exactly once to 87, regenerate the Xcode project, then
   validate, archive, upload, attach, and record the TestFlight result.
 
-## 2026-07-22 11:59 PDT - Codex - REC-121 Historical Feed Backfill
+## 2026-07-22 12:18 PDT - Codex - REC-115 native back correction and explicit TestFlight release
+
+Agent: Codex using the Linear and `recme-pr-review-merge-release` workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Review`)
+
+Goal: apply Ryan's on-device acceptance correction to make the new-list back
+control a thin native left-facing iOS chevron with no visible background, land
+PR #146 to `main`, and publish a new TestFlight build from the resulting latest
+`main` batch.
+
+Starting status:
+
+- Fetched `origin`, confirmed this isolated worktree was clean at pushed head
+  `fe48595`, and left the shared checkout's unrelated branch/work untouched.
+- Reviewed Ryan's attached real-device screenshot. It confirms the existing
+  `chevron.right` is directionally wrong and receives iOS 26's automatic glass
+  toolbar background despite the button's plain style.
+- Updated REC-115's Linear title/description to the corrected left-facing,
+  background-free acceptance criteria and recorded the requested landing and
+  TestFlight release.
+- `origin/main` advanced five commits after PR #146 opened, through TestFlight
+  build-87 metadata commit `67a8bd7`; PR #146 reported `DIRTY`. Merged current
+  `origin/main` into the feature branch and preserved both sides of the only
+  conflict, the append-only agent log.
+- Build 87 has a start/bump entry on `main` but no recorded archive/upload/helper
+  completion and no local archive. Treat it as pending release work until App
+  Store Connect state is checked; do not silently reuse its build number.
+- Expected feature files remain `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log. Release metadata
+  will be handled from latest `main` only after PR #146 passes the merge gate.
+
+Implementation and visual checkpoint, 2026-07-22 12:41 PDT:
+
+- Replaced the new-list editor's right-facing filled chevron with the native
+  `chevron.left` at regular 17pt weight while retaining a 44pt accessible tap
+  target and the existing dismiss action.
+- On iOS 26, the back item uses native cancellation placement and hides its
+  shared toolbar background. Older iOS versions retain leading placement. No
+  custom background is applied to the back button.
+- Added a navigation contract regression covering direction, native weight,
+  background suppression, placement fallback, tap target, accessibility label,
+  and dismissal behavior.
+- XcodeGen completed and the focused regression passed on iPhone 17 Pro,
+  iOS 26.5. The repo's specified iPhone 16 Plus, iOS 18.6 runtime is not
+  installed on this Mac, so the current installed iOS 26.5 runtime is being
+  used for this release gate.
+- Visually verified the rendered editor on both iPhone 17 Pro and the smaller
+  iPhone 17e. Both show a visible thin left chevron without a background,
+  clipping, or overlap. Evidence:
+  `/private/tmp/recme-rec115-native-final-17pro.png` and
+  `/private/tmp/recme-rec115-native-final-17e.png`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 491/491 with no failures or
+  skips. Result bundle:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-38-42--0700.xcresult`.
+- Existing traditional-headermap build warnings remain unchanged; no new
+  warning or test failure was introduced by this correction.
+
+Pre-landing review checkpoint, 2026-07-22 12:44 PDT:
+
+- Ran the required gstack pre-landing review against the exact
+  `origin/main...HEAD` diff. Scope is clean: the native back control, its
+  focused regression, and this required coordination log. No critical or
+  informational finding remains, and no Greptile comment exists on PR #146.
+- The local gstack review-result persistence helper could not write its JSONL
+  receipt because this Mac does not have the helper's required `bun` runtime
+  installed. The review itself completed; the durable result is recorded here
+  instead. Installing unrelated tooling was intentionally left out of this app
+  release.
+
+## 2026-07-22 11:54 PDT - Codex - REC-113 Authenticated Photo Retry
+
+Agent: Codex
+Branch: `codex/rec-113-photo-auth-retry`
+Worktree: `/private/tmp/recme-rec113-photo-auth-retry`
+Linear: `REC-113` (reopened, In Progress)
+
+Goal: restore list-tile user photos and Google Maps fallback photos when an
+authenticated TestFlight session presents a stale Clerk token, then land the
+fix and publish the next TestFlight build requested by Ryan.
+
+Pre-edit evidence and coordination:
+
+- The root checkout is a dirty stale branch with unrelated `.gitignore` and
+  `.pnpm-store/` changes, so it is untouched. This clean isolated worktree was
+  created from `origin/main` at `67a8bd7`.
+- Live inspection of the connected build 86 device found six referenced local
+  visit photos; all six files exist and decode. None maps to the current list
+  places, so those tiles necessarily use the authenticated remote user-photo
+  RPC or Google `place-photo` Edge Function.
+- Build 86 predates the one-time fresh-token retry added for authenticated RPC
+  401/403 responses. Current `main` carries that RPC-only fix, but Edge
+  Functions and protected storage downloads still replay the cached token and
+  the list resolver intentionally falls back to emoji after the error.
+- No active worktree overlaps the intended client/test files. Build 87 is
+  already bumped on `main`, but the agent log has no archive/upload/helper
+  completion entry and the connected phone remains on build 86. Before upload,
+  release state will be queried and the build number will not be reused if App
+  Store Connect has already accepted it.
+
+Expected files:
+
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `WanderTests/RemoteRepositoryTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-22 12:19 PDT:
+
+- Implemented one-time fresh-Clerk-token recovery for the idempotent
+  `place-photo` Edge Function and authenticated private photo downloads. Other
+  Edge Function POSTs do not replay automatically.
+- Bound every initial request and retry to the initiating signed-in user,
+  discarded responses that complete after an account switch, and added
+  cancellation checks before retrying.
+- Coalesced simultaneous 401/403 responses by rejected token and user so a row
+  of list tiles shares one Clerk refresh. Successful refreshes are cached for
+  late failures, failed/rejected replacements are cleared, and refresh state is
+  bounded.
+- Independent reviews identified and drove fixes for non-idempotent replay,
+  cross-account response delivery, duplicate concurrent refreshes, rejected
+  replacement reuse, and cancellation cleanup.
+- The required iPhone 16 Plus / iOS 18.6 destination is not installed in this
+  Xcode environment. The available iPhone 17 / iOS 26.5 focused suite passed
+  57/57 tests after the final hardening. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry/Logs/Test/Test-Wander-2026.07.22_12-18-10--0700.xcresult`.
+
+Validation checkpoint, 2026-07-22 12:38 PDT:
+
+- Final auth/photo coverage is 58/58 on the available iPhone 17 / iOS 26.5
+  simulator, including request-body preservation, storage-token invalidation,
+  account-switch rejection, bounded concurrency cleanup, and one shared token
+  refresh. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-35-28--0700.xcresult`.
+- The complete suite passed 502/502 on the same destination. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-30-08--0700.xcresult`.
+- The first full-suite launch attempt compiled successfully but the simulator
+  service exited with Mach error `-308`; the warmed rerun above completed
+  normally. The generic iOS Simulator build also succeeded. Existing
+  ISO-8601 actor-isolation and legacy headermap warnings remain unchanged.
+- Final independent security, implementation-quality, and test reviews report
+  no remaining findings. `git diff --check` is clean. Next step: commit the
+  three intentional files, open/link the PR, squash-merge it, then package the
+  latest `main` as TestFlight build 88.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the reviewed repair as `374a4389c`, opened PR #154, linked it to
+  `REC-113`, and moved the issue to `In Review` with validation evidence.
+- PR #154 was squash-merged to `main` as `c0b4c33a8` (`fix: refresh auth for
+  list photos (#154)`). The remote feature branch was deleted. The failed
+  `gh --delete-branch` local checkout cleanup was caused only by a stale main
+  worktree registration; GitHub had already completed the squash merge.
+- No code or user-owned changes in the dirty root checkout were touched.
+
+## 2026-07-22 12:41 PDT - Codex - TestFlight Build 88 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-88`
+Worktree: `/private/tmp/recme-testflight-build-88`
+Linear: `REC-113` and `REC-115` (In Review)
+
+Goal: fulfill Ryan's explicit release requests by packaging the latest `main`,
+including Feed recovery, authenticated list-photo repair, and the corrected
+native new-list back control, as build 88.
+
+Release scope and preflight:
+
+- Started from exact `origin/main` commit `c0b4c33a8` in a clean isolated
+  release worktree, then synced the newly merged REC-115 commit `d0d4060ef`.
+  The root checkout remains dirty and untouched.
+- Build 86 is the last completed TestFlight release recorded in this log.
+  Main already carried an unshipped build-87 metadata bump, so this release
+  advances once more to build 88 rather than risking reuse of 87.
+- App behavior merged since build 86 consists of PR #149's one-time fresh-token
+  recovery for authenticated Feed RPCs, PR #154's safe fresh-token recovery
+  for list-tile Google place photos and protected user-photo downloads, and
+  PR #146's thin left-facing new-list back chevron without a toolbar background.
+- Expected release files are `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this append-only log. Next: regenerate
+  with XcodeGen, validate the metadata-only diff, test, open and squash-merge
+  the build bump PR, then archive and upload exact latest `main`.
+
+Release validation checkpoint, 2026-07-22 12:51 PDT:
+
+- Advanced `CURRENT_PROJECT_VERSION` from 87 to 88 and regenerated with
+  XcodeGen 2.45.4. The generated project diff is limited to the matching Debug
+  and Release build-number settings; `plutil -lint` and `git diff --check`
+  pass with no signing or membership churn.
+- The exact build-88 source passed all 502 tests on the available iPhone 17 /
+  iOS 26.5 simulator. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-42-33--0700.xcresult`.
+- The exact source also passed the generic iOS Simulator build. Existing
+  ISO-8601 actor-isolation, unused test-expression, metadata-extraction, and
+  legacy headermap warnings remain non-blocking and pre-existing.
+- `scripts/testflight-release.mjs --build-number 88 --dry-run` resolves App
+  Store Connect app `6776850787`, public group `rec.me Alpha`, locale `en-US`,
+  and public link `https://testflight.apple.com/join/knEhRa6t`.
+- Release-branch scope remains only `project.yml`, the two generated project
+  build-number values, and this append-only log. Next: commit, push, review and
+  squash-merge the metadata PR before archiving exact merged `main`.
+REC-115 current-main merge gate, 2026-07-22 12:46 PDT:
+
+- While PR #146 was indexing, `origin/main` advanced to `c0b4c33` with the
+  REC-113 authenticated photo retry from PR #154. Merged that exact current
+  main into `codex/rec-115-back-arrow`, preserving both append-only log entries.
+- Regenerated the Xcode project and reran the complete suite after the merge.
+  All 503/503 tests passed on iPhone 17 Pro, iOS 26.5 with no failures or skips:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-44-23--0700.xcresult`.
+- Existing ISO-8601 actor-isolation and traditional-headermap warnings remain
+  unchanged. The current-main merge added no REC-115 regression.
+
+Build 88 validation checkpoint, 2026-07-22 12:56 PDT:
+
+- Confirmed the release branch differs from latest `origin/main` only in the
+  build-number metadata (`project.yml` and generated Xcode project) plus this
+  append-only release log. `CURRENT_PROJECT_VERSION` is 88 in both sources.
+- Regenerated with XcodeGen, passed `git diff --check`, and ran the complete
+  release-branch suite on iPhone 17 Pro, iOS 26.5. All 503/503 tests passed with
+  no failures or skips:
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- Existing ISO-8601 actor-isolation, unused test-expression, simulator-strip,
+  and traditional-headermap warnings remain non-blocking and unchanged. The
+  documented iPhone 16 Plus, iOS 18.6 runtime is not installed on this Mac.
+
+Build 88 release completion, 2026-07-22 13:07 PDT:
+
+- Clarification: the earlier 502-test result recorded at 12:51 predated the
+  REC-115 merge. The later exact build-88 branch run supersedes it: all 503/503
+  tests passed on iPhone 17 Pro, iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- PR #156 was squash-merged to `main` as `0cf93035a` with build number 88.
+  The signed archive was produced from that exact detached `main` commit at
+  `/private/tmp/Wander-0.1-build88.xcarchive`; its embedded version is 0.1 (88),
+  code-signature verification passed, and the signing team is `Y7TVK75RZ8`.
+- `xcodebuild -exportArchive` uploaded successfully with
+  `manageAppVersionAndBuildNumber=false`. App Store Connect indexed build id
+  `159b65bc-63ed-4827-b69f-532bac1bc6c2` as `VALID`, retained build number 88,
+  and reports `usesNonExemptEncryption=false`.
+- `scripts/testflight-release.mjs` set the en-US What to Test copy and attached
+  build 88 to public group `rec.me Alpha`
+  (`219f52d8-c202-4407-ba55-53eb41d40526`). Its final summary reports beta
+  review `APPROVED` and public link
+  `https://testflight.apple.com/join/knEhRa6t`. Concurrent helper finalization
+  converged on that approved state; a later submit attempt returned
+  `INVALID_QC_STATE` only because the build was already approved, so no further
+  review transition was required.
+- `REC-113` and `REC-115` are `Done` with PR, validation, TestFlight, archive,
+  and tester evidence. The REC-115 release evidence is in Linear comment
+  `012fefd0-1786-4c9f-b793-76144287dff2`.
+- The required tester-facing announcement was posted in
+  `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750818801029`.
+  A parallel completion path posted the same build-88 checklist seconds later
+  at `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750846466309`;
+  no additional release announcement is needed.
+- Known behavior: category emoji remains the final fallback when a place has no
+  usable user photo or Google place photo. The documented iPhone 16 Plus /
+  iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
+  checkout and all user-owned changes remained untouched.
+
+## 2026-07-22 14:10 PDT - Codex - REC-121 Historical Feed Backfill
 
 Agent: Codex
 Branch: `codex/rec-121-historical-feed`
 Worktree: `/private/tmp/recme-build87-clean-device`
-Linear: `REC-121` (moved to In Progress)
+Linear: `REC-121` (In Review)
 
-Goal: restore the Feed's historical followed activity and Featured for you rail,
-which Joe reports are absent while a save created yesterday still renders.
+Outcome:
 
-Starting evidence and root cause:
-
-- The physical-device probe now completes as loaded, but returned one activity
-  event and zero featured places.
-- `public.feed_events` and its triggers were introduced in migration
-  `20260720234500_feed_activity.sql`. The triggers record only inserts and
-  qualifying transitions from that point forward.
-- `app.followed_feed` derives both activity and featured places exclusively from
-  `feed_events`. There is no migration-time backfill of existing `user_places`,
-  lists, or list items.
-- Therefore, yesterday's newly recorded save is visible while older existing
-  saves are omitted and the rail has no source rows. This is a data-projection
-  gap, not the prior Clerk/RPC-readiness failure.
-
-Planned files:
-
-- `supabase/migrations/*` — idempotent feed-event historical backfill
-- `supabase/tests/feed_activity.sql` — regression coverage for backfilled
-  activity and Featured for you source data
-- `WanderTests/*` only if client presentation needs a guard for a valid
-  partial remote page
-- `docs/agent-log.md`
-
-Coordination:
-
-- The root checkout is on unrelated `codex/rec-60-notifications`; this work
-  uses a clean isolated worktree from current `main`.
-- Mission Control task creation was attempted, but `localhost:4000` is not
-  running. No existing user changes were touched.
-
-Implementation and hosted verification, 2026-07-22 12:18 PDT:
-
-- Added and applied `20260722121000_backfill_feed_activity.sql` to the linked
-  production project `rugmtlgufrhlxwfkumhw`. It creates the private,
-  security-definer `app.backfill_feed_events()` maintenance projection and runs
-  it once. The function is pinned to `search_path=public, app` and has execute
-  revoked from `public`, `anon`, and `authenticated`.
-- The backfill is idempotent. It derives one current historical event per
-  active user place, list, and list item only when the matching source and
-  event type lack an existing event. It preserves historical save, visit, list,
-  and item timestamps instead of flooding the current Feed with migration-time
-  events.
-- Hosted pre-backfill aggregate for Joe: 5 followed accounts, 51 active
-  followed places, 1 Feed event, 50 missing place events, and 0 current rail
-  candidates. Post-backfill: 61 followed Feed events, 0 missing place events,
-  and 35 Featured for you candidates.
-- `pnpm dlx supabase db push --linked --dry-run --yes` listed only the new
-  migration; the actual linked push succeeded. `supabase migration list
-  --linked` is aligned through `20260722121000`.
-- Hosted rollback-only `supabase/tests/feed_activity.sql` passed 27/27. The
-  new regression creates a legacy place with its event intentionally removed,
-  runs the backfill twice, proves exactly one event is restored, and verifies
-  the resulting followed Feed plus Featured for you rail.
-- A full iPhone 16 Plus simulator suite was attempted as required, but the
-  machine ran out of local disk while compiling cached dependencies before any
-  test executed. The resulting incomplete 677 MB
-  `/private/tmp/DerivedData-feed-backfill` cache was removed, returning free
-  space to about 1.1 GB. This is an infrastructure limitation, not a passing
-  iOS test run; the hosted Feed contract test is the validation for this
-  backend-only change.
-- The connected iPhone 16 Pro is visible through `devicectl`, but its iOS lock
-  screen rejected the forced app relaunch. Unlocking it is the remaining
-  real-device step; the already-installed app will fetch the repaired backend
-  Feed on relaunch or pull-to-refresh. No TestFlight build is needed because
-  no client binary changed.
-
-Completion, 2026-07-22 12:19 PDT:
-
-- Committed the repair as `5a52622` (`fix: backfill historical feed activity`),
-  pushed `codex/rec-121-historical-feed`, and opened PR #152:
-  https://github.com/joelipshutz/wander/pull/152
-- Linear `REC-121` is in review with the PR, production validation counts,
-  security metadata, and the outstanding device-unlock step recorded.
-- Next step: unlock Joe's connected iPhone, force-launch rec.me or pull to
-  refresh Feed, and confirm the recovered activity plus Featured for you rail
-  render. The branch remains ready for normal PR review and merge.
+- Backfill migration `20260722121000_backfill_feed_activity.sql` is already
+  applied to production. It idempotently restores historical user-place, list,
+  and list-item Feed events without exposing its security-definer maintenance
+  function to `public`, `anon`, or `authenticated`.
+- Hosted verification passed 27/27 assertions. Followed Feed rows increased
+  from 1 to 61, historical gaps fell from 50 to 0, and 35 Featured for you
+  candidates became available.
+- This branch is now updated with Build 88's completed release state before
+  PR #152 is landed into the requested Build 89 batch. The earlier simulator
+  test attempt did not run because local disk filled; the authoritative
+  regression validation is the hosted Feed contract test above.
