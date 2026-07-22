@@ -17370,3 +17370,13 @@ Implementation and validation checkpoint, 2026-07-22 15:51 PDT:
 - No new visual layout was introduced: REC-112 activates the exact map surface
   already visually validated for REC-111 on large and small phones. No build
   number, TestFlight upload, or tester announcement was requested or performed.
+
+Publication and handoff, 2026-07-22 15:52 PDT:
+
+- Committed the implementation as `56a08d9eb`, pushed
+  `codex/rec-112-calendar-map`, and opened ready PR
+  [#165](https://github.com/joelipshutz/wander/pull/165) against `main`.
+- REC-112 is ready for Ryan to test: Profile → calendar → tap any date with a
+  saved place; confirm the full-width map appears above search, pins match the
+  date list, map pan/zoom works, and tapping a pin opens the same place detail
+  as its list row. Keep the issue In Review until that check is accepted.
