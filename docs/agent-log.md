@@ -14333,593 +14333,6 @@ Build-82 smoke/release completion, 2026-07-20 15:16 PDT:
   its extra ACL plus blocked/self/unauthenticated follow cases to that pgTAP
   file. This does not block the already-approved build or REC-90 behavior.
 
-## 2026-07-20 15:36 PDT - Codex - REC-106 Instagram carousel import investigation
-
-Agent: Codex using the Linear, `recme-linear-log-triage`, and `investigate`
-workflows
-Branch: `codex/rec-106-instagram-carousel`
-Worktree: `/private/tmp/recme-rec106-instagram-carousel`
-Linear: `REC-106` (`In Progress`)
-
-Goal: reproduce why the supplied 12-slide Instagram post yields only Fremont
-Lake, Half Moon Lake Lodge, and Pine Coffee Supply despite its caption and
-slides naming at least nine candidate places; confirm the failing layer, add a
-regression test, implement the smallest verified fix, and leave an Xcode-ready
-branch for Ryan.
-
-Starting state and coordination:
-
-- Created REC-106 as a High-priority Bug assigned to Ryan, related it to
-  REC-97, linked the exact Instagram post, and attached the observed Import
-  Review plus all nine supplied source-carousel screenshots.
-- Fetched `origin` and created this clean isolated worktree from exact
-  `origin/main` `339cba2e0`. The root checkout remains on unrelated stale
-  `codex/rec-88-visit-friends-mockup` with untracked `.pnpm-store/`; it will not
-  be modified. No active worktree or latest agent-log entry declares overlap
-  with REC-106.
-- Current status is clean. Expected scope is the Instagram/import extraction
-  adapter and focused tests, plus `docs/agent-log.md`; exact source files will
-  be narrowed after tracing extraction, resolution, persistence, and recent
-  REC-97 history. No build-number bump, TestFlight release, hosted data reset,
-  or unrelated UI work is in scope.
-
-Checkpoint, 2026-07-20 16:04 PDT:
-
-- Confirmed this Profile import flow is entirely device-local: the public page
-  is fetched on-device, candidates are resolved with MapKit, and batches/items
-  live only in `place-imports-v1.json`. PostHog/Supabase cannot explain this
-  incident because the flow currently emits no hosted rows or import events.
-- Reproduced the exact caption failure before production edits on the installed
-  iPhone 17 Pro / iOS 26.5 simulator: the new focused regression returned only
-  Fremont Lake, Half Moon Lake Lodge, White Mountain Petroglyphs, and Pine
-  Coffee Supply instead of the expected eight (`exit 65`, one assertion
-  failure). The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not
-  installed on this machine, so all executable validation uses the available
-  iOS 26.5 runtime and records that environment difference.
-- Root cause: the production resolver capped social hints at eight while the
-  extractor inserted five account handles before itinerary phrases; a greedy
-  phrase match also swallowed Green River Lakes, failed/weak MapKit hints were
-  silently discarded, and only the single Open Graph cover was OCR'd.
-- The live public page exposes full caption text plus a bounded, parseable
-  embedded JSON object for the exact shortcode with 12 ordered carousel
-  children and 12 HTTPS cover frames. Expanded the fix accordingly: bounded
-  exact-shortcode carousel parsing, four-at-a-time Vision OCR, caption/slide
-  hint prioritization up to 24, independent continuation after failed slides,
-  honest unresolved rows, privacy-safe count/rejection diagnostics, and
-  resolver version 5 so existing three-row results automatically requeue.
-- Focused post-fix validation passed 4/4 tests: exact eight-place caption,
-  12-slide parser, unresolved-place retention, and store persistence of nine
-  destinations with three simulated slide OCR failures. A broader 28-test
-  import run found one existing handle-query normalization regression; restored
-  exact handle extraction and its focused test now passes. `xcodegen generate`
-  completed without project-file churn; `git diff --check` is clean.
-
-Completion checkpoint, 2026-07-20 16:50 PDT:
-
-- Live-source verification fetched the exact supplied post successfully
-  (HTTP 200; 632,907 bytes), selected the exact `Dak2JCClKkF` embedded object
-  rather than decoys/partial duplicates, and found all 12 ordered carousel
-  frames. Every extracted Meta CDN image returned HTTP 200 `image/jpeg`.
-  Captured live OCR/accessibility strings drive the end-to-end regression,
-  which now produces these nine ordered destinations: Fremont Lake, Green
-  River Lakes, Half Moon Lake Lodge, White Mountain Petroglyphs, Flaming
-  Gorge, Wind River Range, Skyline Drive Overlook, Pine Coffee Supply, and
-  Farson Mercantile.
-- Final implementation parses a bounded exact-shortcode carousel, rejects
-  untrusted source/redirect/media hosts, OCRs unique slides concurrently in
-  bounded groups, preserves per-slide provenance, prioritizes destination
-  phrases before raw handles, retains explicitly named unmatched places for
-  review, and emits privacy-safe import counts. Existing social imports below
-  resolver v5 are reprocessed atomically; metadata failure, cancellation, a
-  total MapKit outage, or a mid-import MapKit outage restores every prior row.
-- Independent review caught and drove five final hardening changes: OCR's
-  one-character correction is opt-in only for image-text hints, any MapKit
-  lookup error aborts a source refresh, duplicate payload ranking prefers
-  usable image URLs, and persisted carousel order uses the stored array ordinal
-  as an explicit tiebreaker. In addition, snapshot writes substitute the old
-  rows for every still-pending resolver upgrade, so completing one import cannot
-  strand another import's temporary placeholder across app termination. The
-  five original targeted review regressions passed 5/5; a three-test
-  persistence/relaunch gate, including the new two-group interruption case,
-  passed 3/3.
-- Validation is green on the installed iPhone 17 Pro / iOS 26.5 simulator:
-  import suites passed 43/43 and the full Wander suite passed 484/484. The
-  required generic iOS Simulator build succeeded; `xcodegen generate`
-  succeeded with no project-file diff; `git diff --check` is clean. The
-  repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed here, so
-  that exact destination remains an environment gap for Ryan's local Xcode
-  check, not an asserted pass.
-- Files changed: `Wander/Models/PlaceImportModels.swift`,
-  `Wander/Services/PlaceImportCandidateMatcher.swift`,
-  `Wander/Services/PlaceImportStore.swift`,
-  `Wander/Services/SocialPlaceImportMetadata.swift`,
-  `Wander/Services/WanderDebugLog.swift`, `WanderTests/PlaceImportTests.swift`,
-  and this log. No schema/data mutation, build-number bump, TestFlight upload,
-  or tester announcement occurred. Ready to commit, publish a ready PR, link it
-  to REC-106, and move the issue to `In Review` for Ryan's device/Xcode test.
-
-Publication checkpoint, 2026-07-20 22:17 PDT:
-
-- Committed the implementation as `5ab743368` (`REC-106: Fix Instagram
-  carousel place imports`), pushed `codex/rec-106-instagram-carousel`, and
-  opened ready PR #137: https://github.com/joelipshutz/wander/pull/137. The PR
-  links REC-106 and records the root cause, nine expected destinations, safety
-  behavior, and complete validation evidence.
-- Local `gh` authentication was stale and the GitHub connector could not create
-  a pull request with its integration permissions, so the signed-in GitHub web
-  UI was used to publish and verify the ready (non-draft) PR. This did not alter
-  implementation scope or validation.
-- Linear REC-106 is being handed off in `In Review` with PR #137 attached.
-  Ryan's next step is to open this worktree in Xcode, paste the supplied
-  Instagram URL, and confirm the nine ordered candidates on his simulator or
-  device. The only known validation gap remains the unavailable iPhone 16 Plus
-  / iOS 18.6 runtime; all automated tests and the generic simulator build are
-  green on the installed Xcode/iOS 26.5 environment.
-- No build-number bump, TestFlight upload, release attachment, hosted data
-  mutation, or Slack announcement was requested or performed.
-
-Xcode handoff follow-up, 2026-07-20 22:29 PDT:
-
-- Ryan clarified that every pushed branch intended for his local testing must
-  also be opened in Xcode before handoff. Opened
-  `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in Xcode and
-  verified the visible Branch Chooser reports
-  `codex/rec-106-instagram-carousel`; the selected run destination is Ryan's
-  iPhone. Xcode began normal package resolution/indexing for this worktree.
-- Added the durable handoff rule to `AGENTS.md`: open the isolated branch
-  worktree as its own Xcode project and verify the Branch Chooser, without
-  switching or overwriting another active checkout. This follow-up changes
-  process documentation only; app code and prior validation are unchanged.
-
-Regression follow-up, 2026-07-20 23:06 PDT:
-
-- Ryan's first real-device test exposed a blocker: the newly imported source
-  appeared as a `needsHelp` row titled `instagram.com` with “Retry automatic
-  match” instead of the extracted destinations. Reviewed the supplied 22:57
-  screenshot and the live Xcode console on `Ry’s iPhone` before editing.
-- The console proves carousel fetch/OCR did work: 12 media discovered, 12 OCR
-  attempts, 13 hints, five resolved entries, and four honest unresolved
-  entries. Production MapKit throws `PlaceResolutionError.noCandidates` for an
-  ordinary zero-result search, but `DevicePlaceImportResolver.socialResolution`
-  counted that as a service failure and discarded all nine accumulated rows.
-  Repeated manual retries then also triggered Apple Maps' 50-searches-per-minute
-  throttle. Expected edit scope is
-  `Wander/Services/PlaceImportStore.swift`, focused import regressions, and this
-  log. Existing-upgrade rollback behavior must remain intact.
-- The `/ios-fix` DebugBridge snapshot endpoint is not installed in this app, so
-  `GET /state/snapshot` is unavailable without expanding the project with
-  debug-only instrumentation. The user-supplied pre-fix screenshot plus the
-  live console trace are the reproducing evidence; the durable regression
-  fixture will be an executable store/resolver test that injects the same
-  partial MapKit lookup failure.
-
-Regression implementation checkpoint, 2026-07-20 23:23 PDT:
-
-- Copied the physical-device import snapshot to a temporary directory with
-  `xcrun devicectl` and inspected only the failing row. It contains the exact
-  REC-106 URL, no name/candidates, resolver version 5, and the source-level
-  temporary-MapKit help message. The device Run binary UUID matches the Xcode
-  build, ruling out a stale install. No private snapshot content was committed.
-- Fixed the semantic mismatch: `PlaceResolutionError.noCandidates` now follows
-  the normal unmatched-hint path instead of counting as an outage. A genuine
-  per-hint MapKit error now preserves named partial rows for a fresh import;
-  resolver-version upgrades still restore all prior rows atomically if their
-  refresh is incomplete. A generic `instagram.com` row remains possible only
-  when a real service failure leaves no usable named entry at all.
-- Added production-faithful regression coverage for a no-candidate throw, a
-  transient per-hint failure, existing-row rollback, and the exact 12-slide REC-106
-  fixture. The fixture now logs 13 hints, nine resolved destinations, four
-  ordinary no-candidate hints, and zero lookup failures.
-- Validation: four focused regression tests passed; the full suite passed 486
-  tests with zero failures; `xcodegen generate` produced no tracked project
-  churn; and the generic iOS Simulator build succeeded. The first sandboxed
-  generic build could not access CoreSimulator/SwiftPM caches, so the identical
-  build was rerun with the repository-prescribed elevated access and passed.
-  An independent read-only diff review found no P0/P1 issues and confirmed that
-  enum handling, cancellation, fresh-import partial results, and upgrade
-  rollback are exhaustive and correctly scoped.
-
-Regression publication and device handoff, 2026-07-20 23:29 PDT:
-
-- Committed the repair as `da6900232` (`REC-106: Preserve partial Instagram
-  imports`) and pushed it to `origin/codex/rec-106-instagram-carousel`, updating
-  ready PR #137: https://github.com/joelipshutz/wander/pull/137. Updated the PR
-  description with the real-device root cause, repaired semantics, and current
-  486-test validation. The PR remains open and was not merged.
-- Added a Linear REC-106 comment with the failure evidence, fix commit, test
-  results, and device retest instructions. REC-106 remains `In Review` until
-  Ryan confirms the existing failed row can be retried or the supplied URL can
-  be imported again with all nine named destinations preserved.
-- Opened `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in
-  Xcode, verified the Branch Chooser is `codex/rec-106-instagram-carousel`, set
-  the destination to `Ry’s iPhone`, and ran the repaired app on the physical
-  device. The import queue was preserved; Ryan's next action is to tap `Retry
-  automatic match` on the existing `instagram.com` row or paste the URL again.
-- Final validation remains four focused regressions passed, 486/486 full-suite
-  tests passed, generic iOS Simulator build passed, `xcodegen generate` passed
-  without project churn, `git diff --check` passed, and independent review had
-  no P0/P1 findings. No build-number bump, TestFlight upload, merge, hosted data
-  mutation, or Slack announcement was requested or performed.
-
-Manual place-search regression follow-up, 2026-07-20 23:44 PDT:
-
-- Ryan reported that some recovered Instagram destinations correctly remain
-  unresolved with a `Search for this place` action, but typing a place name and
-  city and pressing Search produces no visible result. Reopened REC-106 as `In
-  Progress` and resumed the existing isolated worktree/branch. The worktree is
-  clean and synchronized with
-  `origin/codex/rec-106-instagram-carousel`; no overlapping edits are recorded.
-- Investigation will first capture a reproducing device/store snapshot, then
-  trace the manual-search UI action through the import store and MapKit resolver.
-  Expected scope is the import-review/manual-match view, its store/resolver
-  contract, focused regression tests, and this log. No Swift edit will be made
-  until the dead Search action has a durable reproducer.
-
-Manual place-search reproduction checkpoint, 2026-07-20 23:51 PDT:
-
-- Captured the current physical-device import snapshot without mutating app
-  state. The exact REC-106 batch contains nine rows: five ready, one ambiguous,
-  and three named `needs_help` rows. The Farson Mercantile row proves the Search
-  callback fired: its seed was updated to `FARSON MERCANTILE` / `Wyoming` at
-  23:27:24 PDT, then persisted with zero candidates and the message `No matching
-  Apple Maps place was found. Try a nearby city or neighborhood.` The source
-  snapshot SHA-256 is
-  `1fa45b1afb2dc9d04a8829b8301a53ad64af7244dc130ea04d0db3799807ecec`;
-  only a minimized, public REC-106 row was copied into the test fixture.
-- Root cause is now reproduced: the rescue sheet starts a fire-and-forget retry
-  and dismisses before its result; the unresolved row never renders the stored
-  `helpMessage`, so no-result, throttling, and transport failures redraw the same
-  Search action and look like a dead button. A second loss path converts one
-  low-confidence MapKit candidate into `needs_help`, making that candidate
-  inaccessible instead of reviewable.
-- Added `WanderTests/Fixtures/rec-106-manual-place-search-pre.json` as the durable
-  minimized pre-fix store snapshot. This checkout intentionally has no
-  DebugBridge/StateServer, and the paired phone disconnected after the trace, so
-  the skill's HTTP state/screenshot endpoints remain unavailable; per the repo's
-  established exception, the physical app-container snapshot plus deterministic
-  Swift regression tests are the reproducible evidence. Planned fix: await the
-  search, keep the sheet open with visible failure feedback, wire keyboard
-  submit, and preserve even one weak result for explicit user review.
-
-Manual place-search implementation and validation, 2026-07-21 00:14 PDT:
-
-- Replaced the fire-and-forget rescue action with an awaited manual-search
-  result. The sheet now shows an in-progress state, keeps and displays MapKit
-  failures, supports the keyboard Search action, and automatically opens the
-  candidate picker when review is needed. The unresolved inbox row also renders
-  its persisted `helpMessage`, so a no-result or temporary Maps failure cannot
-  look like a dead button. Cancel and swipe-to-dismiss remain available during a
-  slow lookup; the import row still updates when the request completes.
-- Scoped weak-candidate preservation to explicit typed searches through a
-  separate resolver entry point. Ordinary automatic imports retain their prior
-  safety contract and still reject a lone unrelated result. A typed search may
-  retain even one low-confidence candidate for human review instead of hiding
-  it. Successful exact matches still become ready automatically.
-- Added state-and-seed validation around asynchronous resolver completion so an
-  older result or failure cannot overwrite a newer typed query, retry,
-  selection, save, or dismissal. Manual-search markers are cleared on every
-  terminal state transition. Deterministic tests cover overlapping searches and
-  dismissal while a result is in flight.
-- Added the minimized public REC-106 physical-device snapshot as a test resource
-  and regenerated `Wander.xcodeproj` with XcodeGen. No private app-container
-  data was committed. Focused validation passed 6/6 tests, including the existing
-  lone-unrelated-result guard; the full suite passed 491/491 tests on iPhone 17
-  Pro / iOS 26.5; the generic iOS Simulator build passed; `xcodegen generate`
-  and `git diff --check` passed. The first full-suite attempt ended before XCTest
-  bootstrapped because the simulator test host was killed; its result bundle
-  reported zero executed tests, and the identical elevated rerun passed all 491.
-- An independent read-only review caught and drove fixes for automatic-import
-  scope, cancellability, stale async results, and deterministic concurrency-test
-  setup. The final review reports no remaining production or test findings.
-
-Manual place-search publication and Xcode handoff, 2026-07-21 00:19 PDT:
-
-- Committed the validated fix as `d50d7ae15` (`REC-106: Fix manual place
-  search`) and pushed it to `origin/codex/rec-106-instagram-carousel`. Updated
-  ready PR #137 with the physical-device evidence, manual-search root cause,
-  repaired behavior, and current 491-test validation:
-  https://github.com/joelipshutz/wander/pull/137. The PR remains open and was
-  not merged.
-- Added a detailed REC-106 Linear comment with the explanation for honest
-  unresolved Search rows, fix, validation, and concrete retest steps. Moved
-  REC-106 from `In Progress` to `In Review` for Ryan's physical-device retest.
-- Verified through Xcode UI that
-  `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` is open and the Branch
-  Chooser reports `codex/rec-106-instagram-carousel`; the selected destination
-  remains `Ry’s iPhone`. Started a fresh Run after the push. Xcode built the
-  branch, then presented its local-network device-discovery sheet because the
-  phone was unavailable on cable/LAN; cancelled that wait and left the correct
-  branch/project open for Ryan. Do not claim a fresh physical-device launch
-  until the phone reconnects.
-- Final handoff remains 6/6 focused regressions passed, 491/491 full-suite tests
-  passed, generic iOS Simulator build passed, XcodeGen and diff checks passed,
-  and independent final review clean. No merge, build-number bump, TestFlight
-  upload, hosted data mutation, or Slack announcement was requested or
-  performed.
-
-Instagram relevance and geographic-resolution follow-up, 2026-07-21 10:43 PDT:
-
-- Ryan reported that the current REC-106 branch admits an incidental entity
-  (`Veterans of Amboy`) alongside the reel's actual subject (`Frank n Franks`),
-  and that three Wyoming carousel destinations resolve with missing or wrong
-  geographic context: Farson Mercantile, Skyline Drive Overlook, and Flaming
-  Gorge. Exact Instagram, Apple Maps, and Google Maps references are recorded
-  in REC-106.
-- Reopened REC-106 as `In Progress` and added the new production evidence.
-  Continuing in the existing isolated worktree on
-  `codex/rec-106-instagram-carousel`; the checkout is clean, synchronized with
-  its remote branch, and seven commits ahead of `origin/main`. The main
-  checkout is on unrelated REC-88 work, so no overlap is expected.
-- Investigation scope: social-candidate provenance/relevance, post-level
-  geographic context propagation, MapKit query construction and canonical
-  matching, deterministic regression fixtures/tests, and this coordination
-  log. OpenAI-assisted extraction/reranking will be evaluated against the
-  existing backend boundary; no API key will be placed in the iOS client.
-- No Swift edits will be made until exact pre-fix fixtures reproduce the wrong
-  extra entity and the Wyoming-to-California/Los Angeles search drift. Expected
-  files are import extraction/resolution services and their focused tests;
-  additional files will be logged before editing if the confirmed root cause
-  crosses that boundary.
-
-Instagram relevance and geographic-resolution investigation checkpoint, 2026-07-21 11:22 PDT:
-
-- Added exact public regression fixtures before production changes. Eight
-  focused tests reproduced 15 failures: the Frank N Frank's reel queried and
-  imported `Veterans of Amboy`; every Wyoming carousel lookup discarded its
-  post-wide state; Farson's `Merc` alias and Flaming Gorge's `Reservoir` suffix
-  did not match; an exact-name California candidate beat Wyoming context; and a
-  state-only typed search polluted the natural-language query instead of
-  bounding MapKit geographically. The pre-fix result bundle is
-  `DerivedData-rec106-prefx/Logs/Test/Test-Wander-2026.07.21_10-59-36--0700.xcresult`
-  and remains untracked generated output.
-- Root cause was split across extraction, search, and matching. The extractor's
-  unrestricted bare `from` rule treated creator provenance as an itinerary
-  destination. Post-wide Wyoming evidence was never inherited by per-slide
-  hints. MapKit searches were unbounded, while the matcher gave geography only
-  a small bonus and did not normalize full state names/codes or known provider
-  aliases. Resolved rows then overwrote stronger creator-facing names with
-  MapKit aliases.
-- Implemented bounded deterministic repairs in
-  `SocialPlaceImportMetadata.swift`, `MapKitPlaceResolver.swift`,
-  `PlaceImportCandidateMatcher.swift`, `PlaceImportStore.swift`, and
-  `PlaceImportModels.swift`: attribution-safe phrase extraction; one-state
-  travel-context inheritance; region-biased MapKit requests; bounded provider
-  query variants; hard rejection of contradictory known states; `WY`/Wyoming,
-  `Merc`/`Mercantile`, and geographic provider-suffix normalization; source-name
-  preservation with provider identity/metadata retained; and resolver version 6
-  so persisted bad social rows are reprocessed.
-- Validation now passes 63/63 import tests and 498/498 full-suite tests on
-  iPhone 17 Pro / iOS 26.5. `git diff --check` passes. A historical manual-search
-  test fixture was explicitly normalized to the current resolver version so it
-  tests typed-search behavior without racing the intentional production upgrade;
-  its fake candidates now use the Wyoming geography required by the new safety
-  contract.
-- OpenAI is appropriate for a later authenticated server-side evidence-role and
-  geographic-context stage, not as a client secret or map authority. Created
-  child follow-up REC-120 under REC-97 for strict candidate-closed structured
-  output, auth/quotas/evals, privacy-safe observability, physical-device QA, and
-  an approved provider/licensing strategy. The exact deterministic REC-106 fixes
-  do not require OpenAI. Apple currently has no reliable searchable Skyline
-  Drive Overlook POI, so this patch rejects Los Angeles results and leaves that
-  named destination honestly unresolved instead of inventing a match.
-
-Instagram relevance and geographic-resolution final validation, 2026-07-21 12:02 PDT:
-
-- Three independent read-only review passes drove additional hardening before
-  publication: city/state suffix parsing now prefers the rightmost explicit
-  state; `LA` remains Los Angeles unless Louisiana syntax is unambiguous;
-  Georgia the country is not forced into the U.S. state; OCR-only geography
-  cannot leak across carousel slides; state-named venues such as California
-  Grill cannot become post-wide geography; and creator-attribution filtering
-  preserves legitimate venues such as Friends & Family and Friendship Coffee.
-  The final reviewer found no remaining P1/P2 issue in the changed REC-106 scope.
-- Final focused geography/relevance validation passed 4/4. The complete import
-  suite passed 73/73 at
-  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-58-45--0700.xcresult`;
-  the complete app suite passed 508/508 at
-  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-59-31--0700.xcresult`;
-  and a generic iOS Simulator build passed for arm64 and x86_64. Generated
-  DerivedData directories remain untracked and are excluded from publication.
-- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed on
-  this Mac; tests used the available iPhone 17 / iOS 26.5 runtime. The generic
-  simulator build covers both simulator architectures. `git diff --check`
-  passes. No build-number bump, TestFlight upload, hosted data mutation, or
-  merge was requested or performed.
-- Publication remains on branch `codex/rec-106-instagram-carousel` and existing
-  PR #137 (https://github.com/joelipshutz/wander/pull/137). REC-106 will return
-  to `In Review` after the push. Ryan still needs to clear/reimport the two exact
-  Instagram URLs because resolver version 6 intentionally reprocesses older
-  social-import rows.
-
-Instagram relevance and geographic-resolution publication, 2026-07-21 12:06 PDT:
-
-- Committed the validated implementation as `e0f90e07a` (`REC-106: Fix social
-  import relevance and geography`) and pushed it to
-  `origin/codex/rec-106-instagram-carousel`; the existing open PR #137 now
-  contains the commit. GitHub PR metadata/comment writes could not be refreshed
-  because both the local `gh` token and the installed GitHub integration lack
-  write access, but this did not block the authenticated git branch push.
-- Added the final behavior, validation, retest instructions, Skyline limitation,
-  and REC-120 follow-up to REC-106 in Linear, then moved REC-106 to `In Review`.
-  No merge or release action was performed.
-- Opened `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` through Xcode and
-  verified the Branch Chooser reports `codex/rec-106-instagram-carousel` with
-  `Ry’s iPhone` selected. Started a fresh Run; Xcode reached the phone but is
-  waiting on `Unlock Ry’s iPhone to Continue`. The project/branch and pending
-  run are intentionally left open so Ryan can unlock the phone and test. Do not
-  claim a fresh device launch until that lock-screen gate completes.
-
-## 2026-07-21 16:09 PDT - Codex - REC-106 100-place Instagram guide regression
-
-Agent: Codex using the `investigate` workflow
-Branch: `codex/rec-106-instagram-carousel`
-Worktree: `/private/tmp/recme-rec106-instagram-carousel`
-Linear: `REC-106` (reopened as `In Progress`, priority raised to Urgent)
-PR: https://github.com/joelipshutz/wander/pull/137
-
-Goal: reproduce and fix the exact public Instagram guide at
-`https://www.instagram.com/p/DU6kxigDOD-/`, which explicitly lists 100 coffee
-shops with geographic context but produced only 24 review rows, including
-neighboring entries merged into malformed names.
-
-Starting status:
-
-- Fetched `origin`; this isolated branch is synchronized with its remote at
-  `c422dcd3a`. The only worktree changes are two untracked REC-106 DerivedData
-  directories from prior green validation. They will remain untracked and will
-  not be removed or committed. The main checkout has unrelated user/agent
-  changes on `codex/rec-88-visit-friends-mockup`; no files there will be edited.
-- Reviewed the supplied 16:05 physical-device screenshot. It proves the failure
-  begins before MapKit: entries such as `NOMADIC SPECIALTY COFFEE / EGYPT` and
-  `CASA CANELA / VENEZUELA` are fused into one import hint, and other rows lose
-  their supplied country boundary. Apple Maps cannot reliably resolve corrupted
-  candidate names, and repeated lookups can then hit provider limits.
-- REC-106 now records the exact URL, malformed examples, observed 24/100 count,
-  and acceptance criteria: preserve all 100 ordered entries as distinct hints,
-  retain source geography, avoid cross-entry fusion, keep ordinary no-match
-  rows honest, and verify the full path with a production-faithful golden
-  fixture before returning the build to Xcode.
-- Investigation will trace live carousel/media discovery, per-slide OCR line
-  ordering, delimiter and candidate segmentation, hint/search caps, MapKit
-  request scheduling/throttling, and persistence. No Swift edit will be made
-  until the exact fixture reproduces the 24-row truncation and fused names.
-- Expected implementation scope is
-  `Wander/Services/SocialPlaceImportMetadata.swift`,
-  `Wander/Services/PlaceImportStore.swift`, related import parsing/matching
-  services as evidence requires, `WanderTests/PlaceImportTests.swift`, fixture
-  resources, and this log. `project.yml`, schema/RLS, auth, release metadata,
-  and unrelated product surfaces are out of scope.
-
-Investigation checkpoint, 2026-07-21 16:47 PDT:
-
-- Reproduced the public source outside the app with the same anonymous iPhone
-  request shape. Instagram returned the complete post and exactly two original
-  1440 x 1795 carousel images. The caption and accessibility text contain none
-  of the shop names; ranks 1-50 are rasterized in slide one and ranks 51-100 in
-  slide two.
-- The exact 24-row device result is deterministic: the embedded parser chooses
-  each 513 x 640 `display_uri` before the original image candidate; generic OCR
-  emits at most 12 search queries per slide; `socialResolution` requests a
-  global maximum of 24 hints; and the extractor then returns `prefix(24)`.
-- The malformed rows have a separate confirmed cause. Vision bounding boxes are
-  discarded, adjacent flattened lines are blindly concatenated across a dense
-  two-column layout, and `NAME / COUNTRY` is not a recognized import schema.
-  Full-resolution Vision OCR on isolated columns recovered 25 + 25 rows from
-  slide one and 25 + 25 from slide two, including wrapped entries such as Ditta
-  Artigianale, Momos, and Casa Barista, proving all 100 rows are available.
-- MapKit is downstream of extraction and must not be asked to repair corrupted
-  names. It also cannot safely receive a foreground burst of 100 searches; the
-  prior physical-device run observed throttling near 50 searches per minute.
-  The implementation will therefore persist all explicit source rows first and
-  enrich large guide rows through one shared paced automatic queue. Explicit
-  user searches remain immediate.
-- The bounded implementation stays within five files including this log:
-  `SocialPlaceImportMetadata.swift` for full-resolution selection, geometry-
-  aware guide OCR, slash-country parsing, and country normalization;
-  `PlaceImportStore.swift` for durable 100-row expansion, pacing, and country-
-  compatible candidates; `PlaceImportModels.swift` for resolver version 7;
-  `PlaceImportTests.swift` for the exact 100-row regression; and this log.
-  OpenAI is not required for this deterministic guide layout, and no client API
-  key or unrelated server architecture will be added in this patch.
-
-Implementation and validation checkpoint, 2026-07-21 17:12 PDT:
-
-- Implemented full-resolution Instagram media selection instead of preferring
-  the 513 x 640 `display_uri`. Dense guide OCR now retains Vision geometry,
-  isolates the two columns, reconstructs wrapped name/country fragments, and
-  parses explicit `NAME / COUNTRY` rows without the generic adjacent-line
-  heuristic fusing neighboring entries.
-- Added country-name/ISO normalization and hard rejection of MapKit candidates
-  from a conflicting explicit country. U.S. state areas are evaluated first so
-  values such as `CA` remain California rather than becoming Canada. This edge
-  case was caught by the complete import suite before publication.
-- Raised the extraction budget to 150, but do not issue a 100-request MapKit
-  burst. Guides larger than 24 entries expand into durable ordered rows first.
-  The store then enriches those queued social rows through one shared automatic
-  lookup pacer at 1.5 seconds between starts (40/minute); explicit user searches
-  bypass the pacer and remain immediate.
-- Bumped the social resolver version from 6 to 7 so prior REC-106 imports are
-  collapsed back to their source URL and reprocessed rather than remaining
-  stuck with the old truncated/corrupted result.
-- Ran the production Vision recognizer against the exact two original 1440 x
-  1795 images from `DU6kxigDOD-`. It reconstructed 100 ordered shops and all 100
-  country values. Vision normalized two accents (`CAFÉ` to `CAFE`), which the
-  existing matcher intentionally treats as equivalent. The temporary
-  absolute-path test used for this live verification was removed; no downloaded
-  Instagram asset or local path is part of the branch.
-- Permanent regression coverage includes the complete ordered 100-shop golden
-  list, durable 100-row expansion before any map request, persistence/order and
-  batch counts, full-resolution media choice, split/wrapped row geometry,
-  wrong-country rejection, and the existing small-post behavior.
-- Validation after the final state/country fix:
-  - `SocialPlaceImportMetadataTests`: 40/40 passed, result bundle
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_16-54-51--0700.xcresult`.
-  - Complete import regression set: 79/79 passed, result bundle
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-03-24--0700.xcresult`.
-  - Full `WanderTests`: 514/514 passed, result bundle
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-04-07--0700.xcresult`.
-  - Generic iOS Simulator build completed with `** BUILD SUCCEEDED **`.
-  - One temporary live-image retry caused the iOS Simulator test runner to exit
-    after the earlier Vision stress runs. `simctl shutdown all` restored the
-    runtime; the focused regression, 79-test import suite, 514-test full suite,
-    and generic build all passed afterward. This was simulator infrastructure,
-    not an app assertion or compile failure.
-- OpenAI is deliberately not used for this exact guide. Its source has a
-  deterministic two-column schema and all 100 names/countries are present in
-  pixels; adding a client API key would introduce security, latency, cost, and
-  hallucination risk without addressing the confirmed truncation/geometry bug.
-  Server-side relevance classification for ambiguous prose remains separate
-  REC-120/REC-97 architecture work.
-- Changed files remain limited to
-  `PlaceImportModels.swift`, `PlaceImportStore.swift`,
-  `SocialPlaceImportMetadata.swift`, `PlaceImportTests.swift`, and this log.
-  `DerivedData-rec106*` remains untracked and must not be staged. PR #137 is the
-  durable review link; the branch will be updated from latest `origin/main`,
-  committed, pushed, and reopened in Xcode for physical-device testing.
-
-Reviewer-hardening checkpoint, 2026-07-21 17:31 PDT:
-
-- Independent review identified and the implementation now fixes four
-  downstream correctness gaps before publication: concurrent automatic batches
-  cannot burst through the MapKit pacer; manual searches jump ahead of a
-  100-row automatic backlog and return when that row finishes rather than when
-  the entire batch finishes; manual-search intent is persisted across app
-  termination; and an explicit country rejects candidates whose country is
-  conflicting, missing, or unrecognized.
-- The pacer records the last actual grant and rechecks spacing after every
-  suspension, preserving its 1.5-second minimum even when multiple waiters wake
-  together after app suspension. A cancelled waiter does not consume a slot.
-  Manual priority and relaunch behavior are durable through the optional
-  `pendingManualSearch` item field; synthesized Codable keeps old v1 snapshots
-  backward compatible when that key is absent.
-- All 100 guide children keep the pasted Instagram URL's original source line.
-  Stable store offsets keep those children contiguous ahead of the next pasted
-  URL rather than synthesizing source-line values that collide and interleave
-  with later sources.
-- Added the 10.5 KB text-only fixture
-  `WanderTests/Fixtures/rec-106-guide-observations.tsv`, containing 191 real
-  Vision strings and normalized bounding boxes captured from the four columns
-  of the supplied two slides. It contains no Instagram pixels. The permanent
-  regression passes those noisy observations through the production geometry
-  parser and asserts all 100 ordered names/countries, including wrapped and
-  split rows. Ran `xcodegen generate` so the generated Xcode project bundles the
-  fixture; the four-line project change is intentional.
-- Focused reviewer regressions passed on the available iPhone 17 / iOS 26.5
-  simulator:
-  - 5/5 guide expansion/manual priority/pacer/country tests at
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-23-31--0700.xcresult`.
-  - 4/4 captured-geometry/manual durability/pacer tests at
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-27-39--0700.xcresult`.
-  - 3/3 pre-lookup persistence/relaunch, multi-source ordering, and exact
-    geometry tests at
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-29-24--0700.xcresult`.
-  - Complete import regression suite: 84/84 passed at
-    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-31-11--0700.xcresult`.
-- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator became unavailable
-  after the local Xcode runtime update; the prior complete 514-test pass ran on
-  that destination before it disappeared, and current focused validation uses
-  the installed iPhone 17 / iOS 26.5 runtime. A fresh complete import/full suite
-  and build will run again after integrating latest `origin/main`.
 ## 2026-07-20 23:43 PDT - Codex - REC-113 list and map-card place photos
 
 Agent: Codex
@@ -15573,49 +14986,111 @@ TestFlight build 85 release completed, 2026-07-21 15:35 PDT:
   https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784673492961879. No App
   Store production submission or marketing-version change was made.
 
-REC-106 latest-main integration checkpoint, 2026-07-21 17:36 PDT:
+## 2026-07-21 16:15 PDT - Codex - REC-115 new-list back affordance
 
-- Committed the complete guide implementation as `111e600ab` (`REC-106:
-  Import complete Instagram guides`), then merged latest `origin/main`
-  `1c39e2c13`, which includes Feed, list-photo, and TestFlight build-85 work.
-- The merge touched no REC-106 Swift implementation or test logic. Conflicts
-  were limited to append-only `docs/agent-log.md` and generated
-  `Wander.xcodeproj/project.pbxproj`; retained both histories and regenerated
-  the project from merged `project.yml`. The generated project now includes
-  all latest-main sources, build 85, and the REC-106 text fixture.
-- Pre-merge final independent review found no P0/P1/P2 issue (confidence 9/10)
-  across guide extraction/order/persistence, manual-search races/durability,
-  pacer behavior, exact-country filtering, optional-Codable compatibility, and
-  captured Vision fixture fidelity. Fresh merged import/full tests and a
-  generic simulator build remain the final publication gate.
+Agent: Codex using the Linear, rec.me Feedback Feature/Bug, and `ios-fix`
+workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Progress`)
 
-REC-106 latest-main validation checkpoint, 2026-07-21 17:42 PDT:
+Goal: add the requested right-facing back arrow to the upper-left of the new
+list sheet, preserve the existing unsaved-dismiss behavior, and leave the fix
+ready for Xcode testing with focused regression and simulator evidence.
 
-- The exact merged source passed the complete iPhone 17 / iOS 26.5 simulator
-  suite: 542/542 tests, zero failures or skips. Result bundle:
-  `/private/tmp/recme-rec106-instagram-carousel/DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-37-57--0700.xcresult`.
-- The exact merged source also passed the generic iOS Simulator build with
-  `CODE_SIGNING_ALLOWED=NO`. The build retains two pre-existing Swift
-  concurrency warnings in `WanderSupabaseClient` from latest main; no REC-106
-  compiler warning or error was introduced.
-- Publication is now limited to concluding the merge, pushing
-  `codex/rec-106-instagram-carousel`, updating PR #137 and Linear REC-106, and
-  opening/running that exact branch in Xcode on Ry's connected iPhone. No
-  TestFlight build or release was requested.
+Starting status:
 
-REC-106 Xcode handoff checkpoint, 2026-07-21 17:44 PDT:
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` `1c39e2c13bfe43aac88abf58979acaa009579dee`. The shared checkout has
+  unrelated `.gitignore` and `.pnpm-store/` changes, which remain untouched.
+- No recent agent-log entry or active worktree reports overlapping REC-115 or
+  the intended source/test files. Expected files are
+  `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Triage: design/UX, P3, Lists create flow. The engineering-review gate is not
+  needed because this is a one-screen affordance using the existing dismissal
+  path, with no shared state, persistence, backend, or navigation-contract
+  change. The design lens requires the exact requested chevron direction, a
+  minimum 44pt tap target, and an explicit accessibility label.
+- The repo intentionally has no DebugBridge/StateServer snapshot/restore API,
+  so the literal `ios-fix` snapshot fixture cannot be captured without adding
+  unrelated debug infrastructure. The existing deterministic `create` Lists
+  launch scenario will be used to reproduce and screenshot the pre-fix state,
+  followed by a focused source-contract test and post-fix simulator screenshot.
 
-- Concluded the latest-main merge as `69a3f1340`; `origin/main` is an ancestor
-  of the branch and the working tree contains no tracked changes after the
-  merge. Generated `DerivedData-rec106*` folders remain intentionally
-  untracked and are excluded from publication.
-- Xcode's device tools currently report `Ry’s iPhone` (iPhone 15 Pro) as
-  `unavailable`, and the Mac is locked. The exact branch is therefore ready to
-  open/run, but deployment cannot begin until the Mac and phone are unlocked
-  and the device becomes an available Xcode destination.
-- Next action: push the branch, update ready PR #137 and REC-106 to In Review,
-  then open `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` and
-  Run on `Ry’s iPhone` as soon as the device-side blocker is cleared.
+Implementation and visual checkpoint, 2026-07-21 16:23 PDT:
+
+- Reproduced the missing leading affordance from exact pre-fix `origin/main`
+  with `-WanderInitialTab lists -WanderListsScenario create`; the baseline
+  screenshot is `/private/tmp/recme-rec115-pre.png`.
+- `ListEditorSheet` now renders a create-only leading toolbar button with the
+  requested `chevron.right`. It calls the existing `dismiss()` path, has a
+  44x44 content target, uses the existing ink/surface toolbar treatment, and
+  exposes the VoiceOver label `Back to lists`. The edit-list presentation does
+  not render the new control.
+- Added a focused navigation source-contract regression covering placement,
+  create-only scope, direction, tap-target size, accessibility label, and the
+  dismissal call. The focused iPhone 17 Pro / iOS 26.5 run passed 1/1:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-20-59--0700.xcresult`.
+- Post-fix visual verification passed on iPhone 17 Pro and smaller iPhone 17e:
+  `/private/tmp/recme-rec115-post-17pro.png` and
+  `/private/tmp/recme-rec115-post-17e.png`. The control is fully visible,
+  right-facing, contrast-safe, and clear of both safe areas; no clipping or
+  toolbar overlap is present. `xcodegen generate` produced no project diff, and
+  `git diff --check` passed before the focused run.
+- The documented iPhone 16 Plus / iOS 18.6 runtime is not installed in this
+  Xcode environment; the currently available iPhone 17 Pro / iOS 26.5 runtime
+  is used for validation.
+
+Validation checkpoint, 2026-07-21 16:24 PDT:
+
+- The full iPhone 17 Pro / iOS 26.5 suite passed 489 tests with 0 failures and
+  0 skips:
+  `/private/tmp/recme-rec115-derived-pre/Logs/Test/Test-Wander-2026.07.21_16-23-06--0700.xcresult`.
+- The full run compiled and linked the patched app after project regeneration.
+  Existing non-blocking runtime diagnostics remain: missing simulator location,
+  Clerk keychain cache access, and the already documented remote-decoder Swift
+  concurrency warnings. No REC-115 compiler warning or test failure occurred.
+- Final scope is limited to the Lists SwiftUI affordance, its focused navigation
+  regression, and this coordination log. No schema, persistence, auth, release,
+  build-number, or TestFlight change is included.
+
+Handoff, 2026-07-21 16:26 PDT:
+
+- Committed the complete REC-115 implementation as
+  `f338660c827beafb9f42569ce03e22c6008ea6a3` (`fix: add new-list back
+  affordance`) and pushed `codex/rec-115-back-arrow` to `origin`.
+- The GitHub connector rejected the required ready PR because the repository's
+  external trust status was not established and the first proposed body linked
+  internal Linear/Slack context. A safer draft with those links removed was
+  then attempted, but the GitHub integration returned `403 Resource not
+  accessible by integration`. The local `gh` session for `ryanlane23` is also
+  expired, so CLI fallback is unavailable without human re-authentication.
+- Linear REC-115 remains `In Progress`, with the pushed branch, commit, test
+  evidence, and PR-auth blocker recorded. Exact restart: run
+  `gh auth login -h github.com`, open a PR from `codex/rec-115-back-arrow` to
+  `main`, then move REC-115 to `In Review` and attach the final PR/head SHA.
+- The implementation itself is ready for Xcode testing now from
+  `/private/tmp/recme-rec115-back-arrow`. No TestFlight build, merge, release,
+  Slack reply, or build-number change was requested or performed.
+
+GitHub authentication and PR completion, 2026-07-21 16:50 PDT:
+
+- At Ryan's explicit request, reauthenticated GitHub CLI through the browser
+  device flow. `gh auth status` now confirms active account `ryanlane23` with
+  repository access; `gh repo view` confirms `WRITE` permission on
+  `joelipshutz/wander`. No credential value was printed or stored in the repo.
+- Confirmed the prior connector failures did not create a duplicate PR and
+  verified the branch is current with `origin/main` (zero commits behind, two
+  commits ahead). Opened ready PR #146 from `codex/rec-115-back-arrow` to
+  `main`: https://github.com/joelipshutz/wander/pull/146.
+- The PR body omits the internal Slack permalink while retaining the fix,
+  root-cause, impact, test, simulator, and runtime-gap evidence. PR #146 is
+  `OPEN`, is not a draft, and contains no TestFlight or release action.
+- Moved Linear REC-115 to `In Review`, attached PR #146, and recorded the
+  validation evidence. Merging/release remains a separate workflow and was not
+  requested here.
+
 ## 2026-07-21 16:08 PDT - Codex - REC-121 Feed RPC Permission Regression
 
 Agent: Codex
@@ -15737,6 +15212,1372 @@ Preflight:
   validate/archive/upload from the resulting latest main batch, then attach
   the uploaded build to TestFlight and update Linear/Slack.
 
+Completion, 2026-07-21 18:37 PDT:
+
+- Squash-merged the build-metadata PR #147 as `106093f`
+  (`chore: prepare TestFlight build 86`). The production archive was built
+  from that exact latest `main` commit. `project.yml` and the generated Xcode
+  project both carry build `86`.
+- Exact-source validation passed 488/488 tests on iPhone 16 Plus, iOS 18.6.
+  The archive succeeded and its metadata confirms `com.grayline.wander`,
+  marketing version `0.1`, build `86`, arm64, and team `Y7TVK75RZ8`.
+- App Store Connect accepted the upload after the export destination was
+  corrected from a local IPA export to `upload`; the same verified archive was
+  used and build-number management remained disabled. Build `0.1 (86)`, id
+  `a39445f5-8563-439e-a927-6db1990898f0`, is `VALID`, has
+  `usesNonExemptEncryption=false`, and includes the en-US What to Test copy.
+- Build 86 is attached to `rec.me Alpha`; external TestFlight review is
+  `APPROVED`. Public link: https://testflight.apple.com/join/knEhRa6t.
+- Updated Linear `REC-121` with the release evidence and posted the required
+  tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784684208014349.
+- The archive emitted the same non-blocking Swift concurrency warnings in
+  `WanderSupabaseClient` noted for Build 85. No new compiler or XCTest failure
+  occurred. Disposable Xcode DerivedData caches were cleared during the
+  release because the local disk had only 116 MB free.
+
+## 2026-07-21 23:52 PDT - Codex - REC-121 Client Feed Recovery
+
+Agent: Codex
+Branch: `codex/rec-121-client-feed`
+Worktree: `/private/tmp/recme-rec121-client-feed`
+Linear: `REC-121` (reopened, In Progress)
+
+Goal: resolve the continued TestFlight Feed unavailable state reported by Joe
+after Build 86.
+
+Pre-edit evidence and plan:
+
+- The root checkout is on an unrelated stale branch and was left untouched;
+  this clean, isolated worktree was created from `origin/main` at `6af3939`.
+- Read the current agent log and confirmed no overlapping active worktree.
+- Verified `followed_feed` directly under Joe's authenticated database role;
+  it returns a valid empty envelope.
+- Minted a short-lived token for Joe's active Clerk session and called the
+  exact production REST RPC. It returned HTTP 200 with the same valid empty
+  envelope. No token, email, note, coordinate, or raw private payload was
+  recorded.
+- The device was not reachable through Xcode at investigation time. Build 86
+  has no configured PostHog project token, so the client-side error class is
+  not available from release analytics.
+- Completed `docs/reviews/2026-07-21-rec121-client-feed-plan-eng-review.md`.
+  The planned bounded client repair is: on an authenticated RPC's 401/403,
+  force one fresh Clerk token and retry that exact request once. It does not
+  change RLS or convert a failure into a false empty Feed.
+
+Checkpoint, 2026-07-22 00:01 PDT:
+
+- Generated the Xcode project and ran the focused simulator command. Xcode
+  compiled the project but cancelled testing because the new static retry
+  predicate inherited `WanderSupabaseClient`'s main-actor isolation while its
+  test is synchronous. Marked the stateless predicate `nonisolated`; this is a
+  compile-time correction, not a product/runtime failure. Re-running the same
+  focused tests next.
+
+- Added a focused HTTP-level regression test that queues a 401 followed by a
+  200 and asserts both the cached and forced Clerk-token request exactly once.
+
+Validation, 2026-07-22 00:06 PDT:
+
+- Regenerated `Wander.xcodeproj` with XcodeGen and checked the diff for
+  whitespace errors.
+- Focused iPhone 16 Plus, iOS 18.6 tests passed 4/4, including the new HTTP
+  401 -> forced-token-refresh -> 200 path, the hosted empty Feed envelope
+  decode, and the Feed's existing auth-readiness retry.
+- The complete required iPhone 16 Plus, iOS 18.6 suite passed 490/490:
+  `/private/tmp/DerivedData-rec121-client-feed/Logs/Test/Test-Wander-2026.07.22_00-04-06--0700.xcresult`.
+- No Supabase migration, RLS change, TestFlight build, or production backend
+  mutation is included in this client repair. Next step: push and open the
+  required PR for review.
+
+Completion, 2026-07-22 00:09 PDT:
+
+- Committed the repair as `f445cdd` (`fix: retry authenticated RPCs with fresh
+  Clerk token`), pushed `codex/rec-121-client-feed`, and opened PR #149:
+  https://github.com/joelipshutz/wander/pull/149.
+- Linear `REC-121` remains `In Progress` until the PR is reviewed, merged, and
+  a requested TestFlight build is available for device verification.
+- TestFlight has not been uploaded or requested in this handoff. To ship, land
+  PR #149, create the next build from current `main`, then test Feed after a
+  cold relaunch and after pressing Retry while signed in.
+
+## 2026-07-22 10:58 PDT - Codex - TestFlight Build 87 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-87`
+Worktree: `/private/tmp/recme-build87-release`
+Linear: `REC-121` (In Review)
+
+Goal: fulfill Joe's explicit request to put the Feed recovery fix on his phone
+through TestFlight.
+
+Release scope and preflight:
+
+- PR #149 was reviewed cleanly and squash-merged to `main` as `cf24bec`
+  (`fix: refresh stale Clerk token after RPC auth failure`). It is the only
+  app-code change since Build 86's release metadata commit; its docs-only
+  companion is excluded from binary behavior but remains on `main`.
+- The merged change retries one authenticated RPC after 401/403 using a fresh
+  Clerk token, keeps a second failure as a real Feed recovery state, and has a
+  focused HTTP regression test plus the complete 490/490 iPhone 16 Plus,
+  iOS 18.6 suite from the merge gate.
+- Build 86 is recorded as the last completed TestFlight build and `project.yml`
+  currently has `CURRENT_PROJECT_VERSION: "86"`. This explicit release will
+  increment the build exactly once to 87, regenerate the Xcode project, then
+  validate, archive, upload, attach, and record the TestFlight result.
+
+## 2026-07-22 11:57 PDT - Codex - REC-110 Profile Map Sharing
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-110-profile-map-share`
+Worktree: `/private/tmp/recme-rec110-profile-map-share`
+Linear: `REC-110` (`In Progress`)
+
+Goal: make Profile > Your Map share both the stable rec.me profile link and a
+PNG of the same static map shown in the app, then validate the flow and prepare
+a ready PR for testing.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `67a8bd7cc`; the primary checkout has unrelated `.gitignore`
+  and `.pnpm-store/` changes that will not be touched.
+- Existing worktrees include an active TestFlight Build 87 release whose scope
+  overlaps only this required coordination log, not the expected runtime files.
+  Any latest-main log additions will be preserved when the branch is updated.
+- REC-110 is assigned to Ryan and was moved from `Backlog` to `In Progress`.
+- Expected implementation scope is
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, the shared activity/share
+  component under `Wander/DesignSystem/`, focused profile/share tests under
+  `WanderTests/`, and this log. `project.yml`, schema/RLS, auth, and app build
+  number are out of scope unless source membership proves necessary.
+- Current source already contains a static Profile map snapshot cache and a
+  centralized `WanderShareButton`; implementation will preserve those shared
+  boundaries and verify the generated share items instead of introducing a
+  competing share path.
+
+Triage and scope checkpoint, 2026-07-22 12:06 PDT:
+
+- Classified REC-110 as a P2 Profile/native-sharing enhancement. The concrete
+  gap is the single-item `ShareLink`: it sends only the profile deep link while
+  the exact rendered `UIImage` remains child-local state.
+- The engineering review gate is not needed after the scope challenge. This is
+  a tiny one-screen affordance that reuses the existing MapKit renderer and
+  centralized native share boundary, adds no shared app state, persistence,
+  backend, auth, privacy, or cross-screen semantics, and can preserve every
+  existing URL-only caller. The skip reason and plan are also recorded on
+  Linear REC-110.
+- Existing code to reuse: `ProfileMapSnapshotView` already displays a
+  request-keyed, bounded-cache `UIImage`; `WanderShareContent.profileMap`
+  already owns the stable route/copy; and the iOS 17 SwiftUI SDK provides
+  `ShareLink(items:)` for a homogeneous collection of transferable URLs.
+- Locked data flow:
+
+  ```text
+  ProfileMapSnapshotView
+      -> exact request-keyed UIImage shown on screen
+      -> lossless PNG data
+      -> unique temp .png URL (aged-file pruning only)
+      -> ProfileMapSection current attachment state
+      -> WanderShareButton [recme profile URL, PNG file URL]
+      -> native multi-item ShareLink
+  ```
+
+- Failure handling: a request-key change clears the old attachment before the
+  next render; a render/encode/write failure leaves the map share disabled so a
+  link-only payload cannot falsely satisfy the issue; old temporary files are
+  not deleted while an activity extension may still be reading them and are
+  pruned on later writes after a retention window.
+- Test plan: stable remote-id eligibility, exactly ordered profile-link + PNG
+  items, actual PNG bytes/dimensions, unique filenames, aged cleanup that keeps
+  fresh files, stale attachment clearing/current-image handoff, existing
+  single-item share regression, full XCTest/build, and simulator share-sheet
+  parity on current and smaller iPhone sizes.
+- Not in scope: public HTTPS/universal-link fallback (already captured in
+  `TODOS.md`), a second MapKit render, card chrome/rounded-corner screenshot,
+  backend or schema work, build-number/TestFlight release work, or changes to
+  place sharing.
+
+Implementation and validation checkpoint, 2026-07-22 12:39 PDT:
+
+- Extended the shared share-content boundary to preserve every existing
+  URL-only caller while allowing the map flow to provide exactly two native
+  activity items: `recme://profiles/<server-id>` and a local `.png` file URL.
+  Profile links now require the remote `serverID`, so guest/local-only ids are
+  never emitted as unusable shared routes.
+- Reused the exact request-keyed `UIImage` already displayed by
+  `ProfileMapSnapshotView`. A request change clears the previous attachment;
+  after the current render succeeds, the image is encoded losslessly and
+  written off the main actor to a uniquely named temporary PNG. Files receive
+  an explicit retention timestamp, and writes prune only regular attachments
+  older than 24 hours so activity extensions can read the selected file
+  asynchronously.
+- The Your Map share affordance remains visually unchanged, is disabled while
+  its current image is being prepared, and now carries an accessibility hint
+  that it shares both the profile link and PNG. Encoding/write failure cannot
+  silently fall back to a link-only payload.
+- Added focused coverage for stable-id eligibility, exact item ordering and
+  route parsing, local-PNG validation, lossless bytes and dimensions, unique
+  attachment names, expired-only pruning, and the view's current-image/stale
+  attachment handoff. Existing single-item sharing remains covered.
+- `xcodegen generate` completed and produced no tracked project-file churn;
+  `git diff --check` passes.
+- Focused `NavigationContractTests` passed 47/47 on iPhone 17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec110-focused/Logs/Test/Test-Wander-2026.07.22_12-20-05--0700.xcresult`.
+- The complete test suite passed 492/492 on iPhone 17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec110-focused/Logs/Test/Test-Wander-2026.07.22_12-20-39--0700.xcresult`.
+  The repo's documented iPhone 16 Plus, iOS 18.6 destination is not installed
+  on this machine, so the available current runtime was used instead.
+- Compact-device regression passed 1/1 on a clean temporary iPhone SE (3rd
+  generation), iOS 26.5 simulator. The pre-existing iPhone 17e simulator was
+  rejected after Xcode reported an early bootstrapping crash; the temporary SE
+  was deleted after capture.
+- Manual simulator QA on iPhone 17 Pro confirmed the live activity sheet says
+  `1 Link and 1 Image`, shows `recme://profiles/user_joe`, and receives the
+  generated map PNG. The emitted PNG was inspected and matches the displayed
+  static Apple Maps snapshot. Screenshots were captured at
+  `/private/tmp/rec110-map-17pro.png` and
+  `/private/tmp/rec110-profile-iphone-se.png`.
+- A fresh read-only adversarial review checked ShareLink behavior, Swift 6
+  concurrency, identity, file lifecycle/privacy, stale-render races,
+  accessibility, and test coverage and found no actionable issues or blockers.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the implementation and validation record as `d9d40f5fa`
+  (`feat: share profile map as PNG`) and pushed
+  `codex/rec-110-profile-map-share`.
+- Opened ready PR #155 and linked it to Linear:
+  https://github.com/joelipshutz/wander/pull/155.
+- Moved Linear REC-110 to `In Review`; it is intentionally not marked `Done`
+  until the ready PR is reviewed/landed and the requested behavior is accepted.
+- No TestFlight build, build-number change, merge, or tester-facing Slack post
+  was requested or performed. Next test: Profile > Your Map > share, confirm
+  the activity sheet reports one link and one image, then save/open the image
+  and verify it matches the on-screen static map.
+
+Post-main-sync validation, 2026-07-22 12:55 PDT:
+
+- Fetched and merged current `origin/main` at `c0b4c33a8` before handoff. The
+  only conflict was this shared coordination log; both REC-110 and REC-113
+  records were preserved in full. Main's app/test changes do not overlap the
+  REC-110 share implementation.
+- The combined post-merge suite passed 504/504 on iPhone 17 Pro / iOS 26.5
+  with zero failures or skips. Result bundle:
+  `/private/tmp/DerivedData-rec110-postmerge-final/Logs/Test/Test-Wander-2026.07.22_12-47-01--0700.xcresult`.
+- Existing Swift concurrency warnings in `WanderSupabaseClient` and unused
+  result warnings in `WanderStoreTests` remain unchanged and non-blocking.
+
+Final base refresh, 2026-07-22 13:05 PDT:
+
+- `origin/main` advanced again through `d0d4060ef` (REC-115 native new-list
+  back affordance) and `0cf93035a` (TestFlight Build 88 metadata). Merged both;
+  the navigation contract additions auto-merged and the only conflict was this
+  log, where the full REC-110 and REC-115 entries were retained.
+- The combined `NavigationContractTests` passed 48/48 on iPhone 17 Pro /
+  iOS 26.5:
+  `/private/tmp/DerivedData-rec110-final-main/Logs/Test/Test-Wander-2026.07.22_12-58-25--0700.xcresult`.
+- The final complete suite passed 505/505 with zero failures or skips on the
+  same destination:
+  `/private/tmp/DerivedData-rec110-final-main/Logs/Test/Test-Wander-2026.07.22_13-04-10--0700.xcresult`.
+
+## 2026-07-22 12:18 PDT - Codex - REC-115 native back correction and explicit TestFlight release
+
+Agent: Codex using the Linear and `recme-pr-review-merge-release` workflows
+Branch: `codex/rec-115-back-arrow`
+Worktree: `/private/tmp/recme-rec115-back-arrow`
+Linear: `REC-115` (`In Review`)
+
+Goal: apply Ryan's on-device acceptance correction to make the new-list back
+control a thin native left-facing iOS chevron with no visible background, land
+PR #146 to `main`, and publish a new TestFlight build from the resulting latest
+`main` batch.
+
+Starting status:
+
+- Fetched `origin`, confirmed this isolated worktree was clean at pushed head
+  `fe48595`, and left the shared checkout's unrelated branch/work untouched.
+- Reviewed Ryan's attached real-device screenshot. It confirms the existing
+  `chevron.right` is directionally wrong and receives iOS 26's automatic glass
+  toolbar background despite the button's plain style.
+- Updated REC-115's Linear title/description to the corrected left-facing,
+  background-free acceptance criteria and recorded the requested landing and
+  TestFlight release.
+- `origin/main` advanced five commits after PR #146 opened, through TestFlight
+  build-87 metadata commit `67a8bd7`; PR #146 reported `DIRTY`. Merged current
+  `origin/main` into the feature branch and preserved both sides of the only
+  conflict, the append-only agent log.
+- Build 87 has a start/bump entry on `main` but no recorded archive/upload/helper
+  completion and no local archive. Treat it as pending release work until App
+  Store Connect state is checked; do not silently reuse its build number.
+- Expected feature files remain `Wander/Features/Lists/ListsScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log. Release metadata
+  will be handled from latest `main` only after PR #146 passes the merge gate.
+
+Implementation and visual checkpoint, 2026-07-22 12:41 PDT:
+
+- Replaced the new-list editor's right-facing filled chevron with the native
+  `chevron.left` at regular 17pt weight while retaining a 44pt accessible tap
+  target and the existing dismiss action.
+- On iOS 26, the back item uses native cancellation placement and hides its
+  shared toolbar background. Older iOS versions retain leading placement. No
+  custom background is applied to the back button.
+- Added a navigation contract regression covering direction, native weight,
+  background suppression, placement fallback, tap target, accessibility label,
+  and dismissal behavior.
+- XcodeGen completed and the focused regression passed on iPhone 17 Pro,
+  iOS 26.5. The repo's specified iPhone 16 Plus, iOS 18.6 runtime is not
+  installed on this Mac, so the current installed iOS 26.5 runtime is being
+  used for this release gate.
+- Visually verified the rendered editor on both iPhone 17 Pro and the smaller
+  iPhone 17e. Both show a visible thin left chevron without a background,
+  clipping, or overlap. Evidence:
+  `/private/tmp/recme-rec115-native-final-17pro.png` and
+  `/private/tmp/recme-rec115-native-final-17e.png`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 491/491 with no failures or
+  skips. Result bundle:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-38-42--0700.xcresult`.
+- Existing traditional-headermap build warnings remain unchanged; no new
+  warning or test failure was introduced by this correction.
+
+Pre-landing review checkpoint, 2026-07-22 12:44 PDT:
+
+- Ran the required gstack pre-landing review against the exact
+  `origin/main...HEAD` diff. Scope is clean: the native back control, its
+  focused regression, and this required coordination log. No critical or
+  informational finding remains, and no Greptile comment exists on PR #146.
+- The local gstack review-result persistence helper could not write its JSONL
+  receipt because this Mac does not have the helper's required `bun` runtime
+  installed. The review itself completed; the durable result is recorded here
+  instead. Installing unrelated tooling was intentionally left out of this app
+  release.
+
+## 2026-07-22 11:54 PDT - Codex - REC-113 Authenticated Photo Retry
+
+Agent: Codex
+Branch: `codex/rec-113-photo-auth-retry`
+Worktree: `/private/tmp/recme-rec113-photo-auth-retry`
+Linear: `REC-113` (reopened, In Progress)
+
+Goal: restore list-tile user photos and Google Maps fallback photos when an
+authenticated TestFlight session presents a stale Clerk token, then land the
+fix and publish the next TestFlight build requested by Ryan.
+
+Pre-edit evidence and coordination:
+
+- The root checkout is a dirty stale branch with unrelated `.gitignore` and
+  `.pnpm-store/` changes, so it is untouched. This clean isolated worktree was
+  created from `origin/main` at `67a8bd7`.
+- Live inspection of the connected build 86 device found six referenced local
+  visit photos; all six files exist and decode. None maps to the current list
+  places, so those tiles necessarily use the authenticated remote user-photo
+  RPC or Google `place-photo` Edge Function.
+- Build 86 predates the one-time fresh-token retry added for authenticated RPC
+  401/403 responses. Current `main` carries that RPC-only fix, but Edge
+  Functions and protected storage downloads still replay the cached token and
+  the list resolver intentionally falls back to emoji after the error.
+- No active worktree overlaps the intended client/test files. Build 87 is
+  already bumped on `main`, but the agent log has no archive/upload/helper
+  completion entry and the connected phone remains on build 86. Before upload,
+  release state will be queried and the build number will not be reused if App
+  Store Connect has already accepted it.
+
+Expected files:
+
+- `Wander/Services/Remote/WanderSupabaseClient.swift`
+- `WanderTests/RemoteRepositoryTests.swift`
+- `docs/agent-log.md`
+
+Checkpoint, 2026-07-22 12:19 PDT:
+
+- Implemented one-time fresh-Clerk-token recovery for the idempotent
+  `place-photo` Edge Function and authenticated private photo downloads. Other
+  Edge Function POSTs do not replay automatically.
+- Bound every initial request and retry to the initiating signed-in user,
+  discarded responses that complete after an account switch, and added
+  cancellation checks before retrying.
+- Coalesced simultaneous 401/403 responses by rejected token and user so a row
+  of list tiles shares one Clerk refresh. Successful refreshes are cached for
+  late failures, failed/rejected replacements are cleared, and refresh state is
+  bounded.
+- Independent reviews identified and drove fixes for non-idempotent replay,
+  cross-account response delivery, duplicate concurrent refreshes, rejected
+  replacement reuse, and cancellation cleanup.
+- The required iPhone 16 Plus / iOS 18.6 destination is not installed in this
+  Xcode environment. The available iPhone 17 / iOS 26.5 focused suite passed
+  57/57 tests after the final hardening. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry/Logs/Test/Test-Wander-2026.07.22_12-18-10--0700.xcresult`.
+
+Validation checkpoint, 2026-07-22 12:38 PDT:
+
+- Final auth/photo coverage is 58/58 on the available iPhone 17 / iOS 26.5
+  simulator, including request-body preservation, storage-token invalidation,
+  account-switch rejection, bounded concurrency cleanup, and one shared token
+  refresh. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-35-28--0700.xcresult`.
+- The complete suite passed 502/502 on the same destination. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-30-08--0700.xcresult`.
+- The first full-suite launch attempt compiled successfully but the simulator
+  service exited with Mach error `-308`; the warmed rerun above completed
+  normally. The generic iOS Simulator build also succeeded. Existing
+  ISO-8601 actor-isolation and legacy headermap warnings remain unchanged.
+- Final independent security, implementation-quality, and test reviews report
+  no remaining findings. `git diff --check` is clean. Next step: commit the
+  three intentional files, open/link the PR, squash-merge it, then package the
+  latest `main` as TestFlight build 88.
+
+Completion, 2026-07-22 12:41 PDT:
+
+- Committed the reviewed repair as `374a4389c`, opened PR #154, linked it to
+  `REC-113`, and moved the issue to `In Review` with validation evidence.
+- PR #154 was squash-merged to `main` as `c0b4c33a8` (`fix: refresh auth for
+  list photos (#154)`). The remote feature branch was deleted. The failed
+  `gh --delete-branch` local checkout cleanup was caused only by a stale main
+  worktree registration; GitHub had already completed the squash merge.
+- No code or user-owned changes in the dirty root checkout were touched.
+
+## 2026-07-22 12:41 PDT - Codex - TestFlight Build 88 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-88`
+Worktree: `/private/tmp/recme-testflight-build-88`
+Linear: `REC-113` and `REC-115` (In Review)
+
+Goal: fulfill Ryan's explicit release requests by packaging the latest `main`,
+including Feed recovery, authenticated list-photo repair, and the corrected
+native new-list back control, as build 88.
+
+Release scope and preflight:
+
+- Started from exact `origin/main` commit `c0b4c33a8` in a clean isolated
+  release worktree, then synced the newly merged REC-115 commit `d0d4060ef`.
+  The root checkout remains dirty and untouched.
+- Build 86 is the last completed TestFlight release recorded in this log.
+  Main already carried an unshipped build-87 metadata bump, so this release
+  advances once more to build 88 rather than risking reuse of 87.
+- App behavior merged since build 86 consists of PR #149's one-time fresh-token
+  recovery for authenticated Feed RPCs, PR #154's safe fresh-token recovery
+  for list-tile Google place photos and protected user-photo downloads, and
+  PR #146's thin left-facing new-list back chevron without a toolbar background.
+- Expected release files are `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this append-only log. Next: regenerate
+  with XcodeGen, validate the metadata-only diff, test, open and squash-merge
+  the build bump PR, then archive and upload exact latest `main`.
+
+Release validation checkpoint, 2026-07-22 12:51 PDT:
+
+- Advanced `CURRENT_PROJECT_VERSION` from 87 to 88 and regenerated with
+  XcodeGen 2.45.4. The generated project diff is limited to the matching Debug
+  and Release build-number settings; `plutil -lint` and `git diff --check`
+  pass with no signing or membership churn.
+- The exact build-88 source passed all 502 tests on the available iPhone 17 /
+  iOS 26.5 simulator. Result bundle:
+  `/tmp/DerivedData-rec113-photo-auth-retry-full/Logs/Test/Test-Wander-2026.07.22_12-42-33--0700.xcresult`.
+- The exact source also passed the generic iOS Simulator build. Existing
+  ISO-8601 actor-isolation, unused test-expression, metadata-extraction, and
+  legacy headermap warnings remain non-blocking and pre-existing.
+- `scripts/testflight-release.mjs --build-number 88 --dry-run` resolves App
+  Store Connect app `6776850787`, public group `rec.me Alpha`, locale `en-US`,
+  and public link `https://testflight.apple.com/join/knEhRa6t`.
+- Release-branch scope remains only `project.yml`, the two generated project
+  build-number values, and this append-only log. Next: commit, push, review and
+  squash-merge the metadata PR before archiving exact merged `main`.
+REC-115 current-main merge gate, 2026-07-22 12:46 PDT:
+
+- While PR #146 was indexing, `origin/main` advanced to `c0b4c33` with the
+  REC-113 authenticated photo retry from PR #154. Merged that exact current
+  main into `codex/rec-115-back-arrow`, preserving both append-only log entries.
+- Regenerated the Xcode project and reran the complete suite after the merge.
+  All 503/503 tests passed on iPhone 17 Pro, iOS 26.5 with no failures or skips:
+  `/private/tmp/DerivedData-rec115-native/Logs/Test/Test-Wander-2026.07.22_12-44-23--0700.xcresult`.
+- Existing ISO-8601 actor-isolation and traditional-headermap warnings remain
+  unchanged. The current-main merge added no REC-115 regression.
+
+Build 88 validation checkpoint, 2026-07-22 12:56 PDT:
+
+- Confirmed the release branch differs from latest `origin/main` only in the
+  build-number metadata (`project.yml` and generated Xcode project) plus this
+  append-only release log. `CURRENT_PROJECT_VERSION` is 88 in both sources.
+- Regenerated with XcodeGen, passed `git diff --check`, and ran the complete
+  release-branch suite on iPhone 17 Pro, iOS 26.5. All 503/503 tests passed with
+  no failures or skips:
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- Existing ISO-8601 actor-isolation, unused test-expression, simulator-strip,
+  and traditional-headermap warnings remain non-blocking and unchanged. The
+  documented iPhone 16 Plus, iOS 18.6 runtime is not installed on this Mac.
+
+Build 88 release completion, 2026-07-22 13:07 PDT:
+
+- Clarification: the earlier 502-test result recorded at 12:51 predated the
+  REC-115 merge. The later exact build-88 branch run supersedes it: all 503/503
+  tests passed on iPhone 17 Pro, iOS 26.5 with result bundle
+  `/private/tmp/DerivedData-build88/Logs/Test/Test-Wander-2026.07.22_12-48-44--0700.xcresult`.
+- PR #156 was squash-merged to `main` as `0cf93035a` with build number 88.
+  The signed archive was produced from that exact detached `main` commit at
+  `/private/tmp/Wander-0.1-build88.xcarchive`; its embedded version is 0.1 (88),
+  code-signature verification passed, and the signing team is `Y7TVK75RZ8`.
+- `xcodebuild -exportArchive` uploaded successfully with
+  `manageAppVersionAndBuildNumber=false`. App Store Connect indexed build id
+  `159b65bc-63ed-4827-b69f-532bac1bc6c2` as `VALID`, retained build number 88,
+  and reports `usesNonExemptEncryption=false`.
+- `scripts/testflight-release.mjs` set the en-US What to Test copy and attached
+  build 88 to public group `rec.me Alpha`
+  (`219f52d8-c202-4407-ba55-53eb41d40526`). Its final summary reports beta
+  review `APPROVED` and public link
+  `https://testflight.apple.com/join/knEhRa6t`. Concurrent helper finalization
+  converged on that approved state; a later submit attempt returned
+  `INVALID_QC_STATE` only because the build was already approved, so no further
+  review transition was required.
+- `REC-113` and `REC-115` are `Done` with PR, validation, TestFlight, archive,
+  and tester evidence. The REC-115 release evidence is in Linear comment
+  `012fefd0-1786-4c9f-b793-76144287dff2`.
+- The required tester-facing announcement was posted in
+  `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750818801029`.
+  A parallel completion path posted the same build-88 checklist seconds later
+  at `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784750846466309`;
+  no additional release announcement is needed.
+- Known behavior: category emoji remains the final fallback when a place has no
+  usable user photo or Google place photo. The documented iPhone 16 Plus /
+  iOS 18.6 simulator runtime remains unavailable on this Mac. The dirty root
+  checkout and all user-owned changes remained untouched.
+
+## 2026-07-22 14:18 PDT - Codex - REC-121 Feed Layout and Navigation
+
+Agent: Codex
+Branch: `codex/rec-121-feed-layout`
+Worktree: `/private/tmp/recme-rec121-feed-layout`
+Linear: `REC-121` (In Review)
+
+Outcome:
+
+- Feed separators now extend edge-to-edge while the content remains inset.
+  Activity is content-sized to remove the oversized blank card space; only the
+  Featured rail is locked at 184 x 252 pt so its cards remain visually aligned.
+- Tapping a Feed actor name opens that member profile. Tapping the place/check-in
+  text opens the canonical place profile and preserves the normal save,
+  add-visit, and edit flows.
+- `swiftc -parse` and `git diff --check` passed. A pre-landing review found no
+  release blocker. It recorded two follow-ups for true interaction coverage of
+  actor/place navigation and Feed-specific visit persistence; those need an
+  eventual SwiftUI UI-test harness and do not change the user-visible release
+  behavior validated in the implemented route.
+- This branch is updated with the merged historical Feed backfill and Build 88
+  release log before PR #153 is landed into the requested Build 89 batch.
+
+## 2026-07-22 14:10 PDT - Codex - REC-121 Historical Feed Backfill
+
+Agent: Codex
+Branch: `codex/rec-121-historical-feed`
+Worktree: `/private/tmp/recme-build87-clean-device`
+Linear: `REC-121` (In Review)
+
+Outcome:
+
+- Backfill migration `20260722121000_backfill_feed_activity.sql` is already
+  applied to production. It idempotently restores historical user-place, list,
+  and list-item Feed events without exposing its security-definer maintenance
+  function to `public`, `anon`, or `authenticated`.
+- Hosted verification passed 27/27 assertions. Followed Feed rows increased
+  from 1 to 61, historical gaps fell from 50 to 0, and 35 Featured for you
+  candidates became available.
+- This branch is now updated with Build 88's completed release state before
+  PR #152 is landed into the requested Build 89 batch. The earlier simulator
+  test attempt did not run because local disk filled; the authoritative
+  regression validation is the hosted Feed contract test above.
+
+## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
+
+Agent: Codex
+Release source: `141c019999f08cecf009e9ef526f91703ff443c3` on `main`
+Release metadata PR: #158
+Linear: `REC-121` (Done)
+
+Release scope:
+
+- PR #152 (`a306b4c`) restores historical Feed events through the reviewed,
+  hosted-validated backfill.
+- PR #153 (`6982a7d`) compacts Feed activity, fixes separator/card sizing, and
+  makes actor and place targets navigate independently.
+
+Validation and release completion:
+
+- Build 89 was prepared by incrementing `CURRENT_PROJECT_VERSION` exactly once
+  from 88, regenerating the Xcode project, and squash-merging PR #158.
+- The full release-branch suite completed successfully on the available iPhone
+  17 Pro / iOS 26.5 simulator. The required iPhone 16 Plus / iOS 18.6 runtime
+  remains unavailable on this Mac.
+- Archived the exact released `main` commit at
+  `/private/tmp/Wander-0.1-build89.xcarchive`. Archive and embedded app metadata
+  confirm rec.me `0.1 (89)`, `com.grayline.wander`, arm64, and team
+  `Y7TVK75RZ8`; strict code-signature verification passed.
+- `xcodebuild -exportArchive` uploaded the unchanged archive with
+  `manageAppVersionAndBuildNumber=false`.
+- App Store Connect build `1ce02b87-9e37-4398-996d-2056820198ad` is `VALID`,
+  reports version 89, and has `usesNonExemptEncryption=false`. The release
+  helper published the What to Test copy, attached the build to public group
+  `rec.me Alpha`, and confirmed external TestFlight review `APPROVED`.
+- Posted the required live tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784756485337549
+- `REC-121` is Done with the PRs, archive, TestFlight result, and two remaining
+  UI-test follow-ups recorded in its Linear comment.
+
+## 2026-07-22 14:24 PDT - Codex - TestFlight Build 89 Release
+
+Agent: Codex
+Branch: `codex/testflight-build-89`
+Worktree: `/private/tmp/recme-testflight-build-89`
+Linear: `REC-121` (In Review)
+
+Goal: package the exact latest `main` requested by Joe as TestFlight Build 89.
+
+Release scope:
+
+- Merged PR #152 (`a306b4c`): production-safe historical Feed-event backfill.
+- Merged PR #153 (`6982a7d`): compact Feed activity layout, full-bleed
+  separators, fixed Featured-card sizing, and separate actor/place navigation.
+- Build 88 is confirmed approved and attached to the public TestFlight group,
+  so this release increments once to 89 rather than reusing an accepted build.
+
+Preflight:
+
+- Created this clean release worktree from `origin/main` at `6982a7d`.
+- The host had only 115 MB free. Removed four locally archived, already-uploaded
+  old builds plus unused Build 82 DerivedData, raising it to about 819 MB; the
+  current release worktree leaves about 609 MB. Archive/test validation will
+  reuse the existing Build 86 archive cache where possible and record any
+  remaining capacity limit honestly.
+- Feature review found no release blocker. Two future test improvements are
+  recorded: interaction-level actor/place routing and Feed-specific visit
+  persistence coverage. They require test-harness work and do not alter the
+  shipped routes reviewed here.
+
+## 2026-07-22 14:31 PDT - Codex - REC-110 TestFlight Build 90 Release
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-90`
+Worktree: `/private/tmp/recme-testflight-build-90`
+Linear: `REC-110` (In Review through TestFlight availability)
+
+Goal: package the exact merged `main` containing REC-110 as the next explicit
+TestFlight build.
+
+Preflight:
+
+- PR #155 (`REC-110`) was squash-merged to `main` at `c3004d8a5` after the
+  48/48 focused and 505/505 full validation. The merged feature branch was
+  deleted from GitHub.
+- `origin/main` currently declares build 89, but no build-89 archive/upload/
+  helper completion is present in the durable release log or available locally.
+  This explicit latest-main release advances once to build 90 rather than
+  reusing or silently rewriting build 89 metadata.
+- Eligible release scope includes REC-110 profile-map sharing plus the Feed
+  backfill/layout changes already merged into build-89 main. No schema or
+  signing changes are introduced by this release branch.
+- App Store Connect credentials are not present at the documented local path
+  on this host, so upload capability will be verified before archive work and
+  any blocked state will retain exact continuation commands.
+
+Build 90 validation and upload checkpoint, 2026-07-22 14:25 PDT:
+
+- Regenerated XcodeGen metadata contains only the intended build-90 settings;
+  `git diff --check` and `plutil -lint Wander.xcodeproj/project.pbxproj` pass.
+- The exact release source passed the full iPhone 17 Pro / iOS 26.5 suite:
+  506/506 tests, zero failures or skips. Result bundle:
+  `/private/tmp/DerivedData-build90/Logs/Test/Test-Wander-2026.07.22_14-09-37--0700.xcresult`.
+- The generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`.
+  Existing Supabase actor-isolation and traditional-headermap warnings remain
+  unchanged and non-blocking.
+- Signed archive succeeded from exact merged main commit `5aae777acf2` at
+  `/private/tmp/Wander-0.1-build90.xcarchive`; embedded marketing version is
+  `0.1`, build `90`, and the archive uses the configured development identity
+  and provisioning profile. The strict local trust check reports
+  `CSSMERR_TP_NOT_TRUSTED` for that development certificate, but Xcode archive
+  validation itself succeeded.
+- `xcodebuild -exportArchive` was attempted with
+  `manageAppVersionAndBuildNumber=false` and stopped before upload with
+  `error: exportArchive Failed to Use Accounts`. No App Store Connect mutation,
+  TestFlight attachment, helper run, or Slack announcement was performed.
+- Resume after configuring App Store Connect credentials on this Mac with:
+  `xcodebuild -exportArchive -archivePath /private/tmp/Wander-0.1-build90.xcarchive -exportOptionsPlist /private/tmp/recme-build90-export-options.plist -exportPath /private/tmp/recme-build90-export -allowProvisioningUpdates`
+  followed by:
+  `/Users/ryanlieblein/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node scripts/testflight-release.mjs --build-number 90 --archive-path /private/tmp/Wander-0.1-build90.xcarchive --what-to-test-file /private/tmp/recme-build90-what-to-test.md`
+  with `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH` (or `--env`) supplied.
+
+## 2026-07-22 14:48 PDT - Codex - TestFlight Build 90 Completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/build90-final-log`
+Worktree: `/private/tmp/recme-build90-final-log`
+Linear: `REC-110` (In Review pending App Store Connect completion)
+
+Goal: complete App Store Connect processing and public TestFlight release for
+the already-uploaded rec.me 0.1 build 90, publish the tester note, close
+REC-110, and correct the earlier upload-blocked checkpoint.
+
+Preflight:
+
+- Started from clean `origin/main` at `47e04fd3e`; the primary checkout still
+  contains unrelated `.gitignore` and `.pnpm-store/` changes and was not used.
+- Build 90 upload succeeded after Ryan signed into Xcode. Archive upload
+  metadata confirms the uploaded binary is build 90 from
+  `/private/tmp/Wander-0.1-build90.xcarchive`.
+- The release helper cannot authenticate because this Mac has no configured
+  `ASC_KEY_ID`, `ASC_ISSUER_ID`, or `ASC_KEY_PATH`; completing the same required
+  metadata and public-group steps through App Store Connect's web UI.
+
+Completion:
+
+- Retried `xcodebuild -exportArchive` after Ryan signed into Xcode. Export and
+  upload succeeded with `manageAppVersionAndBuildNumber=false`; Xcode reported
+  `Upload succeeded`, and archive upload metadata confirmed build 90.
+- App Store Connect build `fc434d7d-54e9-492d-a3c3-3ba206093a44` is validated,
+  reports `App Uses Non-Exempt Encryption: No`, and has the build-90 What to
+  Test copy saved.
+- Attached build 90 to the public external `rec.me Alpha` group, submitted it
+  for beta review with automatic tester notifications, and verified the final
+  status is `Testing` (live/approved).
+- Posted the required tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784757478230379
+- Added the PR, merge, validation, archive, TestFlight, and Slack details to
+  `REC-110`, then moved the issue from In Review to Done.
+- Release validation remains 506/506 tests with zero failures or skips on
+  iPhone 17 Pro / iOS 26.5 plus a successful generic iOS Simulator build. The
+  requested iPhone 16 Plus / iOS 18.6 runtime was unavailable on this Mac.
+
+Outcome: REC-110 is shipped in public TestFlight build 90. No release follow-up
+is required beyond tester feedback.
+
+## 2026-07-20 15:36 PDT - Codex - REC-106 Instagram carousel import investigation
+
+Agent: Codex using the Linear, `recme-linear-log-triage`, and `investigate`
+workflows
+Branch: `codex/rec-106-instagram-carousel`
+Worktree: `/private/tmp/recme-rec106-instagram-carousel`
+Linear: `REC-106` (`In Progress`)
+
+Goal: reproduce why the supplied 12-slide Instagram post yields only Fremont
+Lake, Half Moon Lake Lodge, and Pine Coffee Supply despite its caption and
+slides naming at least nine candidate places; confirm the failing layer, add a
+regression test, implement the smallest verified fix, and leave an Xcode-ready
+branch for Ryan.
+
+Starting state and coordination:
+
+- Created REC-106 as a High-priority Bug assigned to Ryan, related it to
+  REC-97, linked the exact Instagram post, and attached the observed Import
+  Review plus all nine supplied source-carousel screenshots.
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` `339cba2e0`. The root checkout remains on unrelated stale
+  `codex/rec-88-visit-friends-mockup` with untracked `.pnpm-store/`; it will not
+  be modified. No active worktree or latest agent-log entry declares overlap
+  with REC-106.
+- Current status is clean. Expected scope is the Instagram/import extraction
+  adapter and focused tests, plus `docs/agent-log.md`; exact source files will
+  be narrowed after tracing extraction, resolution, persistence, and recent
+  REC-97 history. No build-number bump, TestFlight release, hosted data reset,
+  or unrelated UI work is in scope.
+
+Checkpoint, 2026-07-20 16:04 PDT:
+
+- Confirmed this Profile import flow is entirely device-local: the public page
+  is fetched on-device, candidates are resolved with MapKit, and batches/items
+  live only in `place-imports-v1.json`. PostHog/Supabase cannot explain this
+  incident because the flow currently emits no hosted rows or import events.
+- Reproduced the exact caption failure before production edits on the installed
+  iPhone 17 Pro / iOS 26.5 simulator: the new focused regression returned only
+  Fremont Lake, Half Moon Lake Lodge, White Mountain Petroglyphs, and Pine
+  Coffee Supply instead of the expected eight (`exit 65`, one assertion
+  failure). The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not
+  installed on this machine, so all executable validation uses the available
+  iOS 26.5 runtime and records that environment difference.
+- Root cause: the production resolver capped social hints at eight while the
+  extractor inserted five account handles before itinerary phrases; a greedy
+  phrase match also swallowed Green River Lakes, failed/weak MapKit hints were
+  silently discarded, and only the single Open Graph cover was OCR'd.
+- The live public page exposes full caption text plus a bounded, parseable
+  embedded JSON object for the exact shortcode with 12 ordered carousel
+  children and 12 HTTPS cover frames. Expanded the fix accordingly: bounded
+  exact-shortcode carousel parsing, four-at-a-time Vision OCR, caption/slide
+  hint prioritization up to 24, independent continuation after failed slides,
+  honest unresolved rows, privacy-safe count/rejection diagnostics, and
+  resolver version 5 so existing three-row results automatically requeue.
+- Focused post-fix validation passed 4/4 tests: exact eight-place caption,
+  12-slide parser, unresolved-place retention, and store persistence of nine
+  destinations with three simulated slide OCR failures. A broader 28-test
+  import run found one existing handle-query normalization regression; restored
+  exact handle extraction and its focused test now passes. `xcodegen generate`
+  completed without project-file churn; `git diff --check` is clean.
+
+Completion checkpoint, 2026-07-20 16:50 PDT:
+
+- Live-source verification fetched the exact supplied post successfully
+  (HTTP 200; 632,907 bytes), selected the exact `Dak2JCClKkF` embedded object
+  rather than decoys/partial duplicates, and found all 12 ordered carousel
+  frames. Every extracted Meta CDN image returned HTTP 200 `image/jpeg`.
+  Captured live OCR/accessibility strings drive the end-to-end regression,
+  which now produces these nine ordered destinations: Fremont Lake, Green
+  River Lakes, Half Moon Lake Lodge, White Mountain Petroglyphs, Flaming
+  Gorge, Wind River Range, Skyline Drive Overlook, Pine Coffee Supply, and
+  Farson Mercantile.
+- Final implementation parses a bounded exact-shortcode carousel, rejects
+  untrusted source/redirect/media hosts, OCRs unique slides concurrently in
+  bounded groups, preserves per-slide provenance, prioritizes destination
+  phrases before raw handles, retains explicitly named unmatched places for
+  review, and emits privacy-safe import counts. Existing social imports below
+  resolver v5 are reprocessed atomically; metadata failure, cancellation, a
+  total MapKit outage, or a mid-import MapKit outage restores every prior row.
+- Independent review caught and drove five final hardening changes: OCR's
+  one-character correction is opt-in only for image-text hints, any MapKit
+  lookup error aborts a source refresh, duplicate payload ranking prefers
+  usable image URLs, and persisted carousel order uses the stored array ordinal
+  as an explicit tiebreaker. In addition, snapshot writes substitute the old
+  rows for every still-pending resolver upgrade, so completing one import cannot
+  strand another import's temporary placeholder across app termination. The
+  five original targeted review regressions passed 5/5; a three-test
+  persistence/relaunch gate, including the new two-group interruption case,
+  passed 3/3.
+- Validation is green on the installed iPhone 17 Pro / iOS 26.5 simulator:
+  import suites passed 43/43 and the full Wander suite passed 484/484. The
+  required generic iOS Simulator build succeeded; `xcodegen generate`
+  succeeded with no project-file diff; `git diff --check` is clean. The
+  repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed here, so
+  that exact destination remains an environment gap for Ryan's local Xcode
+  check, not an asserted pass.
+- Files changed: `Wander/Models/PlaceImportModels.swift`,
+  `Wander/Services/PlaceImportCandidateMatcher.swift`,
+  `Wander/Services/PlaceImportStore.swift`,
+  `Wander/Services/SocialPlaceImportMetadata.swift`,
+  `Wander/Services/WanderDebugLog.swift`, `WanderTests/PlaceImportTests.swift`,
+  and this log. No schema/data mutation, build-number bump, TestFlight upload,
+  or tester announcement occurred. Ready to commit, publish a ready PR, link it
+  to REC-106, and move the issue to `In Review` for Ryan's device/Xcode test.
+
+Publication checkpoint, 2026-07-20 22:17 PDT:
+
+- Committed the implementation as `5ab743368` (`REC-106: Fix Instagram
+  carousel place imports`), pushed `codex/rec-106-instagram-carousel`, and
+  opened ready PR #137: https://github.com/joelipshutz/wander/pull/137. The PR
+  links REC-106 and records the root cause, nine expected destinations, safety
+  behavior, and complete validation evidence.
+- Local `gh` authentication was stale and the GitHub connector could not create
+  a pull request with its integration permissions, so the signed-in GitHub web
+  UI was used to publish and verify the ready (non-draft) PR. This did not alter
+  implementation scope or validation.
+- Linear REC-106 is being handed off in `In Review` with PR #137 attached.
+  Ryan's next step is to open this worktree in Xcode, paste the supplied
+  Instagram URL, and confirm the nine ordered candidates on his simulator or
+  device. The only known validation gap remains the unavailable iPhone 16 Plus
+  / iOS 18.6 runtime; all automated tests and the generic simulator build are
+  green on the installed Xcode/iOS 26.5 environment.
+- No build-number bump, TestFlight upload, release attachment, hosted data
+  mutation, or Slack announcement was requested or performed.
+
+Xcode handoff follow-up, 2026-07-20 22:29 PDT:
+
+- Ryan clarified that every pushed branch intended for his local testing must
+  also be opened in Xcode before handoff. Opened
+  `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in Xcode and
+  verified the visible Branch Chooser reports
+  `codex/rec-106-instagram-carousel`; the selected run destination is Ryan's
+  iPhone. Xcode began normal package resolution/indexing for this worktree.
+- Added the durable handoff rule to `AGENTS.md`: open the isolated branch
+  worktree as its own Xcode project and verify the Branch Chooser, without
+  switching or overwriting another active checkout. This follow-up changes
+  process documentation only; app code and prior validation are unchanged.
+
+Regression follow-up, 2026-07-20 23:06 PDT:
+
+- Ryan's first real-device test exposed a blocker: the newly imported source
+  appeared as a `needsHelp` row titled `instagram.com` with “Retry automatic
+  match” instead of the extracted destinations. Reviewed the supplied 22:57
+  screenshot and the live Xcode console on `Ry’s iPhone` before editing.
+- The console proves carousel fetch/OCR did work: 12 media discovered, 12 OCR
+  attempts, 13 hints, five resolved entries, and four honest unresolved
+  entries. Production MapKit throws `PlaceResolutionError.noCandidates` for an
+  ordinary zero-result search, but `DevicePlaceImportResolver.socialResolution`
+  counted that as a service failure and discarded all nine accumulated rows.
+  Repeated manual retries then also triggered Apple Maps' 50-searches-per-minute
+  throttle. Expected edit scope is
+  `Wander/Services/PlaceImportStore.swift`, focused import regressions, and this
+  log. Existing-upgrade rollback behavior must remain intact.
+- The `/ios-fix` DebugBridge snapshot endpoint is not installed in this app, so
+  `GET /state/snapshot` is unavailable without expanding the project with
+  debug-only instrumentation. The user-supplied pre-fix screenshot plus the
+  live console trace are the reproducing evidence; the durable regression
+  fixture will be an executable store/resolver test that injects the same
+  partial MapKit lookup failure.
+
+Regression implementation checkpoint, 2026-07-20 23:23 PDT:
+
+- Copied the physical-device import snapshot to a temporary directory with
+  `xcrun devicectl` and inspected only the failing row. It contains the exact
+  REC-106 URL, no name/candidates, resolver version 5, and the source-level
+  temporary-MapKit help message. The device Run binary UUID matches the Xcode
+  build, ruling out a stale install. No private snapshot content was committed.
+- Fixed the semantic mismatch: `PlaceResolutionError.noCandidates` now follows
+  the normal unmatched-hint path instead of counting as an outage. A genuine
+  per-hint MapKit error now preserves named partial rows for a fresh import;
+  resolver-version upgrades still restore all prior rows atomically if their
+  refresh is incomplete. A generic `instagram.com` row remains possible only
+  when a real service failure leaves no usable named entry at all.
+- Added production-faithful regression coverage for a no-candidate throw, a
+  transient per-hint failure, existing-row rollback, and the exact 12-slide REC-106
+  fixture. The fixture now logs 13 hints, nine resolved destinations, four
+  ordinary no-candidate hints, and zero lookup failures.
+- Validation: four focused regression tests passed; the full suite passed 486
+  tests with zero failures; `xcodegen generate` produced no tracked project
+  churn; and the generic iOS Simulator build succeeded. The first sandboxed
+  generic build could not access CoreSimulator/SwiftPM caches, so the identical
+  build was rerun with the repository-prescribed elevated access and passed.
+  An independent read-only diff review found no P0/P1 issues and confirmed that
+  enum handling, cancellation, fresh-import partial results, and upgrade
+  rollback are exhaustive and correctly scoped.
+
+Regression publication and device handoff, 2026-07-20 23:29 PDT:
+
+- Committed the repair as `da6900232` (`REC-106: Preserve partial Instagram
+  imports`) and pushed it to `origin/codex/rec-106-instagram-carousel`, updating
+  ready PR #137: https://github.com/joelipshutz/wander/pull/137. Updated the PR
+  description with the real-device root cause, repaired semantics, and current
+  486-test validation. The PR remains open and was not merged.
+- Added a Linear REC-106 comment with the failure evidence, fix commit, test
+  results, and device retest instructions. REC-106 remains `In Review` until
+  Ryan confirms the existing failed row can be retried or the supplied URL can
+  be imported again with all nine named destinations preserved.
+- Opened `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` in
+  Xcode, verified the Branch Chooser is `codex/rec-106-instagram-carousel`, set
+  the destination to `Ry’s iPhone`, and ran the repaired app on the physical
+  device. The import queue was preserved; Ryan's next action is to tap `Retry
+  automatic match` on the existing `instagram.com` row or paste the URL again.
+- Final validation remains four focused regressions passed, 486/486 full-suite
+  tests passed, generic iOS Simulator build passed, `xcodegen generate` passed
+  without project churn, `git diff --check` passed, and independent review had
+  no P0/P1 findings. No build-number bump, TestFlight upload, merge, hosted data
+  mutation, or Slack announcement was requested or performed.
+
+Manual place-search regression follow-up, 2026-07-20 23:44 PDT:
+
+- Ryan reported that some recovered Instagram destinations correctly remain
+  unresolved with a `Search for this place` action, but typing a place name and
+  city and pressing Search produces no visible result. Reopened REC-106 as `In
+  Progress` and resumed the existing isolated worktree/branch. The worktree is
+  clean and synchronized with
+  `origin/codex/rec-106-instagram-carousel`; no overlapping edits are recorded.
+- Investigation will first capture a reproducing device/store snapshot, then
+  trace the manual-search UI action through the import store and MapKit resolver.
+  Expected scope is the import-review/manual-match view, its store/resolver
+  contract, focused regression tests, and this log. No Swift edit will be made
+  until the dead Search action has a durable reproducer.
+
+Manual place-search reproduction checkpoint, 2026-07-20 23:51 PDT:
+
+- Captured the current physical-device import snapshot without mutating app
+  state. The exact REC-106 batch contains nine rows: five ready, one ambiguous,
+  and three named `needs_help` rows. The Farson Mercantile row proves the Search
+  callback fired: its seed was updated to `FARSON MERCANTILE` / `Wyoming` at
+  23:27:24 PDT, then persisted with zero candidates and the message `No matching
+  Apple Maps place was found. Try a nearby city or neighborhood.` The source
+  snapshot SHA-256 is
+  `1fa45b1afb2dc9d04a8829b8301a53ad64af7244dc130ea04d0db3799807ecec`;
+  only a minimized, public REC-106 row was copied into the test fixture.
+- Root cause is now reproduced: the rescue sheet starts a fire-and-forget retry
+  and dismisses before its result; the unresolved row never renders the stored
+  `helpMessage`, so no-result, throttling, and transport failures redraw the same
+  Search action and look like a dead button. A second loss path converts one
+  low-confidence MapKit candidate into `needs_help`, making that candidate
+  inaccessible instead of reviewable.
+- Added `WanderTests/Fixtures/rec-106-manual-place-search-pre.json` as the durable
+  minimized pre-fix store snapshot. This checkout intentionally has no
+  DebugBridge/StateServer, and the paired phone disconnected after the trace, so
+  the skill's HTTP state/screenshot endpoints remain unavailable; per the repo's
+  established exception, the physical app-container snapshot plus deterministic
+  Swift regression tests are the reproducible evidence. Planned fix: await the
+  search, keep the sheet open with visible failure feedback, wire keyboard
+  submit, and preserve even one weak result for explicit user review.
+
+Manual place-search implementation and validation, 2026-07-21 00:14 PDT:
+
+- Replaced the fire-and-forget rescue action with an awaited manual-search
+  result. The sheet now shows an in-progress state, keeps and displays MapKit
+  failures, supports the keyboard Search action, and automatically opens the
+  candidate picker when review is needed. The unresolved inbox row also renders
+  its persisted `helpMessage`, so a no-result or temporary Maps failure cannot
+  look like a dead button. Cancel and swipe-to-dismiss remain available during a
+  slow lookup; the import row still updates when the request completes.
+- Scoped weak-candidate preservation to explicit typed searches through a
+  separate resolver entry point. Ordinary automatic imports retain their prior
+  safety contract and still reject a lone unrelated result. A typed search may
+  retain even one low-confidence candidate for human review instead of hiding
+  it. Successful exact matches still become ready automatically.
+- Added state-and-seed validation around asynchronous resolver completion so an
+  older result or failure cannot overwrite a newer typed query, retry,
+  selection, save, or dismissal. Manual-search markers are cleared on every
+  terminal state transition. Deterministic tests cover overlapping searches and
+  dismissal while a result is in flight.
+- Added the minimized public REC-106 physical-device snapshot as a test resource
+  and regenerated `Wander.xcodeproj` with XcodeGen. No private app-container
+  data was committed. Focused validation passed 6/6 tests, including the existing
+  lone-unrelated-result guard; the full suite passed 491/491 tests on iPhone 17
+  Pro / iOS 26.5; the generic iOS Simulator build passed; `xcodegen generate`
+  and `git diff --check` passed. The first full-suite attempt ended before XCTest
+  bootstrapped because the simulator test host was killed; its result bundle
+  reported zero executed tests, and the identical elevated rerun passed all 491.
+- An independent read-only review caught and drove fixes for automatic-import
+  scope, cancellability, stale async results, and deterministic concurrency-test
+  setup. The final review reports no remaining production or test findings.
+
+Manual place-search publication and Xcode handoff, 2026-07-21 00:19 PDT:
+
+- Committed the validated fix as `d50d7ae15` (`REC-106: Fix manual place
+  search`) and pushed it to `origin/codex/rec-106-instagram-carousel`. Updated
+  ready PR #137 with the physical-device evidence, manual-search root cause,
+  repaired behavior, and current 491-test validation:
+  https://github.com/joelipshutz/wander/pull/137. The PR remains open and was
+  not merged.
+- Added a detailed REC-106 Linear comment with the explanation for honest
+  unresolved Search rows, fix, validation, and concrete retest steps. Moved
+  REC-106 from `In Progress` to `In Review` for Ryan's physical-device retest.
+- Verified through Xcode UI that
+  `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` is open and the Branch
+  Chooser reports `codex/rec-106-instagram-carousel`; the selected destination
+  remains `Ry’s iPhone`. Started a fresh Run after the push. Xcode built the
+  branch, then presented its local-network device-discovery sheet because the
+  phone was unavailable on cable/LAN; cancelled that wait and left the correct
+  branch/project open for Ryan. Do not claim a fresh physical-device launch
+  until the phone reconnects.
+- Final handoff remains 6/6 focused regressions passed, 491/491 full-suite tests
+  passed, generic iOS Simulator build passed, XcodeGen and diff checks passed,
+  and independent final review clean. No merge, build-number bump, TestFlight
+  upload, hosted data mutation, or Slack announcement was requested or
+  performed.
+
+Instagram relevance and geographic-resolution follow-up, 2026-07-21 10:43 PDT:
+
+- Ryan reported that the current REC-106 branch admits an incidental entity
+  (`Veterans of Amboy`) alongside the reel's actual subject (`Frank n Franks`),
+  and that three Wyoming carousel destinations resolve with missing or wrong
+  geographic context: Farson Mercantile, Skyline Drive Overlook, and Flaming
+  Gorge. Exact Instagram, Apple Maps, and Google Maps references are recorded
+  in REC-106.
+- Reopened REC-106 as `In Progress` and added the new production evidence.
+  Continuing in the existing isolated worktree on
+  `codex/rec-106-instagram-carousel`; the checkout is clean, synchronized with
+  its remote branch, and seven commits ahead of `origin/main`. The main
+  checkout is on unrelated REC-88 work, so no overlap is expected.
+- Investigation scope: social-candidate provenance/relevance, post-level
+  geographic context propagation, MapKit query construction and canonical
+  matching, deterministic regression fixtures/tests, and this coordination
+  log. OpenAI-assisted extraction/reranking will be evaluated against the
+  existing backend boundary; no API key will be placed in the iOS client.
+- No Swift edits will be made until exact pre-fix fixtures reproduce the wrong
+  extra entity and the Wyoming-to-California/Los Angeles search drift. Expected
+  files are import extraction/resolution services and their focused tests;
+  additional files will be logged before editing if the confirmed root cause
+  crosses that boundary.
+
+Instagram relevance and geographic-resolution investigation checkpoint, 2026-07-21 11:22 PDT:
+
+- Added exact public regression fixtures before production changes. Eight
+  focused tests reproduced 15 failures: the Frank N Frank's reel queried and
+  imported `Veterans of Amboy`; every Wyoming carousel lookup discarded its
+  post-wide state; Farson's `Merc` alias and Flaming Gorge's `Reservoir` suffix
+  did not match; an exact-name California candidate beat Wyoming context; and a
+  state-only typed search polluted the natural-language query instead of
+  bounding MapKit geographically. The pre-fix result bundle is
+  `DerivedData-rec106-prefx/Logs/Test/Test-Wander-2026.07.21_10-59-36--0700.xcresult`
+  and remains untracked generated output.
+- Root cause was split across extraction, search, and matching. The extractor's
+  unrestricted bare `from` rule treated creator provenance as an itinerary
+  destination. Post-wide Wyoming evidence was never inherited by per-slide
+  hints. MapKit searches were unbounded, while the matcher gave geography only
+  a small bonus and did not normalize full state names/codes or known provider
+  aliases. Resolved rows then overwrote stronger creator-facing names with
+  MapKit aliases.
+- Implemented bounded deterministic repairs in
+  `SocialPlaceImportMetadata.swift`, `MapKitPlaceResolver.swift`,
+  `PlaceImportCandidateMatcher.swift`, `PlaceImportStore.swift`, and
+  `PlaceImportModels.swift`: attribution-safe phrase extraction; one-state
+  travel-context inheritance; region-biased MapKit requests; bounded provider
+  query variants; hard rejection of contradictory known states; `WY`/Wyoming,
+  `Merc`/`Mercantile`, and geographic provider-suffix normalization; source-name
+  preservation with provider identity/metadata retained; and resolver version 6
+  so persisted bad social rows are reprocessed.
+- Validation now passes 63/63 import tests and 498/498 full-suite tests on
+  iPhone 17 Pro / iOS 26.5. `git diff --check` passes. A historical manual-search
+  test fixture was explicitly normalized to the current resolver version so it
+  tests typed-search behavior without racing the intentional production upgrade;
+  its fake candidates now use the Wyoming geography required by the new safety
+  contract.
+- OpenAI is appropriate for a later authenticated server-side evidence-role and
+  geographic-context stage, not as a client secret or map authority. Created
+  child follow-up REC-120 under REC-97 for strict candidate-closed structured
+  output, auth/quotas/evals, privacy-safe observability, physical-device QA, and
+  an approved provider/licensing strategy. The exact deterministic REC-106 fixes
+  do not require OpenAI. Apple currently has no reliable searchable Skyline
+  Drive Overlook POI, so this patch rejects Los Angeles results and leaves that
+  named destination honestly unresolved instead of inventing a match.
+
+Instagram relevance and geographic-resolution final validation, 2026-07-21 12:02 PDT:
+
+- Three independent read-only review passes drove additional hardening before
+  publication: city/state suffix parsing now prefers the rightmost explicit
+  state; `LA` remains Los Angeles unless Louisiana syntax is unambiguous;
+  Georgia the country is not forced into the U.S. state; OCR-only geography
+  cannot leak across carousel slides; state-named venues such as California
+  Grill cannot become post-wide geography; and creator-attribution filtering
+  preserves legitimate venues such as Friends & Family and Friendship Coffee.
+  The final reviewer found no remaining P1/P2 issue in the changed REC-106 scope.
+- Final focused geography/relevance validation passed 4/4. The complete import
+  suite passed 73/73 at
+  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-58-45--0700.xcresult`;
+  the complete app suite passed 508/508 at
+  `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_11-59-31--0700.xcresult`;
+  and a generic iOS Simulator build passed for arm64 and x86_64. Generated
+  DerivedData directories remain untracked and are excluded from publication.
+- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed on
+  this Mac; tests used the available iPhone 17 / iOS 26.5 runtime. The generic
+  simulator build covers both simulator architectures. `git diff --check`
+  passes. No build-number bump, TestFlight upload, hosted data mutation, or
+  merge was requested or performed.
+- Publication remains on branch `codex/rec-106-instagram-carousel` and existing
+  PR #137 (https://github.com/joelipshutz/wander/pull/137). REC-106 will return
+  to `In Review` after the push. Ryan still needs to clear/reimport the two exact
+  Instagram URLs because resolver version 6 intentionally reprocesses older
+  social-import rows.
+
+Instagram relevance and geographic-resolution publication, 2026-07-21 12:06 PDT:
+
+- Committed the validated implementation as `e0f90e07a` (`REC-106: Fix social
+  import relevance and geography`) and pushed it to
+  `origin/codex/rec-106-instagram-carousel`; the existing open PR #137 now
+  contains the commit. GitHub PR metadata/comment writes could not be refreshed
+  because both the local `gh` token and the installed GitHub integration lack
+  write access, but this did not block the authenticated git branch push.
+- Added the final behavior, validation, retest instructions, Skyline limitation,
+  and REC-120 follow-up to REC-106 in Linear, then moved REC-106 to `In Review`.
+  No merge or release action was performed.
+- Opened `/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` through Xcode and
+  verified the Branch Chooser reports `codex/rec-106-instagram-carousel` with
+  `Ry’s iPhone` selected. Started a fresh Run; Xcode reached the phone but is
+  waiting on `Unlock Ry’s iPhone to Continue`. The project/branch and pending
+  run are intentionally left open so Ryan can unlock the phone and test. Do not
+  claim a fresh device launch until that lock-screen gate completes.
+
+## 2026-07-21 16:09 PDT - Codex - REC-106 100-place Instagram guide regression
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/rec-106-instagram-carousel`
+Worktree: `/private/tmp/recme-rec106-instagram-carousel`
+Linear: `REC-106` (reopened as `In Progress`, priority raised to Urgent)
+PR: https://github.com/joelipshutz/wander/pull/137
+
+Goal: reproduce and fix the exact public Instagram guide at
+`https://www.instagram.com/p/DU6kxigDOD-/`, which explicitly lists 100 coffee
+shops with geographic context but produced only 24 review rows, including
+neighboring entries merged into malformed names.
+
+Starting status:
+
+- Fetched `origin`; this isolated branch is synchronized with its remote at
+  `c422dcd3a`. The only worktree changes are two untracked REC-106 DerivedData
+  directories from prior green validation. They will remain untracked and will
+  not be removed or committed. The main checkout has unrelated user/agent
+  changes on `codex/rec-88-visit-friends-mockup`; no files there will be edited.
+- Reviewed the supplied 16:05 physical-device screenshot. It proves the failure
+  begins before MapKit: entries such as `NOMADIC SPECIALTY COFFEE / EGYPT` and
+  `CASA CANELA / VENEZUELA` are fused into one import hint, and other rows lose
+  their supplied country boundary. Apple Maps cannot reliably resolve corrupted
+  candidate names, and repeated lookups can then hit provider limits.
+- REC-106 now records the exact URL, malformed examples, observed 24/100 count,
+  and acceptance criteria: preserve all 100 ordered entries as distinct hints,
+  retain source geography, avoid cross-entry fusion, keep ordinary no-match
+  rows honest, and verify the full path with a production-faithful golden
+  fixture before returning the build to Xcode.
+- Investigation will trace live carousel/media discovery, per-slide OCR line
+  ordering, delimiter and candidate segmentation, hint/search caps, MapKit
+  request scheduling/throttling, and persistence. No Swift edit will be made
+  until the exact fixture reproduces the 24-row truncation and fused names.
+- Expected implementation scope is
+  `Wander/Services/SocialPlaceImportMetadata.swift`,
+  `Wander/Services/PlaceImportStore.swift`, related import parsing/matching
+  services as evidence requires, `WanderTests/PlaceImportTests.swift`, fixture
+  resources, and this log. `project.yml`, schema/RLS, auth, release metadata,
+  and unrelated product surfaces are out of scope.
+
+Investigation checkpoint, 2026-07-21 16:47 PDT:
+
+- Reproduced the public source outside the app with the same anonymous iPhone
+  request shape. Instagram returned the complete post and exactly two original
+  1440 x 1795 carousel images. The caption and accessibility text contain none
+  of the shop names; ranks 1-50 are rasterized in slide one and ranks 51-100 in
+  slide two.
+- The exact 24-row device result is deterministic: the embedded parser chooses
+  each 513 x 640 `display_uri` before the original image candidate; generic OCR
+  emits at most 12 search queries per slide; `socialResolution` requests a
+  global maximum of 24 hints; and the extractor then returns `prefix(24)`.
+- The malformed rows have a separate confirmed cause. Vision bounding boxes are
+  discarded, adjacent flattened lines are blindly concatenated across a dense
+  two-column layout, and `NAME / COUNTRY` is not a recognized import schema.
+  Full-resolution Vision OCR on isolated columns recovered 25 + 25 rows from
+  slide one and 25 + 25 from slide two, including wrapped entries such as Ditta
+  Artigianale, Momos, and Casa Barista, proving all 100 rows are available.
+- MapKit is downstream of extraction and must not be asked to repair corrupted
+  names. It also cannot safely receive a foreground burst of 100 searches; the
+  prior physical-device run observed throttling near 50 searches per minute.
+  The implementation will therefore persist all explicit source rows first and
+  enrich large guide rows through one shared paced automatic queue. Explicit
+  user searches remain immediate.
+- The bounded implementation stays within five files including this log:
+  `SocialPlaceImportMetadata.swift` for full-resolution selection, geometry-
+  aware guide OCR, slash-country parsing, and country normalization;
+  `PlaceImportStore.swift` for durable 100-row expansion, pacing, and country-
+  compatible candidates; `PlaceImportModels.swift` for resolver version 7;
+  `PlaceImportTests.swift` for the exact 100-row regression; and this log.
+  OpenAI is not required for this deterministic guide layout, and no client API
+  key or unrelated server architecture will be added in this patch.
+
+Implementation and validation checkpoint, 2026-07-21 17:12 PDT:
+
+- Implemented full-resolution Instagram media selection instead of preferring
+  the 513 x 640 `display_uri`. Dense guide OCR now retains Vision geometry,
+  isolates the two columns, reconstructs wrapped name/country fragments, and
+  parses explicit `NAME / COUNTRY` rows without the generic adjacent-line
+  heuristic fusing neighboring entries.
+- Added country-name/ISO normalization and hard rejection of MapKit candidates
+  from a conflicting explicit country. U.S. state areas are evaluated first so
+  values such as `CA` remain California rather than becoming Canada. This edge
+  case was caught by the complete import suite before publication.
+- Raised the extraction budget to 150, but do not issue a 100-request MapKit
+  burst. Guides larger than 24 entries expand into durable ordered rows first.
+  The store then enriches those queued social rows through one shared automatic
+  lookup pacer at 1.5 seconds between starts (40/minute); explicit user searches
+  bypass the pacer and remain immediate.
+- Bumped the social resolver version from 6 to 7 so prior REC-106 imports are
+  collapsed back to their source URL and reprocessed rather than remaining
+  stuck with the old truncated/corrupted result.
+- Ran the production Vision recognizer against the exact two original 1440 x
+  1795 images from `DU6kxigDOD-`. It reconstructed 100 ordered shops and all 100
+  country values. Vision normalized two accents (`CAFÉ` to `CAFE`), which the
+  existing matcher intentionally treats as equivalent. The temporary
+  absolute-path test used for this live verification was removed; no downloaded
+  Instagram asset or local path is part of the branch.
+- Permanent regression coverage includes the complete ordered 100-shop golden
+  list, durable 100-row expansion before any map request, persistence/order and
+  batch counts, full-resolution media choice, split/wrapped row geometry,
+  wrong-country rejection, and the existing small-post behavior.
+- Validation after the final state/country fix:
+  - `SocialPlaceImportMetadataTests`: 40/40 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_16-54-51--0700.xcresult`.
+  - Complete import regression set: 79/79 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-03-24--0700.xcresult`.
+  - Full `WanderTests`: 514/514 passed, result bundle
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-04-07--0700.xcresult`.
+  - Generic iOS Simulator build completed with `** BUILD SUCCEEDED **`.
+  - One temporary live-image retry caused the iOS Simulator test runner to exit
+    after the earlier Vision stress runs. `simctl shutdown all` restored the
+    runtime; the focused regression, 79-test import suite, 514-test full suite,
+    and generic build all passed afterward. This was simulator infrastructure,
+    not an app assertion or compile failure.
+- OpenAI is deliberately not used for this exact guide. Its source has a
+  deterministic two-column schema and all 100 names/countries are present in
+  pixels; adding a client API key would introduce security, latency, cost, and
+  hallucination risk without addressing the confirmed truncation/geometry bug.
+  Server-side relevance classification for ambiguous prose remains separate
+  REC-120/REC-97 architecture work.
+- Changed files remain limited to
+  `PlaceImportModels.swift`, `PlaceImportStore.swift`,
+  `SocialPlaceImportMetadata.swift`, `PlaceImportTests.swift`, and this log.
+  `DerivedData-rec106*` remains untracked and must not be staged. PR #137 is the
+  durable review link; the branch will be updated from latest `origin/main`,
+  committed, pushed, and reopened in Xcode for physical-device testing.
+
+Reviewer-hardening checkpoint, 2026-07-21 17:31 PDT:
+
+- Independent review identified and the implementation now fixes four
+  downstream correctness gaps before publication: concurrent automatic batches
+  cannot burst through the MapKit pacer; manual searches jump ahead of a
+  100-row automatic backlog and return when that row finishes rather than when
+  the entire batch finishes; manual-search intent is persisted across app
+  termination; and an explicit country rejects candidates whose country is
+  conflicting, missing, or unrecognized.
+- The pacer records the last actual grant and rechecks spacing after every
+  suspension, preserving its 1.5-second minimum even when multiple waiters wake
+  together after app suspension. A cancelled waiter does not consume a slot.
+  Manual priority and relaunch behavior are durable through the optional
+  `pendingManualSearch` item field; synthesized Codable keeps old v1 snapshots
+  backward compatible when that key is absent.
+- All 100 guide children keep the pasted Instagram URL's original source line.
+  Stable store offsets keep those children contiguous ahead of the next pasted
+  URL rather than synthesizing source-line values that collide and interleave
+  with later sources.
+- Added the 10.5 KB text-only fixture
+  `WanderTests/Fixtures/rec-106-guide-observations.tsv`, containing 191 real
+  Vision strings and normalized bounding boxes captured from the four columns
+  of the supplied two slides. It contains no Instagram pixels. The permanent
+  regression passes those noisy observations through the production geometry
+  parser and asserts all 100 ordered names/countries, including wrapped and
+  split rows. Ran `xcodegen generate` so the generated Xcode project bundles the
+  fixture; the four-line project change is intentional.
+- Focused reviewer regressions passed on the available iPhone 17 / iOS 26.5
+  simulator:
+  - 5/5 guide expansion/manual priority/pacer/country tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-23-31--0700.xcresult`.
+  - 4/4 captured-geometry/manual durability/pacer tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-27-39--0700.xcresult`.
+  - 3/3 pre-lookup persistence/relaunch, multi-source ordering, and exact
+    geometry tests at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-29-24--0700.xcresult`.
+  - Complete import regression suite: 84/84 passed at
+    `DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-31-11--0700.xcresult`.
+- The repo-prescribed iPhone 16 Plus / iOS 18.6 simulator became unavailable
+  after the local Xcode runtime update; the prior complete 514-test pass ran on
+  that destination before it disappeared, and current focused validation uses
+  the installed iPhone 17 / iOS 26.5 runtime. A fresh complete import/full suite
+  and build will run again after integrating latest `origin/main`.
+REC-106 latest-main integration checkpoint, 2026-07-21 17:36 PDT:
+
+- Committed the complete guide implementation as `111e600ab` (`REC-106:
+  Import complete Instagram guides`), then merged latest `origin/main`
+  `1c39e2c13`, which includes Feed, list-photo, and TestFlight build-85 work.
+- The merge touched no REC-106 Swift implementation or test logic. Conflicts
+  were limited to append-only `docs/agent-log.md` and generated
+  `Wander.xcodeproj/project.pbxproj`; retained both histories and regenerated
+  the project from merged `project.yml`. The generated project now includes
+  all latest-main sources, build 85, and the REC-106 text fixture.
+- Pre-merge final independent review found no P0/P1/P2 issue (confidence 9/10)
+  across guide extraction/order/persistence, manual-search races/durability,
+  pacer behavior, exact-country filtering, optional-Codable compatibility, and
+  captured Vision fixture fidelity. Fresh merged import/full tests and a
+  generic simulator build remain the final publication gate.
+
+REC-106 latest-main validation checkpoint, 2026-07-21 17:42 PDT:
+
+- The exact merged source passed the complete iPhone 17 / iOS 26.5 simulator
+  suite: 542/542 tests, zero failures or skips. Result bundle:
+  `/private/tmp/recme-rec106-instagram-carousel/DerivedData-rec106/Logs/Test/Test-Wander-2026.07.21_17-37-57--0700.xcresult`.
+- The exact merged source also passed the generic iOS Simulator build with
+  `CODE_SIGNING_ALLOWED=NO`. The build retains two pre-existing Swift
+  concurrency warnings in `WanderSupabaseClient` from latest main; no REC-106
+  compiler warning or error was introduced.
+- Publication is now limited to concluding the merge, pushing
+  `codex/rec-106-instagram-carousel`, updating PR #137 and Linear REC-106, and
+  opening/running that exact branch in Xcode on Ry's connected iPhone. No
+  TestFlight build or release was requested.
+
+REC-106 Xcode handoff checkpoint, 2026-07-21 17:44 PDT:
+
+- Concluded the latest-main merge as `69a3f1340`; `origin/main` is an ancestor
+  of the branch and the working tree contains no tracked changes after the
+  merge. Generated `DerivedData-rec106*` folders remain intentionally
+  untracked and are excluded from publication.
+- Xcode's device tools currently report `Ry’s iPhone` (iPhone 15 Pro) as
+  `unavailable`, and the Mac is locked. The exact branch is therefore ready to
+  open/run, but deployment cannot begin until the Mac and phone are unlocked
+  and the device becomes an available Xcode destination.
+- Next action: push the branch, update ready PR #137 and REC-106 to In Review,
+  then open `/private/tmp/recme-rec106-instagram-carousel/Wander.xcodeproj` and
+  Run on `Ry’s iPhone` as soon as the device-side blocker is cleared.
 REC-106 final latest-main validation, 2026-07-21 17:50 PDT:
 
 - A last pre-push fetch found `origin/main` had advanced to `106093f6a` with

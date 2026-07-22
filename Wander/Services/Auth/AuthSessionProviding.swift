@@ -133,11 +133,19 @@ protocol AuthSessionProviding: AnyObject {
     func signOut() async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
+    func refreshSupabaseAccessToken() async throws -> String
 }
 
 extension AuthSessionProviding {
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
+    }
+
+    /// Providers that do not maintain a server-token cache can treat a forced
+    /// refresh as an ordinary token request. Clerk overrides this to bypass
+    /// its short-lived in-memory cache after an authorization response.
+    func refreshSupabaseAccessToken() async throws -> String {
+        try await supabaseAccessToken()
     }
 }
 
@@ -213,6 +221,24 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         } catch {
             #if DEBUG
             WanderDebugLog.remote.error("auth store supabase token failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+            #endif
+            throw error
+        }
+    }
+
+    func refreshSupabaseAccessToken() async throws -> String {
+        #if DEBUG
+        WanderDebugLog.remote.debug("auth store forced supabase token refresh requested state=\(self.state.debugSummary, privacy: .public)")
+        #endif
+        do {
+            let token = try await provider.refreshSupabaseAccessToken()
+            #if DEBUG
+            WanderDebugLog.remote.debug("auth store forced supabase token refresh succeeded")
+            #endif
+            return token
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("auth store forced supabase token refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
             throw error
         }

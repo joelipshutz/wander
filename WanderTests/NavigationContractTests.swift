@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
@@ -29,7 +30,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
-    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndActivityRowsStayFlat() throws {
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndKeepsOnlyFeaturedCardsUniform() throws {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -46,8 +47,40 @@ final class NavigationContractTests: XCTestCase {
             feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
         )
         XCTAssertTrue(activityList.contains("Divider()"))
+        XCTAssertTrue(activityList.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
         XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
+
+        XCTAssertTrue(feed.contains("private enum FeedFeaturedLayout"))
+
+        let activityModule = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+        XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
+        XCTAssertFalse(activityModule.contains("maxHeight:"))
+
+        let featuredCard = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedFeaturedCard: View").last?
+                .components(separatedBy: "private struct FeedActivityList: View").first
+        )
+        XCTAssertTrue(featuredCard.contains("height: FeedFeaturedLayout.cardHeight"))
+        XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
+    }
+
+    func testFeedActivityRoutesPersonAndPlaceToTheirOwnProfiles() throws {
+        let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
+        let activityModule = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+
+        XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
+        XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
+        XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
+        XCTAssertTrue(feed.contains("openPlace: openPlace"))
+        XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
+        XCTAssertTrue(activityModule.contains("openPlace(place)"))
+        XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
+        XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
     }
 
     func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {
@@ -81,23 +114,148 @@ final class NavigationContractTests: XCTestCase {
     @MainActor
     func testSharedProfileContentBuildsTheRegisteredDeepLinkAndCopy() throws {
         let content = try XCTUnwrap(
-            WanderShareContent.profile(id: "user joe", displayName: "Joe Example", handle: "joe")
+            WanderShareContent.profile(serverID: "user joe", displayName: "Joe Example", handle: "joe")
         )
 
         XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20joe")
+        XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.subject, "Joe Example")
         XCTAssertEqual(content.message, "See @joe on rec.me")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
+        XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
+        XCTAssertNil(WanderShareContent.profile(serverID: "   ", displayName: "Guest", handle: "you"))
     }
 
+    @MainActor
     func testSharedProfileMapContentUsesSharedNativeShareWorker() throws {
+        let imageFileURL = URL(fileURLWithPath: "/tmp/maya-map.png")
         let content = try XCTUnwrap(
-            WanderShareContent.profileMap(id: "user maya", displayName: "Maya Chen", handle: "maya")
+            WanderShareContent.profileMap(
+                serverID: "user maya",
+                displayName: "Maya Chen",
+                handle: "maya",
+                imageFileURL: imageFileURL
+            )
         )
 
         XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20maya")
+        XCTAssertEqual(content.items, [content.item, imageFileURL])
         XCTAssertEqual(content.subject, "Maya Chen's map")
         XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
+        XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user maya"))
+    }
+
+    func testSharedProfileMapContentRequiresAStableProfileAndPNGFile() {
+        let pngFileURL = URL(fileURLWithPath: "/tmp/profile-map.PNG")
+        let jpegFileURL = URL(fileURLWithPath: "/tmp/profile-map.jpg")
+        let remotePNGURL = URL(string: "https://example.com/profile-map.png")!
+
+        XCTAssertNil(
+            WanderShareContent.profileMap(
+                serverID: nil,
+                displayName: "Guest",
+                handle: "you",
+                imageFileURL: pngFileURL
+            )
+        )
+        XCTAssertNil(
+            WanderShareContent.profileMap(
+                serverID: "user_guest",
+                displayName: "Guest",
+                handle: "you",
+                imageFileURL: jpegFileURL
+            )
+        )
+        XCTAssertNil(
+            WanderShareContent.profileMap(
+                serverID: "user_guest",
+                displayName: "Guest",
+                handle: "you",
+                imageFileURL: remotePNGURL
+            )
+        )
+        XCTAssertNotNil(
+            WanderShareContent.profileMap(
+                serverID: "user_guest",
+                displayName: "Guest",
+                handle: "you",
+                imageFileURL: pngFileURL
+            )
+        )
+    }
+
+    @MainActor
+    func testProfileMapPNGAttachmentsAreLosslessUniqueAndPruneOnlyExpiredFiles() throws {
+        let fileManager = FileManager.default
+        let baseDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("wander-share-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: baseDirectory) }
+
+        let rendererFormat = UIGraphicsImageRendererFormat()
+        rendererFormat.scale = 1
+        let renderer = UIGraphicsImageRenderer(
+            size: CGSize(width: 4, height: 3),
+            format: rendererFormat
+        )
+        let pngData = renderer.pngData { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 4, height: 3))
+        }
+        let now = Date()
+        let attachmentDirectory = baseDirectory.appendingPathComponent(
+            WanderShareAttachmentStore.directoryName,
+            isDirectory: true
+        )
+        try fileManager.createDirectory(at: attachmentDirectory, withIntermediateDirectories: true)
+
+        let expiredFileURL = attachmentDirectory.appendingPathComponent("expired.png")
+        let freshFileURL = attachmentDirectory.appendingPathComponent("fresh.png")
+        try pngData.write(to: expiredFileURL)
+        try pngData.write(to: freshFileURL)
+        try fileManager.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-WanderShareAttachmentStore.retentionInterval - 1)],
+            ofItemAtPath: expiredFileURL.path
+        )
+        try fileManager.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-WanderShareAttachmentStore.retentionInterval + 1)],
+            ofItemAtPath: freshFileURL.path
+        )
+
+        let firstFileURL = try WanderShareAttachmentStore.persistPNG(
+            pngData,
+            baseDirectory: baseDirectory,
+            now: now,
+            identifier: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            fileManager: fileManager
+        )
+        let secondFileURL = try WanderShareAttachmentStore.persistPNG(
+            pngData,
+            baseDirectory: baseDirectory,
+            now: now,
+            identifier: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            fileManager: fileManager
+        )
+
+        XCTAssertNotEqual(firstFileURL, secondFileURL)
+        XCTAssertEqual(firstFileURL.pathExtension, "png")
+        XCTAssertEqual(try Data(contentsOf: firstFileURL), pngData)
+        let decodedImage = try XCTUnwrap(UIImage(contentsOfFile: firstFileURL.path)?.cgImage)
+        XCTAssertEqual(decodedImage.width, 4)
+        XCTAssertEqual(decodedImage.height, 3)
+        XCTAssertFalse(fileManager.fileExists(atPath: expiredFileURL.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: freshFileURL.path))
+
+        XCTAssertThrowsError(
+            try WanderShareAttachmentStore.persistPNG(
+                Data("not a PNG".utf8),
+                baseDirectory: baseDirectory,
+                fileManager: fileManager
+            )
+        ) { error in
+            guard case WanderShareAttachmentStore.AttachmentError.invalidPNG = error else {
+                return XCTFail("Expected invalidPNG, got \(error)")
+            }
+        }
     }
 
     func testOtherMemberProfileUsesSharedHomeWithoutOwnerEditActions() throws {
@@ -269,6 +427,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(mapSection.contains("ProfileMapSnapshotView("))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL = nil"))
+        XCTAssertTrue(mapSection.contains("renderedSnapshot = ProfileMapRenderedSnapshot(key: request.cacheKey, image: image)"))
+        XCTAssertTrue(mapSection.contains("let pngData = image.pngData()"))
+        XCTAssertTrue(mapSection.contains("shareImageFileURL = imageFileURL"))
         XCTAssertFalse(mapSection.contains("\n            Map("))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))
@@ -346,6 +508,34 @@ final class NavigationContractTests: XCTestCase {
             .placeDetail
         )
         XCTAssertEqual(ListsScreenScenario.resolved(from: ["Wander", "-WanderListsScenario", "unknown"]), .populated)
+    }
+
+    func testNewListEditorHasTheRequestedDismissAffordance() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let editor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
+
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .cancellationAction)"))
+        XCTAssertTrue(editor.contains("ToolbarItem(placement: .topBarLeading)"), "Older iOS versions should keep the leading placement")
+        XCTAssertTrue(editor.contains("if !isEditing"), "Edit-list navigation should remain unchanged")
+        XCTAssertTrue(editor.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(editor.contains(".font(.system(size: 17, weight: .regular))"))
+        XCTAssertTrue(editor.contains(".sharedBackgroundVisibility(.hidden)"))
+
+        let backButton = try sourceSection(
+            editor,
+            after: "private var newListBackButton: some View",
+            before: "private var isEditing: Bool"
+        )
+        XCTAssertTrue(backButton.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back to lists\")"))
+        XCTAssertTrue(backButton.contains("Button {\n            dismiss()"))
+        XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
     }
 
     func testListMapVisualQAScenariosResolveDeterministically() {

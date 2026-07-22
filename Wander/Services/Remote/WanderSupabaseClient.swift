@@ -164,9 +164,21 @@ private struct SignedStorageURLResponse: Decodable {
 
 @MainActor
 final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling, RemoteStorageCalling, RemoteTableCalling, RemoteUserPlaceDeleting {
+    private struct RejectedTokenKey: Hashable {
+        let userID: String
+        let token: String
+    }
+
+    private struct InFlightTokenRefresh {
+        let id: UUID
+        let task: Task<String, Error>
+    }
+
     let configuration: WanderBackendConfiguration
     private let authSession: AuthSessionProviding
     private let urlSession: URLSession
+    private var inFlightTokenRefreshes: [RejectedTokenKey: InFlightTokenRefresh] = [:]
+    private var replacementTokens: [RejectedTokenKey: String] = [:]
 
     init(configuration: WanderBackendConfiguration, authSession: AuthSessionProviding, urlSession: URLSession = .shared) {
         self.configuration = configuration
@@ -182,7 +194,19 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         try RemoteEncoding.encoder.encode(value)
     }
 
-    func authenticatedHeaders() async throws -> [String: String] {
+    func authenticatedHeaders(forceTokenRefresh: Bool = false) async throws -> [String: String] {
+        let expectedUserID = try configuredAuthenticatedUserID()
+        return try await authenticatedRequestContext(
+            expectedUserID: expectedUserID,
+            forceTokenRefresh: forceTokenRefresh
+        ).headers
+    }
+
+    private func authenticatedRequestContext(
+        expectedUserID: String,
+        forceTokenRefresh: Bool = false,
+        rejectedToken: String? = nil
+    ) async throws -> (headers: [String: String], token: String) {
         guard self.configuration.isSupabaseConfigured else {
             #if DEBUG
             WanderDebugLog.remote.error("auth headers failed reason=not_configured")
@@ -192,9 +216,20 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
 
         let token: String
         do {
-            token = try await self.authSession.supabaseAccessToken()
+            try validateAuthenticatedUser(expectedUserID)
+            if let rejectedToken {
+                token = try await replacementToken(
+                    for: rejectedToken,
+                    expectedUserID: expectedUserID
+                )
+            } else if forceTokenRefresh {
+                token = try await self.authSession.refreshSupabaseAccessToken()
+            } else {
+                token = try await self.authSession.supabaseAccessToken()
+            }
+            try validateAuthenticatedUser(expectedUserID)
             #if DEBUG
-            WanderDebugLog.remote.debug("auth headers ready supabase_url_configured=\((self.configuration.supabaseURL != nil), privacy: .public)")
+            WanderDebugLog.remote.debug("auth headers ready supabase_url_configured=\((self.configuration.supabaseURL != nil), privacy: .public) forced_token_refresh=\((forceTokenRefresh || rejectedToken != nil), privacy: .public)")
             #endif
         } catch {
             #if DEBUG
@@ -203,10 +238,91 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw error
         }
 
-        return [
+        return ([
             "apikey": self.configuration.supabasePublishableKey ?? "",
             "Authorization": "Bearer \(token)"
-        ]
+        ], token)
+    }
+
+    private func currentAuthenticatedUserID() throws -> String {
+        guard case .signedIn(let session) = authSession.state else {
+            throw WanderRemoteError.notAuthenticated
+        }
+        return session.userID
+    }
+
+    private func configuredAuthenticatedUserID() throws -> String {
+        guard configuration.isSupabaseConfigured else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try currentAuthenticatedUserID()
+    }
+
+    private func validateAuthenticatedUser(_ expectedUserID: String) throws {
+        guard case .signedIn(let session) = authSession.state,
+              session.userID == expectedUserID
+        else {
+            throw WanderRemoteError.notAuthenticated
+        }
+    }
+
+    private func replacementToken(
+        for rejectedToken: String,
+        expectedUserID: String
+    ) async throws -> String {
+        try Task.checkCancellation()
+        try validateAuthenticatedUser(expectedUserID)
+
+        let key = RejectedTokenKey(userID: expectedUserID, token: rejectedToken)
+        if let replacementToken = replacementTokens[key] {
+            return replacementToken
+        }
+
+        let refresh: InFlightTokenRefresh
+        if let existingRefresh = inFlightTokenRefreshes[key] {
+            refresh = existingRefresh
+        } else {
+            let authSession = self.authSession
+            let newRefresh = InFlightTokenRefresh(
+                id: UUID(),
+                task: Task { @MainActor in
+                    try await authSession.refreshSupabaseAccessToken()
+                }
+            )
+            inFlightTokenRefreshes[key] = newRefresh
+            refresh = newRefresh
+        }
+
+        do {
+            let token = try await refresh.task.value
+            try validateAuthenticatedUser(expectedUserID)
+            replacementTokens[key] = token
+            if replacementTokens.count > 8 {
+                replacementTokens = [key: token]
+            }
+            if inFlightTokenRefreshes[key]?.id == refresh.id {
+                inFlightTokenRefreshes[key] = nil
+            }
+            try Task.checkCancellation()
+            return token
+        } catch {
+            if inFlightTokenRefreshes[key]?.id == refresh.id {
+                inFlightTokenRefreshes[key] = nil
+            }
+            throw error
+        }
+    }
+
+    private func invalidateReplacementToken(
+        for rejectedToken: String,
+        replacementToken: String,
+        expectedUserID: String
+    ) {
+        let key = RejectedTokenKey(userID: expectedUserID, token: rejectedToken)
+        guard replacementTokens[key] == replacementToken else {
+            return
+        }
+        replacementTokens[key] = nil
     }
 
     func call<Value: Decodable, Params: Encodable>(
@@ -214,6 +330,56 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         params: Params,
         decoder: JSONDecoder = RemoteDecoding.decoder
     ) async throws -> Value {
+        let expectedUserID = try configuredAuthenticatedUserID()
+        let initialResponse = try await rpcResponse(
+            name,
+            params: params,
+            expectedUserID: expectedUserID
+        )
+
+        if Self.requiresFreshToken(after: initialResponse.response.statusCode) {
+            #if DEBUG
+            WanderDebugLog.remote.notice("rpc retrying with fresh token name=\(name, privacy: .public) status=\(initialResponse.response.statusCode, privacy: .public)")
+            #endif
+            try Task.checkCancellation()
+            let refreshedResponse = try await rpcResponse(
+                name,
+                params: params,
+                expectedUserID: expectedUserID,
+                rejectedToken: initialResponse.requestToken
+            )
+            return try decodeRPCResponse(
+                Value.self,
+                data: refreshedResponse.data,
+                response: refreshedResponse.response,
+                name: name,
+                decoder: decoder
+            )
+        }
+
+        return try decodeRPCResponse(
+            Value.self,
+            data: initialResponse.data,
+            response: initialResponse.response,
+            name: name,
+            decoder: decoder
+        )
+    }
+
+    nonisolated static func requiresFreshToken(after statusCode: Int) -> Bool {
+        statusCode == 401 || statusCode == 403
+    }
+
+    nonisolated static func canRetryFunctionAfterAuthorizationFailure(_ name: String) -> Bool {
+        name == "place-photo"
+    }
+
+    private func rpcResponse<Params: Encodable>(
+        _ name: String,
+        params: Params,
+        expectedUserID: String,
+        rejectedToken: String? = nil
+    ) async throws -> (data: Data, response: HTTPURLResponse, requestToken: String) {
         guard let supabaseURL = self.configuration.supabaseURL else {
             #if DEBUG
             WanderDebugLog.remote.error("rpc skipped name=\(name, privacy: .public) reason=missing_supabase_url")
@@ -224,7 +390,10 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         #if DEBUG
         WanderDebugLog.remote.debug("rpc preparing name=\(name, privacy: .public)")
         #endif
-        let headers = try await authenticatedHeaders()
+        let requestContext = try await authenticatedRequestContext(
+            expectedUserID: expectedUserID,
+            rejectedToken: rejectedToken
+        )
         let endpoint = supabaseURL
             .appendingPathComponent("rest")
             .appendingPathComponent("v1")
@@ -235,7 +404,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        headers.forEach { key, value in
+        requestContext.headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
         request.httpBody = try Self.encodeRequestBody(params)
@@ -254,6 +423,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             #endif
             throw error
         }
+        try validateAuthenticatedUser(expectedUserID)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             #if DEBUG
@@ -262,19 +432,38 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("Missing HTTP response for \(name)")
         }
 
-        guard (200..<300).contains(httpResponse.statusCode) else {
+        if let rejectedToken,
+           Self.requiresFreshToken(after: httpResponse.statusCode) {
+            invalidateReplacementToken(
+                for: rejectedToken,
+                replacementToken: requestContext.token,
+                expectedUserID: expectedUserID
+            )
+        }
+
+        return (data, httpResponse, requestContext.token)
+    }
+
+    private func decodeRPCResponse<Value: Decodable>(
+        _: Value.Type,
+        data: Data,
+        response: HTTPURLResponse,
+        name: String,
+        decoder: JSONDecoder
+    ) throws -> Value {
+        guard (200..<300).contains(response.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "unreadable response"
             #if DEBUG
-            WanderDebugLog.remote.error("rpc failed name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            WanderDebugLog.remote.error("rpc failed name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
             #endif
-            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            if Self.requiresFreshToken(after: response.statusCode) {
                 throw WanderRemoteError.notAuthenticated
             }
-            throw WanderRemoteError.invalidResponse("RPC \(name) failed with \(httpResponse.statusCode): \(body)")
+            throw WanderRemoteError.invalidResponse("RPC \(name) failed with \(response.statusCode): \(body)")
         }
 
         #if DEBUG
-        WanderDebugLog.remote.debug("rpc success name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
+        WanderDebugLog.remote.debug("rpc success name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
         #endif
 
         if Value.self == EmptyRPCResponse.self {
@@ -303,6 +492,49 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         body: Body,
         decoder: JSONDecoder = RemoteDecoding.decoder
     ) async throws -> Value {
+        let expectedUserID = try configuredAuthenticatedUserID()
+        let initialResponse = try await functionResponse(
+            name,
+            body: body,
+            expectedUserID: expectedUserID
+        )
+
+        if Self.requiresFreshToken(after: initialResponse.response.statusCode),
+           Self.canRetryFunctionAfterAuthorizationFailure(name) {
+            #if DEBUG
+            WanderDebugLog.remote.notice("function retrying with fresh token name=\(name, privacy: .public) status=\(initialResponse.response.statusCode, privacy: .public)")
+            #endif
+            try Task.checkCancellation()
+            let refreshedResponse = try await functionResponse(
+                name,
+                body: body,
+                expectedUserID: expectedUserID,
+                rejectedToken: initialResponse.requestToken
+            )
+            return try decodeFunctionResponse(
+                Value.self,
+                data: refreshedResponse.data,
+                response: refreshedResponse.response,
+                name: name,
+                decoder: decoder
+            )
+        }
+
+        return try decodeFunctionResponse(
+            Value.self,
+            data: initialResponse.data,
+            response: initialResponse.response,
+            name: name,
+            decoder: decoder
+        )
+    }
+
+    private func functionResponse<Body: Encodable>(
+        _ name: String,
+        body: Body,
+        expectedUserID: String,
+        rejectedToken: String? = nil
+    ) async throws -> (data: Data, response: HTTPURLResponse, requestToken: String) {
         guard let supabaseURL = self.configuration.supabaseURL else {
             #if DEBUG
             WanderDebugLog.remote.error("function skipped name=\(name, privacy: .public) reason=missing_supabase_url")
@@ -313,7 +545,10 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         #if DEBUG
         WanderDebugLog.remote.debug("function preparing name=\(name, privacy: .public)")
         #endif
-        let headers = try await authenticatedHeaders()
+        let requestContext = try await authenticatedRequestContext(
+            expectedUserID: expectedUserID,
+            rejectedToken: rejectedToken
+        )
         let endpoint = supabaseURL
             .appendingPathComponent("functions")
             .appendingPathComponent("v1")
@@ -323,7 +558,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        headers.forEach { key, value in
+        requestContext.headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
         request.httpBody = try Self.encodeRequestBody(body)
@@ -342,6 +577,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             #endif
             throw error
         }
+        try validateAuthenticatedUser(expectedUserID)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             #if DEBUG
@@ -350,19 +586,38 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("Missing HTTP response for function \(name)")
         }
 
-        guard (200..<300).contains(httpResponse.statusCode) else {
+        if let rejectedToken,
+           Self.requiresFreshToken(after: httpResponse.statusCode) {
+            invalidateReplacementToken(
+                for: rejectedToken,
+                replacementToken: requestContext.token,
+                expectedUserID: expectedUserID
+            )
+        }
+
+        return (data, httpResponse, requestContext.token)
+    }
+
+    private func decodeFunctionResponse<Value: Decodable>(
+        _: Value.Type,
+        data: Data,
+        response: HTTPURLResponse,
+        name: String,
+        decoder: JSONDecoder
+    ) throws -> Value {
+        guard (200..<300).contains(response.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "unreadable response"
             #if DEBUG
-            WanderDebugLog.remote.error("function failed name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
+            WanderDebugLog.remote.error("function failed name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) body=\(WanderDebugLog.clean(body), privacy: .public)")
             #endif
-            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            if Self.requiresFreshToken(after: response.statusCode) {
                 throw WanderRemoteError.notAuthenticated
             }
-            throw WanderRemoteError.invalidResponse("Function \(name) failed with \(httpResponse.statusCode): \(body)")
+            throw WanderRemoteError.invalidResponse("Function \(name) failed with \(response.statusCode): \(body)")
         }
 
         #if DEBUG
-        WanderDebugLog.remote.debug("function success name=\(name, privacy: .public) status=\(httpResponse.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
+        WanderDebugLog.remote.debug("function success name=\(name, privacy: .public) status=\(response.statusCode, privacy: .public) bytes=\(data.count, privacy: .public)")
         #endif
 
         guard !data.isEmpty else {
@@ -568,28 +823,72 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
     }
 
     func downloadObject(bucket: String, path: String) async throws -> Data {
+        let expectedUserID = try configuredAuthenticatedUserID()
+        let initialResponse = try await storageDownloadResponse(
+            bucket: bucket,
+            path: path,
+            expectedUserID: expectedUserID
+        )
+
+        let response: (data: Data, response: HTTPURLResponse, requestToken: String)
+        if Self.requiresFreshToken(after: initialResponse.response.statusCode) {
+            #if DEBUG
+            WanderDebugLog.remote.notice("storage download retrying with fresh token bucket=\(bucket, privacy: .public) status=\(initialResponse.response.statusCode, privacy: .public)")
+            #endif
+            try Task.checkCancellation()
+            response = try await storageDownloadResponse(
+                bucket: bucket,
+                path: path,
+                expectedUserID: expectedUserID,
+                rejectedToken: initialResponse.requestToken
+            )
+        } else {
+            response = initialResponse
+        }
+
+        guard (200..<300).contains(response.response.statusCode) else {
+            if Self.requiresFreshToken(after: response.response.statusCode) {
+                throw WanderRemoteError.notAuthenticated
+            }
+            let body = String(data: response.data, encoding: .utf8) ?? "unreadable response"
+            throw WanderRemoteError.invalidResponse("Storage download failed with \(response.response.statusCode): \(body)")
+        }
+        return response.data
+    }
+
+    private func storageDownloadResponse(
+        bucket: String,
+        path: String,
+        expectedUserID: String,
+        rejectedToken: String? = nil
+    ) async throws -> (data: Data, response: HTTPURLResponse, requestToken: String) {
         let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
-        let headers = try await authenticatedHeaders()
+        let requestContext = try await authenticatedRequestContext(
+            expectedUserID: expectedUserID,
+            rejectedToken: rejectedToken
+        )
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.setValue("image/*", forHTTPHeaderField: "Accept")
-        headers.forEach { key, value in
+        requestContext.headers.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
 
         let (data, response) = try await urlSession.data(for: request)
+        try validateAuthenticatedUser(expectedUserID)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw WanderRemoteError.invalidResponse("Missing HTTP response for storage download")
         }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                throw WanderRemoteError.notAuthenticated
-            }
-            let body = String(data: data, encoding: .utf8) ?? "unreadable response"
-            throw WanderRemoteError.invalidResponse("Storage download failed with \(httpResponse.statusCode): \(body)")
+        if let rejectedToken,
+           Self.requiresFreshToken(after: httpResponse.statusCode) {
+            invalidateReplacementToken(
+                for: rejectedToken,
+                replacementToken: requestContext.token,
+                expectedUserID: expectedUserID
+            )
         }
-        return data
+        return (data, httpResponse, requestContext.token)
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String? = nil) throws -> URL {
