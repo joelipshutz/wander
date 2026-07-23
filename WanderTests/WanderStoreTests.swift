@@ -1171,6 +1171,174 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags"])
     }
 
+    func testWannaPlannedDatePersistsAndBecomesAReminderItem() throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_planned_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let saved = try XCTUnwrap(
+            relaunchedStore.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        let reminder = try XCTUnwrap(relaunchedStore.wannaGoReminderItems.first)
+
+        XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(saved.userPlace.plannedDate)), "2026-08-20")
+        XCTAssertEqual(reminder.placeName, "Maru Coffee")
+        XCTAssertEqual(WannaGoDate.storageString(from: reminder.plannedDate), "2026-08-20")
+    }
+
+    func testEditingClearingAndCompletingWannaReconcilesPlannedDate() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_planned_maru",
+            name: "Maru Coffee",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        XCTAssertEqual(store.wannaGoReminderItems.count, 1)
+
+        _ = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: nil
+        )
+        XCTAssertNil(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.plannedDate)
+        XCTAssertTrue(store.wannaGoReminderItems.isEmpty)
+
+        _ = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        XCTAssertNil(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.plannedDate)
+        XCTAssertTrue(store.wannaGoReminderItems.isEmpty)
+    }
+
+    func testRemoteWannaSaveDraftIncludesPlannedDate() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let repository = FakeUserPlaceRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        _ = await store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_planned_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate,
+            backend: backend
+        )
+
+        let draft = try XCTUnwrap(repository.savedDrafts.first)
+        XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(draft.plannedDate)), "2026-08-20")
+    }
+
+    func testRemoteWannaPlanRefreshDiscardsCompletionFromPreviousAccount() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let accountB = AuthSession(userID: "user_b", displayName: "Bee", handle: "bee")
+        store.apply(authState: .signedIn(accountB))
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_account_b_plan",
+                name: "Account B Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        let accountBPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace
+        )
+        accountBPlace.serverID = "up_account_b_plan"
+        accountBPlace.syncStateRaw = SyncState.synced.rawValue
+
+        let repository = DeferredWannaGoPlanRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Aye", handle: "aye")
+            )
+        )
+
+        let refreshTask = Task {
+            await store.refreshRemoteWannaGoPlans(backend: backend)
+        }
+        while !repository.didRequestPlans {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(accountB))
+        repository.finish(with: [])
+        await refreshTask.value
+
+        XCTAssertEqual(
+            WannaGoDate.storageString(from: try XCTUnwrap(accountBPlace.plannedDate)),
+            "2026-08-20"
+        )
+    }
+
     func testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -6142,6 +6310,36 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
         if let error {
             throw error
         }
+    }
+}
+
+@MainActor
+private final class DeferredWannaGoPlanRepository: UserPlaceRepository {
+    private var plansContinuation: CheckedContinuation<[OwnWannaGoPlan], Error>?
+    private(set) var didRequestPlans = false
+
+    func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
+        []
+    }
+
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
+        didRequestPlans = true
+        return try await withCheckedThrowingContinuation { continuation in
+            plansContinuation = continuation
+        }
+    }
+
+    func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
+        throw WanderRemoteError.notImplemented("deferred Wanna plan fake")
+    }
+
+    func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
+
+    func delete(userPlaceID: String) async throws {}
+
+    func finish(with plans: [OwnWannaGoPlan]) {
+        plansContinuation?.resume(returning: plans)
+        plansContinuation = nil
     }
 }
 

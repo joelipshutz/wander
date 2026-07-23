@@ -133,13 +133,16 @@ final class PushNotificationManager: ObservableObject {
     @Published private(set) var isRegisteringToken = false
     @Published private(set) var lastErrorMessage: String?
     @Published private(set) var navigationRequest: NotificationNavigationRequest?
+    @Published private(set) var wannaGoRemindersEnabled: Bool
 
     private let userDefaults: UserDefaults
     private let tokenKey = "wander.apnsDeviceToken"
+    private static let wannaGoRemindersKey = "wander.wannaGoRemindersEnabled"
     private var handledEventIDs: [String] = []
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        self.wannaGoRemindersEnabled = userDefaults.bool(forKey: Self.wannaGoRemindersKey)
     }
 
     var statusTitle: String {
@@ -235,7 +238,9 @@ final class PushNotificationManager: ObservableObject {
                 environment: Self.environment,
                 appBundleID: Bundle.main.bundleIdentifier ?? "com.grayline.wander"
             )
-            return try await backend.updateNotificationPreferences(.allEnabled)
+            let preferences = try await backend.updateNotificationPreferences(.allEnabled)
+            applyNotificationPreferences(preferences)
+            return preferences
         } catch {
             try? await backend.unregisterPushToken(token, environment: Self.environment)
             await disablePreferencesAfterFailedEnrollment(backend: backend)
@@ -253,6 +258,8 @@ final class PushNotificationManager: ObservableObject {
 
         do {
             let preferences = try await backend.updateNotificationPreferences(.allDisabled)
+            applyNotificationPreferences(preferences)
+            await cancelAllWannaGoReminders()
             _ = await unregisterStoredDeviceTokenIfPossible(backend: backend)
             return preferences
         } catch {
@@ -374,7 +381,7 @@ final class PushNotificationManager: ObservableObject {
             return .people(.friends)
         case "list_collaborator_added", "list_place_added":
             return (data?["list_id"] as? String).map { .list(id: $0) }
-        case "place_saved_from_your_map", "followed_place_visit":
+        case "place_saved_from_your_map", "followed_place_visit", WannaGoReminderPlanner.notificationType:
             return (data?["place_id"] as? String).map { .place(id: $0) }
         case "shared_visit":
             guard let participantID = data?["participant_id"] as? String,
@@ -437,6 +444,54 @@ final class PushNotificationManager: ObservableObject {
         data.map { String(format: "%02x", $0) }.joined()
     }
 
+    func applyNotificationPreferences(_ preferences: NotificationPreferences) {
+        wannaGoRemindersEnabled = preferences.pushEnabled && preferences.wannaGoRemindersEnabled
+        userDefaults.set(wannaGoRemindersEnabled, forKey: Self.wannaGoRemindersKey)
+    }
+
+    func reconcileWannaGoReminders(
+        _ items: [WannaGoReminderItem],
+        now: Date = .now
+    ) async {
+        await refreshAuthorizationStatus()
+        let center = UNUserNotificationCenter.current()
+        let existingIdentifiers = await center.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
+
+        guard wannaGoRemindersEnabled, canRegisterForRemoteNotifications else {
+            if !existingIdentifiers.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: existingIdentifiers)
+            }
+            return
+        }
+
+        let plans = WannaGoReminderPlanner.plans(for: items, now: now)
+        if !existingIdentifiers.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: existingIdentifiers)
+        }
+
+        for plan in plans {
+            do {
+                try await center.add(WannaGoReminderPlanner.request(for: plan))
+            } catch {
+                lastErrorMessage = "Could not schedule a Wanna go reminder."
+                #if DEBUG
+                WanderDebugLog.remote.error("wanna reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+                #endif
+            }
+        }
+    }
+
+    func cancelAllWannaGoReminders() async {
+        let center = UNUserNotificationCenter.current()
+        let identifiers = await center.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
+        guard !identifiers.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
     private func storedDeviceTokenWaitingForRegistration() async -> String? {
         if let token = userDefaults.string(forKey: tokenKey), !token.isEmpty {
             return token
@@ -453,7 +508,12 @@ final class PushNotificationManager: ObservableObject {
     }
 
     private func disablePreferencesAfterFailedEnrollment(backend: WanderBackend) async {
-        _ = try? await backend.updateNotificationPreferences(.allDisabled)
+        if let preferences = try? await backend.updateNotificationPreferences(.allDisabled) {
+            applyNotificationPreferences(preferences)
+        } else {
+            applyNotificationPreferences(.allDisabled)
+        }
+        await cancelAllWannaGoReminders()
     }
 
     private static func integerValue(_ value: Any?) -> Int? {

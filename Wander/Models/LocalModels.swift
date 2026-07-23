@@ -260,6 +260,7 @@ final class LocalUserPlace {
     var nearbyConfirmed: Bool
     var visitedAt: Date?
     var savedAt: Date
+    var plannedDate: Date?
     var sourceType: String
     var sourceArtifactID: String?
     var sourceUserPlaceID: String?
@@ -276,7 +277,7 @@ final class LocalUserPlace {
     var updatedAt: Date
     var deletedAt: Date?
 
-    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
+    init(localID: String, serverID: String? = nil, userID: String, placeID: String, status: PlaceStatus, visibility: PlaceVisibility, note: String? = nil, ratingSignal: String? = nil, ratingScore: Double? = nil, recommendedScore: Double? = nil, recommendedCount: Int = 0, categoryOverride: String? = nil, subcategoryOverride: String? = nil, categoryOverrideSource: String? = nil, categoryOverrideConfidence: Double? = nil, nearbyConfirmed: Bool = false, visitedAt: Date? = nil, savedAt: Date = .now, plannedDate: Date? = nil, sourceType: String, sourceArtifactID: String? = nil, sourceUserPlaceID: String? = nil, attributionUserID: String? = nil, historicalWantNote: String? = nil, historicalWantAttributeAnswersJSON: String? = nil, historicalWantTagsJSON: String? = nil, historicalWantedAt: Date? = nil, syncState: SyncState = .localOnly, localUpdatedAt: Date = .now, serverUpdatedAt: Date? = nil, lastSyncError: String? = nil, createdAt: Date = .now, updatedAt: Date = .now, deletedAt: Date? = nil) {
         self.localID = localID
         self.serverID = serverID
         self.userID = userID
@@ -295,6 +296,9 @@ final class LocalUserPlace {
         self.nearbyConfirmed = nearbyConfirmed
         self.visitedAt = visitedAt
         self.savedAt = savedAt
+        self.plannedDate = status == .wannaGo
+            ? plannedDate.map { WannaGoDate.normalized($0) }
+            : nil
         self.sourceType = sourceType
         self.sourceArtifactID = sourceArtifactID
         self.sourceUserPlaceID = sourceUserPlaceID

@@ -511,6 +511,7 @@ struct UserPlaceDraft: Equatable {
     let categoryOverrideSource: String?
     let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
+    let plannedDate: Date?
     let sourceType: String
     let attributes: [PlaceAttributeDraft]
 
@@ -526,6 +527,7 @@ struct UserPlaceDraft: Equatable {
         categoryOverrideSource: String? = nil,
         categoryOverrideConfidence: Double? = nil,
         nearbyConfirmed: Bool,
+        plannedDate: Date? = nil,
         sourceType: String,
         attributes: [PlaceAttributeDraft]
     ) {
@@ -540,9 +542,18 @@ struct UserPlaceDraft: Equatable {
         self.categoryOverrideSource = categoryOverrideSource
         self.categoryOverrideConfidence = categoryOverrideConfidence
         self.nearbyConfirmed = nearbyConfirmed
+        self.plannedDate = status == .wannaGo
+            ? plannedDate.map { WannaGoDate.normalized($0) }
+            : nil
         self.sourceType = sourceType
         self.attributes = attributes
     }
+}
+
+struct OwnWannaGoPlan: Equatable {
+    let userPlaceID: String
+    let placeID: String
+    let plannedDate: Date
 }
 
 struct PlaceAttributeDraft: Equatable {
@@ -1069,6 +1080,7 @@ struct NotificationPreferences: Equatable {
     var captureEnabled: Bool = false
     var discoveryDigestEnabled: Bool = false
     var followedActivityEnabled: Bool = false
+    var wannaGoRemindersEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
         pushEnabled: true,
@@ -1078,7 +1090,8 @@ struct NotificationPreferences: Equatable {
         recommendationsEnabled: true,
         captureEnabled: true,
         discoveryDigestEnabled: true,
-        followedActivityEnabled: true
+        followedActivityEnabled: true,
+        wannaGoRemindersEnabled: true
     )
 
     static let allDisabled = NotificationPreferences(
@@ -1089,7 +1102,8 @@ struct NotificationPreferences: Equatable {
         recommendationsEnabled: false,
         captureEnabled: false,
         discoveryDigestEnabled: false,
-        followedActivityEnabled: false
+        followedActivityEnabled: false,
+        wannaGoRemindersEnabled: false
     )
 }
 
@@ -1102,6 +1116,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var captureEnabled: Bool?
     var discoveryDigestEnabled: Bool?
     var followedActivityEnabled: Bool?
+    var wannaGoRemindersEnabled: Bool?
 
     init(
         pushEnabled: Bool? = nil,
@@ -1111,7 +1126,8 @@ struct NotificationPreferencesUpdate: Equatable {
         recommendationsEnabled: Bool? = nil,
         captureEnabled: Bool? = nil,
         discoveryDigestEnabled: Bool? = nil,
-        followedActivityEnabled: Bool? = nil
+        followedActivityEnabled: Bool? = nil,
+        wannaGoRemindersEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
         self.socialGraphEnabled = socialGraphEnabled
@@ -1121,6 +1137,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.captureEnabled = captureEnabled
         self.discoveryDigestEnabled = discoveryDigestEnabled
         self.followedActivityEnabled = followedActivityEnabled
+        self.wannaGoRemindersEnabled = wannaGoRemindersEnabled
     }
 
     static let allEnabled = NotificationPreferencesUpdate(
@@ -1131,7 +1148,8 @@ struct NotificationPreferencesUpdate: Equatable {
         recommendationsEnabled: true,
         captureEnabled: true,
         discoveryDigestEnabled: true,
-        followedActivityEnabled: true
+        followedActivityEnabled: true,
+        wannaGoRemindersEnabled: true
     )
 
     static let allDisabled = NotificationPreferencesUpdate(
@@ -1142,7 +1160,8 @@ struct NotificationPreferencesUpdate: Equatable {
         recommendationsEnabled: false,
         captureEnabled: false,
         discoveryDigestEnabled: false,
-        followedActivityEnabled: false
+        followedActivityEnabled: false,
+        wannaGoRemindersEnabled: false
     )
 }
 
@@ -1469,9 +1488,16 @@ protocol FeedRepository {
 @MainActor
 protocol UserPlaceRepository {
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace]
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan]
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws
     func delete(userPlaceID: String) async throws
+}
+
+extension UserPlaceRepository {
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
+        []
+    }
 }
 
 @MainActor

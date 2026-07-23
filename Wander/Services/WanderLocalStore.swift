@@ -89,6 +89,53 @@ final class WanderStore: ObservableObject {
     @Published private(set) var isSaveFlowPresented = false
     private var activeSaveFlowPresentationLayers: Set<SaveFlowPresentationLayer> = []
 
+    var wannaGoReminderItems: [WannaGoReminderItem] {
+        var remindersByPlaceID: [String: WannaGoReminderItem] = [:]
+
+        for userPlace in userPlaces where userPlace.userID == currentUser.id
+            && userPlace.status == .wannaGo
+            && userPlace.deletedAt == nil {
+            guard let plannedDate = userPlace.plannedDate,
+                  let place = places.first(where: { place in
+                      place.id == userPlace.placeID
+                          || place.localID == userPlace.placeID
+                          || place.serverID == userPlace.placeID
+                  })
+            else { continue }
+
+            let routePlaceID = place.serverID ?? place.id
+            remindersByPlaceID[routePlaceID] = WannaGoReminderItem(
+                userPlaceID: userPlace.localID,
+                placeID: routePlaceID,
+                placeName: place.canonicalName,
+                plannedDate: plannedDate
+            )
+        }
+
+        for visiblePlace in remoteVisiblePlaceCache where visiblePlace.owner.id == currentUser.id
+            && visiblePlace.userPlace.status == .wannaGo
+            && visiblePlace.userPlace.deletedAt == nil {
+            let routePlaceID = visiblePlace.place.serverID ?? visiblePlace.place.id
+            guard remindersByPlaceID[routePlaceID] == nil,
+                  let plannedDate = visiblePlace.userPlace.plannedDate
+            else { continue }
+
+            remindersByPlaceID[routePlaceID] = WannaGoReminderItem(
+                userPlaceID: visiblePlace.userPlace.id,
+                placeID: routePlaceID,
+                placeName: visiblePlace.place.canonicalName,
+                plannedDate: plannedDate
+            )
+        }
+
+        return remindersByPlaceID.values.sorted { lhs, rhs in
+            if lhs.plannedDate == rhs.plannedDate {
+                return lhs.userPlaceID < rhs.userPlaceID
+            }
+            return lhs.plannedDate < rhs.plannedDate
+        }
+    }
+
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
     private var sharedVisitInboxTask: (
@@ -2952,6 +2999,7 @@ final class WanderStore: ObservableObject {
         if userPlace.status == .wannaGo {
             preserveHistoricalWant(for: userPlace, attributes: attributeDrafts(for: userPlace.id))
         }
+        userPlace.plannedDate = nil
         if userPlace.status != .been {
             userPlace.statusRaw = PlaceStatus.been.rawValue
         }
@@ -3473,6 +3521,7 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
+        plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
@@ -3506,6 +3555,9 @@ final class WanderStore: ObservableObject {
             existing.statusRaw = status.rawValue
             existing.visibilityRaw = resolvedVisibility.rawValue
             existing.note = note
+            existing.plannedDate = status == .wannaGo
+                ? plannedDate.map { WannaGoDate.normalized($0) }
+                : nil
             existing.ratingScore = savedRatingScore
             existing.recommendedScore = savedRatingScore
             existing.recommendedCount = savedRatingScore == nil ? 0 : 1
@@ -3559,6 +3611,9 @@ final class WanderStore: ObservableObject {
             categoryOverrideConfidence: categoryOverride?.confidence,
             nearbyConfirmed: sourceType == .currentLocation,
             savedAt: savedAt,
+            plannedDate: status == .wannaGo
+                ? plannedDate.map { WannaGoDate.normalized($0) }
+                : nil,
             sourceType: sourceType.rawValue,
             syncState: .pendingCreate
         )
@@ -3593,6 +3648,7 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
+        plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
     ) async -> SaveResult {
@@ -3606,6 +3662,7 @@ final class WanderStore: ObservableObject {
             note: note,
             sourceType: sourceType,
             ratingScore: ratingScore,
+            plannedDate: plannedDate,
             attributes: attributes
         )
         #if DEBUG
@@ -4421,6 +4478,24 @@ final class WanderStore: ObservableObject {
         } catch {
             lastRemoteError = remoteErrorMessage(error)
         }
+        await refreshRemoteWannaGoPlans(backend: backend)
+    }
+
+    func refreshRemoteWannaGoPlans(backend: WanderBackend?) async {
+        guard let backend, backend.userPlaceRepository != nil else {
+            return
+        }
+        let requestUserID = currentUser.id
+
+        do {
+            let plans = try await backend.ownWannaGoPlans()
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            applyRemoteWannaGoPlans(plans)
+            lastRemoteError = nil
+        } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+            lastRemoteError = remoteErrorMessage(error)
+        }
     }
 
     func refreshRemoteCurrentProfile(backend: WanderBackend?) async {
@@ -4562,6 +4637,7 @@ final class WanderStore: ObservableObject {
         var remoteFollowing: [ProfileShell]?
         var remoteFollowers: [ProfileShell]?
         var viewportPlaces: [VisiblePlace]?
+        var ownWannaGoPlans: [OwnWannaGoPlan]?
         var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
         var relationshipsByOwnerID: [String: ViewerRelationship] = [:]
         var firstRefreshError: Error?
@@ -4579,6 +4655,14 @@ final class WanderStore: ObservableObject {
         if backend.placeRepository != nil {
             do {
                 viewportPlaces = try await backend.visiblePlaces(in: viewport)
+            } catch {
+                firstRefreshError = firstRefreshError ?? error
+            }
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+        }
+        if backend.userPlaceRepository != nil {
+            do {
+                ownWannaGoPlans = try await backend.ownWannaGoPlans()
             } catch {
                 firstRefreshError = firstRefreshError ?? error
             }
@@ -4621,6 +4705,9 @@ final class WanderStore: ObservableObject {
             if let viewportPlaces {
                 remoteVisiblePlaceCache = viewportPlaces
                 hydrateRemoteVisiblePlaceMetadata(viewportPlaces)
+            }
+            if let ownWannaGoPlans {
+                applyRemoteWannaGoPlans(ownWannaGoPlans)
             }
             for profileID in followedProfileIDs {
                 if let visiblePlaces = visiblePlacesByOwnerID[profileID] {
@@ -5235,6 +5322,7 @@ final class WanderStore: ObservableObject {
             categoryOverrideSource: userPlace.categoryOverrideSource,
             categoryOverrideConfidence: userPlace.categoryOverrideConfidence,
             nearbyConfirmed: userPlace.nearbyConfirmed,
+            plannedDate: userPlace.plannedDate,
             sourceType: userPlace.sourceType,
             attributes: attributeDrafts
         )
@@ -5507,6 +5595,7 @@ final class WanderStore: ObservableObject {
         userPlace.recommendedScore = nil
         userPlace.recommendedCount = 0
         userPlace.visitedAt = nil
+        userPlace.plannedDate = nil
         userPlace.savedAt = wantedAt
         userPlace.deletedAt = nil
         userPlace.updatedAt = date
@@ -5527,6 +5616,7 @@ final class WanderStore: ObservableObject {
         userPlace.subcategoryOverride = nil
         userPlace.categoryOverrideSource = nil
         userPlace.categoryOverrideConfidence = nil
+        userPlace.plannedDate = nil
         userPlace.deletedAt = date
         userPlace.updatedAt = date
         userPlace.localUpdatedAt = date
@@ -5792,6 +5882,7 @@ final class WanderStore: ObservableObject {
             userPlace.subcategoryOverride = nil
             userPlace.categoryOverrideSource = nil
             userPlace.categoryOverrideConfidence = nil
+            userPlace.plannedDate = nil
             userPlace.deletedAt = now
             userPlace.updatedAt = now
             userPlace.localUpdatedAt = now
@@ -6097,6 +6188,29 @@ final class WanderStore: ObservableObject {
         }
         upsertRemoteProfileShells(shells, preserveExistingProfileMetadataWhenMissing: true)
         upsertRemoteAttributes(from: visiblePlaces)
+    }
+
+    private func applyRemoteWannaGoPlans(_ plans: [OwnWannaGoPlan]) {
+        let plansByUserPlaceID = Dictionary(uniqueKeysWithValues: plans.map { ($0.userPlaceID, $0) })
+
+        for userPlace in userPlaces where userPlace.userID == currentUser.id
+            && userPlace.deletedAt == nil
+            && userPlace.syncState == .synced {
+            let remoteID = userPlace.serverID ?? userPlace.id
+            userPlace.plannedDate = userPlace.status == .wannaGo
+                ? plansByUserPlaceID[remoteID]?.plannedDate
+                : nil
+        }
+
+        for visiblePlace in remoteVisiblePlaceCache where visiblePlace.owner.id == currentUser.id
+            && visiblePlace.userPlace.deletedAt == nil {
+            visiblePlace.userPlace.plannedDate = visiblePlace.userPlace.status == .wannaGo
+                ? plansByUserPlaceID[visiblePlace.userPlace.id]?.plannedDate
+                : nil
+        }
+
+        objectWillChange.send()
+        persist()
     }
 
     private func applyRemoteProfileVisiblePlaces(_ visiblePlaces: [VisiblePlace], profileID: String) {

@@ -394,6 +394,14 @@ final class WanderBackend: ObservableObject {
         return try await userPlaceRepository.save(draft)
     }
 
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
+        guard let userPlaceRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await userPlaceRepository.ownWannaGoPlans()
+    }
+
     func deleteUserPlace(userPlaceID: String) async throws {
         guard let userPlaceRepository else {
             throw WanderRemoteError.notConfigured

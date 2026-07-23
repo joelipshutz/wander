@@ -20153,7 +20153,6 @@ REC-135 completion, 2026-07-23 11:49 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
-
 REC-133 merge completion, 2026-07-23 13:12 PDT:
 
 - Squash-merged ready PR #186 into `main` as
@@ -20283,3 +20282,247 @@ REC-126 completion, 2026-07-23 11:56 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
+## 2026-07-23 10:09 PDT - Codex - REC-118 future-date SwiftUI mockup
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-118-future-date-mockup`
+Worktree: `/private/tmp/recme-rec118-future-date-mockup`
+Linear: `REC-118` (`In Progress`)
+
+Goal: create an approval-ready SwiftUI mockup for associating a future date
+with a Wanna save inside the existing More options section. This pass is
+visual and interactive only; persistence, submission models, repository
+wiring, Supabase contracts, and production save behavior are intentionally
+deferred until the mockup is approved.
+
+Starting status and scope:
+
+- Fetched `origin` and created this isolated worktree from clean current
+  `origin/main` at `92adcdc89`. The primary checkout is on an unrelated
+  REC-88 branch with user-owned `.gitignore` and `.pnpm-store` changes, so it
+  will not be touched.
+- Read the latest coordination log, `DESIGN.md`, REC-118, the live
+  `MapPlaceSaveFlowSheet`, and existing DEBUG-only SwiftUI mockup conventions.
+  No current worktree entry overlaps the expected mockup files.
+- REC-118 requires a future date in Wanna → More options with past dates
+  disabled. The proposed mockup will use a familiar optional planning row,
+  an expanded inline graphical calendar, an explicit clear action, and a
+  minimum selectable date of today.
+- Expected files: `Wander/App/WanderApp.swift`, a new DEBUG-only mockup under
+  `Wander/Features/Map/`, and this log. `MapScreen.swift`, persistence models,
+  backend/schema files, build metadata, and production submission code are
+  outside this pass.
+
+Mockup validation checkpoint, 2026-07-23 10:25 PDT:
+
+- Added the DEBUG-only `FutureDateSaveMockups.swift` and launch route
+  `-WanderFutureDateSaveMockup <collapsed|calendar|selected>`. The mock mirrors
+  the existing Wanna save sheet, puts the optional planning date first inside
+  More options, uses the native graphical `DatePicker`, makes the selected
+  date easy to clear, and constrains the range to today and later so past dates
+  are unavailable.
+- The production `MapPlaceSaveFlowSheet`, save models, store/repository
+  contracts, Supabase schema, analytics, and submission behavior remain
+  unchanged. This is intentionally an interaction/design checkpoint before
+  wiring.
+- Ran `xcodegen generate`. The generated project change only registers the new
+  DEBUG mockup source.
+- Universal iOS Simulator build passed with
+  `/private/tmp/DerivedData-rec118-mockup`; an arm64 incremental simulator build
+  also passed after the final date-fixture adjustment.
+- Full tests passed: 584 executed, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec118-tests/Logs/Test/Test-Wander-2026.07.23_10-20-24--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e, both on iOS
+  26.5. The expanded state clearly shows past calendar days disabled, and the
+  collapsed selected-date state has no clipping or overlap. Screenshots:
+  `/private/tmp/rec118-calendar-17pro-final.png` and
+  `/private/tmp/rec118-selected-17e-final.png`.
+- `git diff --check` passed. Next step is design approval, followed by a
+  separate implementation pass to wire the approved date through local
+  persistence, save submission, sync/backend contracts, and regression tests.
+
+Mockup handoff, 2026-07-23 10:28 PDT:
+
+- Committed the validated mockup as `a81f8432b`
+  (`feat: mock up REC-118 future date picker`), pushed
+  `codex/rec-118-future-date-mockup`, and opened draft PR #187:
+  https://github.com/joelipshutz/wander/pull/187.
+- Refreshed `origin` immediately before the push; the branch was one commit
+  ahead of and zero commits behind `origin/main`.
+- REC-118 remains `In Progress` because the issue's production behavior is not
+  implemented. Resume after design approval by promoting the approved control
+  into `MapPlaceSaveFlowSheet` and tracing the optional future date end to end
+  through models, persistence, sync/backend contracts, analytics where
+  appropriate, and focused/full regression coverage.
+- No TestFlight build, build-number change, backend migration, hosted data
+  mutation, or Slack release note was performed.
+
+Implementation resumed, 2026-07-23 10:34 PDT:
+
+- Ryan approved the mockup and expanded REC-118 to include production
+  persistence/sync plus a local reminder three days before the planned date.
+  The reminder setting, cancellation/rescheduling behavior, and notification
+  tap route to the matching Wanna place card are now explicit acceptance
+  criteria in Linear. REC-118 remains `In Progress`.
+- Continuing in the same isolated worktree and branch. The branch is clean,
+  pushed, two commits ahead of and zero commits behind current `origin/main`;
+  draft PR #187 remains the review surface. The unrelated primary checkout and
+  its user-owned REC-88 changes remain untouched.
+- Before editing, this pass will trace the existing save/RPC model, SwiftData
+  persistence, settings, notification authorization/scheduling, and deep-link
+  routing contracts. Expected high-conflict areas include
+  `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`,
+  `project.yml`/the generated project, Supabase migrations, and this log. No
+  other current worktree entry advertises overlapping REC-118 work, but changes
+  will remain isolated and reviewed carefully.
+- Production assumptions to validate in code: the date belongs to the current
+  user's Wanna save rather than the shared place; reminders are device-local,
+  opt-in, and derived from persisted Wanna state; edits, clearing, deletion, or
+  leaving Wanna cancel stale requests; and notification taps reuse the app's
+  existing place-card routing rather than creating a parallel navigation path.
+
+Implementation checkpoint, 2026-07-23 11:16 PDT:
+
+- Wired the optional date through the production Wanna save sheet, local
+  `LocalUserPlace`, file persistence, `UserPlaceDraft`, Supabase save payload,
+  and an owner-only `own_wanna_go_plans` reconciliation RPC. Planned dates stay
+  out of social visible-place RPCs.
+- Added device-local reminder planning for 9:00 AM three calendar days before
+  the saved date, with a 60-request cap to leave headroom under iOS's pending
+  notification limit. Reconciliation removes stale requests after edits,
+  clears, deletions, status changes, preference changes, sign-out, and app
+  refreshes. The local payload reuses `recme://places/<id>` and the existing Map
+  place-card route.
+- Added the account preference `Wanna go reminders`, defaulting off for
+  existing/new preference rows and included in the existing all-notifications
+  enrollment flow. The implementation uses local notifications but keeps the
+  preference server-backed so it follows the current notification settings
+  contract.
+- Added migration `20260723173500_wanna_go_dates_and_reminders.sql`, pgTAP
+  coverage, and the exact production dated-Wanna payload plus metadata/grant
+  assertions to `scripts/supabase-smoke-test.mjs`.
+- `xcodegen generate`, `git diff --check`, and an arm64 simulator build passed.
+  Nine new focused Swift tests now pass across planner timing/copy/timezone,
+  date persistence and clear/status transitions, remote payload/RPC decoding,
+  pending-request headroom, and notification place routing. Existing focused
+  notification preference/routing tests also passed.
+- `supabase test db` could not run because no local Postgres stack is
+  available (`LegacyDbConnectError`). The linked hosted project was confirmed
+  as `wander` (`rugmtlgufrhlxwfkumhw`), but its migration history currently
+  contains REC-126 migrations `20260723063000` and `20260723064500` that are
+  not yet in `origin/main`. Do not push REC-118's migration or claim the hosted
+  smoke test passed until that remote/local history drift is resolved by the
+  REC-126 branch landing (or otherwise being coordinated).
+- `origin/main` advanced by two commits during implementation and overlaps
+  Map/Root/store/generated-project/log files. Next checkpoint is to commit the
+  isolated implementation, rebase onto current `origin/main`, resolve those
+  overlaps deliberately, then rerun focused/full iOS validation.
+
+Final implementation validation, 2026-07-23 12:02 PDT:
+
+- Rebased the REC-118 commits onto exact current `origin/main` at
+  `9c45b0fbf`, including the landed REC-126 cuisine migrations and completion
+  record. The only product conflict across the rebases was the REC-125
+  shared-invitation save
+  context; it now preserves REC-125's blank invitee rating/note/answers while
+  adding REC-118's explicit `initialPlannedDate: nil`. The append-only
+  coordination log preserved both histories.
+- Fixed the one regression found by the first complete run: owner Wanna-plan
+  refresh now participates in the existing deferred social-surface persistence
+  transaction instead of creating a second snapshot. The exact failing
+  regression then passed independently.
+- The complete post-REC-126 suite passed 609/609 with zero failures on iPhone 17 Pro Max /
+  iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec118-focused/Logs/Test/Test-Wander-2026.07.23_11-56-48--0700.xcresult`.
+  The universal generic iOS Simulator build also passed. Existing Supabase
+  formatter, traditional-headermap, and unused-test-expression warnings remain
+  unrelated and non-fatal.
+- Regenerated with XcodeGen, confirmed a clean generated project and
+  `git diff --check`, and syntax-checked the extended hosted smoke script with
+  Node.
+- Final visual QA passed on iPhone 17 Pro and compact iPhone 17e, both on iOS
+  26.5. The expanded calendar clearly disables past dates; the collapsed
+  selected-date state has no clipping or overlap. Screenshots:
+  `/private/tmp/rec118-calendar-17pro-final-implemented.png` and
+  `/private/tmp/rec118-selected-17e-final-implemented.png`.
+- Implementation commit before this log-only checkpoint is `f84b6a88d`; draft
+  PR #187 remains the review surface:
+  https://github.com/joelipshutz/wander/pull/187.
+- Backend handoff remains intentionally blocked: local pgTAP could not run
+  without a local Postgres stack. REC-126's history is now reconciled, but the
+  linked hosted project also contains remote-only migration
+  `20260723183000_visible_place_photo_gallery.sql`, currently uncommitted in
+  the active REC-133 worktree and absent from `origin/main`. Do not copy that
+  user-owned work or apply REC-118's migration out of sequence; run the hosted
+  migration/smoke gate after REC-133 lands or its history is explicitly
+  coordinated. The iOS implementation, migration, pgTAP, and smoke coverage
+  are ready for that follow-up.
+- No TestFlight build-number increment, archive/upload, hosted migration,
+  tester Slack note, or other release action was requested or performed.
+
+Final polish and landing resumed, 2026-07-23 12:18 PDT:
+
+- Ryan requested three final REC-118 interaction/copy changes, followed by a
+  squash merge to `main`: the empty optional row should only say “add a date,”
+  the reminder helper should say “If notifications are on, rec.me will remind
+  you three days before,” and expanding the calendar must not select or
+  prefill a date until the user taps one.
+- The original REC-118 worktree was clean at the start of this pass, but a
+  separate process subsequently staged REC-133 photo-carousel changes there,
+  including overlapping map/project files and removal of REC-118 files. Those
+  changes were not made, modified, unstaged, or reverted by this agent. To
+  preserve them, work moved to the fresh isolated worktree
+  `/private/tmp/recme-rec118-final-polish` on temporary local branch
+  `codex/rec-118-final-polish`, created from clean remote REC-118 head
+  `d4b8cb500`.
+- Remote branch `codex/rec-118-future-date-mockup`, draft PR #187, and Linear
+  REC-118 remain the durable review surfaces. REC-118 is still `In Progress`.
+  Expected files for this polish are `Wander/Features/Map/MapScreen.swift`,
+  the DEBUG mockup for parity, focused tests, and this log.
+- This landing request is not a TestFlight release request. No build-number
+  bump, archive/upload, hosted migration application, or tester Slack note is
+  authorized by this turn.
+
+Pre-merge polish validation, 2026-07-23 13:12 PDT:
+
+- Removed the `OPTIONAL`/“Someday is okay” copy while keeping the field
+  optional, reduced the empty state to “add a date,” and changed the helper to
+  the exact requested sentence: “If notifications are on, rec.me will remind
+  you three days before.”
+- Replaced the graphical single-date picker’s implicit three-day default with
+  an empty `MultiDatePicker` selection. Expanding the calendar now leaves
+  `plannedDate` nil until the user taps a date; a selected date can still be
+  replaced or cleared. Focused reminder and source-contract regressions cover
+  the empty, add, replace, and metadata-normalization paths.
+- Pre-landing review found and fixed one account-switch race adjacent to Wanna
+  plan reconciliation: late notification-preference or remote-plan completions
+  can no longer update a newly signed-in account. A deferred repository
+  regression verifies that a completion from account A cannot clear account
+  B’s planned date.
+- Validation passed: focused REC-118/account-switch regressions (10/10), the
+  complete iOS suite (614/614) on iPhone 17 Pro Max / iOS 26.5, the universal
+  generic iOS Simulator build, Node syntax checking, `git diff --check`, and
+  the linked hosted Supabase smoke with REC-118’s migration plus all 17 pgTAP
+  assertions injected into one rollback-only transaction. The hosted database
+  and migration history were not mutated.
+- The first complete-suite attempt reported one unrelated
+  `testRemoteVisiblePlacesHydrateProfilesAndAttributesWithoutLocalFollow`
+  failure. That test passed independently, and the immediate full rerun passed
+  all 614 tests, confirming the failure was transient.
+- Final visual QA passed on iPhone 17 Pro Max and compact iPhone 17e. Both
+  expanded-calendar screenshots show the current day accent but no selected
+  date: `/private/tmp/rec118-final-empty-calendar-17-pro-max.png` and
+  `/private/tmp/rec118-final-empty-calendar-17e.png`.
+- PR #187 remains the landing surface. Next: commit and push this polish, mark
+  the PR ready and REC-118 `In Review`, confirm it is current with
+  `origin/main`, then squash-merge as requested. No TestFlight or hosted
+  migration deployment is part of this merge-only handoff.
+- Integrated exact current `origin/main` at
+  `f93e0080d08ee2485b03e9c150f24fad843478b5`, including REC-133’s
+  `333439b3fecbd0812917f3aed715bad44ad2fc82` squash and completion record. The
+  only manual conflict was this append-only log; both histories were preserved.
+  XcodeGen produced no project drift. Exact post-integration validation passed
+  626/626 iOS tests
+  (`/private/tmp/DerivedData-rec118-post-main/Logs/Test/Test-Wander-2026.07.23_13-16-33--0700.xcresult`),
+  the universal generic Simulator build, and the linked rollback-only
+  REC-118 migration preview plus the combined REC-133/REC-118 smoke contracts.

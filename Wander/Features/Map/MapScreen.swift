@@ -1097,6 +1097,7 @@ struct MapScreen: View {
                 inviteeUserIDs: submission.inviteeUserIDs,
                 sourceVisit: targetVisit
             )
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
             return result
         case .sharedVisit(let invitation):
             return await acceptSharedVisit(invitation, submission: submission)
@@ -1132,6 +1133,7 @@ struct MapScreen: View {
                 auth.presentGate(for: .syncPlace)
             }
 
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
             return result
         }
     }
@@ -1313,6 +1315,7 @@ struct MapScreen: View {
             guard removal != nil else {
                 return false
             }
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
 
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
@@ -2774,6 +2777,7 @@ struct MapPlaceSaveContext: Identifiable {
     let initialVisibility: PlaceVisibility
     let initialRatingScore: Double?
     let initialNote: String
+    let initialPlannedDate: Date?
     let initialAnswers: [String: Set<String>]
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
@@ -2934,6 +2938,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
+            initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: nil,
@@ -2955,6 +2960,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
+            initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: nil,
@@ -2975,6 +2981,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
+            initialPlannedDate: nil,
             initialAnswers: initialNewSaveAnswers(from: attributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: attributes),
@@ -2998,6 +3005,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: latestVisit?.ratingScore,
             initialNote: note,
+            initialPlannedDate: nil,
             initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: defaultAttributes),
@@ -3017,6 +3025,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
+            initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: invitation.attributeDrafts),
@@ -3037,6 +3046,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: visit.ratingScore,
             initialNote: visit.note ?? "",
+            initialPlannedDate: nil,
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
             initialCuisine: initialCuisine(from: attributes),
@@ -3056,6 +3066,7 @@ struct MapPlaceSaveContext: Identifiable {
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: nil,
             initialNote: visiblePlace.userPlace.note ?? "",
+            initialPlannedDate: visiblePlace.userPlace.plannedDate,
             initialAnswers: initialAnswers(from: attributes),
             initialPersonalLabels: initialPersonalLabels(from: attributes),
             initialCuisine: initialCuisine(from: attributes),
@@ -3215,6 +3226,7 @@ struct MapPlaceSaveSubmission {
     let photoAttachments: [MapPlaceSavePhotoAttachment]
     let inviteeUserIDs: [String]
     let reconcilesSharedVisitInvitees: Bool
+    var plannedDate: Date? = nil
 }
 
 struct MapPlaceSavePhotoAttachment: Identifiable {
@@ -3315,6 +3327,7 @@ func persistNewPlaceSaveSubmission(
         note: submission.note,
         sourceType: sourceType,
         ratingScore: submission.ratingScore,
+        plannedDate: submission.plannedDate,
         attributes: submission.attributes,
         backend: backend
     )
@@ -3372,6 +3385,7 @@ func persistScopedVisitOrWantSubmission(
             note: submission.note,
             sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
             ratingScore: nil,
+            plannedDate: submission.plannedDate,
             attributes: submission.attributes,
             backend: backend
         )
@@ -3472,6 +3486,8 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isChoosingPlaceType = false
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
+    @State private var plannedDate: Date?
+    @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
     @State private var isRemoving = false
     @State private var isShowingRemoveConfirmation = false
@@ -3500,6 +3516,11 @@ struct MapPlaceSaveFlowSheet: View {
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
         _note = State(initialValue: context.initialNote)
+        let today = WannaGoDate.normalized(.now)
+        let initialPlannedDate = context.initialPlannedDate
+            .map { WannaGoDate.normalized($0) }
+            .flatMap { $0 >= today ? $0 : nil }
+        _plannedDate = State(initialValue: initialPlannedDate)
         _visitPhotoAttachments = State(initialValue: context.initialPhotoAttachments)
     }
 
@@ -3771,6 +3792,115 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private var plannedDateSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("when do you wanna go?")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            VStack(spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingPlannedDatePicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Circle())
+
+                        if let plannedDate {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("planned for")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                Text(WannaGoDate.displayString(for: plannedDate))
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.82)
+                            }
+                        } else {
+                            Text("add a date")
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.82)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingPlannedDatePicker ? 180 : 0))
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 58)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(plannedDate == nil ? "Add a Wanna go date" : "Change Wanna go date")
+                .accessibilityValue(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "No date selected")
+
+                if isShowingPlannedDatePicker {
+                    Divider().background(WanderTheme.borderHairline.color)
+
+                    MultiDatePicker(
+                        "Wanna go date",
+                        selection: Binding(
+                            get: {
+                                WannaGoDate.calendarSelection(for: plannedDate)
+                            },
+                            set: { nextSelection in
+                                plannedDate = WannaGoDate.singleDate(
+                                    from: nextSelection,
+                                    replacing: plannedDate
+                                )
+                            }
+                        ),
+                        in: WannaGoDate.normalized(.now)...
+                    )
+                    .labelsHidden()
+                    .tint(WanderTheme.terracotta.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+
+                    HStack {
+                        Label("Past dates are unavailable", systemImage: "calendar.badge.exclamationmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+
+                        Spacer()
+
+                        if plannedDate != nil {
+                            Button("clear") {
+                                plannedDate = nil
+                                isShowingPlannedDatePicker = false
+                            }
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                        }
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing3)
+                }
+            }
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
+
+            Text("If notifications are on, rec.me will remind you three days before.")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder
     private var questionAndLabelSections: some View {
         ForEach(questionBlocks) { block in
@@ -3831,7 +3961,7 @@ struct MapPlaceSaveFlowSheet: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
 
-                    Text("note, tags, labels & privacy")
+                    Text(optionalDetailsSummary)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(1)
@@ -3859,11 +3989,23 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityHint("Optional. Save without opening this section.")
 
             if isShowingOptionalDetails {
+                if selectedStatus == .wannaGo {
+                    plannedDateSection
+                }
                 noteSection
                 questionAndLabelSections
                 visibilitySection
             }
         }
+    }
+
+    private var optionalDetailsSummary: String {
+        if selectedStatus == .wannaGo, let plannedDate {
+            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note & privacy"
+        }
+        return selectedStatus == .wannaGo
+            ? "date, note, tags & privacy"
+            : "note, tags, labels & privacy"
     }
 
     private var removeSaveSection: some View {
@@ -4271,7 +4413,8 @@ struct MapPlaceSaveFlowSheet: View {
             inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : [],
             reconcilesSharedVisitInvitees: context.editedVisit != nil
                 && canInviteFriends
-                && didLoadSharedVisitInvitees
+                && didLoadSharedVisitInvitees,
+            plannedDate: selectedStatus == .wannaGo ? plannedDate : nil
         )
 
         Task {

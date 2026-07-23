@@ -1263,6 +1263,54 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(attributes?[2]["value"] as? String, "Thai")
     }
 
+    func testWannaPlaceSaveSendsPlannedDateAndOwnerPlanRPCDecodesIt() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["save_own_place"] = #"{"user_place_id":"up_maru","place_id":"place_maru"}"#.data(using: .utf8)
+        rpc.responses["own_wanna_go_plans"] = """
+        [{
+          "user_place_id": "up_maru",
+          "place_id": "place_maru",
+          "planned_date": "2026-08-20"
+        }]
+        """.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+        let draft = UserPlaceDraft(
+            place: PlaceDraft(
+                localID: "local_place_maru",
+                serverID: nil,
+                canonicalName: "Maru Coffee",
+                category: "coffee",
+                address: nil,
+                locality: "Los Angeles",
+                region: "CA",
+                country: nil,
+                latitude: 34.045,
+                longitude: -118.235,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mk_maru",
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            nearbyConfirmed: false,
+            plannedDate: plannedDate,
+            sourceType: "manual",
+            attributes: []
+        )
+
+        _ = try await repository.save(draft)
+        let plans = try await repository.ownWannaGoPlans()
+
+        let userPlace = try XCTUnwrap(rpc.rawBodies.first?["input_user_place"] as? [String: Any])
+        XCTAssertEqual(userPlace["planned_date"] as? String, "2026-08-20")
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_own_place", "own_wanna_go_plans"])
+        XCTAssertEqual(plans.map(\.userPlaceID), ["up_maru"])
+        XCTAssertEqual(plans.map(\.placeID), ["place_maru"])
+        XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(plans.first?.plannedDate)), "2026-08-20")
+    }
+
     func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
         let rpc = RecordingRPC()
         let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
@@ -1914,7 +1962,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": false,
-          "followed_activity_enabled": true
+          "followed_activity_enabled": true,
+          "wanna_go_reminders_enabled": false
         }
         """.data(using: .utf8)
         rpc.responses["update_notification_preferences"] = """
@@ -1926,7 +1975,8 @@ final class RemoteRepositoryTests: XCTestCase {
           "recommendations_enabled": true,
           "capture_enabled": true,
           "discovery_digest_enabled": true,
-          "followed_activity_enabled": false
+          "followed_activity_enabled": false,
+          "wanna_go_reminders_enabled": true
         }
         """.data(using: .utf8)
         rpc.responses["register_push_token"] = #""token-row-id""#.data(using: .utf8)
@@ -1934,7 +1984,11 @@ final class RemoteRepositoryTests: XCTestCase {
 
         let preferences = try await repository.preferences()
         let updated = try await repository.updatePreferences(
-            NotificationPreferencesUpdate(discoveryDigestEnabled: true, followedActivityEnabled: false)
+            NotificationPreferencesUpdate(
+                discoveryDigestEnabled: true,
+                followedActivityEnabled: false,
+                wannaGoRemindersEnabled: true
+            )
         )
         let tokenID = try await repository.registerPushToken(
             "abcdef1234567890",
@@ -1947,8 +2001,10 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(preferences.sharedVisitsEnabled)
         XCTAssertTrue(preferences.followedActivityEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
+        XCTAssertFalse(preferences.wannaGoRemindersEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
         XCTAssertFalse(updated.followedActivityEnabled)
+        XCTAssertTrue(updated.wannaGoRemindersEnabled)
         XCTAssertEqual(tokenID, "token-row-id")
         XCTAssertEqual(
             rpc.calls.map(\.name),
@@ -1963,6 +2019,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
         XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
         XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
+        XCTAssertEqual(updatePayload?["wanna_go_reminders_enabled"] as? Bool, true)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
         XCTAssertEqual(rpc.rawBodies[2]["input_environment"] as? String, "sandbox")
@@ -2106,7 +2163,8 @@ final class RemoteRepositoryTests: XCTestCase {
                 recommendationsEnabled: true,
                 captureEnabled: true,
                 discoveryDigestEnabled: true,
-                followedActivityEnabled: true
+                followedActivityEnabled: true,
+                wannaGoRemindersEnabled: true
             )
         )
         XCTAssertEqual(NotificationPreferences.allDisabled, NotificationPreferences(
@@ -2117,7 +2175,8 @@ final class RemoteRepositoryTests: XCTestCase {
             recommendationsEnabled: false,
             captureEnabled: false,
             discoveryDigestEnabled: false,
-            followedActivityEnabled: false
+            followedActivityEnabled: false,
+            wannaGoRemindersEnabled: false
         ))
     }
 
@@ -2176,6 +2235,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(destination("wanna_go_reminder", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(
             destination(
                 "shared_visit",

@@ -24,6 +24,8 @@ struct WanderApp: App {
             #if DEBUG
             if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)
+            } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
+                FutureDateSaveMockupRoot(page: futureDateMockupPage)
             } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
                 ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let carouselMockupPage = PlacePhotoCarouselMockupPage.resolved() {

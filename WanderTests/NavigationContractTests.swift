@@ -467,6 +467,35 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
     }
 
+    func testWannaGoDatePickerStaysEmptyUntilTheUserChoosesADate() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let plannedDateSection = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private var plannedDateSection: some View")
+                .last?
+                .components(separatedBy: "private var questionAndLabelSections: some View")
+                .first
+        )
+
+        XCTAssertTrue(plannedDateSection.contains("Text(\"add a date\")"))
+        XCTAssertTrue(plannedDateSection.contains("MultiDatePicker("))
+        XCTAssertTrue(
+            plannedDateSection.contains(
+                "If notifications are on, rec.me will remind you three days before."
+            )
+        )
+        XCTAssertFalse(plannedDateSection.contains("Someday is okay"))
+        XCTAssertFalse(plannedDateSection.contains("Text(\"OPTIONAL\")"))
+        XCTAssertFalse(mapScreen.contains("@State private var datePickerSelection"))
+        XCTAssertFalse(
+            mapScreen.contains(
+                "let suggestedDate = Calendar.autoupdatingCurrent.date(byAdding: .day"
+            )
+        )
+    }
+
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
         let presentations = [
             ("Wander/App/WanderRootView.swift", ".fullScreenCover(item: $sharedProfile)"),
