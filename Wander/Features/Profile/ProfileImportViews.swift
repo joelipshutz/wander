@@ -867,6 +867,7 @@ struct PlaceImportInboxScreen: View {
     }
 
     private func saveSheetDidDismiss() {
+        store.saveFlowDidDismiss(.saveSheet)
         guard isBulkSaveRunning else { return }
         guard didSaveCurrentBulkItem else {
             bulkSaveQueue = []

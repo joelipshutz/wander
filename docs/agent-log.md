@@ -18956,3 +18956,112 @@ REC-133 design-mock validation and handoff, 2026-07-22 23:20 PDT:
   untouched. No schema/RLS migration, archive, TestFlight upload, build-number
   increment, or Slack release note was performed. Next: collect design approval,
   then scope the production photo-query/pagination and RLS regression work.
+Completion, 2026-07-22 23:15 PDT:
+
+- Squash-merged ready build-number PR #183:
+  https://github.com/joelipshutz/wander/pull/183. Exact release source is
+  merged-main commit `c0d7f6b8f`; REC-127 implementation PR #174 previously
+  merged as `2b8be0823`.
+- `main` advanced only after the build-94 archive/upload began with REC-122
+  (`61b50e6f9`) and its completion log. Build 94 intentionally remains the
+  already-verified `c0d7f6b8f` REC-127 release source; REC-122 is not in build
+  94 and will ride the next explicitly requested TestFlight batch.
+- Deleted only the completed build-94 test DerivedData cache and already-uploaded
+  build-93 archive to make room, then created a fresh detached worktree from
+  exact `origin/main`. Archived `/private/tmp/Wander-0.1-build94.xcarchive`;
+  archive and embedded app metadata both verify rec.me `0.1 (94)`, bundle
+  `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export/upload succeeded with automatic App Store distribution signing and
+  `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander`,
+  `Upload succeeded`, and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed App Store Connect build
+  `8b8dcaa6-9b92-41d9-afc5-a84e7931a5e7` is `VALID`, export compliance is
+  false, en-US What to Test is updated, and public group `rec.me Alpha` is
+  attached. The explicit review-submission POST returned the harmless existing
+  QC-state 422, then the final build query reported beta review `APPROVED`.
+- Posted the required tester-facing Slack note:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784787284501749.
+  Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Linear REC-127 has final PR, merge, validation, build, TestFlight, and Slack
+  evidence and is Done. Mission Control task creation remained unavailable
+  because `localhost:4000` was not running.
+- Final tester focus: normal Map launch uses current-city framing with no
+  selected place/card; location-unavailable fallback remains unselected;
+  notification and explicit place routes still center/select intentionally.
+  Known behavior: current city is a one-shot location fix at the existing
+  city-scale span, not a live follow-camera or reverse-geocoded boundary.
+
+## 2026-07-23 10:51 PDT - Codex - REC-122 Celebration Dismissal Follow-up
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-122-celebration-dismissal`
+Worktree: `/private/tmp/recme-rec122-celebration-dismissal`
+Linear: `REC-122` (`In Progress`)
+
+Goal: fix Joe's phone-validation finding that the streak celebration starts
+behind the still-dismissing save sheet and disappears too quickly. The save
+sheet must fully leave first; the daily takeover must then remain until the
+user confirms it with an explicit button.
+
+Starting status and diagnosis:
+
+- Started clean from exact `origin/main` commit `92adcdc`; the open Xcode
+  phone-build checkout remains isolated and untouched.
+- Root cause is `WanderRootView.queueSaveStreakCelebration`: it presents after
+  a fixed 180 ms and auto-dismisses the daily takeover after 2.2 seconds. The
+  save store publishes its event before `MapPlaceSaveFlowSheet` calls
+  `dismiss()`, so presentation and timing begin behind SwiftUI's sheet window.
+- The repo intentionally has no `DebugBridge` / `StateServer`, confirmed by
+  source search and the existing iOS review record, so the `ios-fix` HTTP
+  snapshot endpoint is unavailable. Joe's observed phone state plus the exact
+  pre-fix presenter ordering above is the reproduction evidence. Add a native
+  deterministic regression test around the presentation gate instead of
+  introducing unowned debug-server infrastructure.
+- Locked behavior: track save-flow visibility, keep the streak event pending
+  while a save sheet is visible, present only after the sheet disappears, and
+  require a clear confirmation action for the daily takeover. Same-day
+  confetti remains a short non-blocking effect after the same gate.
+- Linear REC-122 was reopened and annotated. Mission Control task creation was
+  attempted but `localhost:4000` is not running.
+
+Expected files: `Wander/App/WanderRootView.swift`,
+`Wander/Features/Map/MapScreen.swift`, focused streak tests, and this log.
+
+Checkpoint, 2026-07-23 11:06 PDT:
+
+- Replaced the fixed 180 ms presentation guess with explicit save-flow
+  lifecycle tracking. Every `MapPlaceSaveFlowSheet` now registers while it is
+  visible, and each host removes that layer from its actual sheet `onDismiss`.
+  The Add tab's outer sheet is tracked separately so the takeover also waits
+  for both nested sheets to leave.
+- The root presenter cancels pending celebration work whenever a save-flow
+  layer is visible, requeues the still-current event when all layers are gone,
+  then waits a short 140 ms settling interval. Daily takeovers no longer have
+  any auto-dismiss timer; same-day confetti still clears after 720 ms.
+- Replaced the full-screen tap-to-dismiss affordance with an explicit 54 pt
+  `got it` button that respects the bottom safe area. Inspected the resulting
+  takeover on iPhone 16 Plus and iPhone 16e; hierarchy, wrapping, button fit,
+  tap target, and home-indicator clearance are clean on both sizes.
+- Validation: focused REC-122 suites passed 8/8 with zero failures; full suite
+  passed 586/586 with zero failures; the universal iOS Simulator build passed.
+  Result bundles:
+  `/private/tmp/DerivedData-rec122-dismissal/Logs/Test/Test-Wander-2026.07.23_10-58-12--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec122-dismissal/Logs/Test/Test-Wander-2026.07.23_11-02-13--0700.xcresult`.
+- Pre-landing review found no blocking state, accessibility, safe-area,
+  persistence, privacy, signing, project-file, or scope issues. The generic
+  gstack `review` skill is not installed in this environment, so the equivalent
+  source/diff/test/design-system review was completed directly. No TestFlight
+  build or build-number increment is part of this follow-up.
+
+REC-122 follow-up completion, 2026-07-23 11:09 PDT:
+
+- Ready PR #190 (`fix: present streak takeover after save dismissal`) was clean
+  against exact current `main` and squash-merged as `9b5d2b3`. Linear REC-122
+  has the PR, head SHA, validation evidence, and merge result and is Done.
+- Final validation remains 8/8 focused streak tests, 586/586 full tests, a
+  successful universal simulator build, and inspected iPhone 16 Plus/iPhone
+  16e screenshots. No known blocking issue remains.
+- No TestFlight archive, upload, build-number increment, or Slack release note
+  was performed. The merged fix is ready for a local signed phone build from
+  latest `main` and will ride the next explicitly requested TestFlight batch.

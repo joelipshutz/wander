@@ -344,7 +344,9 @@ struct MapScreen: View {
                 typeaheadTask?.cancel()
                 mapFeatureResolutionTask?.cancel()
             }
-            .sheet(item: $mapSaveFlow) { context in
+            .sheet(item: $mapSaveFlow, onDismiss: {
+                store.saveFlowDidDismiss(.saveSheet)
+            }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveMapFlowSubmission(submission)
                 } onRemove: { context in
@@ -3603,6 +3605,7 @@ struct MapPlaceSaveFlowSheet: View {
                 .id(placeTypePickerMode)
             }
             .onAppear {
+                store.saveFlowDidPresent(.saveSheet)
                 if store.isPrivateProfile {
                     selectedVisibility = .selfOnly
                 }
@@ -6279,7 +6282,9 @@ struct PlaceActivitySection: View {
                 entriesByID: entriesByID
             )
         }
-        .sheet(item: $editFlow) { context in
+        .sheet(item: $editFlow, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { context in
             MapPlaceSaveFlowSheet(context: context) { submission in
                 await saveActivityEdit(submission)
             } onRemove: { context in
