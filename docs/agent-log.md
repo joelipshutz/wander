@@ -19124,7 +19124,6 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
-
 REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
 
 - Merged current `origin/main` at `e09708109` into
@@ -19323,3 +19322,59 @@ REC-125 completion, 2026-07-23 11:42 PDT:
 - No TestFlight build-number increment, archive/upload, public-group action,
   Slack release note, or other release mutation was requested or performed.
   This change will ride the next explicitly requested release batch.
+## 2026-07-23 10:07 PDT - Codex - REC-135 Match Broken Import
+
+Agent: Codex
+Branch: `codex/rec-135-match-broken-import`
+Worktree: `/private/tmp/recme-rec135-match-place`
+Linear: `REC-135` (`In Progress`)
+
+Goal: update the broken-import “Match a Place” flow so its search is prefilled
+from the import, returns selectable place matches using the app's MapKit place
+search contract, permits one selection, and enables a full-width confirmation
+button only after selection.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from clean
+  `origin/main` at `92adcdc89`. The primary checkout contains unrelated
+  `.gitignore` and `.pnpm-store/` changes, so no work will be done there.
+- Existing worktrees do not overlap the expected implementation files.
+- REC-135 moved from Backlog to In Progress before implementation.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`,
+  focused place-import tests under `WanderTests/`, and this coordination log.
+  `project.yml`, the Xcode project, schema/RLS, auth, and build metadata are
+  outside scope unless implementation inspection proves otherwise.
+- The current rescue screen only exposes separate Name/Area fields and a
+  toolbar Search action, then dismisses immediately when a result is found.
+  It does not show candidates or require explicit single-selection confirmation.
+
+Implementation and validation checkpoint, 2026-07-23 10:23 PDT:
+
+- Replaced the destructive search-and-dismiss rescue flow with a prefilled,
+  single-field search surface that automatically loads MapKit matches, supports
+  repeat searches, displays one-selectable result cards, and keeps the
+  full-width Match Place button disabled until a result is selected. The source
+  URL remains below the button.
+- Split candidate preview from confirmation in `PlaceImportStore`. Preview uses
+  the existing `DevicePlaceImportResolver.resolveManualSearch` /
+  `MapKitPlaceResolver` path but does not mutate or persist the import. Explicit
+  confirmation trims and persists the query/area, all displayed candidates,
+  and exactly one selected candidate, while refusing to resurrect a completed,
+  duplicate, or dismissed item.
+- Added regressions proving preview search leaves the durable import unchanged
+  and confirmation persists exactly the selected candidate id.
+- Focused REC-135 tests passed twice after the final stale-import guard: 2 tests,
+  0 failures. Final result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-22-22--0700.xcresult`.
+- The full suite passed before the final one-line stale-import guard: 586 tests,
+  0 failures. Result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-21-31--0700.xcresult`.
+  The final focused rerun rebuilt the app and store successfully.
+- The documented iPhone 16 Plus / iOS 18.6 simulator is not installed on this
+  machine. Validation used the available iPhone 17 Pro / iOS 26.5 runtime. Only
+  existing traditional-headermap, Swift concurrency, and simulator/keychain
+  warnings appeared; no REC-135 compile or test warning was introduced.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
