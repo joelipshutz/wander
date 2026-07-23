@@ -4760,6 +4760,10 @@ struct PlaceTypePickerSheet: View {
             return groups.flatMap(\.subcategories)
         }
 
+        if let cuisines = selectedFilter.cuisines {
+            return cuisines
+        }
+
         let groupTitles = Set(selectedFilter.groupTitles)
         return groups
             .filter { groupTitles.contains($0.title) }
@@ -5091,14 +5095,27 @@ struct PlaceTypePickerSheet: View {
 private struct RestaurantCuisineRegionFilter: Identifiable {
     let id: String
     let groupTitles: [String]
+    let cuisines: [String]?
 
     static let options = [
-        RestaurantCuisineRegionFilter(id: "Popular", groupTitles: ["Popular cuisines"]),
-        RestaurantCuisineRegionFilter(id: "Asia", groupTitles: ["Asian"]),
-        RestaurantCuisineRegionFilter(id: "Europe", groupTitles: ["Europe"]),
-        RestaurantCuisineRegionFilter(id: "Americas", groupTitles: ["Americas & Pacific"]),
-        RestaurantCuisineRegionFilter(id: "Mideast & Africa", groupTitles: ["Middle East & Africa"]),
-        RestaurantCuisineRegionFilter(id: "More", groupTitles: ["Misc"])
+        RestaurantCuisineRegionFilter(
+            id: "Popular",
+            groupTitles: [],
+            cuisines: WanderPlaceCategory.restaurantPopularCuisineOptions
+        ),
+        RestaurantCuisineRegionFilter(id: "Asia", groupTitles: ["Asian"], cuisines: nil),
+        RestaurantCuisineRegionFilter(id: "Europe", groupTitles: ["Europe"], cuisines: nil),
+        RestaurantCuisineRegionFilter(
+            id: "Americas & Pacific",
+            groupTitles: ["Americas & Pacific"],
+            cuisines: nil
+        ),
+        RestaurantCuisineRegionFilter(
+            id: "Mideast & Africa",
+            groupTitles: ["Middle East & Africa"],
+            cuisines: nil
+        ),
+        RestaurantCuisineRegionFilter(id: "More", groupTitles: ["Misc"], cuisines: nil)
     ]
 }
 
@@ -5223,33 +5240,41 @@ private struct RestaurantCuisineRegionFilters: View {
     let onSelect: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(RestaurantCuisineRegionFilter.options) { filter in
-                    Button {
-                        selectedRegion = filter.id
-                        onSelect()
-                    } label: {
-                        Text(filter.id)
-                            .font(.system(size: 13, weight: .black))
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                            .background(
-                                selectedRegion == filter.id
-                                    ? WanderTheme.textInk.color
-                                    : WanderTheme.surfaceBone.color
-                            )
-                            .foregroundStyle(
-                                selectedRegion == filter.id
-                                    ? WanderTheme.textOnAction.color
-                                    : WanderTheme.textInk.color
-                            )
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("filter")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(RestaurantCuisineRegionFilter.options) { filter in
+                        Button {
+                            selectedRegion = filter.id
+                            onSelect()
+                        } label: {
+                            Text(filter.id)
+                                .font(.system(size: 13, weight: .black))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                                .background(
+                                    selectedRegion == filter.id
+                                        ? WanderTheme.textInk.color
+                                        : WanderTheme.surfaceBone.color
+                                )
+                                .foregroundStyle(
+                                    selectedRegion == filter.id
+                                        ? WanderTheme.textOnAction.color
+                                        : WanderTheme.textInk.color
+                                )
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(filter.id) cuisines")
+                        .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(filter.id) cuisines")
-                    .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
                 }
             }
         }

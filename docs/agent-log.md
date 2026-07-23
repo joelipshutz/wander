@@ -19260,3 +19260,69 @@ Review handoff, 2026-07-23 10:46 PDT:
   `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` to the
   foreground in Xcode. Xcode's branch chooser confirms
   `codex/rec-126-restaurant-cuisines`, ready for local test and review.
+
+Follow-up and landing start, 2026-07-23 11:05 PDT:
+
+- Ryan requested every previously identified country-cuisine gap, the proposed
+  South Asian moves, explicit Greek/Japanese/Poke regional placement, an
+  `Americas & Pacific` filter label, and a `filter` subheader above the region
+  choices, followed by squash-merging PR #189 to `main`.
+- Refetched origin. The REC-126 worktree is clean, `origin/main` remains
+  `92adcdc89`, and the branch is 12 commits ahead with no new base commits.
+  The root checkout remains on unrelated REC-88 work, so all edits stay in the
+  isolated REC-126 worktree.
+- Expected files: `shared/place-taxonomy.json`,
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Services/WanderPlaceEmojiResolver.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, and this log. Linear REC-126
+  remains In Review while its ready PR is updated and validated.
+- The latest completed release record is TestFlight build 94; there is no
+  unfinished explicit release and this request does not authorize a new
+  TestFlight build.
+
+Follow-up implementation checkpoint, 2026-07-23 11:26 PDT:
+
+- Expanded the canonical restaurant taxonomy from 126 to 173 unique cuisines
+  and advanced the shared taxonomy contract to version 8. The former Popular
+  ownership group is now a display-only shortcut while every cuisine belongs
+  to one geographic group: Asia (42), Middle East & Africa (29), Europe (40),
+  Americas & Pacific (45), or Misc (17).
+- Added every previously identified country gap, moved Pakistani, Sri Lankan,
+  and Bangladeshi into Asia, and explicitly placed Japanese in Asia, Greek in
+  Europe, and Poke in Americas & Pacific. Added non-fallback regional or dish
+  emoji coverage for every new cuisine.
+- Added the requested lowercase `filter` subheader and renamed the production
+  filter to `Americas & Pacific`. The filter chip preserves its full
+  single-line label in the horizontally scrollable row and exposes the complete
+  `Americas & Pacific cuisines` accessibility name.
+- Updated the production picker, debug mock copy, Swift/JSON parity assertions,
+  popular-overlay assertions, canonical placement tests, and deterministic
+  inference coverage for Laotian and Poke.
+- The first escalated focused run exposed that the static Swift taxonomy entry
+  had not yet been synchronized with the canonical cuisine groups. After
+  fixing that parity omission, focused `WanderPlaceCategoryTests` passed 41/41
+  with zero failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-14-23--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Screenshots:
+  `/private/tmp/rec126-cuisine-expanded-17pro-final.png` and
+  `/private/tmp/rec126-cuisine-expanded-17e-final.png`. Both sizes preserve the
+  two-column grid, readable header, Recents placement, filter hierarchy, sticky
+  footer, safe areas, and 44-point controls. Accessibility inspection also
+  confirmed the full regional filter names and Greek/Japanese availability.
+- `xcodegen generate` completed without project-file churn, the JSON taxonomy
+  reports 173 entries/173 unique values, and `git diff --check` passed. Full
+  exact-head testing and the required pre-landing review remain before merge.
+
+Exact-head validation checkpoint, 2026-07-23 11:28 PDT:
+
+- Full `xcodebuild test` passed 592/592 with zero failures on iPhone 17 /
+  iOS 26.5. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-24-31--0700.xcresult`.
+  Expected non-critical simulator warnings remained limited to Clerk keychain
+  access, a missing optional resource manifest, and the existing traditional
+  headermap warning.
+- While starting the pre-landing review, `origin/main` advanced by two commits
+  beyond the previously fetched `92adcdc89`. This checkpoint is being committed
+  before merging the new base; the branch will be updated from latest main and
+  revalidated before PR #189 is eligible to squash-merge.

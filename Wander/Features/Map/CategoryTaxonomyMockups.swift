@@ -381,7 +381,7 @@ private struct CuisineSmartPickerMockup: View {
                 selectedCuisine = "Thai"
             }
 
-            MockupSearchField(text: "Search 126 cuisines")
+            MockupSearchField(text: "Search 173 cuisines")
 
             MockupSection(title: "quick picks") {
                 MockupChipGrid(

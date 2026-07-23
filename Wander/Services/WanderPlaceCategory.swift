@@ -863,22 +863,28 @@ enum WanderPlaceCategory {
             "thai restaurant", "sushi restaurant", "korean bbq"
         ],
             subcategories: [
-            "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Italian",
-            "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion", "Sushi", "Ramen",
+            "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi", "Ramen",
             "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
-            "Yakiniku", "North Indian", "South Indian", "Malaysian", "Indonesian", "Filipino", "Burmese",
-            "Cambodian", "Asian", "Tibetan", "Mongolian BBQ", "Korean BBQ", "Japanese BBQ", "Japanese curry",
-            "Tonkatsu", "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern", "Lebanese",
-            "Persian", "Turkish", "Israeli", "Moroccan", "Ethiopian", "African", "Falafel", "Gyro", "Kebab",
-            "Shawarma", "Halal", "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss",
-            "Dutch", "Belgian", "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech",
-            "Hungarian", "Romanian", "Croatian", "European", "Eastern European", "Danish", "Pizza",
-            "Fish & chips", "Fondue", "Caribbean", "Jamaican", "Panamanian", "Cuban", "Brazilian",
-            "Argentinian", "Colombian", "Chilean", "Peruvian", "South American", "Latin American",
-            "Southwestern", "Cajun", "Californian", "Hawaiian", "Australian", "Burgers", "Diner", "Hot dogs",
-            "Barbecue", "Wings", "Steakhouse", "Bar & grill", "Taco stand", "Taco truck", "Burrito", "Taco",
-            "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup",
-            "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
+            "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan", "Bangladeshi", "Nepalese",
+            "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese", "Cambodian", "Laotian", "Asian",
+            "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek", "Mongolian BBQ", "Korean BBQ",
+            "Japanese BBQ", "Japanese curry", "Tonkatsu", "Afghan", "Middle Eastern", "Lebanese", "Persian",
+            "Turkish", "Israeli", "Palestinian", "Syrian", "Iraqi", "Jordanian", "Yemeni", "Egyptian",
+            "Moroccan", "Tunisian", "Algerian", "Ethiopian", "Eritrean", "Somali", "Kenyan", "Nigerian",
+            "Ghanaian", "Senegalese", "South African", "African", "Falafel", "Gyro", "Kebab", "Shawarma",
+            "Halal", "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tapas", "Portuguese", "Basque",
+            "German", "Austrian", "Bavarian", "Swiss", "Dutch", "Belgian", "British", "Irish", "Scandinavian",
+            "Swedish", "Norwegian", "Finnish", "Danish", "Polish", "Ukrainian", "Russian", "Czech", "Slovak",
+            "Hungarian", "Romanian", "Croatian", "Serbian", "Bosnian", "Bulgarian", "Albanian", "Slovenian",
+            "Lithuanian", "European", "Eastern European", "Pizza", "Fish & chips", "Fondue", "American",
+            "Canadian", "Mexican", "Tex-Mex", "Caribbean", "Jamaican", "Puerto Rican", "Dominican", "Haitian",
+            "Panamanian", "Cuban", "Brazilian", "Argentinian", "Colombian", "Chilean", "Peruvian",
+            "Venezuelan", "Ecuadorian", "Bolivian", "Uruguayan", "Salvadoran", "Guatemalan", "South American",
+            "Latin American", "Southwestern", "Cajun", "Californian", "Hawaiian", "Poke", "Australian",
+            "New Zealand", "Fijian", "Samoan", "Tongan", "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings",
+            "Steakhouse", "Bar & grill", "Taco stand", "Taco truck", "Burrito", "Taco", "Sandwich", "Bagel",
+            "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup", "Chicken", "Seafood",
+            "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
         ],
             isEditable: true
         ),
@@ -1353,31 +1359,36 @@ enum WanderPlaceCategory {
 
     private static let curatedSubcategoryGroups: [String: [PlaceCategorySubcategoryGroup]] = [
         restaurantsFood: [
-            PlaceCategorySubcategoryGroup(title: "Popular cuisines", subcategories: [
-                "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian",
-                "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
-            ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Asian", subcategories: [
-                "Sushi", "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese",
-                "Izakaya", "Yakitori", "Yakiniku", "North Indian", "South Indian", "Malaysian", "Indonesian",
-                "Filipino", "Burmese", "Cambodian", "Asian", "Tibetan", "Mongolian BBQ", "Korean BBQ",
-                "Japanese BBQ", "Japanese curry", "Tonkatsu"
+                "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
+                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya",
+                "Yakitori", "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan",
+                "Bangladeshi", "Nepalese", "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese",
+                "Cambodian", "Laotian", "Asian", "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek",
+                "Mongolian BBQ", "Korean BBQ", "Japanese BBQ", "Japanese curry", "Tonkatsu"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Middle East & Africa", subcategories: [
-                "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern", "Lebanese", "Persian",
-                "Turkish", "Israeli", "Moroccan", "Ethiopian", "African", "Falafel", "Gyro", "Kebab", "Shawarma",
-                "Halal"
+                "Afghan", "Middle Eastern", "Lebanese", "Persian", "Turkish", "Israeli", "Palestinian",
+                "Syrian", "Iraqi", "Jordanian", "Yemeni", "Egyptian", "Moroccan", "Tunisian", "Algerian",
+                "Ethiopian", "Eritrean", "Somali", "Kenyan", "Nigerian", "Ghanaian", "Senegalese",
+                "South African", "African", "Falafel", "Gyro", "Kebab", "Shawarma", "Halal"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Europe", subcategories: [
-                "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss", "Dutch", "Belgian",
-                "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech", "Hungarian",
-                "Romanian", "Croatian", "European", "Eastern European", "Danish", "Pizza", "Fish & chips", "Fondue"
+                "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tapas", "Portuguese", "Basque",
+                "German", "Austrian", "Bavarian", "Swiss", "Dutch", "Belgian", "British", "Irish",
+                "Scandinavian", "Swedish", "Norwegian", "Finnish", "Danish", "Polish", "Ukrainian", "Russian",
+                "Czech", "Slovak", "Hungarian", "Romanian", "Croatian", "Serbian", "Bosnian", "Bulgarian",
+                "Albanian", "Slovenian", "Lithuanian", "European", "Eastern European", "Pizza",
+                "Fish & chips", "Fondue"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Americas & Pacific", subcategories: [
-                "Caribbean", "Jamaican", "Panamanian", "Cuban", "Brazilian", "Argentinian", "Colombian", "Chilean",
-                "Peruvian", "South American", "Latin American", "Southwestern", "Cajun", "Californian", "Hawaiian",
-                "Australian", "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill",
-                "Taco stand", "Taco truck", "Burrito", "Taco"
+                "American", "Canadian", "Mexican", "Tex-Mex", "Caribbean", "Jamaican", "Puerto Rican",
+                "Dominican", "Haitian", "Panamanian", "Cuban", "Brazilian", "Argentinian", "Colombian",
+                "Chilean", "Peruvian", "Venezuelan", "Ecuadorian", "Bolivian", "Uruguayan", "Salvadoran",
+                "Guatemalan", "South American", "Latin American", "Southwestern", "Cajun", "Californian",
+                "Hawaiian", "Poke", "Australian", "New Zealand", "Fijian", "Samoan", "Tongan", "Burgers",
+                "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill", "Taco stand",
+                "Taco truck", "Burrito", "Taco"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Misc", subcategories: [
                 "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup",
@@ -1837,6 +1848,11 @@ enum WanderPlaceCategory {
     static func restaurantCuisineGroups() -> [PlaceCategorySubcategoryGroup] {
         subcategoryGroups(for: restaurantsFood).filter { $0.role == .cuisine }
     }
+
+    static let restaurantPopularCuisineOptions = [
+        "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian",
+        "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
+    ]
 
     static let restaurantCuisineOptions: [String] = {
         restaurantCuisineGroups().flatMap(\.subcategories)

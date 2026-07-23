@@ -1044,7 +1044,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 7)
+        XCTAssertEqual(shared.version, 8)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1082,29 +1082,52 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let groups = WanderPlaceCategory.restaurantCuisineGroups()
 
         XCTAssertEqual(groups.map(\.title), [
-            "Popular cuisines",
             "Asian",
             "Middle East & Africa",
             "Europe",
             "Americas & Pacific",
             "Misc"
         ])
-        XCTAssertEqual(groups.map(\.subcategories.count), [15, 25, 17, 25, 27, 17])
+        XCTAssertEqual(groups.map(\.subcategories.count), [42, 29, 40, 45, 17])
         XCTAssertTrue(groups.allSatisfy { $0.role == .cuisine })
 
         let cuisines = WanderPlaceCategory.restaurantCuisineOptions
-        XCTAssertEqual(cuisines.count, 126)
+        XCTAssertEqual(cuisines.count, 173)
         XCTAssertEqual(Set(cuisines).count, cuisines.count)
         XCTAssertEqual(
             WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood),
             groups
         )
+        XCTAssertEqual(WanderPlaceCategory.restaurantPopularCuisineOptions, [
+            "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian",
+            "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
+        ])
+        XCTAssertTrue(
+            WanderPlaceCategory.restaurantPopularCuisineOptions.allSatisfy(cuisines.contains),
+            "Popular is a filter over the regional taxonomy, not a separate cuisine region"
+        )
 
         let expectedByGroup: [String: [String]] = [
-            "Asian": ["Sushi", "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot"],
-            "Middle East & Africa": ["Falafel", "Gyro", "Kebab", "Shawarma", "Halal"],
-            "Europe": ["Pizza", "Fish & chips", "Fondue"],
+            "Asian": [
+                "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
+                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
+                "Bangladeshi", "Nepalese", "Singaporean", "Laotian", "Mongolian", "Georgian",
+                "Armenian", "Uzbek"
+            ],
+            "Middle East & Africa": [
+                "Palestinian", "Syrian", "Iraqi", "Jordanian", "Yemeni", "Egyptian", "Nigerian",
+                "Ghanaian", "Senegalese", "Kenyan", "Somali", "Eritrean", "South African", "Tunisian",
+                "Algerian", "Falafel", "Gyro", "Kebab", "Shawarma", "Halal"
+            ],
+            "Europe": [
+                "Italian", "Mediterranean", "Greek", "French", "Spanish", "Serbian", "Bosnian",
+                "Bulgarian", "Albanian", "Slovenian", "Slovak", "Swedish", "Norwegian", "Finnish",
+                "Lithuanian", "Pizza", "Fish & chips", "Fondue"
+            ],
             "Americas & Pacific": [
+                "American", "Canadian", "Mexican", "Tex-Mex", "Puerto Rican", "Dominican", "Haitian",
+                "Venezuelan", "Ecuadorian", "Salvadoran", "Guatemalan", "Bolivian", "Uruguayan",
+                "Hawaiian", "Poke", "Australian", "New Zealand", "Fijian", "Samoan", "Tongan",
                 "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill",
                 "Taco stand", "Taco truck", "Burrito", "Taco"
             ],
@@ -1132,6 +1155,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.defaultSubcategory(for: WanderPlaceCategory.restaurantsFood), "Restaurant")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "pizza restaurant"), "Pizza")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "laotian restaurant"), "Laotian")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "poke restaurant"), "Poke")
     }
 
     func testRecentRestaurantCuisinesUseLatestUniqueSavedChoices() {
