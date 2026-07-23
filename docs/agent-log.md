@@ -19504,3 +19504,14 @@ Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
   matcher remains reachable through REC-109's new navigation. The earlier
   exact matcher QA already verified the result-driven Los Angeles to Santa
   Monica Pier camera refit.
+- PR #193 opened ready, then detected two additional `main` commits that landed
+  during publication (`cff9e0689` REC-125 plus its completion record). Rebased
+  onto exact `origin/main` (`f946737b5`); those source changes affect Map save
+  defaults, not REC-135 files, and only the append-only log required manual
+  resolution.
+- Final exact-head focused validation passed 12/12 manual-search,
+  region-fitting, and Add import-navigation tests:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-46-05--0700.xcresult`.
+  The immediately preceding exact REC-109-integrated branch passed the complete
+  591/591 suite. Republish PR #193 with force-with-lease, confirm hosted
+  mergeability, then squash-merge; no TestFlight action is part of this gate.
