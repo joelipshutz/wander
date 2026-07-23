@@ -378,6 +378,63 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertNil(WanderPlaceCategory.cuisineGuess(forRawValue: "Indianapolis restaurant"))
     }
 
+    func testRestaurantCuisineInferencePrioritizesProviderEvidence() {
+        let inference = WanderPlaceCategory.restaurantCuisineInference(
+            name: "American Sushi House",
+            rawProviderType: "japanese_restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood
+        )
+
+        XCTAssertEqual(inference?.cuisine, "Japanese")
+        XCTAssertEqual(inference?.source, .providerType)
+        XCTAssertEqual(inference?.confidence, 0.98)
+    }
+
+    func testRestaurantCuisineInferenceUsesNamesAndWebsiteAliases() {
+        let sushi = WanderPlaceCategory.restaurantCuisineInference(
+            name: "Sushi Fumi",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood
+        )
+        XCTAssertEqual(sushi?.cuisine, "Sushi")
+        XCTAssertEqual(sushi?.source, .placeName)
+
+        let ugo = WanderPlaceCategory.restaurantCuisineInference(
+            name: "Ugo",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood,
+            websiteURLString: "https://www.cafeugo.com/"
+        )
+        XCTAssertEqual(ugo?.cuisine, "Italian")
+        XCTAssertEqual(ugo?.source, .website)
+    }
+
+    func testRestaurantCuisineInferenceDoesNotGuessFromLocationOrGenericRestaurantData() {
+        let inference = WanderPlaceCategory.restaurantCuisineInference(
+            name: "The Corner",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood,
+            websiteURLString: nil
+        )
+
+        XCTAssertNil(inference)
+    }
+
+    func testKnownProviderCategoryMistakesAreCorrectedFromPlaceName() {
+        XCTAssertEqual(
+            WanderPlaceCategory.primary(for: .restaurant, name: "CAFFENIO"),
+            WanderPlaceCategory.coffeeTeaSweets
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.primary(for: .restaurant, name: "Whole Foods Market"),
+            WanderPlaceCategory.shopping
+        )
+    }
+
     func testUserEditedSubcategoryWinsOverProviderAndNameHints() {
         let assignment = PlaceCategoryAssignment(
             primaryCategory: WanderPlaceCategory.wellnessFitness,
@@ -987,7 +1044,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 6)
+        XCTAssertEqual(shared.version, 8)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1021,35 +1078,154 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
     }
 
-    func testRestaurantsFoodSubcategoriesSeparateTypeAndCuisineGroups() {
-        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood)
+    func testRestaurantsFoodUsesCuisineOnlyGroups() throws {
+        let groups = WanderPlaceCategory.restaurantCuisineGroups()
 
         XCTAssertEqual(groups.map(\.title), [
-            "Restaurant type",
-            "Popular cuisines",
-            "Asian cuisines",
+            "Asian",
             "Middle East & Africa",
-            "European cuisines",
-            "Americas & Pacific"
+            "Europe",
+            "Americas & Pacific",
+            "Misc"
         ])
-        XCTAssertEqual(groups[0].role, .type)
-        XCTAssertTrue(groups[0].subcategories.contains("Restaurant"))
-        XCTAssertTrue(groups[0].subcategories.contains("Taco truck"))
-        XCTAssertEqual(groups[1].role, .cuisine)
-        XCTAssertTrue(groups.flatMap(\.subcategories).contains("Thai"))
-        XCTAssertEqual(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count, 47)
-        XCTAssertEqual(WanderPlaceCategory.restaurantCuisineOptions.count, 85)
+        XCTAssertEqual(groups.map(\.subcategories.count), [42, 29, 40, 45, 17])
+        XCTAssertTrue(groups.allSatisfy { $0.role == .cuisine })
 
-        let restaurantTypes = Set(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories))
-        let cuisines = Set(WanderPlaceCategory.restaurantCuisineOptions)
-        XCTAssertTrue(restaurantTypes.contains("Food court"))
-        XCTAssertTrue(restaurantTypes.contains("Breakfast"))
-        XCTAssertTrue(restaurantTypes.contains("Bagel"))
-        XCTAssertTrue(restaurantTypes.contains("Oyster bar"))
-        XCTAssertTrue(restaurantTypes.contains("Taco truck"))
-        XCTAssertFalse(restaurantTypes.contains("Thai"))
-        XCTAssertFalse(cuisines.contains("Food court"))
-        XCTAssertTrue(cuisines.contains("Thai"))
+        let cuisines = WanderPlaceCategory.restaurantCuisineOptions
+        XCTAssertEqual(cuisines.count, 173)
+        XCTAssertEqual(Set(cuisines).count, cuisines.count)
+        XCTAssertEqual(
+            WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood),
+            groups
+        )
+        XCTAssertEqual(WanderPlaceCategory.restaurantPopularCuisineOptions, [
+            "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian",
+            "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
+        ])
+        XCTAssertTrue(
+            WanderPlaceCategory.restaurantPopularCuisineOptions.allSatisfy(cuisines.contains),
+            "Popular is a filter over the regional taxonomy, not a separate cuisine region"
+        )
+
+        let expectedByGroup: [String: [String]] = [
+            "Asian": [
+                "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
+                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
+                "Bangladeshi", "Nepalese", "Singaporean", "Laotian", "Mongolian", "Georgian",
+                "Armenian", "Uzbek"
+            ],
+            "Middle East & Africa": [
+                "Palestinian", "Syrian", "Iraqi", "Jordanian", "Yemeni", "Egyptian", "Nigerian",
+                "Ghanaian", "Senegalese", "Kenyan", "Somali", "Eritrean", "South African", "Tunisian",
+                "Algerian", "Falafel", "Gyro", "Kebab", "Shawarma", "Halal"
+            ],
+            "Europe": [
+                "Italian", "Mediterranean", "Greek", "French", "Spanish", "Serbian", "Bosnian",
+                "Bulgarian", "Albanian", "Slovenian", "Slovak", "Swedish", "Norwegian", "Finnish",
+                "Lithuanian", "Pizza", "Fish & chips", "Fondue"
+            ],
+            "Americas & Pacific": [
+                "American", "Canadian", "Mexican", "Tex-Mex", "Puerto Rican", "Dominican", "Haitian",
+                "Venezuelan", "Ecuadorian", "Salvadoran", "Guatemalan", "Bolivian", "Uruguayan",
+                "Hawaiian", "Poke", "Australian", "New Zealand", "Fijian", "Samoan", "Tongan",
+                "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill",
+                "Taco stand", "Taco truck", "Burrito", "Taco"
+            ],
+            "Misc": [
+                "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch",
+                "Soup", "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free",
+                "Snack bar", "Gastropub"
+            ]
+        ]
+
+        for (title, expected) in expectedByGroup {
+            let group = try XCTUnwrap(groups.first { $0.title == title })
+            for cuisine in expected {
+                XCTAssertTrue(group.subcategories.contains(cuisine), "\(cuisine) should be in \(title)")
+            }
+        }
+
+        let removedValues = [
+            "Restaurant", "Fast food", "Fine dining", "Casual/family", "Takeout", "Buffet", "Cafeteria"
+        ]
+        for removedValue in removedValues {
+            XCTAssertFalse(cuisines.contains(removedValue), "\(removedValue) should not remain selectable")
+        }
+
+        XCTAssertEqual(WanderPlaceCategory.defaultSubcategory(for: WanderPlaceCategory.restaurantsFood), "Restaurant")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "pizza restaurant"), "Pizza")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "laotian restaurant"), "Laotian")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "poke restaurant"), "Poke")
+    }
+
+    func testRecentRestaurantCuisinesUseLatestUniqueSavedChoices() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let uses = [
+            RestaurantCuisineUse(cuisine: "Italian", savedAt: now.addingTimeInterval(-100)),
+            RestaurantCuisineUse(cuisine: "Thai", savedAt: now.addingTimeInterval(-10)),
+            RestaurantCuisineUse(cuisine: "thai restaurant", savedAt: now.addingTimeInterval(-20)),
+            RestaurantCuisineUse(cuisine: "Not a real cuisine", savedAt: now),
+            RestaurantCuisineUse(cuisine: "Mexican", savedAt: now.addingTimeInterval(-30)),
+            RestaurantCuisineUse(cuisine: "Sushi", savedAt: now.addingTimeInterval(-40)),
+            RestaurantCuisineUse(cuisine: "Japanese", savedAt: now.addingTimeInterval(-50))
+        ]
+
+        XCTAssertEqual(
+            WanderPlaceCategory.recentRestaurantCuisines(from: uses),
+            ["Thai", "Mexican", "Sushi", "Japanese"]
+        )
+        XCTAssertTrue(
+            WanderPlaceCategory.recentRestaurantCuisines(from: uses, limit: 0).isEmpty
+        )
+    }
+
+    func testSelectingCuisineMovesItToFrontOfRecents() {
+        XCTAssertEqual(
+            WanderPlaceCategory.updatingRecentRestaurantCuisines(
+                ["Mexican", "Thai", "Mexican", "Italian", "Unknown"],
+                selecting: "thai restaurant"
+            ),
+            ["Thai", "Mexican", "Italian"]
+        )
+        XCTAssertTrue(
+            WanderPlaceCategory.updatingRecentRestaurantCuisines(
+                ["Thai"],
+                selecting: "Unknown"
+            ).isEmpty
+        )
+    }
+
+    func testMovedRestaurantCuisineStillDrivesContextualDefaults() {
+        let quickBite = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Food court",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(quickBite.tagOptions.contains("quick bite"))
+        XCTAssertTrue(quickBite.defaultTags.contains("good value"))
+
+        let breakfast = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Breakfast",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(breakfast.tagOptions.contains("morning stop"))
+        XCTAssertTrue(breakfast.labelOptions.contains("breakfast rotation"))
+
+        let specialOccasion = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Steakhouse",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(specialOccasion.tagOptions.contains("special occasion"))
+        XCTAssertTrue(specialOccasion.labelOptions.contains("celebration list"))
     }
 
     func testDefaultSuggestionsCoverEveryEditableTaxonomySubcategory() {

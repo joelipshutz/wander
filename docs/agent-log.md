@@ -18044,7 +18044,133 @@ Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
   still reported as `unavailable`, so a signed device install remains blocked
   until the phone is unlocked/reconnected and appears as available.
 
-Merge completion, 2026-07-22 21:45 PDT:
+## 2026-07-22 21:49 PDT - Codex - REC-126 Restaurant Cuisine Taxonomy
+
+Agent: Codex using the rec.me feedback workflow, Linear, engineering review,
+and design-plan review
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`Backlog`; move to `In Progress` before implementation)
+
+Goal: remove the separate subcategory choice for Restaurants & Food, fold the
+retained restaurant-type values into the grouped Cuisine chooser exactly as
+specified in REC-126, remove the five generic/redundant values, validate the
+save-form taxonomy contract, and hand the pushed branch off in Xcode for
+testing/review.
+
+Starting status and coordination:
+
+- Fetched latest `origin/main` and created this clean isolated worktree at
+  `d1e7976a1` because the root checkout is on unrelated REC-88 work with
+  user-owned `.gitignore` and `.pnpm-store/` changes.
+- The root checkout and all unrelated worktrees remain untouched. No active
+  overlapping REC-126 branch or agent-log entry was found.
+- REC-126 currently has no comments or attachments and is in Backlog. Its
+  requested grouping/removal rules are explicit, so triage will lock the
+  smallest compatible data-flow change before implementation.
+- Expected files are
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, focused save-flow/navigation
+  contract tests if required by the review, and this coordination log.
+- `project.yml`, build number, Supabase schema/RLS/RPCs, hosted data migration,
+  TestFlight release work, and unrelated category behavior are out of scope
+  unless source inspection proves the existing cross-layer value-type contract
+  must change.
+
+Engineering and design review checkpoint, 2026-07-22 21:56 PDT:
+
+- Scope challenge: the existing grouped taxonomy, `selectedCuisine` state,
+  visit-scoped `restaurant_cuisine` attribute, category picker, and shared
+  taxonomy parity test already solve the hard parts. The smallest complete
+  change is to make every Restaurants & Food child option a cuisine, remove its
+  separate subcategory affordance, preserve canonical/provider subcategory
+  storage for backward compatibility, and update focused tests/mockups. No new
+  service, persisted field, RPC, migration, or data rewrite is needed.
+- Data flow:
+
+      provider category/subcategory (compatibility, unchanged)
+                         |
+                         v
+      Restaurants & Food category -> Cuisine-only picker
+                         |
+                         v
+      selectedCuisine -> restaurant_cuisine visit attribute
+                         |
+                         v
+      local/remote save payload + existing emoji/default presentation
+
+- The issue's retained lists are treated as the complete migration set from the
+  old Restaurant type section. The five explicitly generic values plus
+  unlisted `Buffet` and `Cafeteria` leave the picker; `Gluten-free` is added.
+  Existing canonical `Barbecue` spelling is retained for saved-value/provider
+  compatibility while placing it in the requested Americas & Pacific group.
+- Group order/design is locked to `Popular cuisines`, `Asian`,
+  `Middle East & Africa`, `Europe`, `Americas & Pacific`, then `Misc`.
+  The save form shows Category + Cuisine for Restaurants & Food and Category +
+  Subcategory for every other editable category. Selecting Restaurants & Food
+  routes directly to Cuisine. This is subtraction using the existing
+  `DESIGN.md` components, so no new visual direction or mockup variants are
+  warranted; DEBUG reference screens will be updated to match.
+- Architecture review: clean. Provider/category subcategories remain available
+  to inference and old saves, while the only user-authored second-level value
+  continues through the already-hosted `restaurant_cuisine` contract.
+  Code-quality review: clean with the obsolete restaurant-type helper/count
+  removed rather than retained as empty/dead semantics. Performance review:
+  clean; static option lookup remains linear over roughly 126 values and adds
+  no I/O or observation.
+- Test review requires exact section membership/order and no duplicates,
+  explicit removed/retained assertions, Swift/shared JSON parity, Cuisine-vs-
+  Subcategory structural UI coverage, category-tile copy/accessibility, moved
+  option emoji/default behavior, and existing save/edit cuisine persistence.
+  The focused plan is stored at
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-126-restaurant-cuisines-eng-review-test-plan-20260722-215452.md`.
+- Failure modes are covered by the plan: a stale subcategory row or wrong
+  post-category route is a UI regression; an ungrouped/duplicate value is a
+  taxonomy regression; a moved cuisine falling back to the broad plate emoji
+  is a presentation regression; shared JSON drift is a cross-runtime
+  regression. Existing provider inference and saved cuisines remain covered by
+  their current tests.
+- NOT in scope: removing the canonical `places.subcategory` field, rewriting
+  old rows/attributes, changing Supabase constraints/RPCs, changing other
+  categories' subcategory model, category-wide design work, build-number or
+  TestFlight release work. Sequential implementation is appropriate because
+  the taxonomy, picker, emoji, mockup, and tests are one small shared contract.
+- Engineering review gate result: clean, 0 unresolved decisions, 0 critical
+  gaps. The gstack review/test artifacts were recorded; its local Bun validator
+  was unavailable, so the bundled Node runtime was used only as a compatible
+  JSON validator to complete the required review-log command.
+
+Implementation and focused-validation checkpoint, 2026-07-22 22:09 PDT:
+
+- Implemented the locked cuisine-only Restaurant & Food flow. The save form now
+  shows Category + Cuisine for restaurants and Category + Subcategory
+  elsewhere; selecting Restaurants & Food routes directly into the Cuisine
+  picker. Category tiles and accessibility copy now report cuisines.
+- Reorganized the Restaurant & Food taxonomy into six cuisine groups with 126
+  unique options, removed the generic/unlisted legacy choices, added
+  `Gluten-free`, and advanced the shared taxonomy mirror to version 7. The
+  canonical provider/default subcategory `Restaurant` remains unchanged for
+  backward compatibility and is no longer user-selectable.
+- Preserved contextual tag/list defaults for restaurant types promoted into
+  cuisine, extended cuisine emoji fallback through the existing restaurant
+  detail rules, and gave `Halal` the specific Middle Eastern dish treatment
+  after the first focused run exposed its generic plate fallback.
+- Updated deterministic taxonomy mockups and added tests for exact group
+  order/count/membership, removed values, shared JSON parity, promoted-cuisine
+  defaults and emoji coverage, and the Restaurant Cuisine-vs-Subcategory UI
+  contract.
+- Ran `xcodegen generate`; it produced no project-file diff. The first focused
+  run failed only the new exhaustive cuisine-emoji assertion for `Halal`; after
+  the targeted fix, the complete focused selection passed 86/86 tests on
+  iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-08-11--0700.xcresult`.
+- `origin/main` advanced by three commits during implementation, including the
+  REC-119 rating explanation in `MapScreen.swift` and new agent-log entries.
+  Integrate those commits before the full-suite and visual validation; preserve
+  both changes if the high-conflict files require manual resolution.
+
+REC-130 merge completion, 2026-07-22 21:45 PDT:
 
 - Ryan visually approved the REC-130 list-tile photo and empty-state behavior
   from the Xcode branch handoff and explicitly requested the squash merge.
@@ -18430,7 +18556,36 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
+REC-126 latest-main validation and blocked handoff, 2026-07-22 23:03 PDT:
 
+- Committed the implementation as `cbd242ae2`, merged current `origin/main`
+  commit `8e69138f4`, and resolved the sole conflict in this append-only work log
+  by preserving the complete REC-119, REC-130, and REC-126 histories. Product
+  files merged automatically. XcodeGen then produced no tracked changes, the
+  branch was 0 behind / 2 commits ahead, and `git diff --check` passed.
+- Focused taxonomy/navigation coverage passed 86/86. The complete exact-head
+  iOS suite passed 579/579 with zero failures on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-10-46--0700.xcresult`.
+  Existing simulator keychain/location, Supabase formatter concurrency, and
+  traditional-headermap diagnostics remain unrelated and non-fatal.
+- Visual QA passed on iPhone 17 Pro and compact iPhone 17e. The corrected
+  Cuisine picker shows `126 cuisines`, the requested first two groups render
+  without clipping or safe-area issues, and the Restaurant edit screen contains
+  only Category + Cuisine. Captures:
+  `/private/tmp/rec126-17pro-cuisine-final.png`,
+  `/private/tmp/rec126-17e-cuisine.png`, and
+  `/private/tmp/rec126-17pro-edit-final.png`.
+- Publication and Xcode handoff are externally blocked. macOS is locked, so the
+  required computer-use workflow cannot open or verify this isolated project
+  in Xcode. GitHub CLI is installed but `gh auth status` reports the active
+  `ryanlane23` token is invalid, so the repo-required push/ready-PR workflow
+  cannot continue until Ryan runs `gh auth login -h github.com`.
+- Added the validation and exact blockers to REC-126 in Linear comment
+  `6653c48f-5977-4f83-ae91-7edd6b01b2c9`. The issue intentionally remains In
+  Progress. Exact restart: unlock the Mac, reauthenticate `gh`, push
+  `codex/rec-126-restaurant-cuisines`, open a ready PR to `main`, load
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode,
+  verify the branch in Xcode, then update this log and Linear to In Review.
 ## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
 
 Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
@@ -18840,6 +18995,43 @@ Validation and pre-landing review, 2026-07-22 23:04 PDT:
   Next: commit/push, open and squash-merge the ready build-number PR, then free
   the completed test cache before archiving exact merged main.
 
+REC-126 final validation checkpoint, 2026-07-22 23:08 PDT:
+
+- Merged exact latest `origin/main` through metadata-only build-94 commit
+  `c0d7f6b8f` into `codex/rec-126-restaurant-cuisines`. The upstream build
+  number and chronological log were the only changes after the prior
+  REC-126 validation; the feature implementation merged without conflict.
+- Regenerated `Wander.xcodeproj` with XcodeGen. Generation produced no
+  additional tracked changes beyond the expected upstream build-94 metadata.
+- The first exact-head full-suite attempt ended before test bootstrap with a
+  transient simulator process kill. The immediate rerun with normal
+  CoreSimulator access passed all 580/580 tests with zero failures on iPhone
+  17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_23-07-19--0700.xcresult`.
+- Focused REC-126 coverage remains 86/86 passing. Visual QA remains clean on
+  iPhone 17 Pro and iPhone 17e: Restaurant & Food opens a 126-item Cuisine
+  picker, and the edit form contains Category + Cuisine with no Subcategory.
+- Publication and Xcode handoff are the only remaining blockers. GitHub CLI
+  authentication for `ryanlane23` is expired, so the branch cannot yet be
+  pushed and a ready PR cannot yet be opened. The Mac is locked, so Xcode
+  cannot yet be opened and verified on the branch. Keep Linear REC-126 In
+  Progress until both are complete.
+- Exact restart: unlock the Mac and run `gh auth login -h github.com`; then
+  push `codex/rec-126-restaurant-cuisines`, open the ready PR linked to
+  REC-126, load this worktree's `Wander.xcodeproj` in Xcode, verify the branch,
+  and move REC-126 to In Review with the PR and validation details.
+
+Xcode handoff checkpoint, 2026-07-22 23:11 PDT:
+
+- The Mac was unlocked during the run. Opened
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode and
+  verified the Branch Chooser visibly reports
+  `codex/rec-126-restaurant-cuisines`. Xcode is indexing the generated project;
+  the branch is locally ready for test/review.
+- Updated the existing REC-126 Linear handoff comment with the exact-head test
+  result and Xcode state. GitHub CLI authentication remains the sole blocker:
+  `gh auth status` still reports the active `ryanlane23` token as invalid.
+
 REC-122 build-94 merge gate, 2026-07-22 23:09 PDT:
 
 - `main` advanced during the hosted PR check with metadata-only build-94 commit
@@ -18907,6 +19099,233 @@ Completion, 2026-07-22 23:15 PDT:
   notification and explicit place routes still center/select intentionally.
   Known behavior: current city is a one-shot location fix at the existing
   city-scale span, not a live follow-camera or reverse-geocoded boundary.
+
+## 2026-07-22 23:26 PDT - Codex - REC-126 cuisine inference, backfill, and chooser redesign
+
+Agent: Codex using Linear, `recme-linear-log-triage`, and `design-shotgun`
+workflows
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`In Progress`)
+
+Goal: expand REC-126 so Restaurant & Food saves preselect the best cuisine from
+available provider/place data, safely backfill hosted saved places that lack a
+cuisine for every profile, and replace the current clunky cuisine picker with a
+reviewable native SwiftUI redesign.
+
+Starting status and coordination:
+
+- Fetched current `origin/main` and merged through `92adcdc89`, including
+  REC-122 and build-94 release logs. The only manual conflict was this
+  append-only coordination log; both histories were preserved. The worktree is
+  clean and eight commits ahead of `origin/main`.
+- The root checkout remains on unrelated `codex/rec-88-visit-friends-mockup`;
+  it is not being edited. No active worktree advertises an overlapping REC-126
+  branch. This task does touch high-conflict `MapScreen.swift`, the shared save
+  path, and a Supabase migration, so changes stay isolated here.
+- The earlier REC-126 decision that no hosted migration was needed is
+  superseded by Ryan's explicit request to populate missing cuisines for
+  pre-existing saved places. Before choosing a migration, inspect all prior
+  cuisine/attribute migrations, production counts, RLS/RPC contracts, and the
+  existing hosted smoke path.
+- Expected files include the restaurant taxonomy/inference service,
+  `Wander/Features/Map/MapScreen.swift`, native chooser mockups/components,
+  focused tests, `shared/place-taxonomy.json` if inference metadata requires it,
+  a new Supabase migration, `scripts/supabase-smoke-test.mjs`, and this log.
+  Exact scope will be narrowed after read-only schema and source inspection.
+- No hosted write or destructive backfill will run until the migration is
+  reviewed, the linked project is confirmed, and rollback-capable validation is
+  green. No TestFlight build or release was requested.
+
+Checkpoint, 2026-07-22 23:57 PDT:
+
+- Read-only hosted inventory found 44 active Restaurant & Food saves, 30
+  missing cuisine values across 9 profiles and 23 canonical places. Twenty-six
+  missing rows had explicit provider cuisine signals. The remaining apparent
+  restaurants were Sushi Fumi, Ugo, CAFFENIO, Whole Foods Market, and—revealed
+  after the first pass—Costco Wholesale.
+- Locked inference priority as existing user choice, provider type,
+  subcategory/category, place name, then website. The implementation matches
+  only the 126 allowed cuisine values plus curated restaurant-term aliases,
+  reports confidence/source in Swift, and intentionally does not infer from
+  locality or default ambiguous restaurants to American. No OpenAI request is
+  needed for the current dataset and no place data is sent off-device.
+- Official business evidence supported CAFFENIO as coffee and Ugo as Italian.
+  CAFFENIO, Whole Foods Market, and Costco were corrected to their real broad
+  categories instead of receiving fabricated cuisines.
+- Applied hosted migrations `20260723063000_backfill_restaurant_cuisines.sql`
+  and `20260723064500_correct_food_market_category.sql` to confirmed linked
+  project `rugmtlgufrhlxwfkumhw` after clean `--dry-run` output. Final hosted
+  verification: 41 active restaurant saves, 41 with cuisine, 0 missing, across
+  8 profiles. Sushi Fumi is Sushi, Ugo is Italian, CAFFENIO is Coffee shop, and
+  Whole Foods/Costco are Grocery store.
+- The internal SQL helper remains security invoker, pins an empty search path,
+  and grants no execute privilege to `authenticated`. The expanded linked
+  rollback-only smoke suite passed, including cuisine behavior/security.
+- Added three interactive debug-only native SwiftUI concepts: Smart Pick,
+  Fast Directory, and Cuisine Atlas. Inspected current-simulator screenshots
+  plus Smart Pick on smaller iPhone 17e; sticky selection/footer, tap sizes,
+  hierarchy, and safe areas are intact. Local captures:
+  `/private/tmp/rec126-cuisine-mockups/`.
+- Universal simulator build passed. The documented iPhone 16 Plus / iOS 18.6
+  destination is not installed under the current Xcode runtime, so focused
+  validation moved to available iPhone 17 / iOS 26.5: 39/39
+  `WanderPlaceCategoryTests` passed. Full-suite validation is in progress.
+
+Local handoff, 2026-07-23 00:03 PDT:
+
+- Full iPhone 17 / iOS 26.5 test suite passed 590/590 with zero failures.
+  Result bundle:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_00-00-25--0700.xcresult`.
+  `git diff --check` also passed.
+- Implementation, migrations, tests, SwiftUI mockups, hosted smoke expansion,
+  and coordination log were committed as `35c863747` (`REC-126: infer and
+  backfill restaurant cuisines`).
+- Linear comment `aaa73f8a-4174-4891-92e9-6fc455f1676c` records the final
+  hosted counts, validation, visual QA, and publishing blocker. REC-126 remains
+  In Progress until a PR exists.
+- GitHub publication is the only incomplete workflow step:
+  `gh auth status` reports Ryan's active `ryanlane23` token is invalid. Exact
+  restart: run `gh auth login -h github.com`, confirm `gh auth status`, then
+  push `codex/rec-126-restaurant-cuisines` and open a ready PR to `main`.
+  No TestFlight build or release was requested or performed.
+
+Follow-up, 2026-07-23 10:07 PDT:
+
+- Ryan selected the Cuisine Atlas direction for the production cuisine picker,
+  with Fast Directory's recent-cuisine strip inserted between search and the
+  regional filters. Approved helper copy is: “We’ll start with our best guess.
+  Change it only if we missed.”
+- Refetched `origin/main`; the branch is clean, still based on current
+  `92adcdc89`, and ten commits ahead. The root checkout remains on unrelated
+  REC-88 work, and no other worktree advertises overlapping REC-126 work.
+- This follow-up will edit the production picker in high-conflict
+  `Wander/Features/Map/MapScreen.swift`, add focused taxonomy/recents coverage
+  if needed, update the selected debug mockup for parity, regenerate the Xcode
+  project, and update this log. REC-126 stays In Progress until implementation,
+  visual QA, full tests, GitHub publication, and a ready PR are complete.
+
+Implementation checkpoint, 2026-07-23 10:36 PDT:
+
+- Replaced the production cuisine chip directory with the selected Cuisine
+  Atlas hierarchy: approved Best Guess card and helper copy, search across all
+  126 cuisines, a two-column emoji grid, regional filters, and a sticky
+  cuisine/Done footer. Cuisine taps now remain in the picker so people can
+  compare options before confirming instead of closing on every tap.
+- Added Fast Directory's Recents strip exactly between search and the regional
+  filters. Recents are derived from the current profile's real saved restaurant
+  cuisines ordered by `savedAt`, canonicalized against the taxonomy, and
+  deduplicated; there is no fake or device-only seed. New selections move to
+  the front during the current edit and become durable through the normal save
+  path.
+- Kept the existing inference contract: explicit saved cuisine wins, followed
+  by deterministic provider type, restaurant type/category, place name, and
+  website evidence. The chosen value is preselected and shown with its actual
+  inference reason; no OpenAI call or new external data transmission was
+  introduced.
+- The `cuisineAtlas` debug route now renders the production picker itself.
+  Visual QA passed on iPhone 17 Pro and smaller iPhone 17e with screenshots at
+  `/private/tmp/rec126-cuisine-atlas-production-17pro.png` and
+  `/private/tmp/rec126-cuisine-atlas-production-17e.png`. Header wrapping,
+  44-point controls, two-column grid, sticky footer, and home-indicator spacing
+  remained intact.
+- Live accessibility/interaction QA verified every region chip is individually
+  exposed, Asia filters to Asian cuisines, choosing Sushi updates both Recents
+  and the footer, and global search resolves Ethiopian regardless of the active
+  region.
+- `xcodegen generate` completed without project-file churn. Universal simulator
+  build passed. Focused `WanderPlaceCategoryTests` passed 41/41, and the final
+  exact-head full suite passed 592/592 on iPhone 17 / iOS 26.5 with zero
+  failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_10-29-17--0700.xcresult`.
+  `git diff --check` passed. The temporary generated `DerivedData-atlas` cache
+  was removed; no TestFlight build or release was requested.
+
+Review handoff, 2026-07-23 10:46 PDT:
+
+- Committed the production Cuisine Atlas follow-up as `880810d18`
+  (`REC-126: ship Cuisine Atlas picker`) and pushed
+  `codex/rec-126-restaurant-cuisines` to origin.
+- Opened ready PR
+  [#189](https://github.com/joelipshutz/wander/pull/189),
+  `REC-126: infer cuisines, backfill saves, and ship Cuisine Atlas`, targeting
+  `main`. The connected GitHub app lacked PR-write access, so the ready PR was
+  created through Ryan's existing signed-in GitHub web session. The repository
+  Git credential was sufficient to push; the standalone `gh` token still
+  reports invalid and was not needed for the completed handoff.
+- Moved Linear REC-126 to In Review and added comment
+  `81456622-e296-47ed-b2f5-ada755f2fc26` with the PR, final hosted backfill
+  counts, validation, privacy posture, and no-TestFlight note.
+- Brought the exact worktree project
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` to the
+  foreground in Xcode. Xcode's branch chooser confirms
+  `codex/rec-126-restaurant-cuisines`, ready for local test and review.
+
+Follow-up and landing start, 2026-07-23 11:05 PDT:
+
+- Ryan requested every previously identified country-cuisine gap, the proposed
+  South Asian moves, explicit Greek/Japanese/Poke regional placement, an
+  `Americas & Pacific` filter label, and a `filter` subheader above the region
+  choices, followed by squash-merging PR #189 to `main`.
+- Refetched origin. The REC-126 worktree is clean, `origin/main` remains
+  `92adcdc89`, and the branch is 12 commits ahead with no new base commits.
+  The root checkout remains on unrelated REC-88 work, so all edits stay in the
+  isolated REC-126 worktree.
+- Expected files: `shared/place-taxonomy.json`,
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Services/WanderPlaceEmojiResolver.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, and this log. Linear REC-126
+  remains In Review while its ready PR is updated and validated.
+- The latest completed release record is TestFlight build 94; there is no
+  unfinished explicit release and this request does not authorize a new
+  TestFlight build.
+
+Follow-up implementation checkpoint, 2026-07-23 11:26 PDT:
+
+- Expanded the canonical restaurant taxonomy from 126 to 173 unique cuisines
+  and advanced the shared taxonomy contract to version 8. The former Popular
+  ownership group is now a display-only shortcut while every cuisine belongs
+  to one geographic group: Asia (42), Middle East & Africa (29), Europe (40),
+  Americas & Pacific (45), or Misc (17).
+- Added every previously identified country gap, moved Pakistani, Sri Lankan,
+  and Bangladeshi into Asia, and explicitly placed Japanese in Asia, Greek in
+  Europe, and Poke in Americas & Pacific. Added non-fallback regional or dish
+  emoji coverage for every new cuisine.
+- Added the requested lowercase `filter` subheader and renamed the production
+  filter to `Americas & Pacific`. The filter chip preserves its full
+  single-line label in the horizontally scrollable row and exposes the complete
+  `Americas & Pacific cuisines` accessibility name.
+- Updated the production picker, debug mock copy, Swift/JSON parity assertions,
+  popular-overlay assertions, canonical placement tests, and deterministic
+  inference coverage for Laotian and Poke.
+- The first escalated focused run exposed that the static Swift taxonomy entry
+  had not yet been synchronized with the canonical cuisine groups. After
+  fixing that parity omission, focused `WanderPlaceCategoryTests` passed 41/41
+  with zero failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-14-23--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Screenshots:
+  `/private/tmp/rec126-cuisine-expanded-17pro-final.png` and
+  `/private/tmp/rec126-cuisine-expanded-17e-final.png`. Both sizes preserve the
+  two-column grid, readable header, Recents placement, filter hierarchy, sticky
+  footer, safe areas, and 44-point controls. Accessibility inspection also
+  confirmed the full regional filter names and Greek/Japanese availability.
+- `xcodegen generate` completed without project-file churn, the JSON taxonomy
+  reports 173 entries/173 unique values, and `git diff --check` passed. Full
+  exact-head testing and the required pre-landing review remain before merge.
+
+Exact-head validation checkpoint, 2026-07-23 11:28 PDT:
+
+- Full `xcodebuild test` passed 592/592 with zero failures on iPhone 17 /
+  iOS 26.5. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-24-31--0700.xcresult`.
+  Expected non-critical simulator warnings remained limited to Clerk keychain
+  access, a missing optional resource manifest, and the existing traditional
+  headermap warning.
+- While starting the pre-landing review, `origin/main` advanced by two commits
+  beyond the previously fetched `92adcdc89`. This checkpoint is being committed
+  before merging the new base; the branch will be updated from latest main and
+  revalidated before PR #189 is eligible to squash-merge.
 
 ## 2026-07-23 10:12 PDT - Codex - REC-109 import review visibility
 
@@ -19124,6 +19543,19 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
+REC-126 landing review checkpoint, 2026-07-23 11:38 PDT:
+
+- Updated the branch through REC-122 follow-up main commit `e09708109`; the
+  combined exact-head suite passed 594/594 with zero failures:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-30-25--0700.xcresult`.
+- The pre-landing scope review caught two unrelated navigation regression tests
+  that earlier branch synchronization had dropped. Restored both while keeping
+  the new restaurant-cuisine navigation contract. A focused run then correctly
+  exposed that `origin/main` had advanced again with PR #188's Add/import
+  implementation, whose test depends on source not yet present on this branch.
+  Commit the test restoration, merge the new `0f43390e2` main head, and rerun
+  validation before publishing; this intermediate compiler failure is base
+  drift, not an REC-126 product-code failure.
 REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
 
 - Merged current `origin/main` at `e09708109` into
@@ -19155,6 +19587,44 @@ REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
   `main`. No TestFlight build-number increment, archive/upload, Slack release
   note, or hosted-data mutation is authorized for this merge-only request.
 
+REC-126 adversarial review fix, 2026-07-23 11:47 PDT:
+
+- An exact-diff adversarial review against `origin/main` found that the
+  long-lived REC-126 branch had accidentally resurrected shared-visit invitee
+  notes, ratings, question answers, and photo downloads while preserving
+  cuisine classification through newer mainline save-flow changes. This was
+  unrelated scope drift and would have regressed REC-125.
+- Restored mainline's blank invitee-metadata behavior and its regression test,
+  while retaining the intended place classification and restaurant cuisine.
+  `WanderTests/WanderStoreTests.swift` now has no diff from `origin/main`; the
+  only remaining navigation-test delta is REC-126's cuisine picker contract.
+- The branch is based on current `origin/main` commit `0f43390e2`. Run the
+  complete suite again on the corrected exact head before publishing PR #189.
+
+REC-126 corrected-head validation, 2026-07-23 11:48 PDT:
+
+- The corrected full iPhone 17e / iOS 26.5 suite passed 598/598 with zero
+  failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-46-27--0700.xcresult`.
+- `git diff --check` passes. The final fetch found that `main` advanced with
+  REC-125 itself plus its completion record (`f946737b5`), exactly the changes
+  whose behavior the adversarial pass restored. Commit the reviewed correction,
+  merge that latest main, confirm the resulting scope diff, and rerun the
+  affected gate before publishing.
+
+REC-126 exact-main publish gate, 2026-07-23 11:52 PDT:
+
+- Merged current `origin/main` through REC-135 commit `379974b19`. Product and
+  test files integrated automatically; the only manual resolution preserved
+  both complete histories in this append-only log.
+- The exact-main focused cuisine taxonomy, cuisine navigation, and REC-125
+  metadata-isolation gates passed 43/43 with zero failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-50-19--0700.xcresult`.
+- The immediately preceding corrected full suite passed 598/598 with zero
+  failures. The exact product state is equivalent for the shared-visit
+  correction, and `git diff --check` passes. The branch is zero commits behind
+  current main and the remaining scope diff is restricted to REC-126 cuisine
+  implementation, tests, migrations/smoke coverage, taxonomy, and this log.
 ## 2026-07-22 21:55 PDT - Codex - REC-125 invitation defaults
 
 Agent: Codex using the rec.me feedback bug workflow and iOS fix workflow

@@ -131,11 +131,14 @@ Notes:
 function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
+  const cuisineSmokeSQL = loadStrictPgTapSQL(
+    new URL("../supabase/tests/restaurant_cuisine_inference.sql", import.meta.url),
+  );
   const discoverSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
   );
   try {
-    writeFileSync(filePath, `${buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID)}\n${discoverSmokeSQL}`, {
+    writeFileSync(filePath, `${buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID)}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`, {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -151,7 +154,7 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
         .join("\n");
       throw new Error(details || "linked Supabase query failed");
     }
-    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, and Discover profile recommendation contracts are valid.");
+    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -1162,6 +1162,41 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testRestaurantPlaceTypeUsesCuisineInsteadOfSubcategory() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeTypeSection = try sourceSection(
+            mapScreen,
+            after: "private var placeTypeSection: some View {",
+            before: "private var candidateCard: some View {"
+        )
+
+        XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))
+        XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .cuisine"))
+        XCTAssertTrue(placeTypeSection.contains("title: \"cuisine\""))
+        XCTAssertTrue(placeTypeSection.contains("} else {"))
+        XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .subcategory"))
+        XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"subcategory\""))
+        XCTAssertTrue(
+            mapScreen.contains(
+                "mode = category == WanderPlaceCategory.restaurantsFood ? .cuisine : .subcategory"
+            )
+        )
+        XCTAssertTrue(
+            mapScreen.contains(
+                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"cuisines\" : \"types\""
+            )
+        )
+
+        let mockups = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/CategoryTaxonomyMockups.swift")
+        )
+        XCTAssertFalse(
+            mockups.contains("MockupDetailRow(title: \"subcategory\", value: \"Restaurant\"")
+        )
+    }
+
     private var projectRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
