@@ -18329,3 +18329,85 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
+
+## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-93`
+Worktree: `/private/tmp/recme-build93-release`
+Linear: `REC-134` (`In Progress`)
+
+Goal: package every eligible app change on exact latest `main` after completed
+TestFlight build 92 into rec.me build 93, validate it, upload it, attach it to the
+public TestFlight group, and post the required tester note.
+
+Starting status and coordination:
+
+- Fetched `origin`; exact release base is clean `origin/main` at `8e69138f4`.
+  The root checkout remains on unrelated REC-88 work with user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or switched.
+  Created this isolated release worktree from current main. Existing worktrees
+  are stale or task-specific; no overlapping active edit will be reverted.
+- Build 92 is fully complete: its archive/upload, public-group attachment,
+  external approval, tester Slack note, and durable completion record are all
+  on `main`. Current `project.yml` declares build 92, so there is no unfinished
+  release and this explicit request increments exactly once to build 93.
+- Eligible app delta since build-92 source `a6cb303b9` is exactly:
+  PR #176 / REC-130 (`d1e7976a1`) defining deterministic list-tile photo,
+  category-emoji, and empty-state fallbacks; and PR #169 / REC-119
+  (`d27cb4d12`) adding accessible rec.me/Fit rating explanations with native
+  anchored popovers and the approved header/control alignment. The remaining
+  commits are docs/coordination records.
+- No backend migration, schema/RLS, auth, tester-data mutation, or
+  marketing-version change is included. Marketing version remains `0.1`.
+  Expected tracked release files are `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Tester copy and export
+  options will live under `/private/tmp`, not the repo.
+- Release plan: bump 92 -> 93, regenerate and audit the project, run the full
+  simulator test/build gate, open and merge a ready build-number PR, archive
+  exact resulting latest main, upload with
+  `manageAppVersionAndBuildNumber=false`, run
+  `scripts/testflight-release.mjs` with the archive path, confirm public-group
+  and beta-review state, update Linear, then post to `#testflight-feedback`.
+
+Validation checkpoint, 2026-07-22 22:10 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 92 to 93 in `project.yml`, then ran
+  `xcodegen generate`. Audited the generated project diff: the only
+  `Wander.xcodeproj/project.pbxproj` changes are the two expected Debug/Release
+  build-number values; there is no signing, compiler-setting, or project-member
+  churn. `git diff --check` passes.
+- The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this Mac.
+  Ran the complete suite on the installed iPhone 17 Pro / iOS 26.5 simulator.
+  The first clean-package run had the simulator kill one test process; Xcode
+  reported no assertion failure, restarted the runner, and the same test passed
+  in that run. The test then passed independently, and a complete clean rerun
+  passed 577/577 with zero failures:
+  `/private/tmp/DerivedData-build93-test/Logs/Test/Test-Wander-2026.07.22_22-04-46--0700.xcresult`.
+- The generic universal iOS Simulator build completed with
+  `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain non-blocking and predate this release.
+- Current tracked scope remains exactly `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this coordination log.
+  Tester-facing What-to-Test copy is staged outside the repo at
+  `/private/tmp/recme-build93-what-to-test.md`. Next: run the release diff review,
+  publish and merge the build-number PR, then archive and upload exact merged
+  `main`.
+
+Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
+
+- Applied the repo-required gstack pre-landing checklist to the complete
+  three-file release diff. Scope is clean: `project.yml` and both generated
+  Xcode configurations agree on build 93, and the only other change is this
+  chronological release record. No product, schema, signing, marketing-version,
+  source-membership, CI, or unrelated generated change is present.
+- Critical and informational passes found no actionable issue. SQL/data,
+  concurrency, LLM/shell, enum completeness, field safety, frontend behavior,
+  time-window, type-boundary, and distribution checks are not implicated by the
+  metadata-only diff. Specialist passes were scope-gated; this session is also
+  prohibited from dispatching review subagents.
+- The optional gstack review-history write was not performed because the
+  sandbox rejected its ability to enqueue local review metadata for later
+  cross-machine artifact sync. This does not affect the code/diff review or
+  release gate. Result: `Pre-Landing Review: No issues found.`
