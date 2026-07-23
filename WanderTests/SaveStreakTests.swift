@@ -2,6 +2,36 @@ import XCTest
 @testable import Wander
 
 final class SaveStreakCalculatorTests: XCTestCase {
+    func testPresentationWaitsForSaveSheetAndDailyTakeoverRequiresConfirmation() {
+        let celebration = SaveStreakCelebration(
+            kind: .dailyTakeover,
+            placeName: "Maru Coffee",
+            placeDetail: "Los Angeles · CA",
+            status: .been,
+            streakCount: 1,
+            saveDate: .now
+        )
+
+        XCTAssertFalse(
+            SaveStreakPresentationPolicy.canPresent(
+                celebration: celebration,
+                isSaveFlowPresented: true
+            )
+        )
+        XCTAssertTrue(
+            SaveStreakPresentationPolicy.canPresent(
+                celebration: celebration,
+                isSaveFlowPresented: false
+            )
+        )
+        XCTAssertNil(
+            SaveStreakPresentationPolicy.autoDismissDelay(for: .dailyTakeover)
+        )
+        XCTAssertNotNil(
+            SaveStreakPresentationPolicy.autoDismissDelay(for: .sameDayConfetti)
+        )
+    }
+
     func testDebugMockupResolverDefaultsToTakeover() {
         XCTAssertNil(SaveStreakMockupPage.resolved(from: ["Wander"]))
         XCTAssertEqual(
@@ -76,6 +106,19 @@ final class SaveStreakCalculatorTests: XCTestCase {
 
 @MainActor
 final class SaveStreakStoreTests: XCTestCase {
+    func testSaveFlowPresentationRemainsActiveUntilHostDismissalCompletes() {
+        let store = WanderStore(fixtures: .empty())
+
+        XCTAssertFalse(store.isSaveFlowPresented)
+        store.saveFlowDidPresent(.addSheet)
+        XCTAssertTrue(store.isSaveFlowPresented)
+        store.saveFlowDidPresent(.saveSheet)
+        store.saveFlowDidDismiss(.saveSheet)
+        XCTAssertTrue(store.isSaveFlowPresented)
+        store.saveFlowDidDismiss(.addSheet)
+        XCTAssertFalse(store.isSaveFlowPresented)
+    }
+
     func testNewBeenAndWannaSavesAdvanceAtMostOncePerLocalDay() throws {
         let store = WanderStore(fixtures: .empty())
 
