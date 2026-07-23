@@ -378,6 +378,63 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertNil(WanderPlaceCategory.cuisineGuess(forRawValue: "Indianapolis restaurant"))
     }
 
+    func testRestaurantCuisineInferencePrioritizesProviderEvidence() {
+        let inference = WanderPlaceCategory.restaurantCuisineInference(
+            name: "American Sushi House",
+            rawProviderType: "japanese_restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood
+        )
+
+        XCTAssertEqual(inference?.cuisine, "Japanese")
+        XCTAssertEqual(inference?.source, .providerType)
+        XCTAssertEqual(inference?.confidence, 0.98)
+    }
+
+    func testRestaurantCuisineInferenceUsesNamesAndWebsiteAliases() {
+        let sushi = WanderPlaceCategory.restaurantCuisineInference(
+            name: "Sushi Fumi",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood
+        )
+        XCTAssertEqual(sushi?.cuisine, "Sushi")
+        XCTAssertEqual(sushi?.source, .placeName)
+
+        let ugo = WanderPlaceCategory.restaurantCuisineInference(
+            name: "Ugo",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood,
+            websiteURLString: "https://www.cafeugo.com/"
+        )
+        XCTAssertEqual(ugo?.cuisine, "Italian")
+        XCTAssertEqual(ugo?.source, .website)
+    }
+
+    func testRestaurantCuisineInferenceDoesNotGuessFromLocationOrGenericRestaurantData() {
+        let inference = WanderPlaceCategory.restaurantCuisineInference(
+            name: "The Corner",
+            rawProviderType: "restaurant",
+            subcategory: "Restaurant",
+            category: WanderPlaceCategory.restaurantsFood,
+            websiteURLString: nil
+        )
+
+        XCTAssertNil(inference)
+    }
+
+    func testKnownProviderCategoryMistakesAreCorrectedFromPlaceName() {
+        XCTAssertEqual(
+            WanderPlaceCategory.primary(for: .restaurant, name: "CAFFENIO"),
+            WanderPlaceCategory.coffeeTeaSweets
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.primary(for: .restaurant, name: "Whole Foods Market"),
+            WanderPlaceCategory.shopping
+        )
+    }
+
     func testUserEditedSubcategoryWinsOverProviderAndNameHints() {
         let assignment = PlaceCategoryAssignment(
             primaryCategory: WanderPlaceCategory.wellnessFitness,

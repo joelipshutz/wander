@@ -19099,3 +19099,75 @@ Completion, 2026-07-22 23:15 PDT:
   notification and explicit place routes still center/select intentionally.
   Known behavior: current city is a one-shot location fix at the existing
   city-scale span, not a live follow-camera or reverse-geocoded boundary.
+
+## 2026-07-22 23:26 PDT - Codex - REC-126 cuisine inference, backfill, and chooser redesign
+
+Agent: Codex using Linear, `recme-linear-log-triage`, and `design-shotgun`
+workflows
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`In Progress`)
+
+Goal: expand REC-126 so Restaurant & Food saves preselect the best cuisine from
+available provider/place data, safely backfill hosted saved places that lack a
+cuisine for every profile, and replace the current clunky cuisine picker with a
+reviewable native SwiftUI redesign.
+
+Starting status and coordination:
+
+- Fetched current `origin/main` and merged through `92adcdc89`, including
+  REC-122 and build-94 release logs. The only manual conflict was this
+  append-only coordination log; both histories were preserved. The worktree is
+  clean and eight commits ahead of `origin/main`.
+- The root checkout remains on unrelated `codex/rec-88-visit-friends-mockup`;
+  it is not being edited. No active worktree advertises an overlapping REC-126
+  branch. This task does touch high-conflict `MapScreen.swift`, the shared save
+  path, and a Supabase migration, so changes stay isolated here.
+- The earlier REC-126 decision that no hosted migration was needed is
+  superseded by Ryan's explicit request to populate missing cuisines for
+  pre-existing saved places. Before choosing a migration, inspect all prior
+  cuisine/attribute migrations, production counts, RLS/RPC contracts, and the
+  existing hosted smoke path.
+- Expected files include the restaurant taxonomy/inference service,
+  `Wander/Features/Map/MapScreen.swift`, native chooser mockups/components,
+  focused tests, `shared/place-taxonomy.json` if inference metadata requires it,
+  a new Supabase migration, `scripts/supabase-smoke-test.mjs`, and this log.
+  Exact scope will be narrowed after read-only schema and source inspection.
+- No hosted write or destructive backfill will run until the migration is
+  reviewed, the linked project is confirmed, and rollback-capable validation is
+  green. No TestFlight build or release was requested.
+
+Checkpoint, 2026-07-22 23:57 PDT:
+
+- Read-only hosted inventory found 44 active Restaurant & Food saves, 30
+  missing cuisine values across 9 profiles and 23 canonical places. Twenty-six
+  missing rows had explicit provider cuisine signals. The remaining apparent
+  restaurants were Sushi Fumi, Ugo, CAFFENIO, Whole Foods Market, and—revealed
+  after the first pass—Costco Wholesale.
+- Locked inference priority as existing user choice, provider type,
+  subcategory/category, place name, then website. The implementation matches
+  only the 126 allowed cuisine values plus curated restaurant-term aliases,
+  reports confidence/source in Swift, and intentionally does not infer from
+  locality or default ambiguous restaurants to American. No OpenAI request is
+  needed for the current dataset and no place data is sent off-device.
+- Official business evidence supported CAFFENIO as coffee and Ugo as Italian.
+  CAFFENIO, Whole Foods Market, and Costco were corrected to their real broad
+  categories instead of receiving fabricated cuisines.
+- Applied hosted migrations `20260723063000_backfill_restaurant_cuisines.sql`
+  and `20260723064500_correct_food_market_category.sql` to confirmed linked
+  project `rugmtlgufrhlxwfkumhw` after clean `--dry-run` output. Final hosted
+  verification: 41 active restaurant saves, 41 with cuisine, 0 missing, across
+  8 profiles. Sushi Fumi is Sushi, Ugo is Italian, CAFFENIO is Coffee shop, and
+  Whole Foods/Costco are Grocery store.
+- The internal SQL helper remains security invoker, pins an empty search path,
+  and grants no execute privilege to `authenticated`. The expanded linked
+  rollback-only smoke suite passed, including cuisine behavior/security.
+- Added three interactive debug-only native SwiftUI concepts: Smart Pick,
+  Fast Directory, and Cuisine Atlas. Inspected current-simulator screenshots
+  plus Smart Pick on smaller iPhone 17e; sticky selection/footer, tap sizes,
+  hierarchy, and safe areas are intact. Local captures:
+  `/private/tmp/rec126-cuisine-mockups/`.
+- Universal simulator build passed. The documented iPhone 16 Plus / iOS 18.6
+  destination is not installed under the current Xcode runtime, so focused
+  validation moved to available iPhone 17 / iOS 26.5: 39/39
+  `WanderPlaceCategoryTests` passed. Full-suite validation is in progress.

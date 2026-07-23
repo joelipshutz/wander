@@ -8,6 +8,9 @@ enum CategoryTaxonomyMockupPage: String, CaseIterable {
     case categories
     case subcategories
     case cuisine
+    case cuisineSmart
+    case cuisineDirectory
+    case cuisineAtlas
     case labels
     case emojiGallery
 
@@ -43,6 +46,12 @@ struct CategoryTaxonomyMockupRoot: View {
                 CategoryTaxonomySubcategoryPickerMockup()
             case .cuisine:
                 CategoryTaxonomyCuisinePickerMockup()
+            case .cuisineSmart:
+                CuisineSmartPickerMockup()
+            case .cuisineDirectory:
+                CuisineDirectoryPickerMockup()
+            case .cuisineAtlas:
+                CuisineAtlasPickerMockup()
             case .labels:
                 CategoryTaxonomyLabelsMockup()
             case .emojiGallery:
@@ -346,6 +355,442 @@ private struct CategoryTaxonomyCuisinePickerMockup: View {
             ForEach(WanderPlaceCategory.restaurantCuisineGroups(), id: \.title) { group in
                 SubcategoryGroupSection(group: group, selectedSubcategory: "Thai") { _ in }
             }
+        }
+    }
+}
+
+private struct CuisineSmartPickerMockup: View {
+    @State private var selectedCuisine = "Thai"
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(
+            title: "what kind of food?",
+            subtitle: "We’ll start with our best guess. Change it only if we missed."
+        ) {
+            CuisinePlaceContextCard(
+                name: "Jitlada",
+                detail: "Thai restaurant · Sunset Blvd",
+                cuisine: selectedCuisine
+            )
+
+            CuisineSuggestionCard(
+                cuisine: "Thai",
+                reason: "Suggested from the place type and name",
+                isSelected: selectedCuisine == "Thai"
+            ) {
+                selectedCuisine = "Thai"
+            }
+
+            MockupSearchField(text: "Search 126 cuisines")
+
+            MockupSection(title: "quick picks") {
+                MockupChipGrid(
+                    values: ["Mexican", "Italian", "Japanese", "Chinese", "American", "Mediterranean"],
+                    selected: [selectedCuisine]
+                )
+            }
+
+            MockupSection(title: "more nearby favorites") {
+                CuisineChoiceRow(cuisine: "Korean", detail: "Korean BBQ, bibimbap, noodles", selectedCuisine: $selectedCuisine)
+                Divider().background(WanderTheme.borderHairline.color)
+                CuisineChoiceRow(cuisine: "Vietnamese", detail: "Pho, bánh mì, rice plates", selectedCuisine: $selectedCuisine)
+                Divider().background(WanderTheme.borderHairline.color)
+                CuisineChoiceRow(cuisine: "Indian", detail: "Regional Indian cooking", selectedCuisine: $selectedCuisine)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CuisineSelectionFooter(cuisine: selectedCuisine)
+        }
+    }
+}
+
+private struct CuisineDirectoryPickerMockup: View {
+    @State private var selectedCuisine = "Thai"
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(
+            title: "choose cuisine",
+            subtitle: "Fast, familiar, and easy to scan."
+        ) {
+            MockupSearchField(text: "Search cuisines")
+
+            MockupSection(title: "suggested for Jitlada") {
+                CuisineChoiceRow(
+                    cuisine: "Thai",
+                    detail: "Best match · place type + name",
+                    selectedCuisine: $selectedCuisine,
+                    accent: true
+                )
+            }
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("recent")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(["Mexican", "Japanese", "Italian", "Mediterranean"], id: \.self) { cuisine in
+                            CuisineCompactChoice(
+                                cuisine: cuisine,
+                                isSelected: selectedCuisine == cuisine
+                            ) {
+                                selectedCuisine = cuisine
+                            }
+                        }
+                    }
+                }
+            }
+
+            MockupSection(title: "A") {
+                ForEach(Array(["Afghan", "African", "American", "Argentinian", "Asian fusion"].enumerated()), id: \.element) { index, cuisine in
+                    if index > 0 {
+                        Divider().background(WanderTheme.borderHairline.color)
+                    }
+                    CuisineChoiceRow(cuisine: cuisine, detail: nil, selectedCuisine: $selectedCuisine)
+                }
+            }
+
+            MockupSection(title: "B") {
+                ForEach(Array(["Bagel", "Bangladeshi", "Barbecue", "Basque", "Belgian", "Bistro", "Brazilian", "British", "Burgers"].enumerated()), id: \.element) { index, cuisine in
+                    if index > 0 {
+                        Divider().background(WanderTheme.borderHairline.color)
+                    }
+                    CuisineChoiceRow(cuisine: cuisine, detail: nil, selectedCuisine: $selectedCuisine)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CuisineSelectionFooter(cuisine: selectedCuisine)
+        }
+    }
+}
+
+private struct CuisineAtlasPickerMockup: View {
+    @State private var selectedCuisine = "Thai"
+    @State private var selectedRegion = "Popular"
+
+    private let regions = ["Popular", "Asia", "Europe", "Americas", "Middle East", "Africa"]
+    private let cuisines = [
+        "Thai", "Mexican", "Italian", "Japanese", "Korean", "Vietnamese",
+        "Chinese", "Indian", "Mediterranean", "French", "Peruvian", "Ethiopian"
+    ]
+
+    var body: some View {
+        CategoryTaxonomyMockupScreen(
+            title: "explore cuisines",
+            subtitle: "Browse by region when you know the vibe, not the exact name."
+        ) {
+            CuisineSuggestionCard(
+                cuisine: "Thai",
+                reason: "Our pick for Jitlada",
+                isSelected: selectedCuisine == "Thai"
+            ) {
+                selectedCuisine = "Thai"
+            }
+
+            MockupSearchField(text: "Search cuisines")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(regions, id: \.self) { region in
+                        Button {
+                            selectedRegion = region
+                        } label: {
+                            Text(region)
+                                .font(.system(size: 13, weight: .black))
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .frame(minHeight: 40)
+                                .background(
+                                    selectedRegion == region
+                                        ? WanderTheme.textInk.color
+                                        : WanderTheme.surfaceBone.color
+                                )
+                                .foregroundStyle(
+                                    selectedRegion == region
+                                        ? WanderTheme.textOnAction.color
+                                        : WanderTheme.textInk.color
+                                )
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: WanderTheme.spacing2),
+                    GridItem(.flexible(), spacing: WanderTheme.spacing2)
+                ],
+                spacing: WanderTheme.spacing2
+            ) {
+                ForEach(cuisines, id: \.self) { cuisine in
+                    CuisineAtlasTile(
+                        cuisine: cuisine,
+                        isSelected: selectedCuisine == cuisine
+                    ) {
+                        selectedCuisine = cuisine
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CuisineSelectionFooter(cuisine: selectedCuisine)
+        }
+    }
+}
+
+private struct CuisinePlaceContextCard: View {
+    let name: String
+    let detail: String
+    let cuisine: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            ZStack {
+                Circle().fill(WanderTheme.terracottaTint.color)
+                WanderCategoryEmoji(
+                    category: WanderPlaceCategory.restaurantsFood,
+                    cuisine: cuisine,
+                    name: name,
+                    size: 22
+                )
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name)
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(detail)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+}
+
+private struct CuisineSuggestionCard: View {
+    let cuisine: String
+    let reason: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .fill(WanderTheme.terracotta.color)
+                    WanderCategoryEmoji(
+                        category: WanderPlaceCategory.restaurantsFood,
+                        cuisine: cuisine,
+                        size: 26
+                    )
+                }
+                .frame(width: 58, height: 58)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: WanderTheme.spacing1) {
+                        Image(systemName: "sparkles")
+                        Text("SMART PICK")
+                    }
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+
+                    Text(cuisine)
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text(reason)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 23, weight: .black))
+                    .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.textFaint.color)
+            }
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.terracottaTint.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.terracotta.color, lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CuisineChoiceRow: View {
+    let cuisine: String
+    let detail: String?
+    @Binding var selectedCuisine: String
+    var accent = false
+
+    var body: some View {
+        Button {
+            selectedCuisine = cuisine
+        } label: {
+            HStack(spacing: WanderTheme.spacing3) {
+                ZStack {
+                    Circle().fill(accent ? WanderTheme.terracottaTint.color : WanderTheme.surfaceSand.color)
+                    WanderCategoryEmoji(
+                        category: WanderPlaceCategory.restaurantsFood,
+                        cuisine: cuisine,
+                        size: 17
+                    )
+                }
+                .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cuisine)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    if let detail {
+                        Text(detail)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: selectedCuisine == cuisine ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(
+                        selectedCuisine == cuisine
+                            ? WanderTheme.terracotta.color
+                            : WanderTheme.borderStrong.color
+                    )
+            }
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CuisineCompactChoice: View {
+    let cuisine: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                WanderCategoryEmoji(
+                    category: WanderPlaceCategory.restaurantsFood,
+                    cuisine: cuisine,
+                    size: 15
+                )
+                Text(cuisine)
+            }
+            .font(.system(size: 13, weight: .black))
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: 44)
+            .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceBone.color)
+            .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CuisineAtlasTile: View {
+    let cuisine: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack {
+                    ZStack {
+                        Circle().fill(WanderTheme.terracottaTint.color)
+                        WanderCategoryEmoji(
+                            category: WanderPlaceCategory.restaurantsFood,
+                            cuisine: cuisine,
+                            size: 21
+                        )
+                    }
+                    .frame(width: 44, height: 44)
+
+                    Spacer(minLength: 0)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+
+                Text(cuisine)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(
+                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CuisineSelectionFooter: View {
+    let cuisine: String
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CUISINE")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text(cuisine)
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+            }
+
+            Spacer(minLength: 0)
+
+            Text("done")
+                .font(.system(size: 16, weight: .black))
+                .padding(.horizontal, WanderTheme.spacing4)
+                .frame(minHeight: 48)
+                .background(WanderTheme.terracotta.color)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing3)
+        .background {
+            WanderTheme.canvasWarm.color
+                .ignoresSafeArea(.container, edges: .bottom)
+                .overlay(alignment: .top) {
+                    WanderTheme.borderHairline.color.frame(height: 1)
+                }
         }
     }
 }

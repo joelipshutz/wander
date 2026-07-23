@@ -107,6 +107,35 @@ struct PlaceCategoryDisplay: Equatable {
     }
 }
 
+enum RestaurantCuisineInferenceSource: String, Equatable {
+    case providerType
+    case subcategory
+    case category
+    case placeName
+    case website
+}
+
+struct RestaurantCuisineInference: Equatable {
+    let cuisine: String
+    let confidence: Double
+    let source: RestaurantCuisineInferenceSource
+
+    var reason: String {
+        switch source {
+        case .providerType:
+            "Suggested from the place type"
+        case .subcategory:
+            "Suggested from the restaurant type"
+        case .category:
+            "Suggested from category details"
+        case .placeName:
+            "Suggested from the place name"
+        case .website:
+            "Suggested from the restaurant website"
+        }
+    }
+}
+
 enum PlaceMemoryAttributeKeys {
     static let personalLabels = "personal_labels"
     static let restaurantCuisine = "restaurant_cuisine"
@@ -1833,6 +1862,77 @@ enum WanderPlaceCategory {
         }?.name
     }
 
+    static func restaurantCuisineInference(
+        name: String?,
+        rawProviderType: String?,
+        subcategory: String?,
+        category: String?,
+        websiteURLString: String? = nil
+    ) -> RestaurantCuisineInference? {
+        let evidence: [(value: String?, source: RestaurantCuisineInferenceSource, confidence: Double)] = [
+            (rawProviderType, .providerType, 0.98),
+            (subcategory, .subcategory, 0.95),
+            (category, .category, 0.92),
+            (name, .placeName, 0.90),
+            (websiteURLString, .website, 0.86)
+        ]
+
+        for item in evidence {
+            if let cuisine = cuisineGuess(forRawValue: item.value) {
+                return RestaurantCuisineInference(
+                    cuisine: cuisine,
+                    confidence: item.confidence,
+                    source: item.source
+                )
+            }
+
+            if let cuisine = cuisineAliasGuess(forRawValue: item.value) {
+                return RestaurantCuisineInference(
+                    cuisine: cuisine,
+                    confidence: item.confidence - 0.04,
+                    source: item.source
+                )
+            }
+        }
+
+        return nil
+    }
+
+    static func restaurantCuisineInference(for candidate: PlaceCandidate) -> RestaurantCuisineInference? {
+        guard candidate.primaryCategory == restaurantsFood else { return nil }
+
+        return restaurantCuisineInference(
+            name: candidate.name,
+            rawProviderType: candidate.rawProviderType,
+            subcategory: candidate.subcategory,
+            category: candidate.category,
+            websiteURLString: candidate.websiteURLString
+        )
+    }
+
+    private static func cuisineAliasGuess(forRawValue rawValue: String?) -> String? {
+        let normalized = normalizedCategoryText(rawValue)
+        guard !normalized.isEmpty else { return nil }
+
+        let aliases: [(cuisine: String, terms: [String])] = [
+            ("Mexican", ["taqueria", "tortilleria"]),
+            ("Italian", ["trattoria", "osteria", "ristorante", "cafeugo"]),
+            ("Pizza", ["pizzeria"]),
+            ("Japanese", ["udon", "soba", "teppanyaki"]),
+            ("Vietnamese", ["banh mi"]),
+            ("Indian", ["tandoor", "tandoori", "masala"]),
+            ("Middle Eastern", ["mezze"]),
+            ("Mediterranean", ["mediterranean grill"])
+        ]
+
+        return aliases.first { alias in
+            alias.terms.contains { term in
+                let normalizedTerm = normalizedCategoryText(term)
+                return " \(normalized) ".contains(" \(normalizedTerm) ")
+            }
+        }?.cuisine
+    }
+
     static func preferredProviderType(
         primaryType: String?,
         types: [String],
@@ -2081,6 +2181,18 @@ enum WanderPlaceCategory {
 
     private static func primaryFromName(_ name: String?, pointCategory: MKPointOfInterestCategory?) -> String? {
         guard let normalizedName = normalizedSearchText(name), !normalizedName.isEmpty else { return nil }
+        let normalizedNameKey = normalizedCategoryText(normalizedName)
+
+        if pointCategory == .restaurant {
+            if normalizedNameKey == "caffenio" {
+                return coffeeTeaSweets
+            }
+
+            if normalizedNameKey == "whole foods market"
+                || normalizedNameKey.hasPrefix("whole foods market ") {
+                return shopping
+            }
+        }
 
         if containsAny(normalizedName, ["veterinary", "veterinarian", " vet ", "animal hospital", "pet hospital", "pet clinic", "dog dental", "cat clinic"]) {
             return wellnessFitness

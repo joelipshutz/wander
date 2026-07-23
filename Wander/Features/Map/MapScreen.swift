@@ -2735,7 +2735,7 @@ struct PlaceSheetPlace {
         self.categorySource = candidate.categorySource
         self.categoryConfidence = candidate.categoryConfidence
         self.rawProviderType = candidate.rawProviderType
-        self.cuisine = nil
+        self.cuisine = WanderPlaceCategory.restaurantCuisineInference(for: candidate)?.cuisine
         self.address = candidate.address
         self.locality = candidate.locality
         self.region = candidate.region
@@ -4003,9 +4003,7 @@ struct MapPlaceSaveFlowSheet: View {
         }
 
         return context.initialCuisine
-            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.rawProviderType)
-            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.subcategory)
-            ?? WanderPlaceCategory.cuisineGuess(forRawValue: context.candidate.category)
+            ?? WanderPlaceCategory.restaurantCuisineInference(for: context.candidate)?.cuisine
     }
 
     private func prepareDetails() {
