@@ -17964,3 +17964,43 @@ Merge completion, 2026-07-22 21:45 PDT:
 - No App Store build number was changed and no archive, upload, TestFlight
   attachment, or tester-facing Slack release note was created. REC-130 will
   ride the next explicitly requested TestFlight release batch from `main`.
+
+## 2026-07-22 21:52 PDT - Codex - REC-133 Place Photo Carousel Mockup
+
+Agent: Codex using the Linear and image-generation workflows
+Branch: `codex/rec-133-place-photo-carousel`
+Worktree: `/private/tmp/recme-rec133-place-photo-carousel`
+Linear: `REC-133` (`In Progress`)
+
+Goal: design and implement a SwiftUI-only mockup that turns the place-profile
+hero photo into a horizontal gallery. The Google Places photo remains first;
+eligible user photos follow; tapping opens a swipeable full-screen viewer with
+clickable user attribution. Production data/RPC wiring waits for explicit design
+approval.
+
+Starting status and coordination:
+
+- Fetched `origin`, left the dirty root checkout untouched, and created this
+  isolated branch/worktree. Before editing, fast-forwarded from build-92 main
+  `9de2e4290` to current `origin/main` `4633a0a87`, which includes the merged
+  REC-130 contributor-scoped list-photo work. The branch is otherwise clean.
+- Created REC-133 in the `recme` team, assigned it to Ryan, attached it to `mvp`,
+  labeled it Feature, and moved it to In Progress. The issue records the design
+  scope and the later policy-safe production contract.
+- The existing place-profile header resolves only one photo. Existing debug-only
+  launch-argument mockups provide the correct isolation pattern; this pass will
+  not alter `PlaceProfileMapSurface`, repositories, Supabase, RLS, or shipping
+  app behavior.
+- Privacy contract for the eventual product path: the gallery may include a
+  user photo only when both the underlying save/photo is currently visible to
+  the viewer under authoritative policy and the contributor profile is
+  public/visible. Stealth/self-only saves, private profiles, blocked users, and
+  stale visibility must be excluded synchronously.
+- Expected files are `Wander/App/WanderApp.swift`, a new debug-only Map mockup
+  source file, two original image assets and catalog metadata, focused tests,
+  and this append-only log. `project.yml`, generated project metadata, backend,
+  migrations, build number, TestFlight, and Slack are out of scope.
+- The original mock assets were generated with the built-in image workflow: a
+  four-panel contact sheet of one LA neighborhood restaurant and a four-panel
+  contact sheet of diverse friend portraits. They contain no brands, text, or
+  third-party photography and will be copied into the app asset catalog.
