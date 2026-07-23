@@ -19224,3 +19224,16 @@ REC-125 implementation and validation, 2026-07-22 22:04 PDT:
   `git diff --check` passes, and the branch is exact with latest `origin/main`
   at `8e69138f4`. No schema/RLS, backend RPC, build-number, TestFlight, or
   release change is included.
+
+REC-125 review handoff, 2026-07-22 22:08 PDT:
+
+- Committed the implementation and regression coverage as `5d916a7c1`
+  (`fix: clear shared visit invitee defaults`), pushed
+  `codex/rec-125-invitation-defaults`, and opened ready PR #180:
+  https://github.com/joelipshutz/wander/pull/180
+- Loaded `/private/tmp/recme-rec125-invitation-defaults/Wander.xcodeproj` in
+  Xcode and verified its branch chooser reports
+  `codex/rec-125-invitation-defaults`; the branch is ready for hands-on testing
+  and review.
+- Linear REC-125 is moving to `In Review` with the PR and validation results.
+  No TestFlight build or release was requested or performed.
