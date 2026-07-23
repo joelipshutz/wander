@@ -20004,7 +20004,6 @@ REC-135 completion, 2026-07-23 11:49 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
-
 REC-126 completion, 2026-07-23 11:56 PDT:
 
 - Ready PR #189 was current with `main`, reported no conflicts, had no hosted
@@ -20027,3 +20026,61 @@ REC-126 completion, 2026-07-23 11:56 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
+## 2026-07-23 10:09 PDT - Codex - REC-118 future-date SwiftUI mockup
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-118-future-date-mockup`
+Worktree: `/private/tmp/recme-rec118-future-date-mockup`
+Linear: `REC-118` (`In Progress`)
+
+Goal: create an approval-ready SwiftUI mockup for associating a future date
+with a Wanna save inside the existing More options section. This pass is
+visual and interactive only; persistence, submission models, repository
+wiring, Supabase contracts, and production save behavior are intentionally
+deferred until the mockup is approved.
+
+Starting status and scope:
+
+- Fetched `origin` and created this isolated worktree from clean current
+  `origin/main` at `92adcdc89`. The primary checkout is on an unrelated
+  REC-88 branch with user-owned `.gitignore` and `.pnpm-store` changes, so it
+  will not be touched.
+- Read the latest coordination log, `DESIGN.md`, REC-118, the live
+  `MapPlaceSaveFlowSheet`, and existing DEBUG-only SwiftUI mockup conventions.
+  No current worktree entry overlaps the expected mockup files.
+- REC-118 requires a future date in Wanna → More options with past dates
+  disabled. The proposed mockup will use a familiar optional planning row,
+  an expanded inline graphical calendar, an explicit clear action, and a
+  minimum selectable date of today.
+- Expected files: `Wander/App/WanderApp.swift`, a new DEBUG-only mockup under
+  `Wander/Features/Map/`, and this log. `MapScreen.swift`, persistence models,
+  backend/schema files, build metadata, and production submission code are
+  outside this pass.
+
+Mockup validation checkpoint, 2026-07-23 10:25 PDT:
+
+- Added the DEBUG-only `FutureDateSaveMockups.swift` and launch route
+  `-WanderFutureDateSaveMockup <collapsed|calendar|selected>`. The mock mirrors
+  the existing Wanna save sheet, puts the optional planning date first inside
+  More options, uses the native graphical `DatePicker`, makes the selected
+  date easy to clear, and constrains the range to today and later so past dates
+  are unavailable.
+- The production `MapPlaceSaveFlowSheet`, save models, store/repository
+  contracts, Supabase schema, analytics, and submission behavior remain
+  unchanged. This is intentionally an interaction/design checkpoint before
+  wiring.
+- Ran `xcodegen generate`. The generated project change only registers the new
+  DEBUG mockup source.
+- Universal iOS Simulator build passed with
+  `/private/tmp/DerivedData-rec118-mockup`; an arm64 incremental simulator build
+  also passed after the final date-fixture adjustment.
+- Full tests passed: 584 executed, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec118-tests/Logs/Test/Test-Wander-2026.07.23_10-20-24--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and the smaller iPhone 17e, both on iOS
+  26.5. The expanded state clearly shows past calendar days disabled, and the
+  collapsed selected-date state has no clipping or overlap. Screenshots:
+  `/private/tmp/rec118-calendar-17pro-final.png` and
+  `/private/tmp/rec118-selected-17e-final.png`.
+- `git diff --check` passed. Next step is design approval, followed by a
+  separate implementation pass to wire the approved date through local
+  persistence, save submission, sync/backend contracts, and regression tests.

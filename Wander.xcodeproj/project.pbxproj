@@ -96,6 +96,7 @@
 		C04D00FF2C508036A0003D84 /* ProfileAvatarStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35E9F94446528E07DA24AD9 /* ProfileAvatarStorageTests.swift */; };
 		C212DC4C46E67610E6FE2A94 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */; };
 		C685CB14B12B2AFDFC9F4EAB /* WanderBackendConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */; };
+		C8BB11723D64693D95477243 /* FutureDateSaveMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */; };
 		C8D2FFF66F5C88B37018FFBC /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34977B260344994771BCC93E /* AuthSessionTests.swift */; };
 		CDE989C7F726EC820478464B /* FeedModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */; };
 		D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */; };
@@ -170,6 +171,7 @@
 		73F1E08A489F203F67F25F17 /* AppBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBrand.swift; sourceTree = "<group>"; };
 		76E267FE49035CB36F175971 /* ProfileImportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileImportViews.swift; sourceTree = "<group>"; };
 		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
+		7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureDateSaveMockups.swift; sourceTree = "<group>"; };
 		7A02BE0AE86E482916C8F103 /* Wander.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wander.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B4A6B29FC1235EFF60DA19D /* SyncStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStateMachineTests.swift; sourceTree = "<group>"; };
 		7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenterTests.swift; sourceTree = "<group>"; };
@@ -329,6 +331,7 @@
 			isa = PBXGroup;
 			children = (
 				14E5D0878CAA5887921E1ED1 /* CategoryTaxonomyMockups.swift */,
+				7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */,
 				CF55A883DB97E39A4A2D85F2 /* MapScreen.swift */,
 				D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */,
 				A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */,
@@ -670,6 +673,7 @@
 				812F84570207D139A528319C /* DiscoverScreen.swift in Sources */,
 				B2D3D8AE71BC35FB52F0AE0C /* FeedModels.swift in Sources */,
 				91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */,
+				C8BB11723D64693D95477243 /* FutureDateSaveMockups.swift in Sources */,
 				FBE5921715AB0F4368586D7B /* GoogleMapsSharedListImporter.swift in Sources */,
 				05CD519FB3F114E951C4D2DE /* LinkPlaceParser.swift in Sources */,
 				2CF99969C90415247403D552 /* ListMapPresentation.swift in Sources */,
