@@ -322,6 +322,28 @@ begin
 end
 $list_cover_metadata$;
 
+do $photo_gallery_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'visible_place_photos'
+    and pg_get_function_identity_arguments(p.oid)
+      = 'input_place_id uuid, input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer';
+  if valid is distinct from true then
+    raise exception 'place-photo gallery metadata contract failed';
+  end if;
+end
+$photo_gallery_metadata$;
+
 do $quota_metadata$
 declare
   valid boolean;
@@ -486,6 +508,24 @@ begin
 end
 $owner_scoped_photos$;
 
+do $owner_photo_gallery$
+declare
+  visible_count integer;
+  attributed_count integer;
+begin
+  select count(*)::integer,
+         count(*) filter (where contributor_user_id = ${smokeUser})::integer
+    into visible_count, attributed_count
+  from public.visible_place_photos((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ));
+  if visible_count <> 2 or attributed_count <> 1 then
+    raise exception 'owner place-photo gallery ordering/attribution fixture failed';
+  end if;
+end
+$owner_photo_gallery$;
+
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
@@ -543,6 +583,21 @@ begin
   end if;
 end
 $follower_scoped_photo$;
+
+do $follower_photo_gallery$
+declare visible_count integer;
+begin
+  select count(*)::integer into visible_count
+  from public.visible_place_photos((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ))
+  where contributor_user_id = ${smokeUser};
+  if visible_count <> 1 then
+    raise exception 'follower place-photo gallery visibility failed';
+  end if;
+end
+$follower_photo_gallery$;
 
 reset role;
 set local role authenticated;
@@ -1803,6 +1858,32 @@ async function runFirstVisiblePlacePhotoChecks(
     },
   );
 
+  await expectQuery(
+    client,
+    "place photo gallery RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'visible_place_photos'
+        and pg_get_function_identity_arguments(p.oid)
+          = 'input_place_id uuid, input_after_created_at timestamp with time zone, input_after_sort_order integer, input_after_photo_id uuid, input_limit integer'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
   await client.query(
     `
       insert into public.follows (follower_user_id, followed_user_id, source)
@@ -1866,7 +1947,7 @@ async function runFirstVisiblePlacePhotoChecks(
         'visit-photos',
         $2 || '/' || ids.visit_id::text || '/' || ids.photo_id::text || '.jpg',
         'image/jpeg',
-        0,
+        1,
         'uploaded'
       from ids
       returning id
@@ -1907,6 +1988,41 @@ async function runFirstVisiblePlacePhotoChecks(
     [smokePlaceID, [collaboratorUserID]],
     (result) => result.rows[0]?.photo_id === expectedCollaboratorPhotoID,
   );
+  const ownerGalleryFirstPage = await expectQuery(
+    client,
+    "owner place-photo gallery keeps public user photos ordered and attributed",
+    `
+      select *
+      from public.visible_place_photos($1::uuid, null, null, null, 1)
+    `,
+    [smokePlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.photo_id === expectedPhotoID
+      && result.rows[0]?.contributor_user_id === smokeUserID
+      && result.rows[0]?.contributor_handle,
+  );
+  await expectQuery(
+    client,
+    "owner place-photo gallery cursor returns the next user photo",
+    `
+      select *
+      from public.visible_place_photos(
+        $1::uuid,
+        $2::timestamptz,
+        $3::integer,
+        $4::uuid,
+        1
+      )
+    `,
+    [
+      smokePlaceID,
+      ownerGalleryFirstPage.rows[0].created_at,
+      ownerGalleryFirstPage.rows[0].sort_order,
+      ownerGalleryFirstPage.rows[0].photo_id,
+    ],
+    (result) => result.rows[0]?.photo_id === expectedCollaboratorPhotoID
+      && result.rows[0]?.contributor_user_id === collaboratorUserID,
+  );
 
   await setAuthenticatedUser(client, collaboratorUserID);
   await expectQuery(
@@ -1922,6 +2038,63 @@ async function runFirstVisiblePlacePhotoChecks(
     "select count(*)::integer as count from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
     [smokePlaceID, [strangerUserID]],
     (result) => result.rows[0]?.count === 0,
+  );
+  await expectQuery(
+    client,
+    "follower place-photo gallery returns public contributors only",
+    `
+      select count(*)::integer as count
+      from public.visible_place_photos($1::uuid)
+      where contributor_user_id = $2
+    `,
+    [smokePlaceID, smokeUserID],
+    (result) => result.rows[0]?.count === 1,
+  );
+
+  await client.query("reset role");
+  await client.query(
+    "update public.profiles set is_private_profile = true where id = $1",
+    [smokeUserID],
+  );
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "place-photo gallery revokes photos when a contributor profile becomes private",
+    `
+      select count(*)::integer as count
+      from public.visible_place_photos($1::uuid)
+      where contributor_user_id = $2
+    `,
+    [smokePlaceID, smokeUserID],
+    (result) => result.rows[0]?.count === 0,
+  );
+
+  await client.query("reset role");
+  await client.query(
+    "update public.profiles set is_private_profile = false where id = $1",
+    [smokeUserID],
+  );
+  await client.query(
+    "update public.user_places set visibility = 'self' where id = $1::uuid",
+    [smokeUserPlaceID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "place-photo gallery excludes stealth photos even for their owner",
+    `
+      select count(*)::integer as count
+      from public.visible_place_photos($1::uuid)
+      where contributor_user_id = $2
+    `,
+    [smokePlaceID, smokeUserID],
+    (result) => result.rows[0]?.count === 0,
+  );
+
+  await client.query("reset role");
+  await client.query(
+    "update public.user_places set visibility = 'followers' where id = $1::uuid",
+    [smokeUserPlaceID],
   );
 
   await setAuthenticatedUser(client, strangerUserID);
@@ -1946,6 +2119,13 @@ async function runFirstVisiblePlacePhotoChecks(
     "anonymous role cannot call list-cover contributor photo RPC",
     "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
     [smokePlaceID, [smokeUserID]],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call place-photo gallery RPC",
+    "select * from public.visible_place_photos($1::uuid)",
+    [smokePlaceID],
     /permission denied/,
   );
 }

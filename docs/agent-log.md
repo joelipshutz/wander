@@ -18192,6 +18192,46 @@ REC-130 merge completion, 2026-07-22 21:45 PDT:
 - No App Store build number was changed and no archive, upload, TestFlight
   attachment, or tester-facing Slack release note was created. REC-130 will
   ride the next explicitly requested TestFlight release batch from `main`.
+
+## 2026-07-22 21:52 PDT - Codex - REC-133 Place Photo Carousel Mockup
+
+Agent: Codex using the Linear and image-generation workflows
+Branch: `codex/rec-133-place-photo-carousel`
+Worktree: `/private/tmp/recme-rec133-place-photo-carousel`
+Linear: `REC-133` (`In Progress`)
+
+Goal: design and implement a SwiftUI-only mockup that turns the place-profile
+hero photo into a horizontal gallery. The Google Places photo remains first;
+eligible user photos follow; tapping opens a swipeable full-screen viewer with
+clickable user attribution. Production data/RPC wiring waits for explicit design
+approval.
+
+Starting status and coordination:
+
+- Fetched `origin`, left the dirty root checkout untouched, and created this
+  isolated branch/worktree. Before editing, fast-forwarded from build-92 main
+  `9de2e4290` to current `origin/main` `4633a0a87`, which includes the merged
+  REC-130 contributor-scoped list-photo work. The branch is otherwise clean.
+- Created REC-133 in the `recme` team, assigned it to Ryan, attached it to `mvp`,
+  labeled it Feature, and moved it to In Progress. The issue records the design
+  scope and the later policy-safe production contract.
+- The existing place-profile header resolves only one photo. Existing debug-only
+  launch-argument mockups provide the correct isolation pattern; this pass will
+  not alter `PlaceProfileMapSurface`, repositories, Supabase, RLS, or shipping
+  app behavior.
+- Privacy contract for the eventual product path: the gallery may include a
+  user photo only when both the underlying save/photo is currently visible to
+  the viewer under authoritative policy and the contributor profile is
+  public/visible. Stealth/self-only saves, private profiles, blocked users, and
+  stale visibility must be excluded synchronously.
+- Expected files are `Wander/App/WanderApp.swift`, a new debug-only Map mockup
+  source file, two original image assets and catalog metadata, focused tests,
+  and this append-only log. `project.yml`, generated project metadata, backend,
+  migrations, build number, TestFlight, and Slack are out of scope.
+- The original mock assets were generated with the built-in image workflow: a
+  four-panel contact sheet of one LA neighborhood restaurant and a four-panel
+  contact sheet of diverse friend portraits. They contain no brands, text, or
+  third-party photography and will be copied into the app asset catalog.
 ## 2026-07-22 15:49 PDT - Codex - REC-119 Rating Explanations
 
 Agent: Codex using the Linear workflow
@@ -19065,6 +19105,50 @@ REC-122 completion, 2026-07-22 23:11 PDT:
   was performed for REC-122. The merged feature can be included from latest
   `main` in the next explicitly requested TestFlight batch.
 
+REC-133 design-mock validation and handoff, 2026-07-22 23:20 PDT:
+
+- Completed the requested design-first, debug-only SwiftUI mock on branch
+  `codex/rec-133-place-photo-carousel` in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel`. Draft PR #186 is open:
+  `https://github.com/joelipshutz/wander/pull/186`. Linear REC-133 is linked,
+  commented with validation, and moved to In Review.
+- The place-card hero is a horizontally paged lazy carousel. The Google place
+  photo is first whenever present, eligible user photos follow, and the fixture
+  includes a 100-photo state with unique IDs to exercise unbounded scrolling.
+  Tapping any item opens a full-screen pager at the same index. User-photo
+  attribution shows avatar, display name, handle, and a 72pt profile-navigation
+  target; Google imagery remains provider-attributed.
+- The mock privacy filter requires a shared save, a public/visible profile, and
+  a non-blocked contributor. Fixtures verify that stealth saves, private
+  profiles, and blocked contributors are excluded. This is presentation-contract
+  validation only: production repository pagination plus server-authoritative
+  Supabase/RLS visibility, revocation, and blocking enforcement remain deferred
+  until design approval.
+- Generated two original, text-free 2x2 image sheets for the mock: one of the
+  same Los Angeles restaurant across exterior/interior/food/patio views and one
+  of diverse friendly profile portraits. They are stored in
+  `PlaceCarouselPhotos.imageset` and `PlaceCarouselAvatars.imageset`. The
+  generated Xcode project change is limited to registering the new mock source,
+  tests, and asset catalog entries; there is no signing or build-number churn
+  from REC-133.
+- Focused `PlacePhotoCarouselMockupTests` passed 6/6. After syncing through
+  latest `origin/main`, the complete suite passed 590/590 with zero failures on
+  iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec133-full/Logs/Test/Test-Wander-2026.07.22_23-16-15--0700.xcresult`.
+  The documented iPhone 16 Plus / iOS 18.6 destination is not installed on this
+  machine; that invocation exited with code 70 before executing tests.
+- Visual QA passed on iPhone 17 Pro for card, full-screen attribution, and the
+  100-photo state, plus compact iPhone 17e card coverage. Reviewed screenshots:
+  `/private/tmp/rec133-card-17pro-final.png`,
+  `/private/tmp/rec133-viewer-17pro-final.png`,
+  `/private/tmp/rec133-hundred-17pro-final.png`, and
+  `/private/tmp/rec133-card-17e-final.png`.
+- Implementation commit is `5c5d90ae7`; merge commits `70d420f25` and
+  `1aaddb0c5` preserve current `main` additions without altering their behavior.
+  The original dirty root checkout (`.gitignore` plus `.pnpm-store/`) remains
+  untouched. No schema/RLS migration, archive, TestFlight upload, build-number
+  increment, or Slack release note was performed. Next: collect design approval,
+  then scope the production photo-query/pagination and RLS regression work.
 Completion, 2026-07-22 23:15 PDT:
 
 - Squash-merged ready build-number PR #183:
@@ -19543,6 +19627,71 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
+
+REC-133 production implementation restart, 2026-07-23 11:22 PDT:
+
+- Agent/tool: Codex. Goal: convert the approved debug-only place-photo carousel
+  mock into the real place-card experience, update the full-screen treatment to
+  match Ryan's supplied black photo-viewer reference without its trash button,
+  remove the separate `View Profile` action, and make the username itself the
+  profile-navigation link.
+- Continuing in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`; draft PR #186 and Linear REC-133 remain
+  the coordination surfaces. REC-133 was moved back to In Progress.
+- Refreshed `origin` and merged the three newer `main` commits through
+  `e09708109`. The only conflict was the append-only `docs/agent-log.md`; both
+  histories were preserved in merge commit `642510337`. The worktree is
+  otherwise clean and ahead of its remote by the current-main merge.
+- Existing worktrees show no active overlap on the intended REC-133 production
+  files. The original root checkout remains on unrelated REC-88 work and will
+  not be touched.
+- Expected scope after code tracing: the production place-profile/card SwiftUI
+  surface, photo/profile repository or backend contracts and models if the
+  existing visit-photo path is insufficient, matching unit/contract tests,
+  generated Xcode membership when required, and this log. Any Supabase/RLS/RPC
+  change will include the repository-mandated SQL and hosted smoke coverage.
+  No TestFlight release is requested.
+
+REC-133 production implementation checkpoint, 2026-07-23 11:58 PDT:
+
+- Implemented the real place-profile hero carousel and full-screen photo viewer:
+  Google Maps remains first, user photos page lazily without a fixed maximum,
+  user attribution includes avatar/name/timestamp/status, and only the
+  underlined username navigates to `ProfileDetailView`. The full-screen surface
+  has a black canvas and close control with no trash or separate `View Profile`
+  action.
+- Added `public.visible_place_photos(...)` as a stable security-invoker RPC with
+  a pinned `search_path`, authenticated-only execute grant, cursor pagination,
+  RLS-authoritative follows/blocks, and explicit exclusion of non-Everyone saves
+  and private/deleted contributor profiles. The iOS gallery intentionally avoids
+  caching these pages and refreshes when the viewer opens/app becomes active so
+  a visibility or profile-privacy change revokes stale photos.
+- Confirmed the linked target is Supabase project `rugmtlgufrhlxwfkumhw`.
+  Hosted migration `20260723183000_visible_place_photo_gallery.sql` applied
+  successfully after a dry run showed it was the only pending migration. Two
+  already-hosted REC-126 migration files not yet on `main` were copied
+  byte-for-byte from `origin/codex/rec-126-restaurant-cuisines` only to align
+  local history for the push, then removed from this branch.
+- Validation so far:
+  - focused `PlacePhotoGalleryTests` plus the repository mapping test: 5 passed;
+  - strict hosted `visible_place_photo_gallery.sql`: 12/12 passed inside a
+    rolled-back transaction, covering grants/security metadata, Google/user
+    ordering inputs, attribution, pagination, stealth, private profiles, and
+    blocks;
+  - mandated linked `scripts/supabase-smoke-test.mjs --linked`: passed;
+  - Node syntax check: passed; pinned `pg` install reported zero
+    vulnerabilities;
+  - local `supabase test db` could not run because Docker is not installed, so
+    the hosted pgTAP and smoke checks are the recorded database validation;
+  - simulator visual QA passed on iPhone 17 Pro and smaller iPhone 17e using
+    `rec133-viewer-17pro.png` and `rec133-viewer-17e.png`; both retain readable
+    attribution, safe-area spacing, paging dots, and the username-only link.
+- `origin/main` advanced again during validation. Next: commit this checkpoint,
+  merge latest `origin/main`, preserve both append-only work histories,
+  regenerate the Xcode project, run the full suite, then push/update draft PR
+  #186 and Linear REC-133.
+
 REC-126 landing review checkpoint, 2026-07-23 11:38 PDT:
 
 - Updated the branch through REC-122 follow-up main commit `e09708109`; the
@@ -20004,6 +20153,94 @@ REC-135 completion, 2026-07-23 11:49 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
+
+REC-133 physical-device follow-up validation, 2026-07-23 13:08 PDT:
+
+- Moved each full-screen image's horizontal inset inside an exact
+  viewport-width paging target and anchored scroll position at center. The
+  second photo now settles with no neighboring-photo sliver.
+- Reworked contributor attribution so display name and full timestamp choose a
+  same-line or stacked layout without truncation, and the clickable username
+  has its own 44pt one-line row. The status pill is fixed-size so its label
+  cannot be compressed away by long attribution.
+- Added a representative debug viewer fixture for `You` /
+  `@ryan_lieblein` plus a fixture regression. The focused
+  gallery/mock/repository suite passed 12/12.
+- The exact final head passed 612/612 tests on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec133-followup/Logs/Test/Test-Wander-2026.07.23_13-05-08--0700.xcresult`.
+  `xcodegen generate` produced no project-file drift and `git diff --check`
+  passes.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Screenshots
+  `rec133-followup-viewer-17pro.png` and
+  `rec133-followup-viewer-17e.png` show the centered second page, complete
+  `@ryan_lieblein`, full `Jun 25, 2026 at 12:23` timestamp, and intact
+  `been` pill with no ellipses or adjacent-photo exposure.
+- Pre-landing review of the full PR diff found no critical, informational, or
+  specialist issue. GitHub reports PR #186 ready and mergeable; it has no
+  review or Greptile comments. No TestFlight action is requested.
+
+REC-133 physical-device follow-up and landing start, 2026-07-23 12:32 PDT:
+
+- Agent/tool: Codex. Goal: fix the full-screen pager so every photo snaps
+  exactly to the viewport center with no neighboring-photo sliver, restructure
+  user attribution so the username stays on one line and all date text remains
+  visible without ellipses, then review and squash-merge PR #186 to `main`.
+- Continuing in the clean isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`. `origin/main` remains `9c45b0fbf` and
+  is an ancestor of the branch. No overlapping worktree edits are present.
+- Reviewed Ryan's physical-device screenshot
+  `codex-clipboard-c0b3366f-c978-498c-8eb2-c89d78d3bbd4.png`. The visible
+  previous-photo strip is caused by applying horizontal padding outside each
+  viewport-width paging target; the attribution row also allows the handle to
+  wrap while competing horizontally with the timestamp.
+- Expected files: production and debug place-photo viewer SwiftUI, matching
+  tests if a stable non-visual contract can be expressed, generated project
+  only if membership changes, and this coordination log. This is a narrow
+  visual follow-up: no schema, RPC, RLS, sync, auth, or persistence contract is
+  changing, so a separate architecture review is not warranted. No TestFlight
+  release was requested.
+
+REC-133 production validation and handoff, 2026-07-23 12:06 PDT:
+
+- Production implementation is complete in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`. Feature commit `1b4f777a1` and latest
+  `main` integration commit `25bcec467` are the current implementation head;
+  draft PR #186 is the handoff surface and will be updated to a ready production
+  PR after this final coordination record is committed.
+- Exact-head iOS validation passed 611/611 tests with zero failures on iPhone
+  17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec133-production/Logs/Test/Test-Wander-2026.07.23_12-00-43--0700.xcresult`.
+  The production gallery model/repository-focused run separately passed 5/5.
+- The generic iOS Simulator build passed after rerunning outside the sandbox so
+  Xcode could access CoreSimulator and the pinned Swift packages. The only
+  source warnings are the pre-existing ISO-8601 formatter actor-isolation
+  warnings in `WanderSupabaseClient.swift`.
+- Hosted database validation remains green: the linked REC-133 migration is
+  applied and aligned, strict rolled-back pgTAP passed 12/12, and the mandated
+  exact-head linked Supabase smoke test passed. Docker is not installed, so
+  `supabase test db` was not available; the hosted pgTAP and smoke runs cover
+  the RPC metadata, grants, visibility, profile privacy, blocks, ordering, and
+  cursor paths instead.
+- Visual QA remains approved on iPhone 17 Pro and smaller iPhone 17e:
+  `rec133-viewer-17pro.png` and `rec133-viewer-17e.png`. Both show the requested
+  black viewer, large aspect-fit photo, page indicator, contributor card, and
+  username-only profile link, with no trash or separate profile button.
+- `git diff --check` is clean. No TestFlight build-number increment,
+  archive/upload, public-group change, or Slack release note was performed.
+
+REC-133 publication completion, 2026-07-23 12:09 PDT:
+
+- Pushed the complete Xcode branch through validation commit `a926ae351` to
+  `origin/codex/rec-133-place-photo-carousel`.
+- Updated PR #186 to `REC-133: Implement privacy-safe place photo carousel`,
+  replaced its mock-only handoff with the production/privacy/validation
+  evidence, and marked it ready. GitHub reports the PR open, non-draft,
+  mergeable, and based on exact current `main` (`9c45b0fbf`).
+- Added the implementation and validation evidence to Linear REC-133 and moved
+  the issue to In Review. The branch is ready for Ryan's local signed-device
+  test; no TestFlight release action was performed.
 
 REC-126 completion, 2026-07-23 11:56 PDT:
 
