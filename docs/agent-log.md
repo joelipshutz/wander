@@ -18430,6 +18430,7 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
+
 ## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
 
 Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
@@ -19154,3 +19155,72 @@ REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
 - Ryan explicitly authorized squash-merging PR #188 and pushing the result to
   `main`. No TestFlight build-number increment, archive/upload, Slack release
   note, or hosted-data mutation is authorized for this merge-only request.
+
+## 2026-07-22 21:55 PDT - Codex - REC-125 invitation defaults
+
+Agent: Codex using the rec.me feedback bug workflow and iOS fix workflow
+Branch: `codex/rec-125-invitation-defaults`
+Worktree: `/private/tmp/recme-rec125-invitation-defaults`
+Linear: `REC-125` (`In Progress`)
+
+Goal: stop a shared-visit invitation from defaulting the inviter's personal
+metadata into the invitee's save form. Preserve only category and
+subcategory/cuisine defaults; notes, tags, rating, photos, and stealth should
+start blank.
+
+Starting status:
+
+- Fetched `origin`, created this isolated worktree from latest `origin/main`,
+  then fast-forwarded it to exact main commit `8e69138f4`. The worktree is
+  clean and zero commits behind. The root checkout has unrelated modified and
+  untracked files and remains untouched.
+- Reviewed current worktrees and recent coordination entries. No active branch
+  overlaps the expected product/test files. `MapScreen.swift` is a designated
+  high-conflict file, so this task remains isolated and the diff will be kept to
+  the `MapPlaceSaveContext.sharedVisit` factory.
+- Expected files are `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`, and this log.
+- Triage: P2 bug/regression in the shared-visit acceptance form. The likely
+  cause is `MapPlaceSaveContext.sharedVisit` converting every non-`multi_tag`
+  invitation attribute into initial form answers, which leaks personal
+  rating/question metadata into the invitee's independent copy.
+- The engineering-review gate is not needed: this is an isolated correction to
+  an existing context factory with no new flow, persisted state, schema/RLS,
+  sync, visibility, or product decision. The acceptance criteria fully specify
+  which defaults remain.
+- The checkout intentionally has no `DebugBridge`/`StateServer`, so the iOS-fix
+  snapshot fixture path is unavailable. Reproduce the bug with a focused,
+  deterministic failing Swift regression test before editing runtime code,
+  then run the focused and complete simulator suites.
+
+REC-125 implementation and validation, 2026-07-22 22:04 PDT:
+
+- Added a deterministic shared-visit context regression with non-empty inviter
+  note, 4.5 rating, personal answer, tag, personal label, and photo metadata.
+  Before the runtime edit it failed on the copied rating, note, and answer,
+  proving the reported bug on exact current main.
+- Updated only `MapPlaceSaveContext.sharedVisit`: invitee rating, note, and
+  personal/question answers now start empty. Existing blank photo attachments
+  and personal labels remain blank; the invitee's supplied default visibility
+  remains authoritative; and the invitation's category, subcategory, and
+  restaurant cuisine remain selected.
+- The production shared-visit flow currently exists only for `been` visits:
+  the save form exposes friend invites only for `.been`, and the backend shared
+  visit contract requires a source visit. There is no separate `wanna` invite
+  path that can leak defaults today; this patch enforces the requested metadata
+  boundary at the common invitation acceptance context.
+- Focused post-fix tests passed 2/2 on iPhone 17 Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`.
+  Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-02-41--0700.xcresult`.
+- The complete suite passed 578/578 with zero failures on iPhone 17 Pro /
+  iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-03-42--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine. Existing simulator keychain, location, Supabase formatter, and
+  traditional-headermap warnings remain unrelated and non-fatal.
+- Regenerated the project with XcodeGen; no generated project diff resulted.
+  `git diff --check` passes, and the branch is exact with latest `origin/main`
+  at `8e69138f4`. No schema/RLS, backend RPC, build-number, TestFlight, or
+  release change is included.

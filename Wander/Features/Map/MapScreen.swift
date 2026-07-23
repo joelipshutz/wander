@@ -3015,9 +3015,9 @@ struct MapPlaceSaveContext: Identifiable {
             requiresStatusConfirmation: false,
             initialStatus: .been,
             initialVisibility: defaultVisibility,
-            initialRatingScore: invitation.ratingScore,
-            initialNote: invitation.note ?? "",
-            initialAnswers: initialNewSaveAnswers(from: invitation.attributeDrafts),
+            initialRatingScore: nil,
+            initialNote: "",
+            initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: invitation.attributeDrafts),
             initialPhotoAttachments: []
