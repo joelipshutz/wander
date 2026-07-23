@@ -20084,3 +20084,19 @@ Mockup validation checkpoint, 2026-07-23 10:25 PDT:
 - `git diff --check` passed. Next step is design approval, followed by a
   separate implementation pass to wire the approved date through local
   persistence, save submission, sync/backend contracts, and regression tests.
+
+Mockup handoff, 2026-07-23 10:28 PDT:
+
+- Committed the validated mockup as `a81f8432b`
+  (`feat: mock up REC-118 future date picker`), pushed
+  `codex/rec-118-future-date-mockup`, and opened draft PR #187:
+  https://github.com/joelipshutz/wander/pull/187.
+- Refreshed `origin` immediately before the push; the branch was one commit
+  ahead of and zero commits behind `origin/main`.
+- REC-118 remains `In Progress` because the issue's production behavior is not
+  implemented. Resume after design approval by promoting the approved control
+  into `MapPlaceSaveFlowSheet` and tracing the optional future date end to end
+  through models, persistence, sync/backend contracts, analytics where
+  appropriate, and focused/full regression coverage.
+- No TestFlight build, build-number change, backend migration, hosted data
+  mutation, or Slack release note was performed.
