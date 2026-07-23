@@ -17941,3 +17941,26 @@ Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
 - Rechecked CoreDevice after opening the project. Ryan's physical iPhone is
   still reported as `unavailable`, so a signed device install remains blocked
   until the phone is unlocked/reconnected and appears as available.
+
+Merge completion, 2026-07-22 21:45 PDT:
+
+- Ryan visually approved the REC-130 list-tile photo and empty-state behavior
+  from the Xcode branch handoff and explicitly requested the squash merge.
+- Pre-landing review against exact `origin/main` commit `9de2e4290` found no
+  unresolved code, design, security/RLS, test, performance, or scope issues.
+  PR #176 was ready, mergeable, 2 commits ahead and 0 behind, with no CI runs,
+  status checks, review comments, or hold labels. Its 11-file diff matched the
+  Linear acceptance criteria and contained no project/signing or generated
+  junk.
+- Squash-merged
+  `codex/rec-130-list-tile-fallback` through
+  https://github.com/joelipshutz/wander/pull/176. The resulting `main` commit
+  is `d1e7976a10bbba320e0f335636fd54270ec068d4`; a post-merge fetch verified
+  `origin/main` at that exact commit.
+- Validation carried into the merge: focused Swift regressions 17/17, full iOS
+  suite 576/576, `git diff --check`, hosted Supabase migration ledger parity,
+  and the rolled-back linked Supabase smoke. Local pgTAP remains unrun because
+  Docker is not installed; hosted metadata and behavior checks passed.
+- No App Store build number was changed and no archive, upload, TestFlight
+  attachment, or tester-facing Slack release note was created. REC-130 will
+  ride the next explicitly requested TestFlight release batch from `main`.
