@@ -1134,6 +1134,43 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
     }
 
+    func testRecentRestaurantCuisinesUseLatestUniqueSavedChoices() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let uses = [
+            RestaurantCuisineUse(cuisine: "Italian", savedAt: now.addingTimeInterval(-100)),
+            RestaurantCuisineUse(cuisine: "Thai", savedAt: now.addingTimeInterval(-10)),
+            RestaurantCuisineUse(cuisine: "thai restaurant", savedAt: now.addingTimeInterval(-20)),
+            RestaurantCuisineUse(cuisine: "Not a real cuisine", savedAt: now),
+            RestaurantCuisineUse(cuisine: "Mexican", savedAt: now.addingTimeInterval(-30)),
+            RestaurantCuisineUse(cuisine: "Sushi", savedAt: now.addingTimeInterval(-40)),
+            RestaurantCuisineUse(cuisine: "Japanese", savedAt: now.addingTimeInterval(-50))
+        ]
+
+        XCTAssertEqual(
+            WanderPlaceCategory.recentRestaurantCuisines(from: uses),
+            ["Thai", "Mexican", "Sushi", "Japanese"]
+        )
+        XCTAssertTrue(
+            WanderPlaceCategory.recentRestaurantCuisines(from: uses, limit: 0).isEmpty
+        )
+    }
+
+    func testSelectingCuisineMovesItToFrontOfRecents() {
+        XCTAssertEqual(
+            WanderPlaceCategory.updatingRecentRestaurantCuisines(
+                ["Mexican", "Thai", "Mexican", "Italian", "Unknown"],
+                selecting: "thai restaurant"
+            ),
+            ["Thai", "Mexican", "Italian"]
+        )
+        XCTAssertTrue(
+            WanderPlaceCategory.updatingRecentRestaurantCuisines(
+                ["Thai"],
+                selecting: "Unknown"
+            ).isEmpty
+        )
+    }
+
     func testMovedRestaurantCuisineStillDrivesContextualDefaults() {
         let quickBite = PlaceMemoryDefaultCatalog.suggestions(
             primaryCategory: WanderPlaceCategory.restaurantsFood,

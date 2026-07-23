@@ -136,6 +136,11 @@ struct RestaurantCuisineInference: Equatable {
     }
 }
 
+struct RestaurantCuisineUse: Equatable {
+    let cuisine: String
+    let savedAt: Date
+}
+
 enum PlaceMemoryAttributeKeys {
     static let personalLabels = "personal_labels"
     static let restaurantCuisine = "restaurant_cuisine"
@@ -1836,6 +1841,56 @@ enum WanderPlaceCategory {
     static let restaurantCuisineOptions: [String] = {
         restaurantCuisineGroups().flatMap(\.subcategories)
     }()
+
+    static func recentRestaurantCuisines(
+        from uses: [RestaurantCuisineUse],
+        limit: Int = 4
+    ) -> [String] {
+        guard limit > 0 else { return [] }
+
+        var seen = Set<String>()
+        return uses
+            .sorted { $0.savedAt > $1.savedAt }
+            .compactMap { use -> String? in
+                guard let cuisine = cuisineGuess(forRawValue: use.cuisine) else {
+                    return nil
+                }
+
+                let key = normalizedCategoryText(cuisine)
+                guard seen.insert(key).inserted else { return nil }
+                return cuisine
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    static func updatingRecentRestaurantCuisines(
+        _ cuisines: [String],
+        selecting selection: String,
+        limit: Int = 4
+    ) -> [String] {
+        guard limit > 0,
+              let selectedCuisine = cuisineGuess(forRawValue: selection)
+        else { return [] }
+
+        var seen = Set([normalizedCategoryText(selectedCuisine)])
+        var updated = [selectedCuisine]
+
+        for cuisine in cuisines {
+            guard let canonicalCuisine = cuisineGuess(forRawValue: cuisine) else {
+                continue
+            }
+
+            let key = normalizedCategoryText(canonicalCuisine)
+            guard seen.insert(key).inserted else { continue }
+            updated.append(canonicalCuisine)
+            if updated.count == limit {
+                break
+            }
+        }
+
+        return updated
+    }
 
     private static let normalizedRestaurantCuisineOptions: [(name: String, normalized: String)] = {
         restaurantCuisineOptions

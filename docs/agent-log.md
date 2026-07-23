@@ -19189,3 +19189,54 @@ Local handoff, 2026-07-23 00:03 PDT:
   restart: run `gh auth login -h github.com`, confirm `gh auth status`, then
   push `codex/rec-126-restaurant-cuisines` and open a ready PR to `main`.
   No TestFlight build or release was requested or performed.
+
+Follow-up, 2026-07-23 10:07 PDT:
+
+- Ryan selected the Cuisine Atlas direction for the production cuisine picker,
+  with Fast Directory's recent-cuisine strip inserted between search and the
+  regional filters. Approved helper copy is: “We’ll start with our best guess.
+  Change it only if we missed.”
+- Refetched `origin/main`; the branch is clean, still based on current
+  `92adcdc89`, and ten commits ahead. The root checkout remains on unrelated
+  REC-88 work, and no other worktree advertises overlapping REC-126 work.
+- This follow-up will edit the production picker in high-conflict
+  `Wander/Features/Map/MapScreen.swift`, add focused taxonomy/recents coverage
+  if needed, update the selected debug mockup for parity, regenerate the Xcode
+  project, and update this log. REC-126 stays In Progress until implementation,
+  visual QA, full tests, GitHub publication, and a ready PR are complete.
+
+Implementation checkpoint, 2026-07-23 10:36 PDT:
+
+- Replaced the production cuisine chip directory with the selected Cuisine
+  Atlas hierarchy: approved Best Guess card and helper copy, search across all
+  126 cuisines, a two-column emoji grid, regional filters, and a sticky
+  cuisine/Done footer. Cuisine taps now remain in the picker so people can
+  compare options before confirming instead of closing on every tap.
+- Added Fast Directory's Recents strip exactly between search and the regional
+  filters. Recents are derived from the current profile's real saved restaurant
+  cuisines ordered by `savedAt`, canonicalized against the taxonomy, and
+  deduplicated; there is no fake or device-only seed. New selections move to
+  the front during the current edit and become durable through the normal save
+  path.
+- Kept the existing inference contract: explicit saved cuisine wins, followed
+  by deterministic provider type, restaurant type/category, place name, and
+  website evidence. The chosen value is preselected and shown with its actual
+  inference reason; no OpenAI call or new external data transmission was
+  introduced.
+- The `cuisineAtlas` debug route now renders the production picker itself.
+  Visual QA passed on iPhone 17 Pro and smaller iPhone 17e with screenshots at
+  `/private/tmp/rec126-cuisine-atlas-production-17pro.png` and
+  `/private/tmp/rec126-cuisine-atlas-production-17e.png`. Header wrapping,
+  44-point controls, two-column grid, sticky footer, and home-indicator spacing
+  remained intact.
+- Live accessibility/interaction QA verified every region chip is individually
+  exposed, Asia filters to Asian cuisines, choosing Sushi updates both Recents
+  and the footer, and global search resolves Ethiopian regardless of the active
+  region.
+- `xcodegen generate` completed without project-file churn. Universal simulator
+  build passed. Focused `WanderPlaceCategoryTests` passed 41/41, and the final
+  exact-head full suite passed 592/592 on iPhone 17 / iOS 26.5 with zero
+  failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_10-29-17--0700.xcresult`.
+  `git diff --check` passed. The temporary generated `DerivedData-atlas` cache
+  was removed; no TestFlight build or release was requested.

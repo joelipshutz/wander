@@ -466,78 +466,26 @@ private struct CuisineDirectoryPickerMockup: View {
 }
 
 private struct CuisineAtlasPickerMockup: View {
-    @State private var selectedCuisine = "Thai"
-    @State private var selectedRegion = "Popular"
-
-    private let regions = ["Popular", "Asia", "Europe", "Americas", "Middle East", "Africa"]
-    private let cuisines = [
-        "Thai", "Mexican", "Italian", "Japanese", "Korean", "Vietnamese",
-        "Chinese", "Indian", "Mediterranean", "French", "Peruvian", "Ethiopian"
-    ]
+    @State private var selectedAssignment = WanderPlaceCategory.assignment(
+        primaryCategory: WanderPlaceCategory.restaurantsFood,
+        subcategory: "Restaurant",
+        source: PlaceCategorySource.provider.rawValue,
+        confidence: 0.98,
+        rawProviderType: "Thai restaurant"
+    )
+    @State private var selectedCuisine: String? = "Thai"
 
     var body: some View {
-        CategoryTaxonomyMockupScreen(
-            title: "explore cuisines",
-            subtitle: "Browse by region when you know the vibe, not the exact name."
-        ) {
-            CuisineSuggestionCard(
-                cuisine: "Thai",
-                reason: "Our pick for Jitlada",
-                isSelected: selectedCuisine == "Thai"
-            ) {
-                selectedCuisine = "Thai"
-            }
-
-            MockupSearchField(text: "Search cuisines")
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(regions, id: \.self) { region in
-                        Button {
-                            selectedRegion = region
-                        } label: {
-                            Text(region)
-                                .font(.system(size: 13, weight: .black))
-                                .padding(.horizontal, WanderTheme.spacing3)
-                                .frame(minHeight: 40)
-                                .background(
-                                    selectedRegion == region
-                                        ? WanderTheme.textInk.color
-                                        : WanderTheme.surfaceBone.color
-                                )
-                                .foregroundStyle(
-                                    selectedRegion == region
-                                        ? WanderTheme.textOnAction.color
-                                        : WanderTheme.textInk.color
-                                )
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: WanderTheme.spacing2),
-                    GridItem(.flexible(), spacing: WanderTheme.spacing2)
-                ],
-                spacing: WanderTheme.spacing2
-            ) {
-                ForEach(cuisines, id: \.self) { cuisine in
-                    CuisineAtlasTile(
-                        cuisine: cuisine,
-                        isSelected: selectedCuisine == cuisine
-                    ) {
-                        selectedCuisine = cuisine
-                    }
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            CuisineSelectionFooter(cuisine: selectedCuisine)
-        }
+        PlaceTypePickerSheet(
+            selectedAssignment: $selectedAssignment,
+            selectedCuisine: $selectedCuisine,
+            placeName: "Jitlada",
+            suggestedCuisine: "Thai",
+            suggestionReason: "Suggested from the place type and name",
+            recentCuisines: ["Mexican", "Japanese", "Italian", "Mediterranean"],
+            initialMode: .cuisine,
+            onSelect: {}
+        )
     }
 }
 

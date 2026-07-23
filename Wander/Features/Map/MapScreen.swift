@@ -3445,7 +3445,7 @@ enum MapPlaceSaveDetailsPolicy {
     }
 }
 
-private enum PlaceTypePickerMode {
+enum PlaceTypePickerMode {
     case category
     case subcategory
     case cuisine
@@ -3596,6 +3596,10 @@ struct MapPlaceSaveFlowSheet: View {
                 PlaceTypePickerSheet(
                     selectedAssignment: $selectedAssignment,
                     selectedCuisine: $selectedCuisine,
+                    placeName: context.candidate.name,
+                    suggestedCuisine: cuisineSuggestionValue,
+                    suggestionReason: cuisineSuggestionReason,
+                    recentCuisines: recentRestaurantCuisines,
                     initialMode: placeTypePickerMode
                 ) {
                     handlePlaceTypeSelection()
@@ -3995,6 +3999,40 @@ struct MapPlaceSaveFlowSheet: View {
             includeDistance: false,
             includeCategory: false
         )
+    }
+
+    private var cuisineSuggestionValue: String? {
+        Self.initialCuisine(for: context)
+    }
+
+    private var cuisineSuggestionReason: String? {
+        guard let suggestion = cuisineSuggestionValue else { return nil }
+
+        if let inference = WanderPlaceCategory.restaurantCuisineInference(for: context.candidate),
+           inference.cuisine.caseInsensitiveCompare(suggestion) == .orderedSame {
+            return inference.reason
+        }
+
+        return "Already saved for this place"
+    }
+
+    private var recentRestaurantCuisines: [String] {
+        let uses = store
+            .visiblePlaces(
+                filters: PlaceFilters(
+                    categories: [WanderPlaceCategory.restaurantsFood],
+                    ownerScopes: ["you"]
+                )
+            )
+            .compactMap { visiblePlace -> RestaurantCuisineUse? in
+                guard let cuisine = visiblePlace.restaurantCuisine else { return nil }
+                return RestaurantCuisineUse(
+                    cuisine: cuisine,
+                    savedAt: visiblePlace.userPlace.savedAt
+                )
+            }
+
+        return WanderPlaceCategory.recentRestaurantCuisines(from: uses)
     }
 
     private static func initialCuisine(for context: MapPlaceSaveContext) -> String? {
@@ -4594,25 +4632,38 @@ private struct PlaceTypeRow: View {
     }
 }
 
-private struct PlaceTypePickerSheet: View {
+struct PlaceTypePickerSheet: View {
     @Binding var selectedAssignment: PlaceCategoryAssignment
     @Binding var selectedCuisine: String?
+    let placeName: String
+    let suggestedCuisine: String?
+    let suggestionReason: String?
     let initialMode: PlaceTypePickerMode
     let onSelect: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var mode: PlaceTypePickerMode
     @State private var query = ""
+    @State private var recentCuisines: [String]
+    @State private var selectedCuisineRegion = "Popular"
 
     init(
         selectedAssignment: Binding<PlaceCategoryAssignment>,
         selectedCuisine: Binding<String?>,
+        placeName: String,
+        suggestedCuisine: String?,
+        suggestionReason: String?,
+        recentCuisines: [String],
         initialMode: PlaceTypePickerMode,
         onSelect: @escaping () -> Void
     ) {
         _selectedAssignment = selectedAssignment
         _selectedCuisine = selectedCuisine
+        self.placeName = placeName
+        self.suggestedCuisine = suggestedCuisine
+        self.suggestionReason = suggestionReason
         self.initialMode = initialMode
         self.onSelect = onSelect
+        _recentCuisines = State(initialValue: recentCuisines)
 
         let primaryCategory = selectedAssignment.wrappedValue.primaryCategory
         let hasEditableSelection = WanderPlaceCategory.editableCategories.contains(primaryCategory)
@@ -4668,16 +4719,8 @@ private struct PlaceTypePickerSheet: View {
         )
     }
 
-    private var selectedCuisineGroups: [PlaceCategorySubcategoryGroup] {
-        filteredGroupsForCurrentSelection(role: .cuisine)
-    }
-
     private var subcategoryGroupsForCurrentSelection: [PlaceCategorySubcategoryGroup] {
         WanderPlaceCategory.subcategoryGroups(for: selectedPrimaryCategory)
-    }
-
-    private var restaurantCuisineCount: Int {
-        WanderPlaceCategory.restaurantCuisineOptions.count
     }
 
     private var selectedCategoryTitle: String {
@@ -4692,12 +4735,35 @@ private struct PlaceTypePickerSheet: View {
         return "\(selectedCategoryTitle) - \(selectedCategoryCount) types"
     }
 
-    private var selectedCuisineSubtitle: String {
-        "\(selectedCategoryTitle) - \(restaurantCuisineCount) cuisines"
-    }
-
     private var selectedCategorySearchName: String {
         selectedCategoryTitle.lowercased()
+    }
+
+    private var filteredCuisineOptions: [String] {
+        let groups = WanderPlaceCategory.restaurantCuisineGroups()
+        let queryText = normalizedQuery
+
+        if !queryText.isEmpty {
+            return groups.flatMap { group in
+                if group.title.localizedCaseInsensitiveContains(queryText) {
+                    return group.subcategories
+                }
+                return group.subcategories.filter {
+                    $0.localizedCaseInsensitiveContains(queryText)
+                }
+            }
+        }
+
+        guard let selectedFilter = RestaurantCuisineRegionFilter.options.first(where: {
+            $0.id == selectedCuisineRegion
+        }) else {
+            return groups.flatMap(\.subcategories)
+        }
+
+        let groupTitles = Set(selectedFilter.groupTitles)
+        return groups
+            .filter { groupTitles.contains($0.title) }
+            .flatMap(\.subcategories)
     }
 
     private var customSearchSubcategory: String? {
@@ -4732,6 +4798,14 @@ private struct PlaceTypePickerSheet: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if mode == .cuisine,
+               selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+                RestaurantCuisineSelectionFooter(cuisine: selectedCuisine) {
+                    dismiss()
+                }
+            }
+        }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -4798,27 +4872,65 @@ private struct PlaceTypePickerSheet: View {
 
     private var cuisinePickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            CategoryPickerHeader(title: "choose cuisine", subtitle: selectedCuisineSubtitle)
-
-            CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
-
-            selectedCategoryPills
+            CategoryPickerHeader(
+                title: "explore cuisines",
+                subtitle: "We’ll start with our best guess. Change it only if we missed."
+            )
 
             if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
                 CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Cuisine only applies to restaurants and food places.")
-            } else if selectedCuisineGroups.isEmpty {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    CategoryPickerEmptyState(title: "No matching cuisine", message: "Try Thai, Mexican, Korean BBQ, or South American.")
-                    clearCuisineControl
-                }
             } else {
-                ForEach(selectedCuisineGroups, id: \.title) { group in
-                    SubcategoryGroupSection(
-                        group: group,
-                        selectedSubcategory: selectedCuisine
-                    ) { cuisine in
-                        selectCuisine(cuisine)
-                        dismiss()
+                selectedCategoryPills
+
+                if let suggestedCuisine,
+                   WanderPlaceCategory.isRestaurantCuisine(suggestedCuisine) {
+                    RestaurantCuisineSuggestionCard(
+                        placeName: placeName,
+                        cuisine: suggestedCuisine,
+                        reason: suggestionReason ?? "Best match from the place details",
+                        isSelected: selectedCuisine?.caseInsensitiveCompare(suggestedCuisine) == .orderedSame
+                    ) {
+                        selectCuisine(suggestedCuisine)
+                    }
+                }
+
+                CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
+
+                if !recentCuisines.isEmpty {
+                    RestaurantCuisineRecentsStrip(
+                        cuisines: recentCuisines,
+                        selectedCuisine: selectedCuisine,
+                        onSelect: selectCuisine
+                    )
+                }
+
+                RestaurantCuisineRegionFilters(
+                    selectedRegion: $selectedCuisineRegion
+                ) {
+                    query = ""
+                }
+
+                if filteredCuisineOptions.isEmpty {
+                    CategoryPickerEmptyState(
+                        title: "No matching cuisine",
+                        message: "Try Thai, Mexican, Korean BBQ, or South American."
+                    )
+                } else {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: WanderTheme.spacing2),
+                            GridItem(.flexible(), spacing: WanderTheme.spacing2)
+                        ],
+                        spacing: WanderTheme.spacing2
+                    ) {
+                        ForEach(filteredCuisineOptions, id: \.self) { cuisine in
+                            RestaurantCuisineAtlasTile(
+                                cuisine: cuisine,
+                                isSelected: selectedCuisine?.caseInsensitiveCompare(cuisine) == .orderedSame
+                            ) {
+                                selectCuisine(cuisine)
+                            }
+                        }
                     }
                 }
 
@@ -4852,7 +4964,6 @@ private struct PlaceTypePickerSheet: View {
             Button {
                 selectedCuisine = nil
                 onSelect()
-                dismiss()
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "xmark")
@@ -4923,7 +5034,10 @@ private struct PlaceTypePickerSheet: View {
 
     private func selectCuisine(_ cuisine: String) {
         selectedCuisine = cuisine
-        query = ""
+        recentCuisines = WanderPlaceCategory.updatingRecentRestaurantCuisines(
+            recentCuisines,
+            selecting: cuisine
+        )
         onSelect()
     }
 
@@ -4971,6 +5085,266 @@ private struct PlaceTypePickerSheet: View {
         }
 
         return role == .type ? groups : []
+    }
+}
+
+private struct RestaurantCuisineRegionFilter: Identifiable {
+    let id: String
+    let groupTitles: [String]
+
+    static let options = [
+        RestaurantCuisineRegionFilter(id: "Popular", groupTitles: ["Popular cuisines"]),
+        RestaurantCuisineRegionFilter(id: "Asia", groupTitles: ["Asian"]),
+        RestaurantCuisineRegionFilter(id: "Europe", groupTitles: ["Europe"]),
+        RestaurantCuisineRegionFilter(id: "Americas", groupTitles: ["Americas & Pacific"]),
+        RestaurantCuisineRegionFilter(id: "Mideast & Africa", groupTitles: ["Middle East & Africa"]),
+        RestaurantCuisineRegionFilter(id: "More", groupTitles: ["Misc"])
+    ]
+}
+
+private struct RestaurantCuisineSuggestionCard: View {
+    let placeName: String
+    let cuisine: String
+    let reason: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing3) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .fill(WanderTheme.terracotta.color)
+                    WanderCategoryEmoji(
+                        category: WanderPlaceCategory.restaurantsFood,
+                        cuisine: cuisine,
+                        name: placeName,
+                        size: 26
+                    )
+                }
+                .frame(width: 58, height: 58)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("BEST GUESS", systemImage: "sparkles")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+
+                    Text(cuisine)
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text(reason)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 23, weight: .black))
+                    .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.textFaint.color)
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+            .background(WanderTheme.terracottaTint.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.terracotta.color, lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Best guess for \(placeName): \(cuisine)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint(reason)
+    }
+}
+
+private struct RestaurantCuisineRecentsStrip: View {
+    let cuisines: [String]
+    let selectedCuisine: String?
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("recent")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(cuisines, id: \.self) { cuisine in
+                        RestaurantCuisineCompactChoice(
+                            cuisine: cuisine,
+                            isSelected: selectedCuisine?.caseInsensitiveCompare(cuisine) == .orderedSame
+                        ) {
+                            onSelect(cuisine)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct RestaurantCuisineCompactChoice: View {
+    let cuisine: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                WanderCategoryEmoji(
+                    category: WanderPlaceCategory.restaurantsFood,
+                    cuisine: cuisine,
+                    size: 15
+                )
+                Text(cuisine)
+                    .lineLimit(1)
+            }
+            .font(.system(size: 13, weight: .black))
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceBone.color)
+            .foregroundStyle(isSelected ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(cuisine)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+}
+
+private struct RestaurantCuisineRegionFilters: View {
+    @Binding var selectedRegion: String
+    let onSelect: () -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(RestaurantCuisineRegionFilter.options) { filter in
+                    Button {
+                        selectedRegion = filter.id
+                        onSelect()
+                    } label: {
+                        Text(filter.id)
+                            .font(.system(size: 13, weight: .black))
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .frame(minHeight: WanderTheme.tapMinimum)
+                            .background(
+                                selectedRegion == filter.id
+                                    ? WanderTheme.textInk.color
+                                    : WanderTheme.surfaceBone.color
+                            )
+                            .foregroundStyle(
+                                selectedRegion == filter.id
+                                    ? WanderTheme.textOnAction.color
+                                    : WanderTheme.textInk.color
+                            )
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(filter.id) cuisines")
+                    .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
+                }
+            }
+        }
+    }
+}
+
+private struct RestaurantCuisineAtlasTile: View {
+    let cuisine: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack {
+                    ZStack {
+                        Circle().fill(WanderTheme.terracottaTint.color)
+                        WanderCategoryEmoji(
+                            category: WanderPlaceCategory.restaurantsFood,
+                            cuisine: cuisine,
+                            size: 21
+                        )
+                    }
+                    .frame(width: 44, height: 44)
+
+                    Spacer(minLength: 0)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+
+                Text(cuisine)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(
+                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(cuisine)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+}
+
+private struct RestaurantCuisineSelectionFooter: View {
+    let cuisine: String?
+    let onDone: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CUISINE")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text(cuisine ?? "No cuisine")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
+            Spacer(minLength: 0)
+
+            Button("done", action: onDone)
+                .font(.system(size: 16, weight: .black))
+                .padding(.horizontal, WanderTheme.spacing4)
+                .frame(minHeight: 48)
+                .background(WanderTheme.terracotta.color)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .clipShape(Capsule())
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing3)
+        .background {
+            WanderTheme.canvasWarm.color
+                .ignoresSafeArea(.container, edges: .bottom)
+                .overlay(alignment: .top) {
+                    WanderTheme.borderHairline.color.frame(height: 1)
+                }
+        }
     }
 }
 
