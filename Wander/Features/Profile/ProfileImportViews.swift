@@ -2,7 +2,7 @@ import MapKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ProfileImportSection: View {
+struct AddImportSection: View {
     let summary: PlaceImportSummary
     let sourceAction: (PlaceImportSource) -> Void
     let inboxAction: () -> Void
@@ -21,71 +21,63 @@ struct ProfileImportSection: View {
 
             LazyVGrid(columns: columns, spacing: WanderTheme.spacing2) {
                 ForEach(PlaceImportSource.allCases) { source in
-                    ProfileImportSourceTile(source: source) {
+                    AddImportSourceTile(source: source) {
                         sourceAction(source)
                     }
                 }
             }
 
-            Button(action: inboxAction) {
-                HStack(spacing: WanderTheme.spacing3) {
-                    ZStack {
-                        Circle()
-                            .fill(summary.processingCount > 0 ? WanderTheme.terracottaTint.color : WanderTheme.skyTint.color)
+            if summary.hasPendingImports {
+                Button(action: inboxAction) {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        ZStack {
+                            Circle()
+                                .fill(summary.processingCount > 0 ? WanderTheme.terracottaTint.color : WanderTheme.skyTint.color)
+                            if summary.processingCount > 0 {
+                                ProgressView()
+                                    .tint(WanderTheme.terracotta.color)
+                            } else {
+                                Image(systemName: "tray.full.fill")
+                                    .font(.system(size: 16, weight: .black))
+                                    .foregroundStyle(WanderTheme.stateInfo.color)
+                            }
+                        }
+
+                        .frame(width: 38, height: 38)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(actionTitle)
+                                .font(.system(size: 15, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                            Text(actionSubtitle)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: WanderTheme.spacing2)
+
                         if summary.processingCount > 0 {
-                            ProgressView()
-                                .tint(WanderTheme.terracotta.color)
-                        } else {
-                            Image(systemName: summary.remainingCount > 0 ? "tray.full.fill" : "tray.fill")
-                                .font(.system(size: 16, weight: .black))
-                                .foregroundStyle(WanderTheme.stateInfo.color)
+                            Text(summary.progress.formatted(.percent.precision(.fractionLength(0))))
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.terracotta.color)
                         }
-
-                        if summary.processingCount == 0, summary.hasImports {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 7, weight: .black))
-                                .frame(width: 14, height: 14)
-                                .background(WanderTheme.stateSuccess.color)
-                                .foregroundStyle(Color.white)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
-                                .offset(x: 13, y: -13)
-                        }
-                    }
-                    .frame(width: 38, height: 38)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(actionTitle)
-                            .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text(actionSubtitle)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(2)
-                    }
-
-                    Spacer(minLength: WanderTheme.spacing2)
-
-                    if summary.processingCount > 0 {
-                        Text(summary.progress.formatted(.percent.precision(.fractionLength(0))))
+                        Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    .padding(WanderTheme.spacing3)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
                 }
-                .padding(WanderTheme.spacing3)
-                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens import progress and review")
             }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens import progress and review")
         }
     }
 
@@ -96,7 +88,7 @@ struct ProfileImportSection: View {
         if summary.remainingCount > 0 {
             return "Import Review"
         }
-        return summary.hasImports ? "Imports done" : "Import Review"
+        return "Import Review"
     }
 
     private var actionSubtitle: String {
@@ -109,14 +101,11 @@ struct ProfileImportSection: View {
         if summary.remainingCount > 0 {
             return "\(summary.remainingCount) place\(summary.remainingCount == 1 ? "" : "s") waiting"
         }
-        if summary.duplicateCount > 0 {
-            return "\(summary.duplicateCount) already in your places"
-        }
-        return "No imports waiting"
+        return "\(summary.remainingCount) place\(summary.remainingCount == 1 ? "" : "s") waiting"
     }
 }
 
-private struct ProfileImportSourceTile: View {
+private struct AddImportSourceTile: View {
     let source: PlaceImportSource
     let action: () -> Void
 

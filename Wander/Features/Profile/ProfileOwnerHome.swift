@@ -37,7 +37,6 @@ struct ProfileOwnerHome: View {
     let followerCount: Int
     let followingCount: Int
     let sharedVisitInvitationCount: Int
-    let importSummary: PlaceImportSummary?
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
     let isAvatarSaving: Bool
@@ -49,8 +48,6 @@ struct ProfileOwnerHome: View {
     let memberActions: ProfileMemberActions?
     let graphAction: (ProfileSocialGraphTab) -> Void
     let sharedVisitInvitationsAction: () -> Void
-    let importSourceAction: (PlaceImportSource) -> Void
-    let importInboxAction: () -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
     let inCommonAction: () -> Void
     let calendarDateAction: (Date, [String]) -> Void
@@ -65,13 +62,6 @@ struct ProfileOwnerHome: View {
                     invitationCount: sharedVisitInvitationCount,
                     action: sharedVisitInvitationsAction
                 )
-                if mode.isOwner, let importSummary {
-                    ProfileImportSection(
-                        summary: importSummary,
-                        sourceAction: importSourceAction,
-                        inboxAction: importInboxAction
-                    )
-                }
                 savedPlacesSection
                 if mode.isOwner, let saveStreak {
                     ProfileSaveStreakRow(summary: saveStreak)

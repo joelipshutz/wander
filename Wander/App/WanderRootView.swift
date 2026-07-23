@@ -10,7 +10,7 @@ struct WanderRootView: View {
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
-    @State private var addSheetDetent = AddSheetLayout.restingDetent
+    @State private var addSheetDetent: PresentationDetent
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
@@ -23,6 +23,7 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @StateObject private var store: WanderStore
+    @StateObject private var importStore: PlaceImportStore
     private let fixtureMode: WanderFixtureMode
 
     init(
@@ -35,6 +36,7 @@ struct WanderRootView: View {
         self.fixtureMode = fixtureMode
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
+        _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
@@ -44,6 +46,13 @@ struct WanderRootView: View {
                 parser: parser,
                 analytics: analytics,
                 persistence: persistence
+            )
+        )
+        let importStore = PlaceImportStore()
+        _importStore = StateObject(wrappedValue: importStore)
+        _addSheetDetent = State(
+            initialValue: AddSheetLayout.restingDetent(
+                hasPendingImports: importStore.summary.hasPendingImports
             )
         )
     }
@@ -111,15 +120,24 @@ struct WanderRootView: View {
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             store.saveFlowDidDismiss(.addSheet)
             addTabResetToken = UUID()
-            addSheetDetent = AddSheetLayout.restingDetent
+            addSheetDetent = addSheetRestingDetent
         }) {
-            AddScreen(resetToken: addTabResetToken, selectedDetent: $addSheetDetent) {
+            AddScreen(
+                importStore: importStore,
+                resetToken: addTabResetToken,
+                selectedDetent: $addSheetDetent
+            ) {
                 isPresentingAdd = false
             }
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
-                .presentationDetents(AddSheetLayout.detents, selection: $addSheetDetent)
+                .presentationDetents(
+                    AddSheetLayout.detents(
+                        hasPendingImports: importStore.summary.hasPendingImports
+                    ),
+                    selection: $addSheetDetent
+                )
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)
                 .presentationBackground(WanderTheme.surfaceBone.color)
@@ -154,6 +172,8 @@ struct WanderRootView: View {
         .onAppear {
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
+            importStore.resumePendingImports()
+            reconcilePlaceImports()
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -203,6 +223,16 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             queueSaveStreakCelebration(celebration)
         }
+        .onChange(of: store.presentationRevision) { _, _ in
+            reconcilePlaceImports()
+        }
+        .onChange(of: importStore.items) { _, _ in
+            reconcilePlaceImports()
+        }
+        .onChange(of: importStore.summary.hasPendingImports) { _, _ in
+            guard addSheetDetent != .large else { return }
+            addSheetDetent = addSheetRestingDetent
+        }
         .onChange(of: store.isSaveFlowPresented) { _, isPresented in
             if isPresented {
                 saveStreakCelebrationTask?.cancel()
@@ -232,12 +262,33 @@ struct WanderRootView: View {
             if newTab == .add {
                 store.saveFlowDidPresent(.addSheet)
                 addTabResetToken = UUID()
-                addSheetDetent = AddSheetLayout.restingDetent
+                addSheetDetent = addSheetRestingDetent
                 isPresentingAdd = true
             } else {
                 selectedTab = newTab
             }
         }
+    }
+
+    private var addSheetRestingDetent: PresentationDetent {
+        AddSheetLayout.restingDetent(
+            hasPendingImports: importStore.summary.hasPendingImports
+        )
+    }
+
+    private func reconcilePlaceImports() {
+        importStore.reconcileDuplicates(
+            with: store.currentUserVisiblePlaces.map { visiblePlace in
+                PlaceImportExistingPlace(
+                    userPlaceID: visiblePlace.userPlace.id,
+                    name: visiblePlace.place.canonicalName,
+                    latitude: visiblePlace.place.latitude,
+                    longitude: visiblePlace.place.longitude,
+                    sourceProvider: visiblePlace.place.sourceProvider,
+                    sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID
+                )
+            }
+        )
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
@@ -511,6 +562,12 @@ struct WanderRootView: View {
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
         arguments.contains("-WanderOpenSettings") ? .settings : nil
+    }
+
+    static func resolvedInitialAddPresentation(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        arguments.contains("-WanderOpenAdd")
     }
 
     static func resolvedInitialSharedProfile(
