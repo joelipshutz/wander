@@ -20004,3 +20004,26 @@ REC-135 completion, 2026-07-23 11:49 PDT:
 - No TestFlight build-number increment, archive/upload, public-group change, or
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
+
+REC-126 completion, 2026-07-23 11:56 PDT:
+
+- Ready PR #189 was current with `main`, reported no conflicts, had no hosted
+  checks or review comments, and was squash-merged as
+  `d60cf4cb75ed6d509aa214c2e68ae457ce330e06`.
+- Shipped deterministic cuisine preselection, the production Cuisine Atlas,
+  173 unique cuisines grouped across five canonical regions, the requested
+  country gaps plus Greek/Japanese/Poke, the `Americas & Pacific` filter label,
+  and the `filter` subheader.
+- Hosted Supabase data is complete across the current population: 41/41
+  restaurant saves have a cuisine and 0 remain missing. The inference is
+  deterministic; no OpenAI API or place/user data transmission was added.
+- Final validation remains 598/598 complete tests, 43/43 exact-main focused
+  cuisine/navigation/metadata-isolation gates, hosted Supabase smoke coverage,
+  `git diff --check`, and visual/accessibility QA on iPhone 17 Pro and iPhone
+  17e. The pre-landing adversarial pass caught and corrected unrelated
+  shared-visit metadata drift before publication.
+- Linear REC-126 has the PR, merge SHA, hosted-data result, validation, and
+  review evidence and is Done. No known blocking issue remains.
+- No TestFlight build-number increment, archive/upload, public-group change, or
+  Slack release note was performed. The merged feature will ride the next
+  explicitly requested TestFlight batch from latest `main`.
