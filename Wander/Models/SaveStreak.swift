@@ -108,3 +108,30 @@ struct SaveStreakCelebration: Identifiable, Equatable {
         self.saveDate = saveDate
     }
 }
+
+enum SaveStreakPresentationPolicy {
+    static let postSaveSheetDelay = Duration.milliseconds(140)
+
+    static func canPresent(
+        celebration: SaveStreakCelebration?,
+        isSaveFlowPresented: Bool
+    ) -> Bool {
+        celebration != nil && !isSaveFlowPresented
+    }
+
+    static func autoDismissDelay(
+        for kind: SaveStreakCelebration.Kind
+    ) -> Duration? {
+        switch kind {
+        case .dailyTakeover:
+            nil
+        case .sameDayConfetti:
+            .milliseconds(720)
+        }
+    }
+}
+
+enum SaveFlowPresentationLayer: Hashable {
+    case addSheet
+    case saveSheet
+}
