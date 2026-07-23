@@ -19515,3 +19515,22 @@ Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
   The immediately preceding exact REC-109-integrated branch passed the complete
   591/591 suite. Republish PR #193 with force-with-lease, confirm hosted
   mergeability, then squash-merge; no TestFlight action is part of this gate.
+
+REC-135 completion, 2026-07-23 11:49 PDT:
+
+- Ready PR #193 was clean and mergeable on exact current `main`, with no
+  required hosted checks or review blockers, then squash-merged as
+  `379974b19c38d6cdac8bf0138a04272f25972825`.
+- GitHub completed the remote merge before its local cleanup encountered an
+  unrelated existing `main` worktree. Verified `origin/main` at the squash
+  commit and explicitly deleted the merged
+  `codex/rec-135-match-broken-import` remote branch.
+- Final evidence remains 591/591 complete tests after the overlapping REC-109
+  import-navigation integration, 12/12 exact-head focused tests after the last
+  unrelated `main` update, clean pre-landing review, and iPhone 17e visual QA
+  of the Los Angeles-to-Santa-Monica result-driven camera refit.
+- Linear REC-135 has the PR, validation, and merge evidence and is Done. No
+  known blocking issue remains.
+- No TestFlight build-number increment, archive/upload, public-group change, or
+  Slack release note was performed. The merged feature will ride the next
+  explicitly requested TestFlight batch from latest `main`.
