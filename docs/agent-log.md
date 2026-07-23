@@ -20872,6 +20872,9 @@ Completion — 2026-07-23 16:31 PDT:
 - Xcode is open on this isolated worktree's `Wander.xcodeproj`; its Branch
   Chooser reports `codex/rec-129-feed-place-profile`, with the Wander scheme and
   iPhone 17 Pro selected. The branch is ready for local test and review.
+- Linked PR #203 from Linear, moved REC-129 to `In Review`, and posted the root
+  cause, validation results, Xcode handoff, and PR #178 overlap for future
+  reviewers.
 - Known coordination item: PR #178 / REC-131 overlaps the two implementation
   files and may require a narrow conflict resolution if it lands first.
 - No TestFlight build, merge, release, or build-number change was requested or
