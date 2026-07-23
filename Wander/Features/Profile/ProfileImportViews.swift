@@ -387,7 +387,6 @@ struct PlaceImportInboxScreen: View {
     @State private var candidatePickerItem: PlaceImportItem?
     @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
-    @State private var pendingManualSearchReviewItemID: String?
     @State private var showsClearConfirmation = false
     @State private var stagedStatuses: [String: PlaceStatus] = [:]
     @State private var bulkSaveQueue: [PlaceImportQuickSaveIntent] = []
@@ -519,17 +518,22 @@ struct PlaceImportInboxScreen: View {
                 }
             )
         }
-        .sheet(item: $rescueItem, onDismiss: beginPendingManualSearchReview) { item in
-            PlaceImportRescueScreen(item: item) { name, area in
-                let outcome = await importStore.search(itemID: item.id, name: name, area: area)
-                if case .needsReview(candidateCount: _) = outcome {
-                    pendingManualSearchReviewItemID = item.id
-                    if rescueItem == nil {
-                        beginPendingManualSearchReview()
-                    }
+        .sheet(item: $rescueItem) { item in
+            PlaceImportRescueScreen(
+                item: item,
+                searchAction: { name, area in
+                    await importStore.previewManualSearch(itemID: item.id, name: name, area: area)
+                },
+                confirmationAction: { name, area, candidates, selectedCandidateID in
+                    importStore.confirmManualSearch(
+                        itemID: item.id,
+                        name: name,
+                        area: area,
+                        candidates: candidates,
+                        selectedCandidateID: selectedCandidateID
+                    )
                 }
-                return outcome
-            }
+            )
         }
         .task(id: duplicateSignature) {
             importStore.reconcileDuplicates(with: existingPlaces)
@@ -873,15 +877,6 @@ struct PlaceImportInboxScreen: View {
         pendingQuickSave = nil
         guard let item = importStore.item(id: intent.itemID) else { return }
         beginSave(item, status: intent.status)
-    }
-
-    private func beginPendingManualSearchReview() {
-        guard let itemID = pendingManualSearchReviewItemID else { return }
-        pendingManualSearchReviewItemID = nil
-        guard let item = importStore.item(id: itemID), !item.candidates.isEmpty else { return }
-        DispatchQueue.main.async {
-            candidatePickerItem = item
-        }
     }
 
     @MainActor
@@ -1586,76 +1581,111 @@ private func usableImportCoordinate(
 }
 
 private struct PlaceImportRescueScreen: View {
-    private enum Field: Hashable {
-        case name
-        case area
-    }
-
     let item: PlaceImportItem
-    let searchAction: (String, String?) async -> PlaceImportManualSearchOutcome
+    let searchAction: (String, String?) async -> PlaceImportCandidateSearchOutcome
+    let confirmationAction: (String, String?, [PlaceCandidate], String) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var name: String
-    @State private var area: String
+    @State private var query: String
+    @State private var candidates: [PlaceCandidate] = []
+    @State private var selectedCandidateID: String?
     @State private var isSearching = false
     @State private var searchFailure: String?
-    @FocusState private var focusedField: Field?
+    @State private var lastSubmittedQuery = ""
+    @State private var searchRevision = 0
+    @State private var candidateMapPosition: MapCameraPosition = .automatic
+    @FocusState private var isSearchFocused: Bool
 
     init(
         item: PlaceImportItem,
-        searchAction: @escaping (String, String?) async -> PlaceImportManualSearchOutcome
+        searchAction: @escaping (String, String?) async -> PlaceImportCandidateSearchOutcome,
+        confirmationAction: @escaping (String, String?, [PlaceCandidate], String) -> Void
     ) {
         self.item = item
         self.searchAction = searchAction
-        _name = State(initialValue: item.seed.nameHint ?? "")
-        _area = State(initialValue: item.seed.areaHint ?? "")
+        self.confirmationAction = confirmationAction
+        _query = State(initialValue: item.seed.nameHint ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("place") {
-                    TextField("Name", text: $name)
-                        .textInputAutocapitalization(.words)
-                        .focused($focusedField, equals: .name)
-                        .submitLabel(.next)
-                        .onSubmit {
-                            focusedField = .area
-                        }
-                    TextField("City or neighborhood", text: $area)
-                        .textInputAutocapitalization(.words)
-                        .focused($focusedField, equals: .area)
-                        .submitLabel(.search)
-                        .onSubmit(performSearch)
-                }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    searchField
 
-                if isSearching {
-                    Section {
+                    if candidateMapRegion != nil {
+                        candidateMap
+                    }
+
+                    if isSearching {
                         HStack(spacing: WanderTheme.spacing2) {
                             ProgressView()
                             Text("Searching Apple Maps…")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
-                    }
-                } else if let searchFailure {
-                    Section("search result") {
-                        Label(searchFailure, systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.stateError.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                    } else if let searchFailure {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                            Text("No matches yet")
+                                .font(.system(size: 17, weight: .black))
+                            Label(searchFailure, systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(WanderTheme.stateError.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                    } else if !candidates.isEmpty {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                            Text("Choose the right place")
+                                .font(.system(size: 17, weight: .black))
+                            Text("Select one match to connect it to this import.")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
 
-                if let sourceURLString = item.seed.sourceURLString {
-                    Section("source") {
-                        Text(sourceURLString)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .textSelection(.enabled)
+                            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+                                candidateButton(candidate, number: index + 1)
+                            }
+                        }
+                    }
+
+                    Button(action: confirmSelection) {
+                        Text("Match Place")
+                            .font(.system(size: 17, weight: .black))
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .background(
+                                selectedCandidateID == nil
+                                    ? WanderTheme.textFaint.color
+                                    : WanderTheme.terracotta.color
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedCandidateID == nil)
+                    .accessibilityHint(
+                        selectedCandidateID == nil
+                            ? "Select a place result first."
+                            : "Connects the selected place to this import."
+                    )
+
+                    if let sourceURLString = item.seed.sourceURLString {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                            Text("SOURCE")
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                            Text(sourceURLString)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
+                .padding(WanderTheme.spacing4)
             }
-            .scrollContentBackground(.hidden)
             .background(WanderTheme.canvasWarm.color)
             .navigationTitle("Match a Place")
             .navigationBarTitleDisplayMode(.inline)
@@ -1663,48 +1693,256 @@ private struct PlaceImportRescueScreen: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        performSearch()
-                    } label: {
-                        if isSearching {
-                            ProgressView()
-                        } else {
-                            Text("Search")
+            }
+            .task {
+                guard !trimmedQuery.isEmpty else {
+                    isSearchFocused = true
+                    return
+                }
+                await performSearch()
+            }
+            .onChange(of: query) {
+                guard normalizedQuery != lastSubmittedQuery else { return }
+                searchRevision += 1
+                isSearching = false
+                selectedCandidateID = nil
+                candidates = []
+                searchFailure = nil
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            TextField("Search for a place", text: $query)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+                .onSubmit {
+                    Task { await performSearch() }
+                }
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                    isSearchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+
+            Button {
+                Task { await performSearch() }
+            } label: {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(trimmedQuery.isEmpty || isSearching)
+            .accessibilityLabel("Search Apple Maps")
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, WanderTheme.spacing1)
+        .frame(minHeight: 52)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+    }
+
+    private var candidateMapRegion: MKCoordinateRegion? {
+        candidateMapRegion(for: candidates)
+    }
+
+    private var candidateMap: some View {
+        Map(position: $candidateMapPosition, interactionModes: [.pan, .zoom]) {
+            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+                if let coordinate = usableImportCoordinate(
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude
+                ) {
+                    Annotation(candidate.name, coordinate: coordinate) {
+                        Button {
+                            selectedCandidateID = candidate.id
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        selectedCandidateID == candidate.id
+                                            ? WanderTheme.terracotta.color
+                                            : WanderTheme.stateInfo.color
+                                    )
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.9), lineWidth: 2)
+                                    )
+
+                                Text("\(index + 1)")
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(Color.white)
+                            }
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .shadow(color: Color.black.opacity(0.22), radius: 3, y: 2)
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Select match \(index + 1), \(candidate.name)")
+                        .accessibilityValue(
+                            selectedCandidateID == candidate.id ? "Selected" : "Not selected"
+                        )
                     }
-                    .disabled(trimmedName.isEmpty || isSearching)
+                    .annotationTitles(.hidden)
                 }
             }
         }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+        .frame(height: 220)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .accessibilityLabel("Map of \(candidates.count) Apple Maps search results")
     }
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    private func candidateButton(_ candidate: PlaceCandidate, number: Int) -> some View {
+        let isSelected = selectedCandidateID == candidate.id
+        return Button {
+            selectedCandidateID = candidate.id
+        } label: {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                Text("\(number)")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(
+                        isSelected ? WanderTheme.textOnAction.color : WanderTheme.stateInfo.color
+                    )
+                    .frame(width: 28, height: 28)
+                    .background(
+                        isSelected
+                            ? WanderTheme.terracotta.color
+                            : WanderTheme.skyTint.color
+                    )
+                    .clipShape(Circle())
 
-    private var trimmedArea: String? {
-        let value = area.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(candidate.name)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(candidate.previewSubtitle())
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(3)
+                }
 
-    private func performSearch() {
-        guard !trimmedName.isEmpty, !isSearching else { return }
-        let submittedName = trimmedName
-        let submittedArea = trimmedArea
-        searchFailure = nil
-        isSearching = true
-        focusedField = nil
-        Task {
-            let outcome = await searchAction(submittedName, submittedArea)
-            isSearching = false
-            switch outcome {
-            case .matched, .needsReview(candidateCount: _):
-                dismiss()
-            case .failed(let message):
-                searchFailure = message
+                Spacer(minLength: 0)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .accessibilityHidden(true)
+                }
             }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(
+                isSelected
+                    ? WanderTheme.terracottaTint.color
+                    : WanderTheme.surfaceRaised.color
+            )
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                    .stroke(
+                        isSelected
+                            ? WanderTheme.terracotta.color
+                            : WanderTheme.borderHairline.color,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(candidate.name), \(candidate.previewSubtitle())")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedQuery: String {
+        trimmedQuery.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
+    @MainActor
+    private func performSearch() async {
+        guard !trimmedQuery.isEmpty, !isSearching else { return }
+        let submittedQuery = trimmedQuery
+        searchRevision += 1
+        let revision = searchRevision
+        searchFailure = nil
+        selectedCandidateID = nil
+        candidates = []
+        isSearching = true
+        isSearchFocused = false
+        let outcome = await searchAction(submittedQuery, item.seed.areaHint)
+        guard revision == searchRevision else { return }
+        isSearching = false
+        lastSubmittedQuery = normalizedQuery
+        switch outcome {
+        case .results(let results):
+            if let region = candidateMapRegion(for: results) {
+                candidateMapPosition = .region(region)
+            } else {
+                candidateMapPosition = .automatic
+            }
+            candidates = results
+        case .failed(let message):
+            searchFailure = message
+        }
+    }
+
+    private func candidateMapRegion(for candidates: [PlaceCandidate]) -> MKCoordinateRegion? {
+        MapRegionFitter.region(
+            fitting: candidates.compactMap { candidate in
+                usableImportCoordinate(
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude
+                )
+            },
+            minimumSpan: 0.02,
+            paddingMultiplier: 1.5
+        )
+    }
+
+    private func confirmSelection() {
+        guard let selectedCandidateID,
+              candidates.contains(where: { $0.id == selectedCandidateID })
+        else { return }
+        confirmationAction(
+            trimmedQuery,
+            item.seed.areaHint,
+            candidates,
+            selectedCandidateID
+        )
+        dismiss()
     }
 }
 

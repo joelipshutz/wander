@@ -19543,7 +19543,6 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
-
 REC-126 landing review checkpoint, 2026-07-23 11:38 PDT:
 
 - Updated the branch through REC-122 follow-up main commit `e09708109`; the
@@ -19779,3 +19778,196 @@ REC-125 completion, 2026-07-23 11:42 PDT:
 - No TestFlight build-number increment, archive/upload, public-group action,
   Slack release note, or other release mutation was requested or performed.
   This change will ride the next explicitly requested release batch.
+## 2026-07-23 10:07 PDT - Codex - REC-135 Match Broken Import
+
+Agent: Codex
+Branch: `codex/rec-135-match-broken-import`
+Worktree: `/private/tmp/recme-rec135-match-place`
+Linear: `REC-135` (`In Progress`)
+
+Goal: update the broken-import “Match a Place” flow so its search is prefilled
+from the import, returns selectable place matches using the app's MapKit place
+search contract, permits one selection, and enables a full-width confirmation
+button only after selection.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from clean
+  `origin/main` at `92adcdc89`. The primary checkout contains unrelated
+  `.gitignore` and `.pnpm-store/` changes, so no work will be done there.
+- Existing worktrees do not overlap the expected implementation files.
+- REC-135 moved from Backlog to In Progress before implementation.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`,
+  focused place-import tests under `WanderTests/`, and this coordination log.
+  `project.yml`, the Xcode project, schema/RLS, auth, and build metadata are
+  outside scope unless implementation inspection proves otherwise.
+- The current rescue screen only exposes separate Name/Area fields and a
+  toolbar Search action, then dismisses immediately when a result is found.
+  It does not show candidates or require explicit single-selection confirmation.
+
+Implementation and validation checkpoint, 2026-07-23 10:23 PDT:
+
+- Replaced the destructive search-and-dismiss rescue flow with a prefilled,
+  single-field search surface that automatically loads MapKit matches, supports
+  repeat searches, displays one-selectable result cards, and keeps the
+  full-width Match Place button disabled until a result is selected. The source
+  URL remains below the button.
+- Split candidate preview from confirmation in `PlaceImportStore`. Preview uses
+  the existing `DevicePlaceImportResolver.resolveManualSearch` /
+  `MapKitPlaceResolver` path but does not mutate or persist the import. Explicit
+  confirmation trims and persists the query/area, all displayed candidates,
+  and exactly one selected candidate, while refusing to resurrect a completed,
+  duplicate, or dismissed item.
+- Added regressions proving preview search leaves the durable import unchanged
+  and confirmation persists exactly the selected candidate id.
+- Focused REC-135 tests passed twice after the final stale-import guard: 2 tests,
+  0 failures. Final result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-22-22--0700.xcresult`.
+- The full suite passed before the final one-line stale-import guard: 586 tests,
+  0 failures. Result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-21-31--0700.xcresult`.
+  The final focused rerun rebuilt the app and store successfully.
+- The documented iPhone 16 Plus / iOS 18.6 simulator is not installed on this
+  machine. Validation used the available iPhone 17 Pro / iOS 26.5 runtime. Only
+  existing traditional-headermap, Swift concurrency, and simulator/keychain
+  warnings appeared; no REC-135 compile or test warning was introduced.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+
+Local review handoff, 2026-07-23 10:28 PDT:
+
+- Implementation committed as `41a8c855c` (`feat: improve broken import place
+  matching`) on `codex/rec-135-match-broken-import`.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified Xcode's branch chooser reports
+  `codex/rec-135-match-broken-import`; package resolution completed and normal
+  background indexing began.
+- A push was attempted so the required review PR could be opened, but the
+  managed environment declined code upload because the chat request did not
+  explicitly authorize network egress. The committed branch remains local.
+  To resume remote review, explicitly authorize pushing the branch, then run
+  `git push -u origin codex/rec-135-match-broken-import` from this worktree and
+  open a ready PR to `main`.
+- REC-135 is ready for local Xcode testing/review. Linear is moved to In Review
+  with validation and the local-only handoff recorded. No known implementation
+  blocker remains; the only incomplete workflow item is the policy-blocked
+  push/PR.
+
+Map-preview review follow-up, 2026-07-23 10:38 PDT:
+
+- Ryan requested a native Apple Maps preview between the search field and place
+  results so users can understand where candidate places are. The map should
+  update from the active search criteria.
+- Refetched `origin`; this isolated worktree is clean and two local commits
+  ahead of `origin/main`. No other worktree overlaps the REC-135 files.
+- Moved REC-135 from In Review back to In Progress for the follow-up.
+- Expected scope remains
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused import-search UI
+  support/tests as needed, and this coordination log. The map will reuse the
+  existing MapKit candidate coordinates and will not add a backend or schema
+  contract.
+
+Map-preview follow-up completion, 2026-07-23 11:02 PDT:
+
+- Added an interactive Apple Maps preview between the search field and results.
+  It refits to each returned candidate set, supports pan/zoom, and disappears
+  while a changed query is awaiting new results.
+- Map pins and result cards use the same numbered selection state. Selecting
+  either surface highlights both and enables `Match Place`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-map-focused/Logs/Test/Test-Wander-2026.07.23_10-50-54--0700.xcresult`.
+  The earlier focused manual-search regression run also passed 2 tests,
+  0 failures.
+- Reviewed the final native UI on iPhone 17 Pro and the smaller iPhone 17e.
+  Both show the fitted map between search and cards without clipping; numbered
+  markers remain legible, and the selected card/pin state is synchronized.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified the branch chooser reports
+  `codex/rec-135-match-broken-import`. The branch is ready for local review.
+- Committed the map follow-up as `85954bd05` (`feat: add map to broken import
+  matching`). Moved REC-135 back to In Review and posted its validation and
+  local-only branch handoff in Linear. A push/PR remains intentionally pending
+  because code upload was not explicitly authorized.
+
+Dynamic-map landing follow-up, 2026-07-23 11:07 PDT:
+
+- Ryan requested one final correction before landing REC-135: the Apple Maps
+  camera must actively refit whenever a newly submitted search returns a
+  different candidate set, then the completed branch should be squash-merged
+  and pushed to `main`.
+- Refetched `origin`; `codex/rec-135-match-broken-import` is clean, four commits
+  ahead of and zero commits behind `origin/main`. The isolated worktree remains
+  appropriate because the primary checkout is on unrelated REC-88 work.
+- Reviewed the shared rec.me landing workflow, gstack pre-landing review
+  workflow/checklist, Linear workflow, and `DESIGN.md`. No pending explicit
+  TestFlight release is part of this merge-only request, so no build-number
+  bump, archive, upload, or Slack release note is authorized.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused regression tests
+  if a suitable view-state boundary exists, and this append-only coordination
+  log. No schema, backend, or project-membership change is expected.
+
+Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
+
+- Replaced the one-time `Map(initialPosition:)` seed with a bound
+  `MapCameraPosition`. Every successful manual search now computes a padded
+  region from that exact candidate set and assigns it to the camera, so
+  subsequent result sets recenter and refit instead of inheriting the first
+  viewport.
+- Focused manual-search and region-fitting coverage passed: 11 tests, 0
+  failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-10-53--0700.xcresult`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-27-53--0700.xcresult`.
+- Reinstalled a disposable fixture on the smaller iPhone 17e and reviewed the
+  actual MapKit flow. The initial Blue Bottle results fitted the Los Angeles
+  candidate spread; changing the query to `Santa Monica Pier` replaced the
+  pins and visibly recentered/zoomed the map around the pier before displaying
+  the four new result cards.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- During validation, `origin/main` advanced by two commits. The completed local
+  correction will be committed, rebased onto the latest `origin/main`, and
+  revalidated before the ready PR is squash-merged.
+- Rebased cleanly onto current `origin/main` (`e09708109`); the only manual
+  resolution preserved both append-only agent-log histories. The complete
+  post-rebase suite passed 588 tests with 0 failures:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-30-09--0700.xcresult`.
+- Completed the pre-landing scope, concurrency, state, persistence,
+  accessibility, MapKit, test, documentation-staleness, and distribution
+  review against current `origin/main`. Scope is clean and there are zero
+  unresolved critical or informational findings. Specialist subagents were
+  not dispatched because this session does not authorize delegation; the same
+  testing, security/data-safety, and native-design lenses were applied
+  directly. No related root-document or TODO update is required.
+- At the publish gate, `origin/main` advanced again with REC-109 / PR #188,
+  which moves the import entry point from Profile to Add and overlaps the same
+  import view/test files. Rebased onto exact current `origin/main`
+  (`0f43390e2`). Source and tests merged automatically; the only manual
+  resolution preserved both append-only log histories.
+- The complete exact post-integration suite passed 591 tests with 0 failures on
+  iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-37-02--0700.xcresult`.
+  `git diff --check` remains clean.
+- Reinstalled the exact build and disposable pending-import fixture on iPhone
+  17e. The newly moved Add sheet shows `Import Review`, opens the unresolved
+  Blue Bottle item, and exposes `Search for the place`; this confirms REC-135's
+  matcher remains reachable through REC-109's new navigation. The earlier
+  exact matcher QA already verified the result-driven Los Angeles to Santa
+  Monica Pier camera refit.
+- PR #193 opened ready, then detected two additional `main` commits that landed
+  during publication (`cff9e0689` REC-125 plus its completion record). Rebased
+  onto exact `origin/main` (`f946737b5`); those source changes affect Map save
+  defaults, not REC-135 files, and only the append-only log required manual
+  resolution.
+- Final exact-head focused validation passed 12/12 manual-search,
+  region-fitting, and Add import-navigation tests:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-46-05--0700.xcresult`.
+  The immediately preceding exact REC-109-integrated branch passed the complete
+  591/591 suite. Republish PR #193 with force-with-lease, confirm hosted
+  mergeability, then squash-merge; no TestFlight action is part of this gate.

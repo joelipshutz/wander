@@ -53,6 +53,11 @@ enum PlaceImportManualSearchOutcome: Equatable {
     case failed(String)
 }
 
+enum PlaceImportCandidateSearchOutcome: Equatable {
+    case results([PlaceCandidate])
+    case failed(String)
+}
+
 @MainActor
 protocol PlaceImportResolving {
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution
@@ -887,6 +892,100 @@ final class PlaceImportStore: ObservableObject {
         case .duplicate, .saved, .dismissed:
             return .failed("This import is no longer waiting for a place match.")
         }
+    }
+
+    func previewManualSearch(
+        itemID: String,
+        name: String,
+        area: String?
+    ) async -> PlaceImportCandidateSearchOutcome {
+        guard let item = item(id: itemID) else {
+            return .failed("This import is no longer available.")
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            return .failed("Enter a place name before searching.")
+        }
+        let normalizedArea = area?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedArea = normalizedArea.flatMap { $0.isEmpty ? nil : $0 }
+        let existingSeed = item.seed
+        let searchSeed = PlaceImportSeed(
+            id: existingSeed.id,
+            rawText: existingSeed.rawText,
+            nameHint: trimmedName,
+            areaHint: trimmedArea,
+            sourceURLString: existingSeed.sourceURLString,
+            sourceLine: existingSeed.sourceLine,
+            latitude: existingSeed.latitude,
+            longitude: existingSeed.longitude,
+            sourceProvider: existingSeed.sourceProvider,
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+        )
+
+        do {
+            let resolution = try await resolver.resolveManualSearch(
+                seed: searchSeed,
+                source: item.source
+            )
+            guard self.item(id: itemID) != nil else {
+                return .failed("This import is no longer available.")
+            }
+            switch resolution {
+            case .candidates(let candidates, selectedCandidateID: _):
+                guard !candidates.isEmpty else {
+                    return .failed("No matching Apple Maps place was found. Try a more specific search.")
+                }
+                return .results(candidates)
+            case .needsHelp(let message):
+                return .failed(message)
+            case .expanded, .expandedResolved, .partialExpandedResolved:
+                return .failed("No matching Apple Maps place was found. Try a more specific search.")
+            }
+        } catch let error as LocalizedError {
+            return .failed(error.errorDescription ?? "Apple Maps search is temporarily unavailable.")
+        } catch {
+            return .failed("Apple Maps search is temporarily unavailable.")
+        }
+    }
+
+    func confirmManualSearch(
+        itemID: String,
+        name: String,
+        area: String?,
+        candidates: [PlaceCandidate],
+        selectedCandidateID: String
+    ) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              ![.duplicate, .saved, .dismissed].contains(items[index].state),
+              !candidates.isEmpty,
+              candidates.contains(where: { $0.id == selectedCandidateID })
+        else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let existingSeed = items[index].seed
+        items[index].seed = PlaceImportSeed(
+            id: existingSeed.id,
+            rawText: existingSeed.rawText,
+            nameHint: trimmedName,
+            areaHint: {
+                let value = area?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return value.flatMap { $0.isEmpty ? nil : $0 }
+            }(),
+            sourceURLString: existingSeed.sourceURLString,
+            sourceLine: existingSeed.sourceLine,
+            latitude: existingSeed.latitude,
+            longitude: existingSeed.longitude,
+            sourceProvider: existingSeed.sourceProvider,
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+        )
+        items[index].pendingManualSearch = nil
+        items[index].candidates = candidates
+        items[index].selectedCandidateID = selectedCandidateID
+        items[index].state = .ready
+        items[index].helpMessage = nil
+        items[index].duplicateUserPlaceID = nil
+        items[index].updatedAt = .now
+        synchronizeBatch(items[index].batchID)
     }
 
     @discardableResult
