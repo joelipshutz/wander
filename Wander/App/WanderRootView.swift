@@ -4,6 +4,7 @@ import SwiftUI
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var accessibilityVoiceOverEnabled
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -358,6 +359,10 @@ struct WanderRootView: View {
 
             withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
                 presentedSaveStreakCelebration = celebration
+            }
+
+            if celebration.kind == .dailyTakeover, accessibilityVoiceOverEnabled {
+                return
             }
 
             do {

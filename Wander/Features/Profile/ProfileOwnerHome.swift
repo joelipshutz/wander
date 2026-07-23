@@ -584,20 +584,19 @@ struct SaveStreakProfileRowMockup: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible()), count: 7),
-                    spacing: WanderTheme.spacing3
-                ) {
-                    ForEach(19...25, id: \.self) { day in
-                        Text("\(day)")
-                            .font(.system(size: 13, weight: .black, design: .rounded))
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                            .background(
-                                day <= 22
-                                    ? WanderTheme.terracotta.color.opacity(0.16)
-                                    : WanderTheme.surfaceBone.color
-                            )
-                            .clipShape(Circle())
+                Grid(horizontalSpacing: WanderTheme.spacing3) {
+                    GridRow {
+                        ForEach(19...25, id: \.self) { day in
+                            Text("\(day)")
+                                .font(.system(size: 13, weight: .black, design: .rounded))
+                                .frame(maxWidth: .infinity, minHeight: 36)
+                                .background(
+                                    day <= 22
+                                        ? WanderTheme.terracotta.color.opacity(0.16)
+                                        : WanderTheme.surfaceBone.color
+                                )
+                                .clipShape(Circle())
+                        }
                     }
                 }
             }
