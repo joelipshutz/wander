@@ -18503,3 +18503,29 @@ Completion, 2026-07-22 21:17 PDT:
   post was requested or performed.
 - Next step: review and merge PR #174. A later explicit TestFlight release can
   package the change from latest `main`.
+
+TestFlight release preparation, 2026-07-22 22:28 PDT:
+
+- Joe explicitly requested shipping REC-127 to TestFlight. A separate explicit
+  build-93 release for REC-119/REC-130 was already active under Ryan-owned
+  Linear REC-134 and ready PR #181, so this run preserved that release rather
+  than racing or reusing its build number. PR #181 has since squash-merged its
+  metadata-only 92 -> 93 bump to `main`; archive/upload/attachment completion is
+  still pending its release owner.
+- Rebased REC-127 twice as `main` advanced: first over the merged REC-130 and
+  REC-119 app changes, then over build-93 metadata at exact `origin/main`
+  `731a3f39d`. Product and test files merged automatically; the only manual
+  conflicts were append-only `docs/agent-log.md`, and both histories were
+  preserved.
+- Re-ran the exact latest-main gates on Joe's installed iPhone 16 Plus / iOS
+  18.6 simulator. The focused map launch regressions passed 2/2. The complete
+  suite passed 578/578 with zero failures at
+  `/private/tmp/DerivedData-rec127-latest-full/Logs/Test/Test-Wander-2026.07.22_22-16-35--0700.xcresult`.
+  The first full-suite command encountered an Xcode build-database lock from
+  the just-finished focused run; the clean rerun used separate DerivedData and
+  passed. The generic iOS Simulator build also passed.
+- Pre-landing result remains clean: no source conflict with the REC-119 rating
+  UI, no backend/schema/auth/visibility change, no generated project churn,
+  and no unresolved decision. Next: publish the rebased PR head, wait for build
+  93 to finish, squash-merge PR #174, then create and ship the next build from
+  exact latest `main`.
