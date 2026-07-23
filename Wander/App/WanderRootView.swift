@@ -20,6 +20,8 @@ struct WanderRootView: View {
     @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
     @State private var sharedVisitBannerTask: Task<Void, Never>?
     @State private var visitInvitationInboxRequestID: UUID?
+    @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
+    @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @StateObject private var store: WanderStore
     private let fixtureMode: WanderFixtureMode
 
@@ -90,6 +92,22 @@ struct WanderRootView: View {
                 }
             }
         }
+        .overlay {
+            if let celebration = presentedSaveStreakCelebration {
+                Group {
+                    switch celebration.kind {
+                    case .dailyTakeover:
+                        SaveStreakCelebrationView(celebration: celebration) {
+                            dismissSaveStreakCelebration(celebration)
+                        }
+                    case .sameDayConfetti:
+                        SaveStreakConfettiPopView()
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
+        }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             addTabResetToken = UUID()
             addSheetDetent = AddSheetLayout.restingDetent
@@ -134,6 +152,7 @@ struct WanderRootView: View {
         }
         .onAppear {
             seedSharedVisitBannerTracker()
+            queueSaveStreakCelebration(store.saveStreakCelebration)
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -180,6 +199,9 @@ struct WanderRootView: View {
         .onChange(of: store.sharedVisitInvitations) { _, invitations in
             presentSharedVisitBannerIfNeeded(from: invitations)
         }
+        .onChange(of: store.saveStreakCelebration) { _, celebration in
+            queueSaveStreakCelebration(celebration)
+        }
         .onOpenURL { url in
             if let route = Self.sharedProfileRoute(for: url) {
                 sharedProfile = route
@@ -191,6 +213,7 @@ struct WanderRootView: View {
         }
         .onDisappear {
             sharedVisitBannerTask?.cancel()
+            saveStreakCelebrationTask?.cancel()
         }
     }
 
@@ -310,6 +333,55 @@ struct WanderRootView: View {
         withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
             sharedVisitBannerInvitation = nil
         }
+    }
+
+    private func queueSaveStreakCelebration(_ celebration: SaveStreakCelebration?) {
+        saveStreakCelebrationTask?.cancel()
+
+        guard let celebration else {
+            withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.16)) {
+                presentedSaveStreakCelebration = nil
+            }
+            return
+        }
+
+        saveStreakCelebrationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(180))
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled, store.saveStreakCelebration?.id == celebration.id else {
+                return
+            }
+
+            withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
+                presentedSaveStreakCelebration = celebration
+            }
+
+            do {
+                try await Task.sleep(
+                    for: celebration.kind == .dailyTakeover
+                        ? .seconds(2.2)
+                        : .milliseconds(720)
+                )
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            dismissSaveStreakCelebration(celebration)
+        }
+    }
+
+    private func dismissSaveStreakCelebration(_ celebration: SaveStreakCelebration) {
+        saveStreakCelebrationTask?.cancel()
+        saveStreakCelebrationTask = nil
+        withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.16)) {
+            presentedSaveStreakCelebration = nil
+        }
+        store.dismissSaveStreakCelebration(id: celebration.id)
     }
 
     private func scheduleSignedInMaintenance(for state: AuthState) {

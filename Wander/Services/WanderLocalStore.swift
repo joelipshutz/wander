@@ -84,6 +84,8 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeListMembers: [LocalPlaceListMember]
     @Published private(set) var placeListItems: [LocalPlaceListItem]
     @Published private(set) var unresolvedDrafts: [UnresolvedDraft] = []
+    @Published private(set) var saveStreakDatesByUserID: [String: [Date]] = [:]
+    @Published private(set) var saveStreakCelebration: SaveStreakCelebration?
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
@@ -312,6 +314,7 @@ final class WanderStore: ObservableObject {
             self.isPrivateProfile = restored.isPrivateProfile
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
+            self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
         } else {
             self.currentUser = fixtures.currentUser
@@ -334,6 +337,8 @@ final class WanderStore: ObservableObject {
             self.defaultVisibility = fixtures.currentUser.defaultVisibility
             self.isPrivateProfile = fixtures.currentUser.isPrivateProfile
             self.autoSaveListAddsToWant = true
+            self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
+                .mapValues { $0.map(\.savedAt) }
         }
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
@@ -716,6 +721,72 @@ final class WanderStore: ObservableObject {
         )
     }
 
+    var saveStreakSummary: SaveStreakSummary {
+        SaveStreakCalculator.summary(saveDates: currentUserSaveStreakDates)
+    }
+
+    func dismissSaveStreakCelebration(id: UUID) {
+        guard saveStreakCelebration?.id == id else { return }
+        saveStreakCelebration = nil
+    }
+
+    private var currentUserSaveStreakDates: [Date] {
+        let localDates = userPlaces
+            .filter { $0.userID == currentUser.id }
+            .map(\.savedAt)
+        let remoteDates = remoteVisiblePlaceCache
+            .filter { $0.owner.id == currentUser.id }
+            .map(\.userPlace.savedAt)
+        return saveStreakDatesByUserID[currentUser.id, default: []] + localDates + remoteDates
+    }
+
+    private func recordNewSaveForStreak(
+        place: LocalPlace,
+        status: PlaceStatus,
+        savedAt: Date,
+        wasTodayCovered: Bool
+    ) {
+        let kind: SaveStreakCelebration.Kind = wasTodayCovered
+            ? .sameDayConfetti
+            : .dailyTakeover
+
+        saveStreakDatesByUserID[currentUser.id, default: []].append(savedAt)
+        let updatedSummary = saveStreakSummary
+        let detail = [place.locality, place.region]
+            .compactMap { value in
+                guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+                    return nil
+                }
+                return value
+            }
+            .joined(separator: " · ")
+
+        let celebration = SaveStreakCelebration(
+            kind: kind,
+            placeName: place.canonicalName,
+            placeDetail: detail.isEmpty ? nil : detail,
+            status: status,
+            streakCount: updatedSummary.currentCount,
+            saveDate: savedAt
+        )
+
+        if saveStreakCelebration?.kind != .dailyTakeover || kind == .dailyTakeover {
+            saveStreakCelebration = celebration
+        }
+
+        analytics.track(
+            AnalyticsEvent(
+                name: kind == .dailyTakeover
+                    ? WanderAnalyticsEvents.saveStreakAdvanced
+                    : WanderAnalyticsEvents.saveStreakSameDaySave,
+                properties: [
+                    "status": status.rawValue,
+                    "streak_count": "\(updatedSummary.currentCount)"
+                ]
+            )
+        )
+    }
+
     var pendingSyncCount: Int {
         let pendingUserPlaces = userPlaces.filter { $0.syncState != .synced }.count
         let pendingAttributes = placeAttributes.filter { $0.syncState != .synced }.count
@@ -843,6 +914,8 @@ final class WanderStore: ObservableObject {
         unresolvedDrafts = []
         sourceArtifacts = []
         extractionJobs = []
+        saveStreakDatesByUserID = [:]
+        saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsState = .idle
         followedFeedPage = nil
@@ -2291,7 +2364,9 @@ final class WanderStore: ObservableObject {
     ) -> LocalPlaceVisit {
         let place = upsertPlace(from: invitation.candidate, sourceType: .socialSave)
         let now = Date.now
+        let wasTodayCovered = saveStreakSummary.isTodayCovered
         let userPlace: LocalUserPlace
+        let createdNewUserPlace: Bool
 
         if let existing = userPlaces.first(where: {
             $0.userID == currentUser.id
@@ -2317,6 +2392,7 @@ final class WanderStore: ObservableObject {
             existing.updatedAt = now
             existing.localUpdatedAt = now
             userPlace = existing
+            createdNewUserPlace = false
         } else {
             userPlace = LocalUserPlace(
                 localID: "local_up_shared_\(result.userPlaceID)",
@@ -2329,12 +2405,14 @@ final class WanderStore: ObservableObject {
                 ratingScore: draft.ratingScore,
                 nearbyConfirmed: false,
                 visitedAt: draft.visitedAt,
+                savedAt: now,
                 sourceType: AddSourceType.socialSave.rawValue,
                 attributionUserID: invitation.sourceOwnerUserID,
                 syncState: .synced,
                 serverUpdatedAt: now
             )
             userPlaces.append(userPlace)
+            createdNewUserPlace = true
         }
 
         replaceAttributes(for: userPlace.id, with: draft.attributes, syncState: .synced)
@@ -2376,6 +2454,14 @@ final class WanderStore: ObservableObject {
 
         sharedVisitInvitations.removeAll { $0.participantID == invitation.participantID }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+        if createdNewUserPlace {
+            recordNewSaveForStreak(
+                place: place,
+                status: .been,
+                savedAt: now,
+                wasTodayCovered: wasTodayCovered
+            )
+        }
         objectWillChange.send()
         persist()
         return visit
@@ -3442,6 +3528,8 @@ final class WanderStore: ObservableObject {
             return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
         }
 
+        let savedAt = Date.now
+        let wasTodayCovered = saveStreakSummary.isTodayCovered
         let userPlace = LocalUserPlace(
             localID: "local_up_\(currentUser.handle)_\(slug(place.canonicalName))",
             userID: currentUser.id,
@@ -3458,6 +3546,7 @@ final class WanderStore: ObservableObject {
             categoryOverrideSource: categoryOverride?.source,
             categoryOverrideConfidence: categoryOverride?.confidence,
             nearbyConfirmed: sourceType == .currentLocation,
+            savedAt: savedAt,
             sourceType: sourceType.rawValue,
             syncState: .pendingCreate
         )
@@ -3473,6 +3562,12 @@ final class WanderStore: ObservableObject {
                 name: WanderAnalyticsEvents.placeSaved,
                 properties: ["source_type": sourceType.rawValue, "visibility": resolvedVisibility.rawValue, "status": status.rawValue]
             )
+        )
+        recordNewSaveForStreak(
+            place: place,
+            status: status,
+            savedAt: savedAt,
+            wasTodayCovered: wasTodayCovered
         )
         persist()
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
@@ -4956,6 +5051,12 @@ final class WanderStore: ObservableObject {
         for index in placeListItems.indices where placeListItems[index].addedByUserID == previousUserID && placeListItems[index].deletedAt == nil {
             placeListItems[index].addedByUserID = signedInProfile.id
             placeListItems[index].updatedAt = .now
+            didClaimRows = true
+        }
+
+        if let guestStreakDates = saveStreakDatesByUserID.removeValue(forKey: previousUserID),
+           !guestStreakDates.isEmpty {
+            saveStreakDatesByUserID[signedInProfile.id, default: []].append(contentsOf: guestStreakDates)
             didClaimRows = true
         }
 

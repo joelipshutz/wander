@@ -18512,3 +18512,52 @@ Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
   sandbox rejected its ability to enqueue local review metadata for later
   cross-machine artifact sync. This does not affect the code/diff review or
   release gate. Result: `Pre-Landing Review: No issues found.`
+
+Implementation start, 2026-07-22 22:20 PDT:
+
+- Joe approved and explicitly asked to ship the refined B/C direction: B's
+  dark full-screen Streak Window takeover, a saved-place ticket that travels
+  and flips face-up, and C's quiet hairline Profile row below Been/Wanna and
+  above the calendar. The approved artifact is recorded in local
+  `approved.json`; Reduce Motion replaces the spatial flight/flip with a fade.
+- Scope changed from design-only to iOS implementation. REC-122 remains In
+  Progress and draft PR #175 will be updated rather than opening a competing
+  branch/PR.
+- Merged latest `origin/main` (`731a3f3`) before implementation. The only
+  conflict was this append-only log; both REC-122 and current main histories
+  were preserved. Current app metadata is build 93. This feature request does
+  not authorize another build-number bump, archive, TestFlight upload, or
+  tester Slack post.
+- Implementation contract: only a newly created Been or Wanna save qualifies;
+  edits and additional visits do not. The first qualifying save on a local
+  calendar day advances the persisted per-user streak and gets the takeover;
+  later new saves that day keep the same count and get a short confetti pop.
+  The Profile row reports the current run, recent seven-day coverage, and best
+  run without turning Profile into a streak dashboard.
+- Expected production files: a focused streak model/calculator, local-store
+  streak ledger and save event wiring, snapshot persistence, root celebration
+  presentation, owner Profile row, analytics names, focused tests, and this
+  log. No Supabase schema/RPC/RLS or auth contract change is planned.
+
+Implementation checkpoint, 2026-07-22 22:42 PDT:
+
+- Implemented the persisted per-user daily streak ledger and calculator, new-save
+  qualification in both direct and accepted-shared-visit paths, daily takeover
+  versus same-day confetti events, analytics, the full-screen ticket flip/flight,
+  Reduce Motion fallback, and the quiet owner-Profile row between Been/Wanna and
+  the calendar. Snapshot decoding remains backward-compatible; old snapshots
+  derive their initial ledger from saved-place timestamps.
+- The first focused run caught a real ordering bug: the newly appended save was
+  visible before celebration classification, so the first save appeared to be a
+  same-day save. Classification now captures day coverage before insertion.
+- Focused iPhone 16 Plus / iOS 18.6 validation passes 6/6 with zero failures,
+  including calculator continuity/reset, first Been/Wanna takeover, later
+  same-day confetti, edit exclusion, guest-to-signed-in transfer, relaunch
+  persistence, and the debug visual-QA route. Result bundle:
+  `/private/tmp/DerivedData-rec122-streak/Logs/Test/Test-Wander-2026.07.22_22-41-08--0700.xcresult`.
+- A paired physical iPhone is present, but the optional gstack live-device QA
+  bridge is not integrated in this app and expects `@Observable` snapshot hooks.
+  Adding that package would expand the feature scope, so no DebugBridge or device
+  control dependency was added. Visual validation will use the repo-required
+  simulator screenshots on a large and a smaller iPhone via a DEBUG-only streak
+  mockup launch argument plus the real demo-fixture Profile screen.

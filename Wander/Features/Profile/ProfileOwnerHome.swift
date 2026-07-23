@@ -33,6 +33,7 @@ struct ProfileOwnerHome: View {
     let profile: LocalProfile
     let mode: ProfileHomeMode
     let stats: ProfileStats
+    let saveStreak: SaveStreakSummary?
     let followerCount: Int
     let followingCount: Int
     let sharedVisitInvitationCount: Int
@@ -72,6 +73,9 @@ struct ProfileOwnerHome: View {
                     )
                 }
                 savedPlacesSection
+                if mode.isOwner, let saveStreak {
+                    ProfileSaveStreakRow(summary: saveStreak)
+                }
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -465,6 +469,71 @@ private struct OwnerProfileSaveTile: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ProfileSaveStreakRow: View {
+    let summary: SaveStreakSummary
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 28, height: 28)
+
+                Text(streakTitle)
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                HStack(spacing: 3) {
+                    ForEach(summary.recentDayCoverage.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(
+                                summary.recentDayCoverage[index]
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.borderHairline.color.opacity(0.65)
+                            )
+                            .frame(width: 10, height: 4)
+                    }
+                }
+                .accessibilityHidden(true)
+
+                if summary.bestCount > 0 {
+                    Text("\(summary.bestCount) best")
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .padding(.vertical, WanderTheme.spacing1)
+
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var streakTitle: String {
+        guard summary.currentCount > 0 else { return "start a streak" }
+        return "\(summary.currentCount)-day streak"
+    }
+
+    private var accessibilityLabel: String {
+        guard summary.currentCount > 0 else {
+            return "No active save streak. Save a Been or Wanna place to start one."
+        }
+        let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
+        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus)"
     }
 }
 
