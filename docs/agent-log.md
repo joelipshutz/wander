@@ -20518,8 +20518,9 @@ Pre-merge polish validation, 2026-07-23 13:12 PDT:
   `origin/main`, then squash-merge as requested. No TestFlight or hosted
   migration deployment is part of this merge-only handoff.
 - Integrated exact current `origin/main` at
-  `333439b3fecbd0812917f3aed715bad44ad2fc82` after REC-133 landed. The only
-  manual conflict was this append-only log; both histories were preserved.
+  `f93e0080d08ee2485b03e9c150f24fad843478b5`, including REC-133’s
+  `333439b3fecbd0812917f3aed715bad44ad2fc82` squash and completion record. The
+  only manual conflict was this append-only log; both histories were preserved.
   XcodeGen produced no project drift. Exact post-integration validation passed
   626/626 iOS tests
   (`/private/tmp/DerivedData-rec118-post-main/Logs/Test/Test-Wander-2026.07.23_13-16-33--0700.xcresult`),
