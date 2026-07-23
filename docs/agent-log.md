@@ -17591,3 +17591,16 @@ Publication and review handoff, 2026-07-22 16:14 PDT:
   badge. Keep REC-124 In Review until the behavior and PR are accepted.
 - No release was requested or performed. Any TestFlight packaging of this app
   change requires a separate explicit release request after merge.
+
+Xcode device-test handoff, 2026-07-22 16:19 PDT:
+
+- Opened this worktree's `Wander.xcodeproj` in Xcode and verified the toolbar
+  reports branch `codex/rec-124-calendar-badges`, scheme `Wander`, and run
+  destination `Ry’s iPhone`.
+- Started Build and Run. Compilation completed and Xcode reached the device
+  install/launch step, but paused with “Unlock Ry’s iPhone to Continue” because
+  the phone is locked. Xcode remains open on the correct branch and is waiting.
+- Exact continuation: unlock Ry’s iPhone; Xcode should resume launching Wander.
+  If it does not resume automatically, dismiss the lock sheet and press Run
+  once. No source, configuration, backend, build-number, or TestFlight change
+  was made for this hands-on test handoff.
