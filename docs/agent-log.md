@@ -18131,3 +18131,32 @@ REC-119 rec.me control-position follow-up start, 2026-07-22 19:31 PDT:
   editing the high-conflict `MapScreen.swift`, preserve this coordination entry,
   rebase the branch onto current `origin/main`, then regenerate, test, and
   recapture the large- and compact-phone SwiftUI mockups.
+
+REC-119 rec.me control-position validation, 2026-07-22 19:41 PDT:
+
+- Rebased the branch onto current `origin/main` at `9de2e4290`, preserving the
+  complete REC-124, build-92, and REC-119 histories. The only conflict was this
+  append-only coordination log; product files rebased cleanly.
+- Gave the rec.me explanation control a dedicated additional 8-point trailing
+  offset in both place-profile rating-card implementations, moving it from
+  `x: 6` to `x: 14`. The Fit control remains at `x: 6`; card dimensions, label
+  centering, 44-point tap targets, copy, and native popover behavior are
+  otherwise unchanged.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused rating-copy contract passed 1/1 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_19-33-27--0700.xcresult`.
+- Visually reviewed the closed state on iPhone 17 Pro at
+  `/private/tmp/rec119-right-17pro-final.png` and iPhone 17e at
+  `/private/tmp/rec119-right-17e-final.png`. The rec.me icon now sits at the
+  outer-right corner with clear separation from its two-line header and no
+  collision with the adjacent Fit card.
+- Reviewed the open native-caret state at
+  `/private/tmp/rec119-right-17pro-popover.png`; the system caret points to the
+  moved control. The temporary local-only auto-open capture hook was fully
+  reverted before final validation, so production remains tap-to-open.
+- The complete latest-main suite passed 574/574 with zero failures on iPhone 17
+  Pro / iOS 26.5 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_19-39-59--0700.xcresult`.
+  Existing Supabase formatter warnings and simulator diagnostics remain
+  unrelated. No build-number, TestFlight, backend, or release action was
+  requested or performed.

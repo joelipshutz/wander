@@ -6025,7 +6025,7 @@ private struct PlaceProfileMetricCard: View {
         .overlay(alignment: .topTrailing) {
             if let explanation {
                 PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: 6, y: compact ? -1 : 1)
+                    .offset(x: explanation == .recMe ? 14 : 6, y: compact ? -1 : 1)
             }
         }
     }

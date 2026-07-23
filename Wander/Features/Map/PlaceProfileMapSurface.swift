@@ -1106,7 +1106,7 @@ private struct PlaceProfileRatingTile: View {
         .overlay(alignment: .topTrailing) {
             if let explanation {
                 PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: 6, y: 2)
+                    .offset(x: explanation == .recMe ? 14 : 6, y: 2)
             }
         }
     }
