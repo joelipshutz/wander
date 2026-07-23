@@ -18969,3 +18969,15 @@ Checkpoint, 2026-07-23 11:06 PDT:
   gstack `review` skill is not installed in this environment, so the equivalent
   source/diff/test/design-system review was completed directly. No TestFlight
   build or build-number increment is part of this follow-up.
+
+REC-122 follow-up completion, 2026-07-23 11:09 PDT:
+
+- Ready PR #190 (`fix: present streak takeover after save dismissal`) was clean
+  against exact current `main` and squash-merged as `9b5d2b3`. Linear REC-122
+  has the PR, head SHA, validation evidence, and merge result and is Done.
+- Final validation remains 8/8 focused streak tests, 586/586 full tests, a
+  successful universal simulator build, and inspected iPhone 16 Plus/iPhone
+  16e screenshots. No known blocking issue remains.
+- No TestFlight archive, upload, build-number increment, or Slack release note
+  was performed. The merged fix is ready for a local signed phone build from
+  latest `main` and will ride the next explicitly requested TestFlight batch.
