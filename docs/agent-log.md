@@ -17708,3 +17708,63 @@ REC-124 merge completion, 2026-07-22 17:35 PDT:
   91; no archive, upload, TestFlight attachment, or Slack release note was made
   because this was an explicit merge-only request. REC-124 will ride the next
   separately requested TestFlight release batch.
+
+## 2026-07-22 17:55 PDT - Codex - TestFlight Build 92
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-92`
+Worktree: `/private/tmp/recme-testflight-build-92`
+Linear: `REC-128` (`In Progress`)
+
+Goal: package every eligible app change on exact latest `main` after completed
+TestFlight build 91 into rec.me build 92, validate it, upload it, attach it to the
+public TestFlight group, and post the required tester note.
+
+Starting status and coordination:
+
+- Fetched `origin`; exact release base is clean `origin/main` at `dcbcd6559`.
+  The root checkout remains on unrelated REC-88 work with user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or switched.
+  Created this isolated release worktree from current main. Existing worktrees
+  are stale or task-specific; no overlapping active edit will be reverted.
+- Build 91 is fully complete: its archive/upload, public-group attachment,
+  external approval, tester Slack note, and durable completion record are all on
+  `main`. Current `project.yml` still declares build 91, so there is no unfinished
+  release and this explicit request increments exactly once to build 92.
+- Eligible app delta since build-91 source `9dfc5e9d6` is exactly:
+  PR #165 / REC-112 (`98659cb6a`) enabling the existing full-width interactive
+  saved-place map for calendar-date result lists; and PR #167 / REC-124
+  (`4d3cc00da`) preserving one badge count per owner Been visit/save record,
+  including repeat visits to one place, while canonicalizing distinct drill-in
+  place IDs. The remaining commits are docs/coordination records.
+- No backend, migration, schema/RLS, auth, signing-policy, tester-data mutation,
+  or marketing-version change is included. Marketing version remains `0.1`.
+  Expected tracked release files are `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Tester copy and export options
+  will live under `/private/tmp`, not the repo.
+- Release plan: bump 91 -> 92, regenerate and audit the project, run the full
+  simulator test/build gate, open and merge a ready build-number PR, archive exact
+  resulting latest main, upload with `manageAppVersionAndBuildNumber=false`, run
+  `scripts/testflight-release.mjs` with the archive path, confirm public-group and
+  beta-review state, update Linear, then post to `#testflight-feedback`.
+
+Validation checkpoint, 2026-07-22 18:01 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 91 to 92 in `project.yml`, then ran
+  `xcodegen generate`. Audited the generated project diff: the only
+  `Wander.xcodeproj/project.pbxproj` changes are the two expected Debug/Release
+  build-number values; there is no signing, compiler-setting, or project-member
+  churn. `git diff --check` passes.
+- The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this Mac.
+  Ran the complete suite on the installed iPhone 17 Pro / iOS 26.5 simulator:
+  573 tests executed, 0 failures, `** TEST SUCCEEDED **`. Result bundle:
+  `/private/tmp/DerivedData-build92-test/Logs/Test/Test-Wander-2026.07.22_17-56-08--0700.xcresult`.
+- The generic iOS Simulator build also completed with `** BUILD SUCCEEDED **`.
+  Xcode emitted the existing traditional-headermap warning and no release
+  blocker. Tester-facing What-to-Test copy is staged outside the repo at
+  `/private/tmp/recme-build92-what-to-test.md`.
+- Current tracked scope remains exactly `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this coordination log. Next: commit,
+  open the build-92 PR, recheck latest `origin/main`, review and squash-merge,
+  then archive and upload exact merged main.
