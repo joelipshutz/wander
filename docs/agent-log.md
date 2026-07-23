@@ -19237,3 +19237,50 @@ REC-125 review handoff, 2026-07-22 22:08 PDT:
   and review.
 - Linear REC-125 is moving to `In Review` with the PR and validation results.
   No TestFlight build or release was requested or performed.
+
+REC-125 latest-main landing review, 2026-07-23 11:21 PDT:
+
+- Fetched current `origin/main` at `e09708109`. PR #180 had become conflicting
+  after eight upstream commits, including REC-127 map-launch behavior, REC-122
+  streak work, and build-93/build-94 release records. Rebased both REC-125
+  commits onto current main. Product/test files merged automatically; the only
+  manual conflict was this append-only coordination log, and both complete
+  histories were preserved.
+- The required pre-landing review found one blocking completeness gap:
+  `MapPlaceSaveFlowSheet` still called `loadSharedVisitPhotosIfNeeded()` and
+  downloaded every inviter photo into the invitee's selected attachments after
+  the context initialized blank. Removed that automatic loader, its task call,
+  and its one-use state so shared visits now truly start without inherited
+  photos. The existing explicit backend copy contract remains available if a
+  future opt-in photo-selection surface is designed.
+- Re-run focused REC-125 validation and the complete simulator suite against
+  the rebased/fixed head, then regenerate/audit, publish with lease protection,
+  confirm the hosted merge gate, and squash-merge. No build-number increment,
+  TestFlight archive/upload, or tester Slack note is authorized.
+
+REC-125 latest-main validation and pre-landing review, 2026-07-23 11:34 PDT:
+
+- Focused shared-visit context tests passed 2/2 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-25-50--0700.xcresult`.
+- The complete suite passed 587/587 with zero failures on the same simulator.
+  Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-33-26--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime remains unavailable;
+  its command stopped at destination resolution before building or testing.
+- Regenerated with XcodeGen and confirmed there is no generated project diff.
+  `git diff --check` passes. The diff contains only the shared-visit save
+  context/photo-loader correction, its deterministic regression coverage, and
+  this required coordination log.
+- Pre-landing review is clear after removing the automatic shared-photo loader.
+  No remaining blocking data-loss, persistence, concurrency, security/privacy,
+  accessibility, signing, schema/RLS/RPC, enum-contract, distribution, or
+  scope issue was found. There are no Greptile comments, prior gstack reviews,
+  related `TODOS.md` items, failing hosted checks, or PR hold labels to resolve.
+  No implementation plan file was present to compare.
+- The optional gstack review-history/telemetry wrapper could not be used because
+  the environment safety policy blocked transmission of private repository and
+  session metadata. The full local source/diff/checklist/test review was
+  completed without telemetry; this does not affect the code or merge gate.
