@@ -18288,3 +18288,23 @@ REC-119 pre-landing review, 2026-07-22 21:44 PDT:
   result: `Pre-Landing Review: No issues found.` Commit and publish this exact
   reviewed state, refresh the ready PR metadata, then recheck latest-main
   mergeability immediately before squash merge.
+
+REC-119 latest-main landing gate, 2026-07-22 21:51 PDT:
+
+- `main` advanced twice during the landing review: first with REC-130 PR #176,
+  then with its completion record PR #177. Rebased all 11 REC-119 commits onto
+  exact `origin/main` commit `4633a0a87`. The only conflicts were the expected
+  append-only `docs/agent-log.md` overlaps; the complete upstream REC-130 and
+  branch REC-119 histories were preserved. Product and test files rebased
+  without conflict.
+- Regenerated with XcodeGen after the final rebase; no generated diff resulted,
+  `git diff --check` passed, and the branch is exactly 0 behind / 11 ahead of
+  `origin/main`. The REC-119 product diff is unchanged from the clean review,
+  so the final iPhone 17 Pro and iPhone 17e visual captures remain valid.
+- The complete exact-main suite now passes 577/577 with zero failures on iPhone
+  17 Pro / iOS 26.5 at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-49-26--0700.xcresult`.
+  The three added upstream REC-130 tests account for the count increase.
+  Existing formatter, headermap, and simulator diagnostics remain unrelated.
+  Publish with lease protection, confirm PR #169 is still ready/clean/mergeable
+  at the new head, then squash-merge. No TestFlight or release work is included.
