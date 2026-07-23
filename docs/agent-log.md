@@ -18557,3 +18557,62 @@ Build-93 completion and REC-127 release continuation, 2026-07-22 22:56 PDT:
   578/578 tests passed, and its generic simulator build passed. Continue by
   squash-merging PR #174, then package the next build number (94) from exact
   latest `main`; build 93 intentionally does not contain REC-127.
+
+## 2026-07-22 22:58 PDT - Codex - REC-127 TestFlight Build 94
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-94`
+Worktree: `/private/tmp/recme-build94-release`
+Linear: `REC-127` (`In Review`)
+
+Goal: package the explicitly requested REC-127 map-default fix from exact latest
+`main` into rec.me build 94, validate it, upload it, attach it to the public
+TestFlight group, and post the required tester note.
+
+Starting status and release scope:
+
+- Build 93 is fully complete, `VALID`, attached to public group `rec.me Alpha`,
+  externally approved, documented in Linear, and announced in Slack. Exact
+  build-94 base is clean `origin/main` commit `2b8be0823`, the squash merge of
+  ready PR #174.
+- Eligible app delta since build-93 source `731a3f39d` is exactly REC-127: a
+  normal Map launch no longer selects the first visible place and requests one
+  current-location fix for a city-scale initial camera. Explicit visual-QA and
+  notification place destinations still select/center intentionally; denied or
+  unavailable location retains the deterministic fallback map with no selection.
+- REC-127 passed focused 2/2 and complete 578/578 tests on iPhone 16 Plus / iOS
+  18.6 plus the generic iOS Simulator build immediately before merge. Visual QA
+  on iPhone 16e confirmed city framing, the native blue location dot, and no
+  selected place/card. The squash merge contains the exact reviewed product/test
+  diff plus chronological release logs.
+- No backend, migration, schema/RLS, auth, visibility, tester-data, signing-policy,
+  or marketing-version change is included. Marketing version remains `0.1`.
+- Release plan: bump 93 -> 94, regenerate and audit the Xcode project, rerun the
+  release build/test gate, open and squash-merge the metadata-only build-number
+  PR, archive exact resulting main, upload with
+  `manageAppVersionAndBuildNumber=false`, finalize TestFlight, update REC-127,
+  and post to `#testflight-feedback`.
+
+Validation and pre-landing review, 2026-07-22 23:04 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 93 to 94 in `project.yml`, ran
+  `xcodegen generate`, and audited the generated project. The only Xcode project
+  changes are the two matching Debug/Release build-number values; no signing,
+  compiler, source-membership, or marketing-version churn is present.
+- The complete release suite passed 578/578 with zero failures and zero skips on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-build94-gate/Logs/Test/Test-Wander-2026.07.22_22-59-19--0700.xcresult`.
+  Existing Supabase formatter actor-isolation, unused test-expression, signed
+  simulator-library stripping, and traditional-headermap warnings remain
+  unrelated and non-blocking.
+- The generic iOS Simulator build passed against the same cache with
+  `ONLY_ACTIVE_ARCH=YES ARCHS=arm64`. This arm64-only setting was necessary
+  because the machine had 744 MB free after the full suite and avoids duplicating
+  the x86_64 package graph; the exact app/tests already built and ran on arm64.
+- `git diff --check` passes. Pre-landing review found no actionable issue: the
+  three-file diff is limited to the 93 -> 94 metadata and this chronological
+  release record. Product behavior is the exact reviewed/merged REC-127 diff,
+  no required human decision remains, and no hold or unrelated scope exists.
+  Next: commit/push, open and squash-merge the ready build-number PR, then free
+  the completed test cache before archiving exact merged main.
