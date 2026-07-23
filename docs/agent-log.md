@@ -18762,3 +18762,20 @@ Build-93 completion and REC-127 release continuation, 2026-07-22 22:56 PDT:
   578/578 tests passed, and its generic simulator build passed. Continue by
   squash-merging PR #174, then package the next build number (94) from exact
   latest `main`; build 93 intentionally does not contain REC-127.
+
+REC-122 latest-main landing gate, 2026-07-22 23:04 PDT:
+
+- Fetched and merged exact `origin/main` commit `2b8be08` after REC-127 landed.
+  The app changes merged without conflict; the only conflict was this shared
+  append-only agent log, and both histories were preserved.
+- Re-ran the complete test suite on iPhone 16 Plus / iOS 18.6 against the
+  resulting exact latest-main state: 584/584 tests passed with zero failures.
+  Result bundle:
+  `/private/tmp/DerivedData-rec122-latest/Logs/Test/Test-Wander-2026.07.22_22-58-58--0700.xcresult`.
+- Re-ran the generic iOS Simulator build against the same state; it completed
+  with `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation,
+  traditional-headermap, and test unused-Bool warnings remain unrelated.
+- REC-122 remains implementation-complete with no backend, schema, auth,
+  visibility, build-number, signing, or dependency changes. Next: publish the
+  branch, move PR #175 and Linear to review, verify the hosted merge gate, and
+  squash-merge. No TestFlight action is included in this landing.
