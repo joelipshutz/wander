@@ -19378,3 +19378,22 @@ Implementation and validation checkpoint, 2026-07-23 10:23 PDT:
   warnings appeared; no REC-135 compile or test warning was introduced.
 - `git diff --check` passes. No schema/RLS, project membership, build metadata,
   auth, or backend contract changed. No TestFlight release was requested.
+
+Local review handoff, 2026-07-23 10:28 PDT:
+
+- Implementation committed as `41a8c855c` (`feat: improve broken import place
+  matching`) on `codex/rec-135-match-broken-import`.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified Xcode's branch chooser reports
+  `codex/rec-135-match-broken-import`; package resolution completed and normal
+  background indexing began.
+- A push was attempted so the required review PR could be opened, but the
+  managed environment declined code upload because the chat request did not
+  explicitly authorize network egress. The committed branch remains local.
+  To resume remote review, explicitly authorize pushing the branch, then run
+  `git push -u origin codex/rec-135-match-broken-import` from this worktree and
+  open a ready PR to `main`.
+- REC-135 is ready for local Xcode testing/review. Linear is moved to In Review
+  with validation and the local-only handoff recorded. No known implementation
+  blocker remains; the only incomplete workflow item is the policy-blocked
+  push/PR.
