@@ -8,27 +8,26 @@ struct SaveStreakCelebrationView: View {
     @State private var ticketLanded = false
 
     var body: some View {
-        Button(action: onDismiss) {
-            GeometryReader { proxy in
-                ZStack {
-                    WanderTheme.textInk.color
-                        .ignoresSafeArea()
-
-                    RadialGradient(
-                        colors: [
-                            WanderTheme.terracottaDark.color.opacity(0.52),
-                            WanderTheme.textInk.color.opacity(0)
-                        ],
-                        center: .center,
-                        startRadius: 10,
-                        endRadius: max(proxy.size.width, proxy.size.height) * 0.64
-                    )
+        GeometryReader { proxy in
+            ZStack {
+                WanderTheme.textInk.color
                     .ignoresSafeArea()
 
-                    SaveStreakConfettiLayer()
-                        .ignoresSafeArea()
+                RadialGradient(
+                    colors: [
+                        WanderTheme.terracottaDark.color.opacity(0.52),
+                        WanderTheme.textInk.color.opacity(0)
+                    ],
+                    center: .center,
+                    startRadius: 10,
+                    endRadius: max(proxy.size.width, proxy.size.height) * 0.64
+                )
+                .ignoresSafeArea()
 
-                    VStack(alignment: .leading, spacing: 0) {
+                SaveStreakConfettiLayer()
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 0) {
                         Text("REC.ME")
                             .font(.system(size: 15, weight: .black, design: .rounded))
                             .tracking(2.2)
@@ -82,20 +81,25 @@ struct SaveStreakCelebrationView: View {
 
                         Spacer(minLength: WanderTheme.spacing6)
 
-                        Text("tap to close")
-                            .font(.system(size: 13, weight: .black, design: .rounded))
-                            .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.56))
+                        Button(action: onDismiss) {
+                            Text("got it")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 54)
+                                .background(WanderTheme.surfaceBone.color)
+                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Closes the streak celebration")
                             .frame(maxWidth: .infinity)
                             .padding(.bottom, max(proxy.safeAreaInsets.bottom, WanderTheme.spacing4) + WanderTheme.spacing2)
                     }
                     .padding(.horizontal, WanderTheme.spacing6)
                 }
-            }
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Double tap to close")
         .onAppear {
             guard !ticketLanded else { return }
             DispatchQueue.main.async {

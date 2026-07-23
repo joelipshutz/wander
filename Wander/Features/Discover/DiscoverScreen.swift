@@ -213,7 +213,9 @@ struct DiscoverScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
-            .sheet(item: $placeSaveFlow) { context in
+            .sheet(item: $placeSaveFlow, onDismiss: {
+                store.saveFlowDidDismiss(.saveSheet)
+            }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveDiscoverFlowSubmission(submission)
                 } onRemove: { context in

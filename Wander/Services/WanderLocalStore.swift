@@ -86,6 +86,8 @@ final class WanderStore: ObservableObject {
     @Published private(set) var unresolvedDrafts: [UnresolvedDraft] = []
     @Published private(set) var saveStreakDatesByUserID: [String: [Date]] = [:]
     @Published private(set) var saveStreakCelebration: SaveStreakCelebration?
+    @Published private(set) var isSaveFlowPresented = false
+    private var activeSaveFlowPresentationLayers: Set<SaveFlowPresentationLayer> = []
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
@@ -728,6 +730,16 @@ final class WanderStore: ObservableObject {
     func dismissSaveStreakCelebration(id: UUID) {
         guard saveStreakCelebration?.id == id else { return }
         saveStreakCelebration = nil
+    }
+
+    func saveFlowDidPresent(_ layer: SaveFlowPresentationLayer) {
+        activeSaveFlowPresentationLayers.insert(layer)
+        isSaveFlowPresented = !activeSaveFlowPresentationLayers.isEmpty
+    }
+
+    func saveFlowDidDismiss(_ layer: SaveFlowPresentationLayer) {
+        activeSaveFlowPresentationLayers.remove(layer)
+        isSaveFlowPresented = !activeSaveFlowPresentationLayers.isEmpty
     }
 
     private var currentUserSaveStreakDates: [Date] {
