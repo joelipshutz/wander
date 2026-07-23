@@ -17849,3 +17849,35 @@ Starting status and coordination:
 - Mission Control task creation was attempted, but local
   `http://localhost:4000` is not running. Linear REC-122 was found and moved
   from Todo to In Progress before design work began.
+
+Design checkpoint, 2026-07-22 21:17 PDT:
+
+- Built one fully local, interactive HTML/CSS/JS comparison board with three
+  directions. Each includes the first-qualifying-save-of-the-day full-screen
+  celebration and the owner Profile placement directly below Been/Wanna and
+  above the calendar:
+  - A, Flame Bloom: large hand-drawn terracotta flame plus a soft Profile card.
+  - B, Streak Window: saved-place ticket, four-day path, and a calm
+    `today is covered` Profile status.
+  - C, Firecracker: oversized streak count plus the quietest hairline Profile
+    row.
+- Proposed interaction contract shown in the mock: Been and Wanna both
+  qualify; the first qualifying save on a local calendar day gets confetti and
+  an approximately 1.8-second dismissible takeover; later qualifying saves that
+  day get a short confetti pop over the normal save confirmation, with no second
+  takeover or streak increment.
+- Persistent local artifacts:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/streak-celebration-20260722/`
+  (`design-board.html`, `variant-A.png`, `variant-B.png`, `variant-C.png`).
+  These remain outside the repo per the design workflow.
+- Visual QA used the installed Chrome binary. All three sections rendered at
+  iPhone proportions with correct Profile hierarchy. Interaction QA confirmed
+  42 confetti pieces and 44 active entrance animations on replay, all three
+  Profile modules present, and no console errors after a clean reload.
+- The external AI image generator and later Linear screenshot upload were both
+  rejected because they would export internal design details without a separate
+  approval. No bypass was attempted. The local implementation and screenshots
+  are complete; Linear can receive a text-only progress note.
+- Recommendation awaiting Joe's review: combine A's warm, unmistakably rec.me
+  takeover with C's ultra-quiet Profile row. No direction has been approved and
+  no production SwiftUI is implemented yet.
