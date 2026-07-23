@@ -188,6 +188,8 @@ function buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID) {
   const strangerUser = sqlString(strangerUserID);
   const smokeVisitID = "56000000-0000-0000-0000-000000000001";
   const smokePhotoID = "57000000-0000-0000-0000-000000000001";
+  const collaboratorVisitID = "56000000-0000-0000-0000-000000000002";
+  const collaboratorPhotoID = "57000000-0000-0000-0000-000000000002";
 
   return `
 begin;
@@ -211,7 +213,7 @@ update public.user_places up
 set status = 'been', visibility = 'followers', deleted_at = null
 from public.places p
 where up.place_id = p.id
-  and up.user_id = ${smokeUser}
+  and up.user_id in (${smokeUser}, ${collaboratorUser})
   and p.source_provider = 'codex_smoke'
   and p.source_provider_place_id = 'place-list-rpc-smoke';
 
@@ -245,6 +247,36 @@ values (
 )
 on conflict (id) do update set upload_state = 'uploaded', deleted_at = null, updated_at = now();
 
+insert into public.place_visits (id, user_place_id, visited_at, note, backfilled_from_user_place, deleted_at)
+select
+  '${collaboratorVisitID}'::uuid,
+  up.id,
+  now(),
+  'Rolled back linked collaborator cover-photo smoke visit',
+  false,
+  null
+from public.user_places up
+join public.places p on p.id = up.place_id
+where up.user_id = ${collaboratorUser}
+  and p.source_provider = 'codex_smoke'
+  and p.source_provider_place_id = 'place-list-rpc-smoke'
+on conflict (id) do update set deleted_at = null, updated_at = now();
+
+insert into public.visit_photos (
+  id, visit_id, storage_bucket, storage_path, content_type, sort_order, upload_state, deleted_at
+)
+values (
+  '${collaboratorPhotoID}'::uuid,
+  '${collaboratorVisitID}'::uuid,
+  'visit-photos',
+  ${collaboratorUser} || '/${collaboratorVisitID}/${collaboratorPhotoID}.jpg',
+  'image/jpeg',
+  0,
+  'uploaded',
+  null
+)
+on conflict (id) do update set upload_state = 'uploaded', deleted_at = null, updated_at = now();
+
 do $metadata$
 declare
   valid boolean;
@@ -265,6 +297,27 @@ begin
   end if;
 end
 $metadata$;
+
+do $list_cover_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'first_visible_place_photo_by_users'
+    and pg_get_function_identity_arguments(p.oid) = 'input_place_id uuid, input_user_ids text[]';
+  if valid is distinct from true then
+    raise exception 'list-cover contributor photo metadata contract failed';
+  end if;
+end
+$list_cover_metadata$;
 
 do $quota_metadata$
 declare
@@ -407,6 +460,29 @@ begin
 end
 $owner$;
 
+do $owner_scoped_photos$
+declare owner_photo uuid; collaborator_photo uuid;
+begin
+  select photo_id into owner_photo
+  from public.first_visible_place_photo_by_users((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ), array[${smokeUser}]::text[]);
+  if owner_photo is distinct from '${smokePhotoID}'::uuid then
+    raise exception 'owner-scoped list-cover photo selection failed';
+  end if;
+
+  select photo_id into collaborator_photo
+  from public.first_visible_place_photo_by_users((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ), array[${collaboratorUser}]::text[]);
+  if collaborator_photo is distinct from '${collaboratorPhotoID}'::uuid then
+    raise exception 'collaborator-scoped list-cover photo selection failed';
+  end if;
+end
+$owner_scoped_photos$;
+
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${collaboratorUser}, true);
@@ -450,6 +526,20 @@ begin
   end if;
 end
 $follower$;
+
+do $follower_scoped_photo$
+declare visible_count integer;
+begin
+  select count(*)::integer into visible_count
+  from public.first_visible_place_photo_by_users((
+    select p.id from public.places p
+    where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
+  ), array[${strangerUser}]::text[]);
+  if visible_count <> 0 then
+    raise exception 'list-cover contributor filter admitted an unrelated user photo';
+  end if;
+end
+$follower_scoped_photo$;
 
 reset role;
 set local role authenticated;
@@ -1452,6 +1542,7 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     collaboratorUserID,
     strangerUserID,
     smokeUserPlaceID,
+    collaboratorUserPlaceID,
     smokePlaceID,
   );
   await setAuthenticatedUser(client, smokeUserID);
@@ -1656,6 +1747,7 @@ async function runFirstVisiblePlacePhotoChecks(
   collaboratorUserID,
   strangerUserID,
   smokeUserPlaceID,
+  collaboratorUserPlaceID,
   smokePlaceID,
 ) {
   await expectQuery(
@@ -1672,6 +1764,31 @@ async function runFirstVisiblePlacePhotoChecks(
       where n.nspname = 'public'
         and p.proname = 'first_visible_place_photo'
         and pg_get_function_identity_arguments(p.oid) = 'input_place_id uuid'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
+  await expectQuery(
+    client,
+    "list-cover contributor photo RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'first_visible_place_photo_by_users'
+        and pg_get_function_identity_arguments(p.oid) = 'input_place_id uuid, input_user_ids text[]'
     `,
     [],
     (result) => {
@@ -1725,6 +1842,45 @@ async function runFirstVisiblePlacePhotoChecks(
     (result) => result.rows.length === 1,
   );
   const expectedPhotoID = photoFixture.rows[0].id;
+  const collaboratorPhotoFixture = await expectQuery(
+    client,
+    "create rolled-back collaborator list-cover photo fixture",
+    `
+      with inserted_visit as (
+        insert into public.place_visits (user_place_id, visited_at, note, backfilled_from_user_place)
+        values ($1::uuid, now(), 'Rolled back collaborator cover-photo smoke visit', false)
+        returning id
+      ), ids as (
+        select inserted_visit.id as visit_id, gen_random_uuid() as photo_id
+        from inserted_visit
+      )
+      insert into public.visit_photos (
+        id, visit_id, storage_bucket, storage_path, content_type, sort_order, upload_state
+      )
+      select
+        ids.photo_id,
+        ids.visit_id,
+        'visit-photos',
+        $2 || '/' || ids.visit_id::text || '/' || ids.photo_id::text || '.jpg',
+        'image/jpeg',
+        0,
+        'uploaded'
+      from ids
+      returning id
+    `,
+    [collaboratorUserPlaceID, collaboratorUserID],
+    (result) => result.rows.length === 1,
+  );
+  const expectedCollaboratorPhotoID = collaboratorPhotoFixture.rows[0].id;
+
+  await client.query(
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values ($1, $2, 'profile')
+      on conflict (follower_user_id, followed_user_id) do nothing
+    `,
+    [smokeUserID, collaboratorUserID],
+  );
 
   await setAuthenticatedUser(client, smokeUserID);
   await expectQuery(
@@ -1734,6 +1890,20 @@ async function runFirstVisiblePlacePhotoChecks(
     [smokePlaceID],
     (result) => result.rows[0]?.photo_id === expectedPhotoID,
   );
+  await expectQuery(
+    client,
+    "owner list cover selects only the requested owner photo",
+    "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [smokeUserID]],
+    (result) => result.rows[0]?.photo_id === expectedPhotoID,
+  );
+  await expectQuery(
+    client,
+    "owner list cover can select an eligible collaborator photo",
+    "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [collaboratorUserID]],
+    (result) => result.rows[0]?.photo_id === expectedCollaboratorPhotoID,
+  );
 
   await setAuthenticatedUser(client, collaboratorUserID);
   await expectQuery(
@@ -1742,6 +1912,13 @@ async function runFirstVisiblePlacePhotoChecks(
     "select * from public.first_visible_place_photo($1::uuid)",
     [smokePlaceID],
     (result) => result.rows[0]?.photo_id === expectedPhotoID,
+  );
+  await expectQuery(
+    client,
+    "follower list cover excludes a visible photo outside the contributor set",
+    "select count(*)::integer as count from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [strangerUserID]],
+    (result) => result.rows[0]?.count === 0,
   );
 
   await setAuthenticatedUser(client, strangerUserID);
@@ -1759,6 +1936,13 @@ async function runFirstVisiblePlacePhotoChecks(
     "anonymous role cannot call preferred-place-photo RPC",
     "select * from public.first_visible_place_photo($1::uuid)",
     [smokePlaceID],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call list-cover contributor photo RPC",
+    "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [smokeUserID]],
     /permission denied/,
   );
 }

@@ -138,6 +138,57 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
+    func testResolverScopesUserPhotoLookupToEligibleListContributors() async throws {
+        let userPhoto = photo(provider: "visit_photo", id: "collaborator-photo")
+        let repository = RecordingListPlacePhotoRepository(
+            visibleUserResult: .success(userPhoto),
+            providerResult: .failure(TestError.missing),
+            imageDataByPhotoID: [userPhoto.providerPlaceID: try imageData()]
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+
+        let resolved = await ListPlacePhotoResolver.resolve(
+            request: request,
+            preferredUserPhoto: nil,
+            eligibleUserIDs: ["user_owner", "user_collaborator"],
+            authorizationScopeKey: "test-authorization",
+            targetPixelSize: 128,
+            backend: backend
+        )
+
+        XCTAssertEqual(resolved?.photo, userPhoto)
+        XCTAssertEqual(
+            repository.metadataCalls,
+            [.scopedVisibleUser(["user_owner", "user_collaborator"])]
+        )
+        XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
+    }
+
+    @MainActor
+    func testResolverSkipsUserPhotoLookupWhenListHasNoEligibleContributors() async throws {
+        let googlePhoto = photo(provider: "google_places", id: "google-photo")
+        let repository = RecordingListPlacePhotoRepository(
+            visibleUserResult: .failure(TestError.missing),
+            providerResult: .success(googlePhoto),
+            imageDataByPhotoID: [googlePhoto.providerPlaceID: try imageData()]
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+
+        let resolved = await ListPlacePhotoResolver.resolve(
+            request: request,
+            preferredUserPhoto: nil,
+            eligibleUserIDs: [],
+            authorizationScopeKey: "test-authorization",
+            targetPixelSize: 128,
+            backend: backend
+        )
+
+        XCTAssertEqual(resolved?.photo, googlePhoto)
+        XCTAssertEqual(repository.metadataCalls, [.provider])
+        XCTAssertEqual(repository.imageRequests, [googlePhoto.providerPlaceID])
+    }
+
+    @MainActor
     func testResolverFallsBackToGoogleMapsWhenUserPhotoCannotRender() async throws {
         let userPhoto = photo(provider: "visit_photo", id: "broken-user-photo")
         let googlePhoto = photo(provider: "google_places", id: "google-photo")
@@ -413,6 +464,7 @@ final class ListPlacePhotoTests: XCTestCase {
 private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
     enum MetadataCall: Equatable {
         case visibleUser
+        case scopedVisibleUser([String])
         case provider
     }
 
@@ -441,7 +493,11 @@ private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
-        metadataCalls.append(.visibleUser)
+        if let userIDs = request.eligibleUserIDs {
+            metadataCalls.append(.scopedVisibleUser(userIDs))
+        } else {
+            metadataCalls.append(.visibleUser)
+        }
         if visibleUserDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: visibleUserDelayNanoseconds)
         }

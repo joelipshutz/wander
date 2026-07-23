@@ -155,6 +155,7 @@ enum ListPlacePhotoResolver {
     static func resolve(
         request: PlacePhotoRequest,
         preferredUserPhoto: PlacePhoto?,
+        eligibleUserIDs: [String]? = nil,
         authorizationScopeKey: String,
         targetPixelSize: Int,
         backend: WanderBackend
@@ -171,24 +172,27 @@ enum ListPlacePhotoResolver {
             return resolved
         }
 
-        do {
-            let visibleUserPhoto = try await visibleUserPhoto(
-                for: request,
-                authorizationScopeKey: authorizationScopeKey,
-                backend: backend
-            )
-            if let resolved = await render(
-                visibleUserPhoto,
-                backend: backend,
-                targetPixelSize: targetPixelSize,
-                attemptedPhotoKeys: &attemptedPhotoKeys
-            ) {
-                return resolved
+        if eligibleUserIDs?.isEmpty != true {
+            do {
+                let visibleUserPhoto = try await visibleUserPhoto(
+                    for: request,
+                    eligibleUserIDs: eligibleUserIDs,
+                    authorizationScopeKey: authorizationScopeKey,
+                    backend: backend
+                )
+                if let resolved = await render(
+                    visibleUserPhoto,
+                    backend: backend,
+                    targetPixelSize: targetPixelSize,
+                    attemptedPhotoKeys: &attemptedPhotoKeys
+                ) {
+                    return resolved
+                }
+            } catch is CancellationError {
+                return nil
+            } catch {
+                // A missing eligible user photo is the expected path to provider fallback.
             }
-        } catch is CancellationError {
-            return nil
-        } catch {
-            // A missing visible user photo is the expected path to provider fallback.
         }
 
         guard !Task.isCancelled else { return nil }
@@ -246,18 +250,27 @@ enum ListPlacePhotoResolver {
 
     private static func visibleUserPhoto(
         for request: PlacePhotoRequest,
+        eligibleUserIDs: [String]?,
         authorizationScopeKey: String,
         backend: WanderBackend
     ) async throws -> PlacePhoto {
         try Task.checkCancellation()
-        let key = "\(authorizationScopeKey)|\(request.lookupKey)"
+        let contributorKey = eligibleUserIDs?
+            .sorted()
+            .joined(separator: ",") ?? "all-visible-users"
+        let key = "\(authorizationScopeKey)|\(request.lookupKey)|contributors:\(contributorKey)"
         let entry: VisibleUserPhotoTask
         if let existing = visibleUserPhotoTasks[key] {
             entry = existing
         } else {
             let id = UUID()
             let task = Task { @MainActor in
-                try await backend.visibleUserPlacePhoto(for: request)
+                if let eligibleUserIDs {
+                    return try await backend.visibleUserPlacePhoto(
+                        for: request.restrictingVisibleUserPhotos(to: eligibleUserIDs)
+                    )
+                }
+                return try await backend.visibleUserPlacePhoto(for: request)
             }
             let newEntry = VisibleUserPhotoTask(id: id, task: task)
             visibleUserPhotoTasks[key] = newEntry

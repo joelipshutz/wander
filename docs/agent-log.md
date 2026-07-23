@@ -17816,3 +17816,128 @@ Final outcome:
 - No known build-92 release blocker remains. Next: testers should exercise the
   calendar map and repeat-visit badge checklist and reply in the Slack thread
   with device, account/email if relevant, screenshots, and exact repro steps.
+
+## 2026-07-22 19:34 PDT - Codex - REC-130 List Tile Cover Fallbacks
+
+Agent: Codex using the rec.me feedback, iOS fix, Linear, and GitHub publish
+workflows
+Branch: `codex/rec-130-list-tile-fallback`
+Worktree: `/private/tmp/recme-rec130-list-tile-fallback`
+Linear: `REC-130` (`In Progress`; related to `REC-113`)
+
+Goal: make list-tile cover rendering deterministic: an eligible owner or
+collaborator user photo, otherwise a Google place photo, otherwise the place's
+category emoji, with a neutral default icon only when the list has no
+renderable place candidate. Build and install the pushed branch on Ryan's
+connected iPhone for direct testing.
+
+Starting status and coordination:
+
+- Fetched latest `origin/main` and created this clean isolated worktree from
+  exact build-92 completion commit `9de2e4290`. The root checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes and remains untouched.
+- No existing issue covered this exact fallback contract, so created REC-130,
+  assigned it to Ryan, linked REC-113, and moved it directly to In Progress.
+- A broad cross-team review is unnecessary, but the scoped engineering review
+  below is required because the exact owner/collaborator rule needs one additive
+  RLS-preserving RPC as well as Lists presentation work.
+- Expected files are Lists cover/resolver source, focused Lists tests, and this
+  append-only log. `project.yml`, build number, schema/RLS, and TestFlight are
+  out of scope. The local GitHub CLI token is stale; the connected GitHub app
+  will be used for the required draft PR after a normal branch push.
+- The iOS-fix StateServer snapshot fixture is unavailable by prior repo
+  decision because this app has no DebugBridge/restore API. The deterministic
+  current source behavior and focused Swift tests will serve as the pre/post
+  regression fixture; a signed branch build will be installed without an app
+  uninstall or data reset for real-device validation.
+
+Engineering review checkpoint, 2026-07-22 19:42 PDT:
+
+- Root cause is verified in source. `ListPreviewMosaic.emptyCover` renders the
+  list-name initial instead of a neutral icon, while
+  `first_visible_place_photo(uuid)` intentionally returns the first photo from
+  any RLS-visible user and accepts no owner/collaborator filter. The live tile
+  also preloads the current user's local photo for every list, even when that
+  user is not the list owner or a collaborator.
+- The smallest complete design reuses the existing photo pipeline and adds one
+  narrow security-invoker RPC for contributor-scoped lookup. The legacy RPC
+  remains unchanged for Map/place-profile callers. List tiles pass a sorted,
+  UUID-validated set containing the list owner and collaborators; the resolver
+  tries an eligible local photo, then the scoped RPC, then the existing Google
+  provider lookup. If all photo paths fail, the existing category emoji remains
+  visible. A list with no preview place renders `bookmark.fill` on the existing
+  sand surface instead of a name initial.
+- Data flow:
+
+      list owner + collaborators
+                 |
+                 v
+      ListPreviewMosaic / photo resolver
+          | eligible local user photo
+          | scoped RLS RPC photo
+          | Google Places photo
+          | category emoji
+          ` no place -> bookmark.fill
+
+- Architecture review: clean. The additive RPC is explicit, preserves RLS,
+  pins `search_path`, denies anon, and does not alter other photo consumers.
+  Code-quality review: clean; the contributor list is computed once on the
+  list projection and threaded only through tile media. Performance review:
+  clean; the tile still makes at most one user-photo metadata lookup followed
+  by the existing provider fallback, with existing coalescing/caches intact.
+- Test review requires: resolver order and contributor-id forwarding including
+  an empty/invalid-id path; repository RPC name/parameters and legacy behavior;
+  UI contract for emoji fallback and `bookmark.fill`; pgTAP metadata/RLS/user
+  filtering; and the hosted rollback smoke using two users' photos for the same
+  place. No untested branch or unresolved architecture/product decision remains.
+- Production failure handling is explicit: missing/deferred RPC deployment,
+  expired auth, unreadable user image, Google failure, and offline network all
+  settle on the place emoji; a list with no renderable place settles on the
+  neutral bookmark. The user is never left with a blank tile.
+- NOT in scope: durable photo caching, quota redesign, list-item hydration,
+  changes to Map/place-profile photo eligibility, build-number/TestFlight work,
+  or a new debug bridge. Sequential implementation is appropriate because the
+  Swift, RPC, and smoke changes share one photo-resolution contract.
+
+Implementation and validation checkpoint, 2026-07-22 20:00 PDT:
+
+- Implemented the locked order for list tiles only: preloaded current-user
+  photo when the current user is the list owner/collaborator; first RLS-visible
+  owner/collaborator photo through the new scoped RPC; existing Google Places
+  photo; existing category emoji; and `bookmark.fill` only when the list has no
+  preview place. Map and place-profile photo behavior remains unchanged.
+- Added `public.first_visible_place_photo_by_users(uuid,text[])` in migration
+  `20260723025000_list_cover_photo_contributors.sql`. It is `STABLE SECURITY
+  INVOKER`, pins `search_path=public, app`, grants only `authenticated`, and
+  preserves the existing visit-photo RLS authority. Added pgTAP metadata,
+  grants, and contributor-filter behavior coverage plus linked hosted smoke
+  coverage for owner, collaborator, unrelated contributor, stranger, and anon.
+- Ran `xcodegen generate`; no generated project diff resulted. Focused iOS
+  regression run passed 17/17 tests. Full iOS suite passed 576/576 tests on the
+  installed iPhone 17 Pro / iOS 26.5 simulator; result bundle:
+  `/private/tmp/DerivedData-rec130-full/Logs/Test/Test-Wander-2026.07.22_19-54-22--0700.xcresult`.
+  Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking and are unrelated to REC-130.
+- Installed the pinned smoke dependencies with the bundled Node runtime, then
+  linked this isolated worktree to confirmed project `rugmtlgufrhlxwfkumhw`.
+  The hosted dry-run reported only the REC-130 migration. Applied it, verified
+  local/remote ledger parity at `20260723025000`, and ran
+  `node scripts/supabase-smoke-test.mjs --linked`; the complete rolled-back
+  hosted suite passed. Docker is not installed, so local pgTAP could not run;
+  the hosted metadata/behavior smoke is the strongest available SQL check.
+- Latest `origin/main` remains `9de2e4290`, exactly this branch base, and
+  `git diff --check` passes. CoreDevice recognizes Ryan's iPhone identifier
+  `871CDC6E-9974-5BB8-B0FE-300B5589AF97`, but currently reports the device as
+  `unavailable`; signed build/install/launch is pending reconnection/unlock.
+
+Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
+
+- Opened `/private/tmp/recme-rec130-list-tile-fallback/Wander.xcodeproj` in
+  Xcode. The Xcode branch chooser confirms
+  `codex/rec-130-list-tile-fallback`; the user's dirty root checkout remains
+  untouched. The active run destination is currently the iPhone 17 Pro
+  simulator, so the implementation is available for immediate simulator
+  testing from Xcode.
+- Rechecked CoreDevice after opening the project. Ryan's physical iPhone is
+  still reported as `unavailable`, so a signed device install remains blocked
+  until the phone is unlocked/reconnected and appears as available.
