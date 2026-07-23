@@ -19123,3 +19123,34 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
+
+REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
+
+- Merged current `origin/main` at `e09708109` into
+  `codex/rec-109-import-review-button`. The overlapping
+  `WanderRootView.swift` conflict was resolved by preserving both REC-109's
+  durable import-store/content-aware Add detents and REC-122's save-flow
+  dismissal lifecycle. Profile and Add overlaps were also inspected against
+  the exact `origin/main` diff.
+- Final visual behavior uses a 480-point resting Add sheet when pending imports
+  render `Import Review` and a 410-point resting sheet when the row is absent.
+  Pending-state captures on iPhone 17 Pro and smaller iPhone 17e show the review
+  row fully visible with a normal bottom inset and no oversized blank area.
+- The complete post-merge suite passed 589/589 with zero failures on iPhone 17e
+  / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec109-17e/Logs/Test/Test-Wander-2026.07.23_11-28-10--0700.xcresult`.
+  A prior iPhone 17 Pro run lost its simulator service hub and reported one
+  source-contract failure while the device service was dying; the exact test
+  then passed independently and in the complete healthy-simulator run.
+- The post-merge universal generic iOS Simulator build passed for arm64 and
+  x86_64. `xcodegen generate` produced no project diff and
+  `git diff --check` passes.
+- Pre-landing review of the exact nine-file diff against `origin/main` found no
+  blocking correctness, state-transition, navigation, accessibility, privacy,
+  persistence, signing, project-generation, or scope issues. No Greptile
+  comments exist on PR #188; the optional slop scan could not run because
+  `bun` is not installed, and manual source/diff inspection found no slop or
+  unrelated generated files.
+- Ryan explicitly authorized squash-merging PR #188 and pushing the result to
+  `main`. No TestFlight build-number increment, archive/upload, Slack release
+  note, or hosted-data mutation is authorized for this merge-only request.
