@@ -18308,3 +18308,24 @@ REC-119 latest-main landing gate, 2026-07-22 21:51 PDT:
   Existing formatter, headermap, and simulator diagnostics remain unrelated.
   Publish with lease protection, confirm PR #169 is still ready/clean/mergeable
   at the new head, then squash-merge. No TestFlight or release work is included.
+
+REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
+
+- Safely force-updated the twice-rebased reviewed branch at `fffb26d7f`, then
+  confirmed it was exact with `origin/main`, ready, `CLEAN`, and `MERGEABLE`,
+  with no configured checks. Squash-merged ready PR #169:
+  https://github.com/joelipshutz/wander/pull/169
+- The feature is now on remote `main` as
+  `d27cb4d12b52a139d2cb55a18f20c934ed7b0c74` (`REC-119: Explain place rating
+  scores (#169)`). The merged behavior includes accessible rec.me and Fit info
+  buttons, native control-attached caret popovers, and the approved farther-left
+  alignment for all three icon-and-header groups.
+- Final validation remains the exact-main 577/577 simulator suite at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-49-26--0700.xcresult`
+  plus visual review on iPhone 17 Pro and iPhone 17e. The mandatory pre-landing
+  review found no issue.
+- Moved Linear REC-119 to Done and added merge commit, validation, and release
+  disposition in final comment `6d9d136b-fb13-4e8b-ab6b-00bedec8b631`.
+  No known follow-up blocker remains. No build-number bump, TestFlight archive
+  or upload, or tester Slack note was requested or performed; the change waits
+  for a future explicit release batch.
