@@ -18529,3 +18529,31 @@ TestFlight release preparation, 2026-07-22 22:28 PDT:
   and no unresolved decision. Next: publish the rebased PR head, wait for build
   93 to finish, squash-merge PR #174, then create and ship the next build from
   exact latest `main`.
+
+Build-93 completion and REC-127 release continuation, 2026-07-22 22:56 PDT:
+
+- Build 93 had no App Store Connect record or newer Linear/Slack progress more
+  than 30 minutes after its bump PR merged, so this run recorded a takeover on
+  REC-134 and used an isolated detached worktree at exact merged-main commit
+  `731a3f39d`. A read-only App Store Connect check immediately before each
+  archive/upload phase confirmed there was no competing build-93 upload.
+- The first archive attempt failed before producing an archive because the
+  machine had only 201 MB free. Deleted only four disposable DerivedData
+  directories created by this REC-127/release run (about 5.3 GB), then retried
+  without changing source or signing policy. The clean retry succeeded.
+- Archived `/private/tmp/Wander-0.1-build93.xcarchive`; archive and embedded app
+  metadata verify rec.me `0.1 (93)`, bundle `com.grayline.wander`, and team
+  `Y7TVK75RZ8`. Export/upload succeeded with
+  `manageAppVersionAndBuildNumber=false`.
+- `scripts/testflight-release.mjs` confirmed App Store Connect build
+  `0321ec79-1a99-4539-948e-9365290e9543` is `VALID`, set export compliance to
+  false, updated en-US What to Test, attached public group `rec.me Alpha`, and
+  returned external beta review `APPROVED`.
+- Posted the required tester note to `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784786117972389.
+  Public link: https://testflight.apple.com/join/knEhRa6t. REC-134 is Done;
+  REC-119 and REC-130 have build-93 availability comments.
+- REC-127 PR #174 remains exact with `origin/main`, ready, clean, mergeable,
+  578/578 tests passed, and its generic simulator build passed. Continue by
+  squash-merging PR #174, then package the next build number (94) from exact
+  latest `main`; build 93 intentionally does not contain REC-127.
