@@ -20183,6 +20183,18 @@ REC-133 production validation and handoff, 2026-07-23 12:06 PDT:
 - `git diff --check` is clean. No TestFlight build-number increment,
   archive/upload, public-group change, or Slack release note was performed.
 
+REC-133 publication completion, 2026-07-23 12:09 PDT:
+
+- Pushed the complete Xcode branch through validation commit `a926ae351` to
+  `origin/codex/rec-133-place-photo-carousel`.
+- Updated PR #186 to `REC-133: Implement privacy-safe place photo carousel`,
+  replaced its mock-only handoff with the production/privacy/validation
+  evidence, and marked it ready. GitHub reports the PR open, non-draft,
+  mergeable, and based on exact current `main` (`9c45b0fbf`).
+- Added the implementation and validation evidence to Linear REC-133 and moved
+  the issue to In Review. The branch is ready for Ryan's local signed-device
+  test; no TestFlight release action was performed.
+
 REC-126 completion, 2026-07-23 11:56 PDT:
 
 - Ready PR #189 was current with `main`, reported no conflicts, had no hosted
