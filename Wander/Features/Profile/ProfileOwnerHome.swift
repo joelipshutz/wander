@@ -537,6 +537,84 @@ private struct ProfileSaveStreakRow: View {
     }
 }
 
+#if DEBUG
+struct SaveStreakProfileRowMockup: View {
+    private let summary = SaveStreakSummary(
+        currentCount: 4,
+        bestCount: 9,
+        isTodayCovered: true,
+        recentDayCoverage: [true, true, true, true, false, false, false]
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("profile")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text("Joe")
+                    .font(.system(size: 30, weight: .black))
+            }
+
+            HStack(spacing: WanderTheme.spacing3) {
+                OwnerProfileSaveTile(
+                    value: 87,
+                    label: "BEEN",
+                    symbol: "checkmark.circle.fill",
+                    color: WanderTheme.stateSuccess.color,
+                    fill: WanderTheme.categorySage.color.opacity(0.22),
+                    action: {}
+                )
+                OwnerProfileSaveTile(
+                    value: 34,
+                    label: "WANNA",
+                    symbol: "bookmark.fill",
+                    color: WanderTheme.stateWarning.color,
+                    fill: WanderTheme.sunTint.color,
+                    action: {}
+                )
+            }
+
+            ProfileSaveStreakRow(summary: summary)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                Text("Joe's calendar")
+                    .font(.system(size: 23, weight: .black))
+                Text("July 2026")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible()), count: 7),
+                    spacing: WanderTheme.spacing3
+                ) {
+                    ForEach(19...25, id: \.self) { day in
+                        Text("\(day)")
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(
+                                day <= 22
+                                    ? WanderTheme.terracotta.color.opacity(0.16)
+                                    : WanderTheme.surfaceBone.color
+                            )
+                            .clipShape(Circle())
+                    }
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+            Spacer()
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing6)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .preferredColorScheme(.light)
+    }
+}
+#endif
+
 private struct ProfileCalendarSection: View {
     let insights: ProfileInsights
     @Binding var selectedMonth: Date

@@ -18561,3 +18561,22 @@ Implementation checkpoint, 2026-07-22 22:42 PDT:
   control dependency was added. Visual validation will use the repo-required
   simulator screenshots on a large and a smaller iPhone via a DEBUG-only streak
   mockup launch argument plus the real demo-fixture Profile screen.
+
+Visual QA checkpoint, 2026-07-22 22:46 PDT:
+
+- Built and installed build 93 Debug on the iPhone 16 Plus and iPhone 16e,
+  both on iOS 18.6. Captured the settled takeover, the real demo-fixture owner
+  Profile, and an exact-component close-up of the production Been/Wanna ->
+  streak row -> calendar hierarchy. Screenshots are local at
+  `/private/tmp/rec122-visual-qa/` and intentionally are not product assets.
+- The full-screen takeover preserves safe areas, ticket hierarchy, date path,
+  explanatory copy, close affordance, and large serif headline on both sizes
+  without clipping. The small phone still has breathing room below the copy.
+- The production Profile row remains deliberately quieter than the save tiles:
+  flame and `4-day streak` at left, seven compact coverage marks, and `9 best`
+  at right. It fits on the iPhone 16e and sits exactly below Been/Wanna and above
+  the calendar. The surrounding Profile launch also confirmed the feature did
+  not disturb the existing owner surface or tab shell.
+- Added DEBUG-only `-WanderStreakMockup takeover|profileRow` routes following the
+  repo's existing visual-mockup launch-argument pattern. The route is covered by
+  a focused resolver test and compiles out of Release behavior.

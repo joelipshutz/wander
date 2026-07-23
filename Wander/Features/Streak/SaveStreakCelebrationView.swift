@@ -364,6 +364,7 @@ private extension PlaceStatus {
 #if DEBUG
 enum SaveStreakMockupPage: String, CaseIterable {
     case takeover
+    case profileRow
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> SaveStreakMockupPage? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderStreakMockup") else {
@@ -396,6 +397,8 @@ struct SaveStreakMockupRoot: View {
                 ),
                 onDismiss: {}
             )
+        case .profileRow:
+            SaveStreakProfileRowMockup()
         }
     }
 }

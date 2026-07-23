@@ -8,6 +8,12 @@ final class SaveStreakCalculatorTests: XCTestCase {
             SaveStreakMockupPage.resolved(from: ["Wander", "-WanderStreakMockup"]),
             .takeover
         )
+        XCTAssertEqual(
+            SaveStreakMockupPage.resolved(
+                from: ["Wander", "-WanderStreakMockup", "profileRow"]
+            ),
+            .profileRow
+        )
     }
 
     func testSummaryDeduplicatesSameDaySavesAndKeepsYesterdayRunActive() throws {
