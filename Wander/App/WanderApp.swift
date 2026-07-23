@@ -22,7 +22,9 @@ struct WanderApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
+            if let streakMockupPage = SaveStreakMockupPage.resolved() {
+                SaveStreakMockupRoot(page: streakMockupPage)
+            } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
                 ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let carouselMockupPage = PlacePhotoCarouselMockupPage.resolved() {
                 PlacePhotoCarouselMockupRoot(page: carouselMockupPage)
