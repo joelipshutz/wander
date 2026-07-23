@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(27);
+select plan(28);
 
 select ok(
   exists (
@@ -246,6 +246,34 @@ select is(
   jsonb_array_length(public.followed_feed()->'activity'),
   0,
   'private-mode accounts are omitted from the feed projection'
+);
+
+update public.profiles
+set is_private_profile = false
+where id = 'feed_actor';
+
+insert into public.profiles (id, handle, display_name, is_private_profile)
+values ('feed_actor_two', 'feedactortwo', 'Feed Actor Two', false);
+
+insert into public.follows (follower_user_id, followed_user_id, source)
+values ('feed_viewer', 'feed_actor_two', 'profile');
+
+insert into public.user_places (
+  id, user_id, place_id, status, visibility, source_type
+)
+values (
+  '71000000-0000-0000-0000-000000000004',
+  'feed_actor_two',
+  '70000000-0000-0000-0000-000000000001',
+  'wanna_go',
+  'followers',
+  'social_save'
+);
+
+select is(
+  public.followed_feed()->'featured_places'->0->>'reason',
+  'Saved by Feed Actor Two and 1 other',
+  'featured social proof counts distinct followed accounts while naming the newest saver'
 );
 
 select ok(

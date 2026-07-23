@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FeedScreen: View {
     @EnvironmentObject private var store: WanderStore
@@ -36,7 +37,8 @@ struct FeedScreen: View {
                     FeedPeopleSurface(openProfile: openProfile)
                 }
             }
-            .wanderScreen()
+            .background(WanderTheme.surfaceRaised.color.ignoresSafeArea())
+            .foregroundStyle(WanderTheme.textInk.color)
             .task(id: auth.isSignedIn) {
                 await refresh()
             }
@@ -101,6 +103,7 @@ struct FeedScreen: View {
                 FeedFeaturedRail(
                     places: page.featuredPlaces,
                     openProfile: openProfile,
+                    openPlace: openPlace,
                     save: saveFeaturedPlace
                 )
             }
@@ -403,7 +406,7 @@ private struct FeedSurfaceTabs: View {
         }
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(WanderTheme.borderHairline.color)
+                .fill(WanderTheme.borderStrong.color.opacity(0.82))
                 .frame(height: 1)
                 .zIndex(-1)
         }
@@ -913,17 +916,24 @@ private struct FeedSectionHeading: View {
 private struct FeedFeaturedRail: View {
     let places: [FeedFeaturedPlace]
     let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
     let save: (FeedFeaturedPlace) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ForEach(places) { featured in
-                    FeedFeaturedCard(featured: featured, openProfile: openProfile, save: save)
+                    FeedFeaturedCard(
+                        featured: featured,
+                        openProfile: openProfile,
+                        openPlace: openPlace,
+                        save: save
+                    )
                 }
             }
-            .padding(.horizontal, 1)
+            .padding(.horizontal, WanderTheme.spacing4)
         }
+        .padding(.horizontal, -WanderTheme.spacing4)
         .accessibilityLabel("Featured places from people you follow")
     }
 }
@@ -931,24 +941,37 @@ private struct FeedFeaturedRail: View {
 private struct FeedFeaturedCard: View {
     let featured: FeedFeaturedPlace
     let openProfile: (ProfileShell) -> Void
+    let openPlace: (VisiblePlace) -> Void
     let save: (FeedFeaturedPlace) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(alignment: .top) {
-                FeedPlaceArtwork(place: featured.visiblePlace, height: 92)
-                Spacer(minLength: 0)
-            }
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            FeedPlaceArtwork(
+                place: featured.visiblePlace,
+                height: FeedFeaturedLayout.artworkHeight
+            )
 
             Text(featured.visiblePlace.place.canonicalName)
                 .font(.system(size: 15, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .lineLimit(2)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: FeedFeaturedLayout.titleHeight,
+                    maxHeight: FeedFeaturedLayout.titleHeight,
+                    alignment: .topLeading
+                )
 
             Text(placeDetail(for: featured.visiblePlace))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .lineLimit(1)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: FeedFeaturedLayout.detailHeight,
+                    maxHeight: FeedFeaturedLayout.detailHeight,
+                    alignment: .leading
+                )
 
             Button {
                 openProfile(ProfileShell(
@@ -962,10 +985,17 @@ private struct FeedFeaturedCard: View {
             } label: {
                 Label(featured.reason, systemImage: "person.2.fill")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.skyTint.color)
+                    .foregroundStyle(WanderTheme.textInk.color.opacity(0.78))
                     .lineLimit(1)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: FeedFeaturedLayout.socialProofHeight,
+                        maxHeight: FeedFeaturedLayout.socialProofHeight,
+                        alignment: .leading
+                    )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Open \(featured.visiblePlace.owner.displayName)'s profile")
 
             Spacer(minLength: 0)
 
@@ -975,7 +1005,7 @@ private struct FeedFeaturedCard: View {
                 Label("Save", systemImage: "plus")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .frame(maxWidth: .infinity, minHeight: FeedFeaturedLayout.actionHeight)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(Capsule())
             }
@@ -994,6 +1024,11 @@ private struct FeedFeaturedCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         }
+        .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .onTapGesture {
+            openPlace(featured.visiblePlace)
+        }
+        .accessibilityHint("Opens \(featured.visiblePlace.place.canonicalName)")
     }
 }
 
@@ -1017,7 +1052,7 @@ private struct FeedActivityList: View {
 
                 if index < activity.count - 1 {
                     Divider()
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(WanderTheme.borderStrong.color.opacity(0.78))
                         .padding(.horizontal, -WanderTheme.spacing4)
                 }
             }
@@ -1027,7 +1062,12 @@ private struct FeedActivityList: View {
 
 private enum FeedFeaturedLayout {
     static let cardWidth: CGFloat = 184
-    static let cardHeight: CGFloat = 252
+    static let cardHeight: CGFloat = 244
+    static let artworkHeight: CGFloat = 88
+    static let titleHeight: CGFloat = 36
+    static let detailHeight: CGFloat = 16
+    static let socialProofHeight: CGFloat = 16
+    static let actionHeight: CGFloat = 38
 }
 
 private enum FeedActivityLayout {
@@ -1109,6 +1149,18 @@ private struct FeedActivityModule: View {
             .padding(.top, WanderTheme.spacing1)
         }
         .padding(WanderTheme.spacing3)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openPrimaryDestination()
+        }
+    }
+
+    private func openPrimaryDestination() {
+        if let place = activity.place {
+            openPlace(place)
+        } else if let list = activity.list {
+            openList(list)
+        }
     }
 
     private var activityTitle: some View {
@@ -1260,23 +1312,92 @@ private struct FeedMediaPlaceholder: View {
 }
 
 private struct FeedPlaceArtwork: View {
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.displayScale) private var displayScale
     let place: VisiblePlace
     let height: CGFloat
+    @State private var resolvedPhoto: ListPlaceResolvedPhoto?
+    @State private var resolvedPhotoKey: String?
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+        GeometryReader { proxy in
+            let targetPixelSize = max(
+                1,
+                Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
             )
+            let resolutionKey = photoResolutionKey
+
+            ZStack {
+                fallbackArtwork
+
+                if resolvedPhotoKey == resolutionKey, let resolvedPhoto {
+                    Image(uiImage: resolvedPhoto.image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(alignment: .bottom) {
+                if resolvedPhotoKey == resolutionKey,
+                   resolvedPhoto?.photo.isGooglePlacesPhoto == true {
+                    Text("Google Maps")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .padding(.horizontal, 3)
+                        .frame(maxWidth: .infinity, minHeight: 13)
+                        .background(Color.black.opacity(0.68))
+                        .allowsHitTesting(false)
+                }
+            }
+            .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+                resolvedPhoto = nil
+                resolvedPhotoKey = resolutionKey
+                let resolved = await ListPlacePhotoResolver.resolve(
+                    request: PlaceSheetPlace(visiblePlace: place).photoRequest,
+                    preferredUserPhoto: store.firstVisitPhoto(forPlaceID: place.place.id)
+                        .map(PlacePhoto.init(localVisitPhoto:)),
+                    authorizationScopeKey: ListPlacePhotoResolver.authorizationScopeKey(for: store),
+                    targetPixelSize: targetPixelSize,
+                    backend: backend
+                )
+                guard !Task.isCancelled, photoResolutionKey == resolutionKey else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    resolvedPhoto = resolved
+                    resolvedPhotoKey = resolutionKey
+                }
+            }
+        }
+        .frame(height: height)
+        .clipped()
+    }
+
+    private var fallbackArtwork: some View {
+        LinearGradient(
+            colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay {
             Image(systemName: categorySymbol(for: place.effectiveCategory))
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+
+    private var photoResolutionKey: String {
+        [
+            PlaceSheetPlace(visiblePlace: place).photoLookupKey,
+            store.firstVisitPhoto(forPlaceID: place.place.id)?.id ?? "no-preloaded-user-photo",
+            ListPlacePhotoResolver.authorizationScopeKey(for: store)
+        ]
+        .joined(separator: "|")
     }
 }
 
@@ -1284,13 +1405,7 @@ private struct FeedLoadingState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             FeedSectionHeading(title: "Featured for you")
-            HStack(spacing: WanderTheme.spacing3) {
-                ForEach(0..<2, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .fill(WanderTheme.surfaceSand.color)
-                        .frame(width: 184, height: 218)
-                }
-            }
+            FeedFeaturedPlaceholderRail()
             FeedSectionHeading(title: "Your feed")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
@@ -1333,33 +1448,48 @@ private struct FeedRefreshRecoveryState: View {
 
 private struct FeedRecoveryFeaturedRail: View {
     var body: some View {
+        FeedFeaturedPlaceholderRail()
+            .redacted(reason: .placeholder)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct FeedFeaturedPlaceholderRail: View {
+    var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<2, id: \.self) { _ in
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
                             .fill(WanderTheme.surfaceSand.color)
-                            .frame(height: 92)
+                            .frame(height: FeedFeaturedLayout.artworkHeight)
                         RoundedRectangle(cornerRadius: 5)
                             .fill(WanderTheme.surfaceSand.color)
-                            .frame(width: 116, height: 14)
+                            .frame(width: 116, height: FeedFeaturedLayout.titleHeight)
                         RoundedRectangle(cornerRadius: 5)
                             .fill(WanderTheme.surfaceSand.color)
-                            .frame(width: 82, height: 11)
+                            .frame(width: 82, height: FeedFeaturedLayout.detailHeight)
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(WanderTheme.surfaceSand.color)
+                            .frame(width: 128, height: FeedFeaturedLayout.socialProofHeight)
+                        Spacer(minLength: 0)
                         RoundedRectangle(cornerRadius: 18)
                             .fill(WanderTheme.surfaceSand.color)
-                            .frame(height: 38)
+                            .frame(height: FeedFeaturedLayout.actionHeight)
                     }
                     .padding(WanderTheme.spacing3)
-                    .frame(width: 184, alignment: .leading)
+                    .frame(
+                        width: FeedFeaturedLayout.cardWidth,
+                        height: FeedFeaturedLayout.cardHeight,
+                        alignment: .leading
+                    )
                     .background(WanderTheme.surfaceBone.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 }
             }
-            .padding(.horizontal, 1)
+            .padding(.horizontal, WanderTheme.spacing4)
         }
-        .redacted(reason: .placeholder)
-        .accessibilityHidden(true)
+        .padding(.horizontal, -WanderTheme.spacing4)
     }
 }
 
@@ -1394,7 +1524,7 @@ private struct FeedRecoveryActivityList: View {
 
                 if index < 2 {
                     Divider()
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(WanderTheme.borderStrong.color.opacity(0.78))
                 }
             }
         }
@@ -1532,10 +1662,17 @@ private func initials(for name: String) -> String {
 }
 
 private func placeDetail(for place: VisiblePlace) -> String {
+    let isRestaurant = WanderPlaceCategory.normalizedPrimaryCategory(place.effectiveCategory)
+        == WanderPlaceCategory.restaurantsFood
+    let category = isRestaurant ? "Restaurant" : place.effectiveCategoryDisplay.category
+    let secondary = isRestaurant
+        ? place.restaurantCuisine ?? place.effectiveSubcategory
+        : place.effectiveSubcategory
+
     [
-        place.effectiveCategoryDisplay.compactTitle,
-        place.place.locality,
-        place.place.region
+        category,
+        secondary,
+        place.place.locality
     ]
     .compactMap { value in
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)

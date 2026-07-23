@@ -17816,3 +17816,57 @@ Final outcome:
 - No known build-92 release blocker remains. Next: testers should exercise the
   calendar map and repeat-visit badge checklist and reply in the Slack thread
   with device, account/email if relevant, screenshots, and exact repro steps.
+
+## 2026-07-22 21:00 PDT - Codex - REC-131 Feed polish start
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-131-feed-polish` in isolated worktree
+`/private/tmp/recme-rec131-feed-polish`
+Linear: `REC-131` (In Progress)
+
+Goal: polish the Feed’s Featured rail and activity rows: make tiles visually
+consistent and edge-to-edge, use resolved place photos and stronger social
+proof, clarify metadata, make primary destinations reliably tappable, and open
+list activity directly into the selected list.
+
+Starting status and coordination:
+
+- Fetched current `origin/main`; this worktree is clean at `9de2e42`. The
+  root checkout is on unrelated `codex/rec-60-notifications` work and will not
+  be touched. No active worktree overlaps this Feed/List scope.
+- Expected scope: `FeedScreen`, feed presentation/tests, `ListsScreen`, the
+  shared list photo resolver if needed, one additive Feed social-proof migration
+  plus its contract test, and this log. No TestFlight build or hosted migration
+  apply is authorized by this request.
+- The `ios-fix` workflow calls for a StateServer snapshot before Swift edits.
+  This app currently has no DebugBridge/StateServer (documented in prior agent
+  log entries), so validation will use source tests, Xcode build/test, and
+  simulator screenshots instead.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. Linear REC-131 is the active tracker for this work.
+
+Implementation checkpoint, 2026-07-22 21:26 PDT:
+
+- Updated the Places Feed to use a white surface, stronger tab/activity
+  dividers, fixed `184 x 244` Featured slots, a physical-edge horizontal
+  viewport, and matching loading/recovery rail geometry. Featured media now
+  follows the existing visible-user-photo -> Google Maps photo resolver and
+  retains Google attribution.
+- Featured tiles open the place profile when tapped; their person proof opens
+  the profile; Feed rows now open their place or list from the row itself while
+  retaining the explicit actor and Save controls. Restaurant metadata is now
+  `Restaurant · cuisine · locality`; other place types use
+  `category · subcategory · locality`.
+- Changed both the local fallback and additive hosted migration so social proof
+  counts distinct followed accounts for the same place while preserving newest
+  event ordering, e.g. `Saved by Ryan Lee and 3 others`. The migration restates
+  the existing security-definer/search-path/RPC-grant boundary and is not
+  applied to hosted Supabase.
+- Lists now present a locally cached target immediately, refresh it in place,
+  and only wait for remote hydration when no cached target exists.
+- `swiftc -parse` over all changed Swift production/test files and
+  `git diff --check` pass. The full `xcodebuild` command repeatedly terminated
+  during SwiftPM dependency compilation before it produced a compiler result;
+  no build/test pass is claimed. The local `supabase` CLI is not installed, so
+  `supabase test db` could not run. The Mac was locked when attempting the
+  required Xcode/simulator visual check; unlock is needed to complete it.

@@ -152,6 +152,22 @@ enum ListPlacePhotoResolver {
 
     private static var visibleUserPhotoTasks: [String: VisibleUserPhotoTask] = [:]
 
+    static func authorizationScopeKey(for store: WanderStore) -> String {
+        let followsKey = store.follows
+            .map {
+                "\($0.followerUserID)>\($0.followedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        let blocksKey = store.blocks
+            .map {
+                "\($0.blockerUserID)>\($0.blockedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
+            }
+            .sorted()
+            .joined(separator: ",")
+        return "user:\(store.currentUser.id)|follows:\(followsKey)|blocks:\(blocksKey)"
+    }
+
     static func resolve(
         request: PlacePhotoRequest,
         preferredUserPhoto: PlacePhoto?,

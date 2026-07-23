@@ -18,6 +18,7 @@ struct ListsScreen: View {
     @State private var mapList: PlaceListMock?
     @State private var selectedProfileID: String?
     @State private var deletedListIDs = Set<String>()
+    @State private var handlingListRouteIDs = Set<UUID>()
 
     init(scenario: ListsScreenScenario = .resolved()) {
         self.scenario = scenario
@@ -109,17 +110,45 @@ struct ListsScreen: View {
 
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
         guard let request, case .list(let listID) = request.destination else { return }
+        guard handlingListRouteIDs.insert(request.id).inserted else { return }
+        defer { handlingListRouteIDs.remove(request.id) }
+
+        if let cachedList = list(matching: listID) {
+            presentList(cachedList, requestID: request.id)
+            Task { @MainActor in
+                await refreshRoutedList(id: listID)
+            }
+            return
+        }
 
         await store.refreshRemotePlaceLists(backend: backend)
-        guard let list = store.visiblePlaceLists.first(where: {
-            $0.id == listID || $0.localID == listID || $0.serverID == listID
-        }) else { return }
+        guard let refreshedList = list(matching: listID) else { return }
+        presentList(refreshedList, requestID: request.id)
+    }
 
+    private func list(matching listID: String) -> LocalPlaceList? {
+        store.visiblePlaceLists.first {
+            $0.id == listID || $0.localID == listID || $0.serverID == listID
+        }
+    }
+
+    private func presentList(_ list: LocalPlaceList, requestID: UUID) {
         selectedList = PlaceListMock(list: list, store: store)
         selectedScopeID = list.ownerUserID == store.currentUser.id
             ? ListsScope.mine.rawValue
             : ListsScope.collabs.rawValue
-        pushNotifications.consumeNavigationRequest(id: request.id)
+        pushNotifications.consumeNavigationRequest(id: requestID)
+    }
+
+    private func refreshRoutedList(id listID: String) async {
+        await store.refreshRemotePlaceLists(backend: backend)
+        guard let selectedList,
+              selectedList.sourceListID == listID || selectedList.id == listID,
+              let refreshedList = list(matching: listID)
+        else {
+            return
+        }
+        self.selectedList = PlaceListMock(list: refreshedList, store: store)
     }
 
     private func detailScreen(for list: PlaceListMock, initialSelectedPlace: ListPlaceMock? = nil) -> some View {
@@ -3000,19 +3029,7 @@ private struct ListPlacePhotoMedia: View {
     }
 
     private var photoAuthorizationScopeKey: String {
-        let followsKey = store.follows
-            .map {
-                "\($0.followerUserID)>\($0.followedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
-            }
-            .sorted()
-            .joined(separator: ",")
-        let blocksKey = store.blocks
-            .map {
-                "\($0.blockerUserID)>\($0.blockedUserID):\($0.localUpdatedAt.timeIntervalSinceReferenceDate.bitPattern)"
-            }
-            .sorted()
-            .joined(separator: ",")
-        return "user:\(store.currentUser.id)|follows:\(followsKey)|blocks:\(blocksKey)"
+        ListPlacePhotoResolver.authorizationScopeKey(for: store)
     }
 }
 

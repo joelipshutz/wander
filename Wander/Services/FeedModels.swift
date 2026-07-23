@@ -122,27 +122,52 @@ enum FeedPresentation {
         limit: Int = 8,
         relativeTo now: Date = .now
     ) -> [FeedFeaturedPlace] {
-        var seenPlaceIDs = Set<String>()
-        var results: [FeedFeaturedPlace] = []
+        struct FeaturedCandidate {
+            let place: VisiblePlace
+            let latestActor: ProfileShell
+            var supporterIDs: Set<String>
+        }
+
+        var orderedPlaceIDs: [String] = []
+        var candidatesByPlaceID: [String: FeaturedCandidate] = [:]
 
         for event in newestFirst(activity, relativeTo: now) {
             guard let place = event.place,
-                  !currentUserPlaceIDs.contains(place.place.id),
-                  seenPlaceIDs.insert(place.place.id).inserted
+                  !currentUserPlaceIDs.contains(place.place.id)
             else {
                 continue
             }
 
-            results.append(
-                FeedFeaturedPlace(
-                    visiblePlace: place,
-                    reason: "Saved by \(event.actor.displayName)"
+            if var existing = candidatesByPlaceID[place.place.id] {
+                existing.supporterIDs.insert(event.actor.id)
+                candidatesByPlaceID[place.place.id] = existing
+            } else {
+                orderedPlaceIDs.append(place.place.id)
+                candidatesByPlaceID[place.place.id] = FeaturedCandidate(
+                    place: place,
+                    latestActor: event.actor,
+                    supporterIDs: [event.actor.id]
                 )
-            )
-            if results.count == max(0, limit) { break }
+            }
         }
 
-        return results
+        return orderedPlaceIDs.prefix(max(0, limit)).compactMap { placeID in
+            guard let candidate = candidatesByPlaceID[placeID] else { return nil }
+            return FeedFeaturedPlace(
+                visiblePlace: candidate.place,
+                reason: featuredReason(
+                    primaryActorName: candidate.latestActor.displayName,
+                    supporterCount: candidate.supporterIDs.count
+                )
+            )
+        }
+    }
+
+    static func featuredReason(primaryActorName: String, supporterCount: Int) -> String {
+        let otherCount = max(0, supporterCount - 1)
+        guard otherCount > 0 else { return "Saved by \(primaryActorName)" }
+        let otherLabel = otherCount == 1 ? "other" : "others"
+        return "Saved by \(primaryActorName) and \(otherCount) \(otherLabel)"
     }
 
     static func timestampText(

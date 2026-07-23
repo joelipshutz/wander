@@ -81,6 +81,35 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
         XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
+        XCTAssertTrue(activityModule.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(activityModule.contains("openPrimaryDestination()"))
+        XCTAssertTrue(activityModule.contains("if let place = activity.place"))
+        XCTAssertTrue(activityModule.contains("else if let list = activity.list"))
+    }
+
+    func testFeedFeaturedTilesUseResolvedPhotosAndFullBleedRailWhileKeepingPrimaryDestinationsDirect() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(feed.contains("ListPlacePhotoResolver.resolve("))
+        XCTAssertTrue(feed.contains("Text(\"Google Maps\")"))
+        XCTAssertTrue(feed.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertTrue(feed.contains("openPlace(featured.visiblePlace)"))
+        XCTAssertTrue(feed.contains("WanderTheme.borderStrong.color.opacity(0.78)"))
+        XCTAssertTrue(feed.contains("let isRestaurant = WanderPlaceCategory.normalizedPrimaryCategory"))
+        XCTAssertTrue(feed.contains("place.restaurantCuisine ?? place.effectiveSubcategory"))
+    }
+
+    func testFeedListRoutesPresentCachedListBeforeRefreshingRemoteContent() throws {
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+
+        XCTAssertTrue(lists.contains("if let cachedList = list(matching: listID)"))
+        XCTAssertTrue(lists.contains("presentList(cachedList, requestID: request.id)"))
+        XCTAssertTrue(lists.contains("await refreshRoutedList(id: listID)"))
+        XCTAssertTrue(lists.contains("private func refreshRoutedList(id listID: String) async"))
     }
 
     func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {
