@@ -51,6 +51,7 @@ struct ProfileScreen: View {
                 profile: store.currentUser,
                 mode: .owner,
                 stats: profileStats,
+                saveStreak: store.saveStreakSummary,
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
                 sharedVisitInvitationCount: store.sharedVisitInvitations.count,
@@ -898,6 +899,7 @@ struct ProfileDetailView: View {
                                 inCommonCount: inCommonPlaces.count
                             ),
                             stats: profileStats,
+                            saveStreak: nil,
                             followerCount: store.followers(of: profileID).count,
                             followingCount: store.following(of: profileID).count,
                             sharedVisitInvitationCount: 0,

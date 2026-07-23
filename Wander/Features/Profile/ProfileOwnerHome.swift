@@ -33,6 +33,7 @@ struct ProfileOwnerHome: View {
     let profile: LocalProfile
     let mode: ProfileHomeMode
     let stats: ProfileStats
+    let saveStreak: SaveStreakSummary?
     let followerCount: Int
     let followingCount: Int
     let sharedVisitInvitationCount: Int
@@ -72,6 +73,9 @@ struct ProfileOwnerHome: View {
                     )
                 }
                 savedPlacesSection
+                if mode.isOwner, let saveStreak {
+                    ProfileSaveStreakRow(summary: saveStreak)
+                }
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -467,6 +471,148 @@ private struct OwnerProfileSaveTile: View {
         .buttonStyle(.plain)
     }
 }
+
+private struct ProfileSaveStreakRow: View {
+    let summary: SaveStreakSummary
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 28, height: 28)
+
+                Text(streakTitle)
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                HStack(spacing: 3) {
+                    ForEach(summary.recentDayCoverage.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(
+                                summary.recentDayCoverage[index]
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.borderHairline.color.opacity(0.65)
+                            )
+                            .frame(width: 10, height: 4)
+                    }
+                }
+                .accessibilityHidden(true)
+
+                if summary.bestCount > 0 {
+                    Text("\(summary.bestCount) best")
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+            }
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .padding(.vertical, WanderTheme.spacing1)
+
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var streakTitle: String {
+        guard summary.currentCount > 0 else { return "start a streak" }
+        return "\(summary.currentCount)-day streak"
+    }
+
+    private var accessibilityLabel: String {
+        guard summary.currentCount > 0 else {
+            return "No active save streak. Save a Been or Wanna place to start one."
+        }
+        let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
+        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus)"
+    }
+}
+
+#if DEBUG
+struct SaveStreakProfileRowMockup: View {
+    private let summary = SaveStreakSummary(
+        currentCount: 4,
+        bestCount: 9,
+        isTodayCovered: true,
+        recentDayCoverage: [true, true, true, true, false, false, false]
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text("profile")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                Text("Joe")
+                    .font(.system(size: 30, weight: .black))
+            }
+
+            HStack(spacing: WanderTheme.spacing3) {
+                OwnerProfileSaveTile(
+                    value: 87,
+                    label: "BEEN",
+                    symbol: "checkmark.circle.fill",
+                    color: WanderTheme.stateSuccess.color,
+                    fill: WanderTheme.categorySage.color.opacity(0.22),
+                    action: {}
+                )
+                OwnerProfileSaveTile(
+                    value: 34,
+                    label: "WANNA",
+                    symbol: "bookmark.fill",
+                    color: WanderTheme.stateWarning.color,
+                    fill: WanderTheme.sunTint.color,
+                    action: {}
+                )
+            }
+
+            ProfileSaveStreakRow(summary: summary)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                Text("Joe's calendar")
+                    .font(.system(size: 23, weight: .black))
+                Text("July 2026")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Grid(horizontalSpacing: WanderTheme.spacing3) {
+                    GridRow {
+                        ForEach(19...25, id: \.self) { day in
+                            Text("\(day)")
+                                .font(.system(size: 13, weight: .black, design: .rounded))
+                                .frame(maxWidth: .infinity, minHeight: 36)
+                                .background(
+                                    day <= 22
+                                        ? WanderTheme.terracotta.color.opacity(0.16)
+                                        : WanderTheme.surfaceBone.color
+                                )
+                                .clipShape(Circle())
+                        }
+                    }
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+            Spacer()
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing6)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .preferredColorScheme(.light)
+    }
+}
+#endif
 
 private struct ProfileCalendarSection: View {
     let insights: ProfileInsights
