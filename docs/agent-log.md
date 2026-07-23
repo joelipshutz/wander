@@ -19171,3 +19171,21 @@ Checkpoint, 2026-07-22 23:57 PDT:
   destination is not installed under the current Xcode runtime, so focused
   validation moved to available iPhone 17 / iOS 26.5: 39/39
   `WanderPlaceCategoryTests` passed. Full-suite validation is in progress.
+
+Local handoff, 2026-07-23 00:03 PDT:
+
+- Full iPhone 17 / iOS 26.5 test suite passed 590/590 with zero failures.
+  Result bundle:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_00-00-25--0700.xcresult`.
+  `git diff --check` also passed.
+- Implementation, migrations, tests, SwiftUI mockups, hosted smoke expansion,
+  and coordination log were committed as `35c863747` (`REC-126: infer and
+  backfill restaurant cuisines`).
+- Linear comment `aaa73f8a-4174-4891-92e9-6fc455f1676c` records the final
+  hosted counts, validation, visual QA, and publishing blocker. REC-126 remains
+  In Progress until a PR exists.
+- GitHub publication is the only incomplete workflow step:
+  `gh auth status` reports Ryan's active `ryanlane23` token is invalid. Exact
+  restart: run `gh auth login -h github.com`, confirm `gh auth status`, then
+  push `codex/rec-126-restaurant-cuisines` and open a ready PR to `main`.
+  No TestFlight build or release was requested or performed.
