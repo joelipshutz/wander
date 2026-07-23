@@ -19240,3 +19240,23 @@ Implementation checkpoint, 2026-07-23 10:36 PDT:
   `DerivedData/Logs/Test/Test-Wander-2026.07.23_10-29-17--0700.xcresult`.
   `git diff --check` passed. The temporary generated `DerivedData-atlas` cache
   was removed; no TestFlight build or release was requested.
+
+Review handoff, 2026-07-23 10:46 PDT:
+
+- Committed the production Cuisine Atlas follow-up as `880810d18`
+  (`REC-126: ship Cuisine Atlas picker`) and pushed
+  `codex/rec-126-restaurant-cuisines` to origin.
+- Opened ready PR
+  [#189](https://github.com/joelipshutz/wander/pull/189),
+  `REC-126: infer cuisines, backfill saves, and ship Cuisine Atlas`, targeting
+  `main`. The connected GitHub app lacked PR-write access, so the ready PR was
+  created through Ryan's existing signed-in GitHub web session. The repository
+  Git credential was sufficient to push; the standalone `gh` token still
+  reports invalid and was not needed for the completed handoff.
+- Moved Linear REC-126 to In Review and added comment
+  `81456622-e296-47ed-b2f5-ada755f2fc26` with the PR, final hosted backfill
+  counts, validation, privacy posture, and no-TestFlight note.
+- Brought the exact worktree project
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` to the
+  foreground in Xcode. Xcode's branch chooser confirms
+  `codex/rec-126-restaurant-cuisines`, ready for local test and review.
