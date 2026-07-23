@@ -20746,3 +20746,50 @@ Completion, 2026-07-23 14:34 PDT:
   preserve a stored selection. No known blocker or follow-up remains.
 - This was intentionally merge-only. No build number was changed and no
   TestFlight archive, upload, or tester Slack message was produced.
+
+## 2026-07-23 14:19 PDT - Codex - REC-114 Place Match Card Redesign
+
+Agent: Codex
+Branch: `codex/rec-114-place-match-cards`
+Worktree: `/private/tmp/recme-rec114-place-cards`
+Linear: `REC-114` (`In Progress`)
+
+Goal: redesign the Profile import flow's Review Matches → Choose the Place
+cards with a left-side Google place image, richer place metadata, and compact
+Been/Wanna actions, then validate the branch and open it in Xcode for review.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `38676cec9`. The primary checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes, so it will remain untouched.
+- Existing worktrees do not include REC-114 or overlap this branch. Linear
+  REC-114 was read with its Slack-linked request and moved from `Backlog` to
+  `In Progress` before implementation.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused tests under
+  `WanderTests/`, and this coordination log. Shared store, project membership,
+  Supabase, and build-number files are out of scope unless inspection proves
+  otherwise.
+- Planned validation is focused import/UI contract coverage, the full iOS
+  suite, a generic iOS Simulator build, and simulator screenshots on a current
+  and smaller phone before the branch is pushed and opened in Xcode.
+
+Checkpoint, 2026-07-23 14:36 PDT:
+
+- Replaced the full-width ambiguous-match rows with enriched horizontal cards:
+  Google Places photo/fallback on the left, numbered match identity, place
+  category and locality, and compact 44pt Been/Wanna capsule actions. The map
+  and direct match selection remain intact.
+- Added a DEBUG-only `-WanderPlaceImportCandidateMockup` launch fixture with
+  three realistic candidates so this exact sheet can be reviewed without
+  mutating a tester's import history. Added source-contract coverage for the
+  enriched card, provider photo lookup, Google attribution, compact actions,
+  and the QA fixture.
+- Focused regression passed on the locally available iPhone 17 Pro Max /
+  iOS 26.5 simulator: 1 test, 0 failures. The repository-documented iPhone 16
+  Plus / iOS 18.6 runtime is not installed on this machine, so visual coverage
+  will use iPhone 17 Pro Max and the smaller iPhone 17e on iOS 26.5. Existing
+  Swift 6 actor-isolation and headermap warnings remain unchanged.
+- `origin/main` advanced by two commits during implementation. The feature
+  commit will be rebased onto the new head before final validation and PR.

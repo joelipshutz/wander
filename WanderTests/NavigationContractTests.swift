@@ -385,6 +385,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
 
+    func testChoosePlaceUsesEnrichedHorizontalCardsWithProviderPhotosAndCompactActions() throws {
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+
+        XCTAssertTrue(importViews.contains("PlaceImportCandidateCard("))
+        XCTAssertTrue(importViews.contains("PlaceImportCandidatePhoto(candidate: candidate, index: index)"))
+        XCTAssertTrue(importViews.contains(".task(id: candidate.importPhotoRequest.lookupKey)"))
+        XCTAssertTrue(importViews.contains("backend.placePhoto(for: candidate.importPhotoRequest)"))
+        XCTAssertTrue(importViews.contains("Text(\"Google Maps\")"))
+        XCTAssertTrue(importViews.contains("Text(candidate.importCategoryTitle)"))
+        XCTAssertTrue(importViews.contains("Text(candidate.importLocationSummary)"))
+        XCTAssertTrue(importViews.contains("Capsule()"))
+        XCTAssertTrue(importViews.contains(".frame(minHeight: WanderTheme.tapMinimum)"))
+        XCTAssertTrue(importViews.contains("-WanderPlaceImportCandidateMockup"))
+
+        let cardSource = try XCTUnwrap(
+            importViews
+                .components(separatedBy: "private struct PlaceImportCandidateCard: View")
+                .last?
+                .components(separatedBy: "private struct PlaceImportCandidatePhoto: View")
+                .first
+        )
+        XCTAssertFalse(cardSource.contains(".frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)"))
+    }
+
     func testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")

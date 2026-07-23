@@ -1404,66 +1404,17 @@ private struct PlaceImportCandidatePicker: View {
                     }
 
                     ForEach(Array(item.candidates.enumerated()), id: \.element.id) { index, candidate in
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                            Button {
+                        PlaceImportCandidateCard(
+                            index: index,
+                            candidate: candidate,
+                            selectionAction: {
                                 selectionAction(candidate.id)
                                 dismiss()
-                            } label: {
-                                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                                    Text("\(index + 1)")
-                                        .font(.system(size: 12, weight: .black))
-                                        .frame(width: 28, height: 28)
-                                        .background(WanderTheme.skyTint.color)
-                                        .foregroundStyle(WanderTheme.stateInfo.color)
-                                        .clipShape(Circle())
-
-                                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                                        Text(candidate.name)
-                                            .font(.system(size: 16, weight: .black))
-                                            .foregroundStyle(WanderTheme.textInk.color)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        Text(candidate.previewSubtitle())
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(WanderTheme.textMuted.color)
-                                            .lineLimit(3)
-                                    }
-
-                                    Spacer(minLength: WanderTheme.spacing2)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12, weight: .black))
-                                        .foregroundStyle(WanderTheme.textFaint.color)
-                                        .frame(width: 24, height: 24)
-                                }
-                                .contentShape(Rectangle())
+                            },
+                            quickSaveAction: { status in
+                                quickSaveAction(candidate.id, status)
+                                dismiss()
                             }
-                            .buttonStyle(.plain)
-
-                            HStack(spacing: WanderTheme.spacing2) {
-                                quickSaveButton(
-                                    "Been",
-                                    systemImage: "checkmark.circle.fill",
-                                    color: WanderTheme.stateSuccess.color
-                                ) {
-                                    quickSaveAction(candidate.id, .been)
-                                    dismiss()
-                                }
-                                quickSaveButton(
-                                    "Wanna",
-                                    systemImage: "bookmark.fill",
-                                    color: WanderTheme.stateWarning.color
-                                ) {
-                                    quickSaveAction(candidate.id, .wannaGo)
-                                    dismiss()
-                                }
-                            }
-                        }
-                        .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                         )
                     }
                 }
@@ -1543,6 +1494,121 @@ private struct PlaceImportCandidatePicker: View {
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
     }
+}
+
+private struct PlaceImportCandidateCard: View {
+    let index: Int
+    let candidate: PlaceCandidate
+    let selectionAction: () -> Void
+    let quickSaveAction: (PlaceStatus) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Button(action: selectionAction) {
+                PlaceImportCandidatePhoto(candidate: candidate, index: index)
+                    .frame(width: photoWidth, height: photoHeight)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Choose match \(index + 1), \(candidate.name)")
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Button(action: selectionAction) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Text("MATCH \(index + 1)")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(WanderTheme.stateInfo.color)
+                                .padding(.horizontal, WanderTheme.spacing2)
+                                .frame(minHeight: 22)
+                                .background(WanderTheme.skyTint.color)
+                                .clipShape(Capsule())
+
+                            Spacer(minLength: WanderTheme.spacing1)
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .frame(width: 24, height: 24)
+                        }
+
+                        Text(candidate.name)
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: WanderTheme.spacing1) {
+                            Text(candidate.categoryEmoji)
+                                .accessibilityHidden(true)
+                            Text(candidate.importCategoryTitle)
+                                .lineLimit(1)
+                        }
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+
+                        Text(candidate.importLocationSummary)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    "Choose match \(index + 1), \(candidate.name), "
+                        + "\(candidate.importCategoryTitle), \(candidate.importLocationSummary)"
+                )
+                .accessibilityHint("Selects this place for the import")
+
+                HStack(spacing: WanderTheme.spacing2) {
+                    quickSaveButton(
+                        "Been",
+                        systemImage: "checkmark.circle.fill",
+                        color: WanderTheme.stateSuccess.color
+                    ) {
+                        quickSaveAction(.been)
+                    }
+
+                    quickSaveButton(
+                        "Wanna",
+                        systemImage: "bookmark.fill",
+                        color: WanderTheme.stateWarning.color
+                    ) {
+                        quickSaveAction(.wannaGo)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(WanderTheme.spacing3)
+        }
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .shadow(
+            color: WanderTheme.textInk.color.opacity(0.08),
+            radius: 8,
+            x: 0,
+            y: 3
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var photoWidth: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 88 : 104
+    }
+
+    private var photoHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 184 : 172
+    }
 
     private func quickSaveButton(
         _ title: String,
@@ -1552,19 +1618,177 @@ private struct PlaceImportCandidatePicker: View {
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 14, weight: .black))
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .font(.system(size: 12, weight: .black))
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(minHeight: WanderTheme.tapMinimum)
                 .background(color.opacity(0.13))
                 .foregroundStyle(color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                    Capsule()
                         .stroke(color.opacity(0.32), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Save \(candidate.name) as \(title)")
     }
 }
+
+private struct PlaceImportCandidatePhoto: View {
+    let candidate: PlaceCandidate
+    let index: Int
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
+
+    var body: some View {
+        ZStack {
+            WanderTheme.surfaceSand.color
+
+            WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 32)
+
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: candidate.name,
+                    onLoadFailure: { failedPhoto in
+                        if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
+                            self.photo = nil
+                        }
+                    }
+                )
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            Text("\(index + 1)")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 28, height: 28)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.94))
+                .clipShape(Circle())
+                .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 4, y: 2)
+                .padding(WanderTheme.spacing2)
+        }
+        .overlay(alignment: .bottom) {
+            if photo?.isGooglePlacesPhoto == true {
+                Text("Google Maps")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 16)
+                    .background(Color.black.opacity(0.68))
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: candidate.importPhotoRequest.lookupKey) {
+            photo = nil
+            do {
+                let resolvedPhoto = try await backend.placePhoto(for: candidate.importPhotoRequest)
+                try Task.checkCancellation()
+                photo = resolvedPhoto
+            } catch {
+                guard !Task.isCancelled else { return }
+                photo = nil
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private extension PlaceCandidate {
+    var importPhotoRequest: PlacePhotoRequest {
+        PlacePhotoRequest(
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID
+        )
+    }
+
+    var importCategoryTitle: String {
+        let title = WanderPlaceCategory.display(for: categoryAssignment).compactTitle
+        return title.isEmpty ? "Place" : title
+    }
+
+    var importLocationSummary: String {
+        previewSubtitle(includeCategory: false, fallback: "Nearby place")
+    }
+}
+
+#if DEBUG
+enum PlaceImportCandidateMockupPage {
+    static var isPresented: Bool {
+        ProcessInfo.processInfo.arguments.contains("-WanderPlaceImportCandidateMockup")
+    }
+}
+
+struct PlaceImportCandidateMockupRoot: View {
+    var body: some View {
+        PlaceImportCandidatePicker(
+            item: Self.item,
+            selectionAction: { _ in },
+            quickSaveAction: { _, _ in }
+        )
+        .preferredColorScheme(.light)
+    }
+
+    private static let item = PlaceImportItem(
+        id: "rec-114-candidate-mockup",
+        batchID: "rec-114-mockup-batch",
+        source: .googleMaps,
+        seed: PlaceImportSeed(
+            rawText: "Maru Coffee Los Feliz",
+            nameHint: "Maru Coffee",
+            areaHint: "Los Feliz",
+            sourceURLString: nil,
+            sourceLine: 1
+        ),
+        state: .ambiguous,
+        candidates: [
+            PlaceCandidate(
+                id: "rec-114-maru",
+                name: "Maru Coffee",
+                category: "coffee shop",
+                address: "1936 Hillhurst Ave, Los Angeles, CA 90027",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "United States",
+                latitude: 34.10662,
+                longitude: -118.28762,
+                sourceProvider: "google_maps",
+                confidence: 0.95
+            ),
+            PlaceCandidate(
+                id: "rec-114-gget",
+                name: "Go Get Em Tiger",
+                category: "coffee shop",
+                address: "230 N Larchmont Blvd, Los Angeles, CA 90004",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "United States",
+                latitude: 34.07510,
+                longitude: -118.32378,
+                sourceProvider: "google_maps",
+                confidence: 0.82
+            ),
+            PlaceCandidate(
+                id: "rec-114-verve",
+                name: "Verve Coffee Roasters",
+                category: "coffee shop",
+                address: "8925 Melrose Ave, West Hollywood, CA 90069",
+                locality: "West Hollywood",
+                region: "CA",
+                country: "United States",
+                latitude: 34.08088,
+                longitude: -118.38694,
+                sourceProvider: "google_maps",
+                confidence: 0.76
+            )
+        ]
+    )
+}
+#endif
 
 private func usableImportCoordinate(
     latitude: Double?,
