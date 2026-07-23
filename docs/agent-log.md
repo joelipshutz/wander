@@ -17662,3 +17662,29 @@ Acceptance-correction implementation and validation, 2026-07-22 17:30 PDT:
   or Slack release change was made. Next: commit this correction, force-update
   the rebased PR branch, revise PR #167's acceptance copy, complete the required
   pre-landing review, and squash-merge if the gate remains clean.
+
+Pre-landing review checkpoint, 2026-07-22 17:34 PDT:
+
+- Committed the acceptance correction as `8f3452b57`, force-updated the rebased
+  feature branch, and revised PR #167 so its summary explicitly says repeat Been
+  visit/save records increment the badge while the date drill-in stays
+  de-duplicated by canonical place.
+- Completed the gstack pre-landing checklist against the complete current diff.
+  Pass 1 found no SQL/data, concurrency, LLM trust, shell, enum, auth, or security
+  surface. Pass 2 found no field, time-window, type-boundary, view, pipeline,
+  completeness, TODO, or documentation-staleness issue. The source diff is one
+  canonical place-ID resolution; focused tests cover the corrected badge/list
+  cardinality. Pre-Landing Review: no issues found; quality score 10.0.
+- Specialist reviews were skipped for scope: the production diff is two lines in
+  one pure presenter, with no schema/API/migration/design/performance/crypto or
+  bundle impact, and the exact regression plus full suite already passed. There
+  are no Greptile, review, inline, or conversation comments; no checks are
+  configured. GitHub reports PR #167 open, ready, `CLEAN`, and `MERGEABLE`.
+- The optional gstack tracking initializer was not run because the permission
+  reviewer rejected its potential session/repository telemetry egress. The
+  substantive checklist and evidence are recorded here; no attempt was made to
+  bypass that restriction. `gstack-review-read` reports `NO_REVIEWS`.
+- Final exact-head gates before this docs-only checkpoint: 14/14 focused tests,
+  573/573 complete tests, generic Simulator build success, clean XcodeGen output,
+  and clean `git diff --check`. No unresolved finding remains. Next: push this
+  review record, recheck latest `main` and PR state, then squash-merge PR #167.
