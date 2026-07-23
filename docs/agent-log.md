@@ -18979,3 +18979,16 @@ Implementation and validation, 2026-07-23 10:36 PDT:
 - `origin/main` remains at the branch base (`92adcdc89`), so no update or
   conflict resolution is required before commit. No known REC-109 blocker
   remains; next steps are commit, ready PR, and Linear handoff to In Review.
+
+Completion, 2026-07-23 10:39 PDT:
+
+- Committed the implementation as `452771189` (`feat: move place imports to
+  Add`) and pushed `codex/rec-109-import-review-button`.
+- Opened ready PR #188 against `main`:
+  https://github.com/joelipshutz/wander/pull/188.
+- Attached the PR and validation summary to Linear REC-109, then moved the
+  issue from In Progress to In Review. The requested implementation is ready
+  for Xcode testing from this branch/worktree.
+- No TestFlight build-number bump, archive/upload, Slack release note, merge,
+  backend change, or hosted-data mutation was performed. The remaining action
+  is human Xcode review/testing and normal PR review.
