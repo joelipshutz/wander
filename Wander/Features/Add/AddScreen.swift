@@ -5,7 +5,7 @@ import UIKit
 import Vision
 
 enum AddSheetLayout {
-    static let restingDetent = PresentationDetent.height(300)
+    static let restingDetent = PresentationDetent.height(560)
     static let detents: Set<PresentationDetent> = [restingDetent, .large]
 }
 
@@ -13,6 +13,7 @@ struct AddScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @ObservedObject var importStore: PlaceImportStore
     let resetToken: UUID
     @Binding private var selectedDetent: PresentationDetent
     let onClose: () -> Void
@@ -31,13 +32,18 @@ struct AddScreen: View {
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
+    @State private var selectedImportSource: PlaceImportSource?
+    @State private var showsImportInbox = false
+    @State private var opensImportInboxAfterSource = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
+        importStore: PlaceImportStore,
         resetToken: UUID = UUID(),
         selectedDetent: Binding<PresentationDetent>,
         onClose: @escaping () -> Void
     ) {
+        self.importStore = importStore
         self.resetToken = resetToken
         _selectedDetent = selectedDetent
         self.onClose = onClose
@@ -97,6 +103,20 @@ struct AddScreen: View {
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $selectedImportSource, onDismiss: openImportInboxAfterSourceIfNeeded) { source in
+                PlaceImportSourceScreen(
+                    source: source,
+                    importStore: importStore
+                ) { _ in
+                    opensImportInboxAfterSource = true
+                }
+            }
+            .navigationDestination(isPresented: $showsImportInbox) {
+                PlaceImportInboxScreen(importStore: importStore)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
             }
         }
     }
@@ -202,6 +222,12 @@ struct AddScreen: View {
                 .background(WanderTheme.surfaceRaised.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+
+                AddImportSection(
+                    summary: importStore.summary,
+                    sourceAction: openImportSource,
+                    inboxAction: openImportInbox
+                )
 
                 if let resolutionMessage {
                     InlineMessage(text: resolutionMessage)
@@ -315,6 +341,9 @@ struct AddScreen: View {
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         addSaveFlow = nil
+        selectedImportSource = nil
+        showsImportInbox = false
+        opensImportInboxAfterSource = false
         selectedDetent = AddSheetLayout.restingDetent
     }
 
@@ -365,6 +394,22 @@ struct AddScreen: View {
         withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
             selectedDetent = .large
         }
+    }
+
+    private func openImportSource(_ source: PlaceImportSource) {
+        expandSheet()
+        selectedImportSource = source
+    }
+
+    private func openImportInbox() {
+        expandSheet()
+        showsImportInbox = true
+    }
+
+    private func openImportInboxAfterSourceIfNeeded() {
+        guard opensImportInboxAfterSource else { return }
+        opensImportInboxAfterSource = false
+        openImportInbox()
     }
 
     private func openSharedSaveFlow() {

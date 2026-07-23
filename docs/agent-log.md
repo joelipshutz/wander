@@ -18906,3 +18906,76 @@ Completion, 2026-07-22 23:15 PDT:
   notification and explicit place routes still center/select intentionally.
   Known behavior: current city is a one-shot location fix at the existing
   city-scale span, not a live follow-camera or reverse-geocoded boundary.
+
+## 2026-07-23 10:12 PDT - Codex - REC-109 import review visibility
+
+Agent: Codex using the Linear and `ios-fix` workflows
+Branch: `codex/rec-109-import-review-button`
+Worktree: `/private/tmp/recme-rec109-import-review`
+Linear: `REC-109` (`In Progress`, assigned to Ryan)
+
+Goal: move the place-import entry points from Profile to the Add sheet and show
+the import-review button on Add only while there are pending imports.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` commit `92adcdc89`. The primary checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes, so it will not be edited.
+- Existing worktrees do not overlap this new REC-109 branch. The expected
+  implementation boundary is `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileScreen.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, focused tests under
+  `WanderTests/`, and this log.
+- Current root cause is ownership and placement: `PlaceImportStore` and all
+  import navigation currently live inside `ProfileScreen`, while `AddScreen`
+  has no access to the durable import store or inbox. The review action is
+  rendered as part of the always-present Profile import section instead of
+  being gated by pending review state on Add.
+- The repo intentionally has no DebugBridge/StateServer snapshot/restore API,
+  so the `ios-fix` pre-state endpoint is unavailable without expanding project
+  scope. Source inspection plus a deterministic Swift regression test will be
+  the pre-fix fixture; simulator build/test and visual captures will be used
+  for post-fix validation. No debug instrumentation will be added.
+- No TestFlight build, merge, build-number change, backend/schema change, or
+  tester-data mutation is in scope.
+
+Implementation and validation, 2026-07-23 10:36 PDT:
+
+- Hoisted the durable `PlaceImportStore` to `WanderRootView`, passed it into
+  `AddScreen`, and moved the import-source and inbox navigation out of
+  `ProfileScreen`. Duplicate reconciliation and pending-import resume now run
+  from the root so import work remains alive when Profile is not mounted.
+- Added the four import-source tiles below `From a photo` on Add, raised the
+  resting Add detent from 300 to 560 points, and removed the import section
+  from both owner and member Profile construction.
+- Added `PlaceImportSummary.hasPendingImports`. The Add `Import Review` row is
+  rendered only while imports are processing or require review/help; it is
+  absent for an empty store and for completed saved/duplicate-only history.
+- Added deterministic store and navigation-contract coverage, including a
+  `-WanderOpenAdd` visual-QA launch path. `xcodegen generate` produced no
+  project-file diff, and `git diff --check` passes.
+- Focused regression: 3/3 passed on iPhone 17 Pro / iOS 26.5:
+  `PlaceImportStoreTests.testImportReviewIsPendingOnlyWhileItemsNeedProcessingOrReview`,
+  `NavigationContractTests.testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems`,
+  and
+  `NavigationContractTests.testRootViewCanResolveAddPresentationForVisualQA`.
+- Full regression: `xcodebuild test` passed 587/587 with zero failures on the
+  installed iPhone 17 Pro / iOS 26.5 simulator. Result bundle:
+  `/private/tmp/DerivedData-rec109-focused/Logs/Test/Test-Wander-2026.07.23_10-30-26--0700.xcresult`.
+  The repo-documented iPhone 16 Plus / iOS 18.6 runtime is not installed on
+  this machine.
+- Generic universal iOS Simulator build passed with
+  `CODE_SIGNING_ALLOWED=NO`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain unchanged.
+- Visually inspected pending-import Add sheets on iPhone 17 Pro and the smaller
+  iPhone 17e, plus the fresh/no-import state on iPhone 17 Pro. The import
+  sources fit without scrolling in the resting sheet, pending imports show the
+  review row, and a fresh store omits that row. Captures:
+  `/private/tmp/rec109-add-pending-iphone17pro.png`,
+  `/private/tmp/rec109-add-pending-iphone17e.png`, and
+  `/private/tmp/rec109-add-empty-iphone17pro.png`.
+- `origin/main` remains at the branch base (`92adcdc89`), so no update or
+  conflict resolution is required before commit. No known REC-109 blocker
+  remains; next steps are commit, ready PR, and Linear handoff to In Review.

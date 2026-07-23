@@ -125,6 +125,28 @@ final class GoogleMapsSharedListImporterTests: XCTestCase {
 
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
+    func testImportReviewIsPendingOnlyWhileItemsNeedProcessingOrReview() async throws {
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: FakePlaceImportResolver()
+        )
+
+        XCTAssertFalse(store.summary.hasPendingImports)
+
+        let batchID = try store.enqueue(source: .textNotes, text: "Ready, Los Angeles")
+        XCTAssertTrue(store.summary.hasPendingImports)
+
+        await store.waitForProcessing(batchID: batchID)
+        XCTAssertTrue(store.summary.hasPendingImports)
+
+        let readyItem = try XCTUnwrap(store.items(for: batchID).first)
+        store.markSaved(itemID: readyItem.id, userPlaceID: "saved-place")
+
+        XCTAssertFalse(store.summary.hasPendingImports)
+        XCTAssertTrue(store.summary.hasImports)
+        XCTAssertEqual(store.summary.savedCount, 1)
+    }
+
     func testProcessingProducesReviewStatesAndSaveProgress() async throws {
         let persistence = InMemoryPlaceImportPersistence()
         let store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())

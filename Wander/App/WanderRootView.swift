@@ -24,6 +24,7 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @StateObject private var store: WanderStore
+    @StateObject private var importStore: PlaceImportStore
     private let fixtureMode: WanderFixtureMode
 
     init(
@@ -36,6 +37,7 @@ struct WanderRootView: View {
         self.fixtureMode = fixtureMode
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
+        _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
@@ -47,6 +49,7 @@ struct WanderRootView: View {
                 persistence: persistence
             )
         )
+        _importStore = StateObject(wrappedValue: PlaceImportStore())
     }
 
     var body: some View {
@@ -113,7 +116,11 @@ struct WanderRootView: View {
             addTabResetToken = UUID()
             addSheetDetent = AddSheetLayout.restingDetent
         }) {
-            AddScreen(resetToken: addTabResetToken, selectedDetent: $addSheetDetent) {
+            AddScreen(
+                importStore: importStore,
+                resetToken: addTabResetToken,
+                selectedDetent: $addSheetDetent
+            ) {
                 isPresentingAdd = false
             }
                 .environmentObject(store)
@@ -154,6 +161,8 @@ struct WanderRootView: View {
         .onAppear {
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
+            importStore.resumePendingImports()
+            reconcilePlaceImports()
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -203,6 +212,12 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             queueSaveStreakCelebration(celebration)
         }
+        .onChange(of: store.presentationRevision) { _, _ in
+            reconcilePlaceImports()
+        }
+        .onChange(of: importStore.items) { _, _ in
+            reconcilePlaceImports()
+        }
         .onOpenURL { url in
             if let route = Self.sharedProfileRoute(for: url) {
                 sharedProfile = route
@@ -230,6 +245,21 @@ struct WanderRootView: View {
                 selectedTab = newTab
             }
         }
+    }
+
+    private func reconcilePlaceImports() {
+        importStore.reconcileDuplicates(
+            with: store.currentUserVisiblePlaces.map { visiblePlace in
+                PlaceImportExistingPlace(
+                    userPlaceID: visiblePlace.userPlace.id,
+                    name: visiblePlace.place.canonicalName,
+                    latitude: visiblePlace.place.latitude,
+                    longitude: visiblePlace.place.longitude,
+                    sourceProvider: visiblePlace.place.sourceProvider,
+                    sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID
+                )
+            }
+        )
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
@@ -495,6 +525,12 @@ struct WanderRootView: View {
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
         arguments.contains("-WanderOpenSettings") ? .settings : nil
+    }
+
+    static func resolvedInitialAddPresentation(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        arguments.contains("-WanderOpenAdd")
     }
 
     static func resolvedInitialSharedProfile(
