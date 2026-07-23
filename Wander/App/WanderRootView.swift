@@ -4,7 +4,6 @@ import SwiftUI
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @Environment(\.accessibilityVoiceOverEnabled) private var accessibilityVoiceOverEnabled
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -119,6 +118,7 @@ struct WanderRootView: View {
             }
         }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
+            store.saveFlowDidDismiss(.addSheet)
             addTabResetToken = UUID()
             addSheetDetent = addSheetRestingDetent
         }) {
@@ -233,6 +233,13 @@ struct WanderRootView: View {
             guard addSheetDetent != .large else { return }
             addSheetDetent = addSheetRestingDetent
         }
+        .onChange(of: store.isSaveFlowPresented) { _, isPresented in
+            if isPresented {
+                saveStreakCelebrationTask?.cancel()
+            } else {
+                queueSaveStreakCelebration(store.saveStreakCelebration)
+            }
+        }
         .onOpenURL { url in
             if let route = Self.sharedProfileRoute(for: url) {
                 sharedProfile = route
@@ -253,6 +260,7 @@ struct WanderRootView: View {
             selectedTab
         } set: { newTab in
             if newTab == .add {
+                store.saveFlowDidPresent(.addSheet)
                 addTabResetToken = UUID()
                 addSheetDetent = addSheetRestingDetent
                 isPresentingAdd = true
@@ -397,14 +405,24 @@ struct WanderRootView: View {
             return
         }
 
+        guard SaveStreakPresentationPolicy.canPresent(
+            celebration: celebration,
+            isSaveFlowPresented: store.isSaveFlowPresented
+        ) else {
+            return
+        }
+
         saveStreakCelebrationTask = Task { @MainActor in
             do {
-                try await Task.sleep(for: .milliseconds(180))
+                try await Task.sleep(for: SaveStreakPresentationPolicy.postSaveSheetDelay)
             } catch {
                 return
             }
 
-            guard !Task.isCancelled, store.saveStreakCelebration?.id == celebration.id else {
+            guard !Task.isCancelled,
+                  !store.isSaveFlowPresented,
+                  store.saveStreakCelebration?.id == celebration.id
+            else {
                 return
             }
 
@@ -412,16 +430,14 @@ struct WanderRootView: View {
                 presentedSaveStreakCelebration = celebration
             }
 
-            if celebration.kind == .dailyTakeover, accessibilityVoiceOverEnabled {
+            guard let autoDismissDelay = SaveStreakPresentationPolicy.autoDismissDelay(
+                for: celebration.kind
+            ) else {
                 return
             }
 
             do {
-                try await Task.sleep(
-                    for: celebration.kind == .dailyTakeover
-                        ? .seconds(2.2)
-                        : .milliseconds(720)
-                )
+                try await Task.sleep(for: autoDismissDelay)
             } catch {
                 return
             }

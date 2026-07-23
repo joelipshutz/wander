@@ -107,7 +107,9 @@ struct AddScreen: View {
                 guard detent == restingDetent, isQuickAddFocused else { return }
                 isQuickAddFocused = false
             }
-            .sheet(item: $addSaveFlow) { context in
+            .sheet(item: $addSaveFlow, onDismiss: {
+                store.saveFlowDidDismiss(.saveSheet)
+            }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveSharedSubmission(submission)
                 } onRemove: { _ in

@@ -55,7 +55,9 @@ struct FeedScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
-            .sheet(item: $placeSaveFlow) { context in
+            .sheet(item: $placeSaveFlow, onDismiss: {
+                store.saveFlowDidDismiss(.saveSheet)
+            }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveFeedFlowSubmission(submission)
                 } onRemove: { _ in
