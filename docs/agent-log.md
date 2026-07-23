@@ -18911,3 +18911,48 @@ REC-122 completion, 2026-07-22 23:11 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed for REC-122. The merged feature can be included from latest
   `main` in the next explicitly requested TestFlight batch.
+
+REC-133 design-mock validation and handoff, 2026-07-22 23:20 PDT:
+
+- Completed the requested design-first, debug-only SwiftUI mock on branch
+  `codex/rec-133-place-photo-carousel` in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel`. Draft PR #186 is open:
+  `https://github.com/joelipshutz/wander/pull/186`. Linear REC-133 is linked,
+  commented with validation, and moved to In Review.
+- The place-card hero is a horizontally paged lazy carousel. The Google place
+  photo is first whenever present, eligible user photos follow, and the fixture
+  includes a 100-photo state with unique IDs to exercise unbounded scrolling.
+  Tapping any item opens a full-screen pager at the same index. User-photo
+  attribution shows avatar, display name, handle, and a 72pt profile-navigation
+  target; Google imagery remains provider-attributed.
+- The mock privacy filter requires a shared save, a public/visible profile, and
+  a non-blocked contributor. Fixtures verify that stealth saves, private
+  profiles, and blocked contributors are excluded. This is presentation-contract
+  validation only: production repository pagination plus server-authoritative
+  Supabase/RLS visibility, revocation, and blocking enforcement remain deferred
+  until design approval.
+- Generated two original, text-free 2x2 image sheets for the mock: one of the
+  same Los Angeles restaurant across exterior/interior/food/patio views and one
+  of diverse friendly profile portraits. They are stored in
+  `PlaceCarouselPhotos.imageset` and `PlaceCarouselAvatars.imageset`. The
+  generated Xcode project change is limited to registering the new mock source,
+  tests, and asset catalog entries; there is no signing or build-number churn
+  from REC-133.
+- Focused `PlacePhotoCarouselMockupTests` passed 6/6. After syncing through
+  latest `origin/main`, the complete suite passed 590/590 with zero failures on
+  iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec133-full/Logs/Test/Test-Wander-2026.07.22_23-16-15--0700.xcresult`.
+  The documented iPhone 16 Plus / iOS 18.6 destination is not installed on this
+  machine; that invocation exited with code 70 before executing tests.
+- Visual QA passed on iPhone 17 Pro for card, full-screen attribution, and the
+  100-photo state, plus compact iPhone 17e card coverage. Reviewed screenshots:
+  `/private/tmp/rec133-card-17pro-final.png`,
+  `/private/tmp/rec133-viewer-17pro-final.png`,
+  `/private/tmp/rec133-hundred-17pro-final.png`, and
+  `/private/tmp/rec133-card-17e-final.png`.
+- Implementation commit is `5c5d90ae7`; merge commits `70d420f25` and
+  `1aaddb0c5` preserve current `main` additions without altering their behavior.
+  The original dirty root checkout (`.gitignore` plus `.pnpm-store/`) remains
+  untouched. No schema/RLS migration, archive, TestFlight upload, build-number
+  increment, or Slack release note was performed. Next: collect design approval,
+  then scope the production photo-query/pagination and RLS regression work.
