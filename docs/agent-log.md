@@ -19432,3 +19432,7 @@ Map-preview follow-up completion, 2026-07-23 11:02 PDT:
 - Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
   verified the branch chooser reports
   `codex/rec-135-match-broken-import`. The branch is ready for local review.
+- Committed the map follow-up as `85954bd05` (`feat: add map to broken import
+  matching`). Moved REC-135 back to In Review and posted its validation and
+  local-only branch handoff in Linear. A push/PR remains intentionally pending
+  because code upload was not explicitly authorized.
