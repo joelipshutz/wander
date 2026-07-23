@@ -3141,13 +3141,21 @@ struct MapPlaceSaveContext: Identifiable {
     private static func initialNewSaveAnswers(
         from attributes: [LocalPlaceAttribute]
     ) -> [String: Set<String>] {
-        initialAnswers(from: attributes.filter { $0.valueType != "multi_tag" })
+        initialAnswers(
+            from: attributes.filter {
+                $0.valueType != "multi_tag" && $0.valueType != "price_scale"
+            }
+        )
     }
 
     private static func initialNewSaveAnswers(
         from attributes: [PlaceAttributeDraft]
     ) -> [String: Set<String>] {
-        initialAnswers(from: attributes.filter { $0.valueType != "multi_tag" })
+        initialAnswers(
+            from: attributes.filter {
+                $0.valueType != "multi_tag" && $0.valueType != "price_scale"
+            }
+        )
     }
 
     private static func initialPersonalLabels(from attributes: [LocalPlaceAttribute]) -> Set<String> {
@@ -3434,7 +3442,11 @@ enum MapPlaceSaveDetailsPolicy {
         context: MapPlaceSaveContext,
         status: PlaceStatus
     ) -> Set<String> {
-        guard block.kind != .multiTag else { return [] }
+        guard block.kind != .multiTag,
+              block.valueType != "price_scale"
+        else {
+            return []
+        }
 
         return usesCompactWannaGoLayout(context: context, status: status)
             ? []

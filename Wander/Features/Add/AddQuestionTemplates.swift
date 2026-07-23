@@ -241,7 +241,7 @@ enum AddQuestionTemplates {
                 kind: .singleChoice,
                 valueType: "price_scale",
                 options: ["$", "$$", "$$$"],
-                defaultValues: ["$$"],
+                defaultValues: [],
                 minimumOptionWidth: 64
             ),
             AddQuestionBlock(
