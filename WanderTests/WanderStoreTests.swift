@@ -273,7 +273,11 @@ final class WanderStoreTests: XCTestCase {
     private func makeSharedVisitInvitation(
         participantID: String = "participant-1",
         generation: Int = 1,
-        attributeAnswers: [VisitAttributeAnswer] = []
+        attributeAnswers: [VisitAttributeAnswer] = [],
+        note: String? = "Great table",
+        ratingScore: Double? = 4,
+        tags: [String] = ["group drinks"],
+        photos: [SharedVisitPhotoSnapshot] = []
     ) -> SharedVisitInvitation {
         SharedVisitInvitation(
             participantID: participantID,
@@ -301,11 +305,11 @@ final class WanderStoreTests: XCTestCase {
             sourceProvider: "mapkit",
             sourceProviderPlaceID: "mapkit-rvr",
             visitedAt: Date(timeIntervalSince1970: 1_720_000_000),
-            note: "Great table",
-            ratingScore: 4,
+            note: note,
+            ratingScore: ratingScore,
             attributeAnswers: attributeAnswers,
-            tags: ["group drinks"],
-            photos: []
+            tags: tags,
+            photos: photos
         )
     }
 
@@ -2795,9 +2799,66 @@ final class WanderStoreTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(sharedVisitContext.initialAnswers["strenuousness"], ["easy"])
-        XCTAssertNil(sharedVisitContext.initialAnswers["hike_tags"])
+        XCTAssertTrue(sharedVisitContext.initialAnswers.isEmpty)
         XCTAssertTrue(sharedVisitContext.initialPersonalLabels.isEmpty)
+    }
+
+    func testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification() {
+        let invitation = makeSharedVisitInvitation(
+            attributeAnswers: [
+                VisitAttributeAnswer(
+                    questionKey: PlaceMemoryAttributeKeys.restaurantCuisine,
+                    valueType: "single_choice",
+                    value: .string("Italian")
+                ),
+                VisitAttributeAnswer(
+                    questionKey: "noise_level",
+                    valueType: "single_choice",
+                    value: .string("lively")
+                ),
+                VisitAttributeAnswer(
+                    questionKey: "restaurant_tags",
+                    valueType: "multi_tag",
+                    value: .array([.string("date night")])
+                ),
+                VisitAttributeAnswer(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    value: .array([.string("birthday shortlist")])
+                )
+            ],
+            note: "Order the pasta",
+            ratingScore: 4.5,
+            tags: ["date night"],
+            photos: [
+                SharedVisitPhotoSnapshot(
+                    photoID: "photo-1",
+                    storageBucket: "visit-photos",
+                    storagePath: "shared/photo-1.jpg",
+                    contentType: "image/jpeg",
+                    byteSize: 123,
+                    width: 1200,
+                    height: 900,
+                    capturedAt: nil,
+                    sortOrder: 0
+                )
+            ]
+        )
+
+        let context = MapPlaceSaveContext.sharedVisit(
+            invitation,
+            defaultVisibility: .mutuals
+        )
+
+        XCTAssertEqual(context.candidate.primaryCategory, invitation.candidate.primaryCategory)
+        XCTAssertEqual(context.candidate.subcategory, invitation.candidate.subcategory)
+        XCTAssertEqual(context.initialCuisine, "Italian")
+        XCTAssertEqual(context.initialVisibility, .mutuals)
+        XCTAssertNil(context.initialRatingScore)
+        XCTAssertEqual(context.initialNote, "")
+        XCTAssertTrue(context.initialAnswers.isEmpty)
+        XCTAssertTrue(context.initialPersonalLabels.isEmpty)
+        XCTAssertTrue(context.initialPhotoAttachments.isEmpty)
     }
 
     func testQuickAddCoordinateParserAcceptsDecimalAndCardinalCoordinates() throws {

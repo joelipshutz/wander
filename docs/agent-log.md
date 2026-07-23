@@ -19587,3 +19587,28 @@ REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
 - Ryan explicitly authorized squash-merging PR #188 and pushing the result to
   `main`. No TestFlight build-number increment, archive/upload, Slack release
   note, or hosted-data mutation is authorized for this merge-only request.
+
+REC-126 adversarial review fix, 2026-07-23 11:47 PDT:
+
+- An exact-diff adversarial review against `origin/main` found that the
+  long-lived REC-126 branch had accidentally resurrected shared-visit invitee
+  notes, ratings, question answers, and photo downloads while preserving
+  cuisine classification through newer mainline save-flow changes. This was
+  unrelated scope drift and would have regressed REC-125.
+- Restored mainline's blank invitee-metadata behavior and its regression test,
+  while retaining the intended place classification and restaurant cuisine.
+  `WanderTests/WanderStoreTests.swift` now has no diff from `origin/main`; the
+  only remaining navigation-test delta is REC-126's cuisine picker contract.
+- The branch is based on current `origin/main` commit `0f43390e2`. Run the
+  complete suite again on the corrected exact head before publishing PR #189.
+
+REC-126 corrected-head validation, 2026-07-23 11:48 PDT:
+
+- The corrected full iPhone 17e / iOS 26.5 suite passed 598/598 with zero
+  failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-46-27--0700.xcresult`.
+- `git diff --check` passes. The final fetch found that `main` advanced with
+  REC-125 itself plus its completion record (`f946737b5`), exactly the changes
+  whose behavior the adversarial pass restored. Commit the reviewed correction,
+  merge that latest main, confirm the resulting scope diff, and rerun the
+  affected gate before publishing.
