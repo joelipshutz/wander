@@ -350,6 +350,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(root.contains("@StateObject private var importStore: PlaceImportStore"))
+        XCTAssertTrue(root.contains("importStore: importStore"))
+        XCTAssertTrue(addScreen.contains("AddImportSection("))
+        XCTAssertTrue(addScreen.contains("PlaceImportSourceScreen("))
+        XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 410"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 480"))
+        XCTAssertTrue(
+            root.contains(
+                "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
+            )
+        )
+        XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
+        XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
+        XCTAssertFalse(profileHome.contains("ImportSection"))
+    }
+
     func testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
@@ -554,6 +589,14 @@ final class NavigationContractTests: XCTestCase {
             .settings
         )
         XCTAssertNil(WanderRootView.resolvedInitialPresentation(from: ["Wander"]))
+    }
+
+    @MainActor
+    func testRootViewCanResolveAddPresentationForVisualQA() {
+        XCTAssertTrue(
+            WanderRootView.resolvedInitialAddPresentation(from: ["Wander", "-WanderOpenAdd"])
+        )
+        XCTAssertFalse(WanderRootView.resolvedInitialAddPresentation(from: ["Wander"]))
     }
 
     func testListsScreenCanResolveInteractiveVisualQAScenarios() {
@@ -1116,6 +1159,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(
             PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
             66
+        )
+    }
+
+    func testRestaurantPlaceTypeUsesCuisineInsteadOfSubcategory() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeTypeSection = try sourceSection(
+            mapScreen,
+            after: "private var placeTypeSection: some View {",
+            before: "private var candidateCard: some View {"
+        )
+
+        XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))
+        XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .cuisine"))
+        XCTAssertTrue(placeTypeSection.contains("title: \"cuisine\""))
+        XCTAssertTrue(placeTypeSection.contains("} else {"))
+        XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .subcategory"))
+        XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"subcategory\""))
+        XCTAssertTrue(
+            mapScreen.contains(
+                "mode = category == WanderPlaceCategory.restaurantsFood ? .cuisine : .subcategory"
+            )
+        )
+        XCTAssertTrue(
+            mapScreen.contains(
+                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"cuisines\" : \"types\""
+            )
+        )
+
+        let mockups = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/CategoryTaxonomyMockups.swift")
+        )
+        XCTAssertFalse(
+            mockups.contains("MockupDetailRow(title: \"subcategory\", value: \"Restaurant\"")
         )
     }
 

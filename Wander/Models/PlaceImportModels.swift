@@ -254,6 +254,10 @@ struct PlaceImportSummary: Equatable {
     var hasImports: Bool {
         batchID != nil
     }
+
+    var hasPendingImports: Bool {
+        processingCount > 0 || remainingCount > 0
+    }
 }
 
 private extension String {

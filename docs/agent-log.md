@@ -18044,7 +18044,133 @@ Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
   still reported as `unavailable`, so a signed device install remains blocked
   until the phone is unlocked/reconnected and appears as available.
 
-Merge completion, 2026-07-22 21:45 PDT:
+## 2026-07-22 21:49 PDT - Codex - REC-126 Restaurant Cuisine Taxonomy
+
+Agent: Codex using the rec.me feedback workflow, Linear, engineering review,
+and design-plan review
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`Backlog`; move to `In Progress` before implementation)
+
+Goal: remove the separate subcategory choice for Restaurants & Food, fold the
+retained restaurant-type values into the grouped Cuisine chooser exactly as
+specified in REC-126, remove the five generic/redundant values, validate the
+save-form taxonomy contract, and hand the pushed branch off in Xcode for
+testing/review.
+
+Starting status and coordination:
+
+- Fetched latest `origin/main` and created this clean isolated worktree at
+  `d1e7976a1` because the root checkout is on unrelated REC-88 work with
+  user-owned `.gitignore` and `.pnpm-store/` changes.
+- The root checkout and all unrelated worktrees remain untouched. No active
+  overlapping REC-126 branch or agent-log entry was found.
+- REC-126 currently has no comments or attachments and is in Backlog. Its
+  requested grouping/removal rules are explicit, so triage will lock the
+  smallest compatible data-flow change before implementation.
+- Expected files are
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, focused save-flow/navigation
+  contract tests if required by the review, and this coordination log.
+- `project.yml`, build number, Supabase schema/RLS/RPCs, hosted data migration,
+  TestFlight release work, and unrelated category behavior are out of scope
+  unless source inspection proves the existing cross-layer value-type contract
+  must change.
+
+Engineering and design review checkpoint, 2026-07-22 21:56 PDT:
+
+- Scope challenge: the existing grouped taxonomy, `selectedCuisine` state,
+  visit-scoped `restaurant_cuisine` attribute, category picker, and shared
+  taxonomy parity test already solve the hard parts. The smallest complete
+  change is to make every Restaurants & Food child option a cuisine, remove its
+  separate subcategory affordance, preserve canonical/provider subcategory
+  storage for backward compatibility, and update focused tests/mockups. No new
+  service, persisted field, RPC, migration, or data rewrite is needed.
+- Data flow:
+
+      provider category/subcategory (compatibility, unchanged)
+                         |
+                         v
+      Restaurants & Food category -> Cuisine-only picker
+                         |
+                         v
+      selectedCuisine -> restaurant_cuisine visit attribute
+                         |
+                         v
+      local/remote save payload + existing emoji/default presentation
+
+- The issue's retained lists are treated as the complete migration set from the
+  old Restaurant type section. The five explicitly generic values plus
+  unlisted `Buffet` and `Cafeteria` leave the picker; `Gluten-free` is added.
+  Existing canonical `Barbecue` spelling is retained for saved-value/provider
+  compatibility while placing it in the requested Americas & Pacific group.
+- Group order/design is locked to `Popular cuisines`, `Asian`,
+  `Middle East & Africa`, `Europe`, `Americas & Pacific`, then `Misc`.
+  The save form shows Category + Cuisine for Restaurants & Food and Category +
+  Subcategory for every other editable category. Selecting Restaurants & Food
+  routes directly to Cuisine. This is subtraction using the existing
+  `DESIGN.md` components, so no new visual direction or mockup variants are
+  warranted; DEBUG reference screens will be updated to match.
+- Architecture review: clean. Provider/category subcategories remain available
+  to inference and old saves, while the only user-authored second-level value
+  continues through the already-hosted `restaurant_cuisine` contract.
+  Code-quality review: clean with the obsolete restaurant-type helper/count
+  removed rather than retained as empty/dead semantics. Performance review:
+  clean; static option lookup remains linear over roughly 126 values and adds
+  no I/O or observation.
+- Test review requires exact section membership/order and no duplicates,
+  explicit removed/retained assertions, Swift/shared JSON parity, Cuisine-vs-
+  Subcategory structural UI coverage, category-tile copy/accessibility, moved
+  option emoji/default behavior, and existing save/edit cuisine persistence.
+  The focused plan is stored at
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-126-restaurant-cuisines-eng-review-test-plan-20260722-215452.md`.
+- Failure modes are covered by the plan: a stale subcategory row or wrong
+  post-category route is a UI regression; an ungrouped/duplicate value is a
+  taxonomy regression; a moved cuisine falling back to the broad plate emoji
+  is a presentation regression; shared JSON drift is a cross-runtime
+  regression. Existing provider inference and saved cuisines remain covered by
+  their current tests.
+- NOT in scope: removing the canonical `places.subcategory` field, rewriting
+  old rows/attributes, changing Supabase constraints/RPCs, changing other
+  categories' subcategory model, category-wide design work, build-number or
+  TestFlight release work. Sequential implementation is appropriate because
+  the taxonomy, picker, emoji, mockup, and tests are one small shared contract.
+- Engineering review gate result: clean, 0 unresolved decisions, 0 critical
+  gaps. The gstack review/test artifacts were recorded; its local Bun validator
+  was unavailable, so the bundled Node runtime was used only as a compatible
+  JSON validator to complete the required review-log command.
+
+Implementation and focused-validation checkpoint, 2026-07-22 22:09 PDT:
+
+- Implemented the locked cuisine-only Restaurant & Food flow. The save form now
+  shows Category + Cuisine for restaurants and Category + Subcategory
+  elsewhere; selecting Restaurants & Food routes directly into the Cuisine
+  picker. Category tiles and accessibility copy now report cuisines.
+- Reorganized the Restaurant & Food taxonomy into six cuisine groups with 126
+  unique options, removed the generic/unlisted legacy choices, added
+  `Gluten-free`, and advanced the shared taxonomy mirror to version 7. The
+  canonical provider/default subcategory `Restaurant` remains unchanged for
+  backward compatibility and is no longer user-selectable.
+- Preserved contextual tag/list defaults for restaurant types promoted into
+  cuisine, extended cuisine emoji fallback through the existing restaurant
+  detail rules, and gave `Halal` the specific Middle Eastern dish treatment
+  after the first focused run exposed its generic plate fallback.
+- Updated deterministic taxonomy mockups and added tests for exact group
+  order/count/membership, removed values, shared JSON parity, promoted-cuisine
+  defaults and emoji coverage, and the Restaurant Cuisine-vs-Subcategory UI
+  contract.
+- Ran `xcodegen generate`; it produced no project-file diff. The first focused
+  run failed only the new exhaustive cuisine-emoji assertion for `Halal`; after
+  the targeted fix, the complete focused selection passed 86/86 tests on
+  iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-08-11--0700.xcresult`.
+- `origin/main` advanced by three commits during implementation, including the
+  REC-119 rating explanation in `MapScreen.swift` and new agent-log entries.
+  Integrate those commits before the full-suite and visual validation; preserve
+  both changes if the high-conflict files require manual resolution.
+
+REC-130 merge completion, 2026-07-22 21:45 PDT:
 
 - Ryan visually approved the REC-130 list-tile photo and empty-state behavior
   from the Xcode branch handoff and explicitly requested the squash merge.
@@ -18470,6 +18596,36 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
+REC-126 latest-main validation and blocked handoff, 2026-07-22 23:03 PDT:
+
+- Committed the implementation as `cbd242ae2`, merged current `origin/main`
+  commit `8e69138f4`, and resolved the sole conflict in this append-only work log
+  by preserving the complete REC-119, REC-130, and REC-126 histories. Product
+  files merged automatically. XcodeGen then produced no tracked changes, the
+  branch was 0 behind / 2 commits ahead, and `git diff --check` passed.
+- Focused taxonomy/navigation coverage passed 86/86. The complete exact-head
+  iOS suite passed 579/579 with zero failures on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-10-46--0700.xcresult`.
+  Existing simulator keychain/location, Supabase formatter concurrency, and
+  traditional-headermap diagnostics remain unrelated and non-fatal.
+- Visual QA passed on iPhone 17 Pro and compact iPhone 17e. The corrected
+  Cuisine picker shows `126 cuisines`, the requested first two groups render
+  without clipping or safe-area issues, and the Restaurant edit screen contains
+  only Category + Cuisine. Captures:
+  `/private/tmp/rec126-17pro-cuisine-final.png`,
+  `/private/tmp/rec126-17e-cuisine.png`, and
+  `/private/tmp/rec126-17pro-edit-final.png`.
+- Publication and Xcode handoff are externally blocked. macOS is locked, so the
+  required computer-use workflow cannot open or verify this isolated project
+  in Xcode. GitHub CLI is installed but `gh auth status` reports the active
+  `ryanlane23` token is invalid, so the repo-required push/ready-PR workflow
+  cannot continue until Ryan runs `gh auth login -h github.com`.
+- Added the validation and exact blockers to REC-126 in Linear comment
+  `6653c48f-5977-4f83-ae91-7edd6b01b2c9`. The issue intentionally remains In
+  Progress. Exact restart: unlock the Mac, reauthenticate `gh`, push
+  `codex/rec-126-restaurant-cuisines`, open a ready PR to `main`, load
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode,
+  verify the branch in Xcode, then update this log and Linear to In Review.
 ## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
 
 Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
@@ -18879,6 +19035,43 @@ Validation and pre-landing review, 2026-07-22 23:04 PDT:
   Next: commit/push, open and squash-merge the ready build-number PR, then free
   the completed test cache before archiving exact merged main.
 
+REC-126 final validation checkpoint, 2026-07-22 23:08 PDT:
+
+- Merged exact latest `origin/main` through metadata-only build-94 commit
+  `c0d7f6b8f` into `codex/rec-126-restaurant-cuisines`. The upstream build
+  number and chronological log were the only changes after the prior
+  REC-126 validation; the feature implementation merged without conflict.
+- Regenerated `Wander.xcodeproj` with XcodeGen. Generation produced no
+  additional tracked changes beyond the expected upstream build-94 metadata.
+- The first exact-head full-suite attempt ended before test bootstrap with a
+  transient simulator process kill. The immediate rerun with normal
+  CoreSimulator access passed all 580/580 tests with zero failures on iPhone
+  17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_23-07-19--0700.xcresult`.
+- Focused REC-126 coverage remains 86/86 passing. Visual QA remains clean on
+  iPhone 17 Pro and iPhone 17e: Restaurant & Food opens a 126-item Cuisine
+  picker, and the edit form contains Category + Cuisine with no Subcategory.
+- Publication and Xcode handoff are the only remaining blockers. GitHub CLI
+  authentication for `ryanlane23` is expired, so the branch cannot yet be
+  pushed and a ready PR cannot yet be opened. The Mac is locked, so Xcode
+  cannot yet be opened and verified on the branch. Keep Linear REC-126 In
+  Progress until both are complete.
+- Exact restart: unlock the Mac and run `gh auth login -h github.com`; then
+  push `codex/rec-126-restaurant-cuisines`, open the ready PR linked to
+  REC-126, load this worktree's `Wander.xcodeproj` in Xcode, verify the branch,
+  and move REC-126 to In Review with the PR and validation details.
+
+Xcode handoff checkpoint, 2026-07-22 23:11 PDT:
+
+- The Mac was unlocked during the run. Opened
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode and
+  verified the Branch Chooser visibly reports
+  `codex/rec-126-restaurant-cuisines`. Xcode is indexing the generated project;
+  the branch is locally ready for test/review.
+- Updated the existing REC-126 Linear handoff comment with the exact-head test
+  result and Xcode state. GitHub CLI authentication remains the sole blocker:
+  `gh auth status` still reports the active `ryanlane23` token as invalid.
+
 REC-122 build-94 merge gate, 2026-07-22 23:09 PDT:
 
 - `main` advanced during the hosted PR check with metadata-only build-94 commit
@@ -18991,6 +19184,375 @@ Completion, 2026-07-22 23:15 PDT:
   Known behavior: current city is a one-shot location fix at the existing
   city-scale span, not a live follow-camera or reverse-geocoded boundary.
 
+## 2026-07-22 23:26 PDT - Codex - REC-126 cuisine inference, backfill, and chooser redesign
+
+Agent: Codex using Linear, `recme-linear-log-triage`, and `design-shotgun`
+workflows
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`In Progress`)
+
+Goal: expand REC-126 so Restaurant & Food saves preselect the best cuisine from
+available provider/place data, safely backfill hosted saved places that lack a
+cuisine for every profile, and replace the current clunky cuisine picker with a
+reviewable native SwiftUI redesign.
+
+Starting status and coordination:
+
+- Fetched current `origin/main` and merged through `92adcdc89`, including
+  REC-122 and build-94 release logs. The only manual conflict was this
+  append-only coordination log; both histories were preserved. The worktree is
+  clean and eight commits ahead of `origin/main`.
+- The root checkout remains on unrelated `codex/rec-88-visit-friends-mockup`;
+  it is not being edited. No active worktree advertises an overlapping REC-126
+  branch. This task does touch high-conflict `MapScreen.swift`, the shared save
+  path, and a Supabase migration, so changes stay isolated here.
+- The earlier REC-126 decision that no hosted migration was needed is
+  superseded by Ryan's explicit request to populate missing cuisines for
+  pre-existing saved places. Before choosing a migration, inspect all prior
+  cuisine/attribute migrations, production counts, RLS/RPC contracts, and the
+  existing hosted smoke path.
+- Expected files include the restaurant taxonomy/inference service,
+  `Wander/Features/Map/MapScreen.swift`, native chooser mockups/components,
+  focused tests, `shared/place-taxonomy.json` if inference metadata requires it,
+  a new Supabase migration, `scripts/supabase-smoke-test.mjs`, and this log.
+  Exact scope will be narrowed after read-only schema and source inspection.
+- No hosted write or destructive backfill will run until the migration is
+  reviewed, the linked project is confirmed, and rollback-capable validation is
+  green. No TestFlight build or release was requested.
+
+Checkpoint, 2026-07-22 23:57 PDT:
+
+- Read-only hosted inventory found 44 active Restaurant & Food saves, 30
+  missing cuisine values across 9 profiles and 23 canonical places. Twenty-six
+  missing rows had explicit provider cuisine signals. The remaining apparent
+  restaurants were Sushi Fumi, Ugo, CAFFENIO, Whole Foods Market, and—revealed
+  after the first pass—Costco Wholesale.
+- Locked inference priority as existing user choice, provider type,
+  subcategory/category, place name, then website. The implementation matches
+  only the 126 allowed cuisine values plus curated restaurant-term aliases,
+  reports confidence/source in Swift, and intentionally does not infer from
+  locality or default ambiguous restaurants to American. No OpenAI request is
+  needed for the current dataset and no place data is sent off-device.
+- Official business evidence supported CAFFENIO as coffee and Ugo as Italian.
+  CAFFENIO, Whole Foods Market, and Costco were corrected to their real broad
+  categories instead of receiving fabricated cuisines.
+- Applied hosted migrations `20260723063000_backfill_restaurant_cuisines.sql`
+  and `20260723064500_correct_food_market_category.sql` to confirmed linked
+  project `rugmtlgufrhlxwfkumhw` after clean `--dry-run` output. Final hosted
+  verification: 41 active restaurant saves, 41 with cuisine, 0 missing, across
+  8 profiles. Sushi Fumi is Sushi, Ugo is Italian, CAFFENIO is Coffee shop, and
+  Whole Foods/Costco are Grocery store.
+- The internal SQL helper remains security invoker, pins an empty search path,
+  and grants no execute privilege to `authenticated`. The expanded linked
+  rollback-only smoke suite passed, including cuisine behavior/security.
+- Added three interactive debug-only native SwiftUI concepts: Smart Pick,
+  Fast Directory, and Cuisine Atlas. Inspected current-simulator screenshots
+  plus Smart Pick on smaller iPhone 17e; sticky selection/footer, tap sizes,
+  hierarchy, and safe areas are intact. Local captures:
+  `/private/tmp/rec126-cuisine-mockups/`.
+- Universal simulator build passed. The documented iPhone 16 Plus / iOS 18.6
+  destination is not installed under the current Xcode runtime, so focused
+  validation moved to available iPhone 17 / iOS 26.5: 39/39
+  `WanderPlaceCategoryTests` passed. Full-suite validation is in progress.
+
+Local handoff, 2026-07-23 00:03 PDT:
+
+- Full iPhone 17 / iOS 26.5 test suite passed 590/590 with zero failures.
+  Result bundle:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_00-00-25--0700.xcresult`.
+  `git diff --check` also passed.
+- Implementation, migrations, tests, SwiftUI mockups, hosted smoke expansion,
+  and coordination log were committed as `35c863747` (`REC-126: infer and
+  backfill restaurant cuisines`).
+- Linear comment `aaa73f8a-4174-4891-92e9-6fc455f1676c` records the final
+  hosted counts, validation, visual QA, and publishing blocker. REC-126 remains
+  In Progress until a PR exists.
+- GitHub publication is the only incomplete workflow step:
+  `gh auth status` reports Ryan's active `ryanlane23` token is invalid. Exact
+  restart: run `gh auth login -h github.com`, confirm `gh auth status`, then
+  push `codex/rec-126-restaurant-cuisines` and open a ready PR to `main`.
+  No TestFlight build or release was requested or performed.
+
+Follow-up, 2026-07-23 10:07 PDT:
+
+- Ryan selected the Cuisine Atlas direction for the production cuisine picker,
+  with Fast Directory's recent-cuisine strip inserted between search and the
+  regional filters. Approved helper copy is: “We’ll start with our best guess.
+  Change it only if we missed.”
+- Refetched `origin/main`; the branch is clean, still based on current
+  `92adcdc89`, and ten commits ahead. The root checkout remains on unrelated
+  REC-88 work, and no other worktree advertises overlapping REC-126 work.
+- This follow-up will edit the production picker in high-conflict
+  `Wander/Features/Map/MapScreen.swift`, add focused taxonomy/recents coverage
+  if needed, update the selected debug mockup for parity, regenerate the Xcode
+  project, and update this log. REC-126 stays In Progress until implementation,
+  visual QA, full tests, GitHub publication, and a ready PR are complete.
+
+Implementation checkpoint, 2026-07-23 10:36 PDT:
+
+- Replaced the production cuisine chip directory with the selected Cuisine
+  Atlas hierarchy: approved Best Guess card and helper copy, search across all
+  126 cuisines, a two-column emoji grid, regional filters, and a sticky
+  cuisine/Done footer. Cuisine taps now remain in the picker so people can
+  compare options before confirming instead of closing on every tap.
+- Added Fast Directory's Recents strip exactly between search and the regional
+  filters. Recents are derived from the current profile's real saved restaurant
+  cuisines ordered by `savedAt`, canonicalized against the taxonomy, and
+  deduplicated; there is no fake or device-only seed. New selections move to
+  the front during the current edit and become durable through the normal save
+  path.
+- Kept the existing inference contract: explicit saved cuisine wins, followed
+  by deterministic provider type, restaurant type/category, place name, and
+  website evidence. The chosen value is preselected and shown with its actual
+  inference reason; no OpenAI call or new external data transmission was
+  introduced.
+- The `cuisineAtlas` debug route now renders the production picker itself.
+  Visual QA passed on iPhone 17 Pro and smaller iPhone 17e with screenshots at
+  `/private/tmp/rec126-cuisine-atlas-production-17pro.png` and
+  `/private/tmp/rec126-cuisine-atlas-production-17e.png`. Header wrapping,
+  44-point controls, two-column grid, sticky footer, and home-indicator spacing
+  remained intact.
+- Live accessibility/interaction QA verified every region chip is individually
+  exposed, Asia filters to Asian cuisines, choosing Sushi updates both Recents
+  and the footer, and global search resolves Ethiopian regardless of the active
+  region.
+- `xcodegen generate` completed without project-file churn. Universal simulator
+  build passed. Focused `WanderPlaceCategoryTests` passed 41/41, and the final
+  exact-head full suite passed 592/592 on iPhone 17 / iOS 26.5 with zero
+  failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_10-29-17--0700.xcresult`.
+  `git diff --check` passed. The temporary generated `DerivedData-atlas` cache
+  was removed; no TestFlight build or release was requested.
+
+Review handoff, 2026-07-23 10:46 PDT:
+
+- Committed the production Cuisine Atlas follow-up as `880810d18`
+  (`REC-126: ship Cuisine Atlas picker`) and pushed
+  `codex/rec-126-restaurant-cuisines` to origin.
+- Opened ready PR
+  [#189](https://github.com/joelipshutz/wander/pull/189),
+  `REC-126: infer cuisines, backfill saves, and ship Cuisine Atlas`, targeting
+  `main`. The connected GitHub app lacked PR-write access, so the ready PR was
+  created through Ryan's existing signed-in GitHub web session. The repository
+  Git credential was sufficient to push; the standalone `gh` token still
+  reports invalid and was not needed for the completed handoff.
+- Moved Linear REC-126 to In Review and added comment
+  `81456622-e296-47ed-b2f5-ada755f2fc26` with the PR, final hosted backfill
+  counts, validation, privacy posture, and no-TestFlight note.
+- Brought the exact worktree project
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` to the
+  foreground in Xcode. Xcode's branch chooser confirms
+  `codex/rec-126-restaurant-cuisines`, ready for local test and review.
+
+Follow-up and landing start, 2026-07-23 11:05 PDT:
+
+- Ryan requested every previously identified country-cuisine gap, the proposed
+  South Asian moves, explicit Greek/Japanese/Poke regional placement, an
+  `Americas & Pacific` filter label, and a `filter` subheader above the region
+  choices, followed by squash-merging PR #189 to `main`.
+- Refetched origin. The REC-126 worktree is clean, `origin/main` remains
+  `92adcdc89`, and the branch is 12 commits ahead with no new base commits.
+  The root checkout remains on unrelated REC-88 work, so all edits stay in the
+  isolated REC-126 worktree.
+- Expected files: `shared/place-taxonomy.json`,
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Services/WanderPlaceEmojiResolver.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, and this log. Linear REC-126
+  remains In Review while its ready PR is updated and validated.
+- The latest completed release record is TestFlight build 94; there is no
+  unfinished explicit release and this request does not authorize a new
+  TestFlight build.
+
+Follow-up implementation checkpoint, 2026-07-23 11:26 PDT:
+
+- Expanded the canonical restaurant taxonomy from 126 to 173 unique cuisines
+  and advanced the shared taxonomy contract to version 8. The former Popular
+  ownership group is now a display-only shortcut while every cuisine belongs
+  to one geographic group: Asia (42), Middle East & Africa (29), Europe (40),
+  Americas & Pacific (45), or Misc (17).
+- Added every previously identified country gap, moved Pakistani, Sri Lankan,
+  and Bangladeshi into Asia, and explicitly placed Japanese in Asia, Greek in
+  Europe, and Poke in Americas & Pacific. Added non-fallback regional or dish
+  emoji coverage for every new cuisine.
+- Added the requested lowercase `filter` subheader and renamed the production
+  filter to `Americas & Pacific`. The filter chip preserves its full
+  single-line label in the horizontally scrollable row and exposes the complete
+  `Americas & Pacific cuisines` accessibility name.
+- Updated the production picker, debug mock copy, Swift/JSON parity assertions,
+  popular-overlay assertions, canonical placement tests, and deterministic
+  inference coverage for Laotian and Poke.
+- The first escalated focused run exposed that the static Swift taxonomy entry
+  had not yet been synchronized with the canonical cuisine groups. After
+  fixing that parity omission, focused `WanderPlaceCategoryTests` passed 41/41
+  with zero failures. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-14-23--0700.xcresult`.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Screenshots:
+  `/private/tmp/rec126-cuisine-expanded-17pro-final.png` and
+  `/private/tmp/rec126-cuisine-expanded-17e-final.png`. Both sizes preserve the
+  two-column grid, readable header, Recents placement, filter hierarchy, sticky
+  footer, safe areas, and 44-point controls. Accessibility inspection also
+  confirmed the full regional filter names and Greek/Japanese availability.
+- `xcodegen generate` completed without project-file churn, the JSON taxonomy
+  reports 173 entries/173 unique values, and `git diff --check` passed. Full
+  exact-head testing and the required pre-landing review remain before merge.
+
+Exact-head validation checkpoint, 2026-07-23 11:28 PDT:
+
+- Full `xcodebuild test` passed 592/592 with zero failures on iPhone 17 /
+  iOS 26.5. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-24-31--0700.xcresult`.
+  Expected non-critical simulator warnings remained limited to Clerk keychain
+  access, a missing optional resource manifest, and the existing traditional
+  headermap warning.
+- While starting the pre-landing review, `origin/main` advanced by two commits
+  beyond the previously fetched `92adcdc89`. This checkpoint is being committed
+  before merging the new base; the branch will be updated from latest main and
+  revalidated before PR #189 is eligible to squash-merge.
+
+## 2026-07-23 10:12 PDT - Codex - REC-109 import review visibility
+
+Agent: Codex using the Linear and `ios-fix` workflows
+Branch: `codex/rec-109-import-review-button`
+Worktree: `/private/tmp/recme-rec109-import-review`
+Linear: `REC-109` (`In Progress`, assigned to Ryan)
+
+Goal: move the place-import entry points from Profile to the Add sheet and show
+the import-review button on Add only while there are pending imports.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` commit `92adcdc89`. The primary checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes, so it will not be edited.
+- Existing worktrees do not overlap this new REC-109 branch. The expected
+  implementation boundary is `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileScreen.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, focused tests under
+  `WanderTests/`, and this log.
+- Current root cause is ownership and placement: `PlaceImportStore` and all
+  import navigation currently live inside `ProfileScreen`, while `AddScreen`
+  has no access to the durable import store or inbox. The review action is
+  rendered as part of the always-present Profile import section instead of
+  being gated by pending review state on Add.
+- The repo intentionally has no DebugBridge/StateServer snapshot/restore API,
+  so the `ios-fix` pre-state endpoint is unavailable without expanding project
+  scope. Source inspection plus a deterministic Swift regression test will be
+  the pre-fix fixture; simulator build/test and visual captures will be used
+  for post-fix validation. No debug instrumentation will be added.
+- No TestFlight build, merge, build-number change, backend/schema change, or
+  tester-data mutation is in scope.
+
+Implementation and validation, 2026-07-23 10:36 PDT:
+
+- Hoisted the durable `PlaceImportStore` to `WanderRootView`, passed it into
+  `AddScreen`, and moved the import-source and inbox navigation out of
+  `ProfileScreen`. Duplicate reconciliation and pending-import resume now run
+  from the root so import work remains alive when Profile is not mounted.
+- Added the four import-source tiles below `From a photo` on Add, raised the
+  resting Add detent from 300 to 560 points, and removed the import section
+  from both owner and member Profile construction.
+- Added `PlaceImportSummary.hasPendingImports`. The Add `Import Review` row is
+  rendered only while imports are processing or require review/help; it is
+  absent for an empty store and for completed saved/duplicate-only history.
+- Added deterministic store and navigation-contract coverage, including a
+  `-WanderOpenAdd` visual-QA launch path. `xcodegen generate` produced no
+  project-file diff, and `git diff --check` passes.
+- Focused regression: 3/3 passed on iPhone 17 Pro / iOS 26.5:
+  `PlaceImportStoreTests.testImportReviewIsPendingOnlyWhileItemsNeedProcessingOrReview`,
+  `NavigationContractTests.testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems`,
+  and
+  `NavigationContractTests.testRootViewCanResolveAddPresentationForVisualQA`.
+- Full regression: `xcodebuild test` passed 587/587 with zero failures on the
+  installed iPhone 17 Pro / iOS 26.5 simulator. Result bundle:
+  `/private/tmp/DerivedData-rec109-focused/Logs/Test/Test-Wander-2026.07.23_10-30-26--0700.xcresult`.
+  The repo-documented iPhone 16 Plus / iOS 18.6 runtime is not installed on
+  this machine.
+- Generic universal iOS Simulator build passed with
+  `CODE_SIGNING_ALLOWED=NO`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain unchanged.
+- Visually inspected pending-import Add sheets on iPhone 17 Pro and the smaller
+  iPhone 17e, plus the fresh/no-import state on iPhone 17 Pro. The import
+  sources fit without scrolling in the resting sheet, pending imports show the
+  review row, and a fresh store omits that row. Captures:
+  `/private/tmp/rec109-add-pending-iphone17pro.png`,
+  `/private/tmp/rec109-add-pending-iphone17e.png`, and
+  `/private/tmp/rec109-add-empty-iphone17pro.png`.
+- `origin/main` remains at the branch base (`92adcdc89`), so no update or
+  conflict resolution is required before commit. No known REC-109 blocker
+  remains; next steps are commit, ready PR, and Linear handoff to In Review.
+
+Completion, 2026-07-23 10:39 PDT:
+
+- Committed the implementation as `452771189` (`feat: move place imports to
+  Add`) and pushed `codex/rec-109-import-review-button`.
+- Opened ready PR #188 against `main`:
+  https://github.com/joelipshutz/wander/pull/188.
+- Attached the PR and validation summary to Linear REC-109, then moved the
+  issue from In Progress to In Review. The requested implementation is ready
+  for Xcode testing from this branch/worktree.
+- No TestFlight build-number bump, archive/upload, Slack release note, merge,
+  backend change, or hosted-data mutation was performed. The remaining action
+  is human Xcode review/testing and normal PR review.
+
+Visual-feedback continuation, 2026-07-23 10:55 PDT:
+
+- Ryan approved the REC-109 placement/visibility behavior and supplied an
+  on-device screenshot showing the pending-import Add sheet left about 121
+  points of unused space below `Import Review`.
+- Re-fetched `origin`; `origin/main` remains the branch base
+  (`92adcdc89`), the REC-109 worktree is clean, and no overlapping worktree is
+  editing `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Add/AddScreen.swift`, or the focused navigation contract.
+- The requested follow-up is to move the resting sheet top down and retain only
+  a normal bottom inset. The planned layout uses a 480-point resting detent
+  while pending imports render the review row and a 410-point detent when that
+  row is absent, with state transitions kept valid if imports start or finish
+  while Add is open.
+- Expected edits are `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Add/AddScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log. Validation will
+  cover pending and empty visual states, the focused contract, the full iOS
+  suite, and the pre-landing review before Ryan-authorized squash merge of PR
+  #188.
+- Release sweep: `CURRENT_PROJECT_VERSION` remains 94 and the build-94 log
+  records successful upload, public-group attachment, approval, and Slack
+  announcement. No unfinished explicit TestFlight release exists, and this
+  merge-only request does not authorize build 95, an archive/upload, or tester
+  communication.
+
+Visual-fix validation, 2026-07-23 11:12 PDT:
+
+- Replaced the single 560-point resting detent with content-aware detents:
+  480 points while pending imports render `Import Review`, and 410 points when
+  the row is absent. `WanderRootView` initializes and updates its selected
+  detent from the durable import summary, while preserving `.large` during
+  active search/import navigation.
+- The focused navigation contract passed. The first simulator attempt was
+  interrupted after an Xcode simulator service-hub handshake stalled; after
+  restarting the simulator, the same test passed with no app-code failure.
+- The complete regression passed 587/587 with zero failures on iPhone 17 Pro /
+  iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec109-focused/Logs/Test/Test-Wander-2026.07.23_11-09-23--0700.xcresult`.
+- The universal generic iOS Simulator build passed after rerunning outside the
+  expected filesystem sandbox; the sandbox-only attempt could not access
+  CoreSimulator/SwiftPM caches and did not exercise app code.
+- Post-change visual QA passed on iPhone 17 Pro and smaller iPhone 17e with
+  pending imports. In both captures, the review row remains fully visible and
+  ends with roughly a normal 30-point bottom inset rather than the reported
+  ~121-point gap:
+  `/private/tmp/rec109-add-empty-tight-iphone17pro.png` and
+  `/private/tmp/rec109-add-pending-tight-iphone17e.png`. The existing empty
+  fixture/contract confirms the review row remains absent, and its resting
+  height now drops by the same row allowance to 410 points.
+- `xcodegen generate` produced no project diff and `git diff --check` passes.
+  During the final fetch, `origin/main` advanced to `e09708109` through PRs
+  #190/#191 with overlapping Add/root/profile files. Preserve this validated
+  REC-109 change in a checkpoint commit, merge latest `origin/main`, resolve
+  overlaps by retaining both features, rerun the relevant gates, and only then
+  republish/squash-merge PR #188.
 ## 2026-07-23 10:51 PDT - Codex - REC-122 Celebration Dismissal Follow-up
 
 Agent: Codex using `ios-fix`
@@ -19126,6 +19688,491 @@ REC-133 production implementation checkpoint, 2026-07-23 11:58 PDT:
     `rec133-viewer-17pro.png` and `rec133-viewer-17e.png`; both retain readable
     attribution, safe-area spacing, paging dots, and the username-only link.
 - `origin/main` advanced again during validation. Next: commit this checkpoint,
-  merge latest `origin/main` while preserving its removal of the obsolete
-  debug-only carousel handoff, regenerate the Xcode project, run the full suite,
-  then push/update draft PR #186 and Linear REC-133.
+  merge latest `origin/main`, preserve both append-only work histories,
+  regenerate the Xcode project, run the full suite, then push/update draft PR
+  #186 and Linear REC-133.
+
+REC-126 landing review checkpoint, 2026-07-23 11:38 PDT:
+
+- Updated the branch through REC-122 follow-up main commit `e09708109`; the
+  combined exact-head suite passed 594/594 with zero failures:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-30-25--0700.xcresult`.
+- The pre-landing scope review caught two unrelated navigation regression tests
+  that earlier branch synchronization had dropped. Restored both while keeping
+  the new restaurant-cuisine navigation contract. A focused run then correctly
+  exposed that `origin/main` had advanced again with PR #188's Add/import
+  implementation, whose test depends on source not yet present on this branch.
+  Commit the test restoration, merge the new `0f43390e2` main head, and rerun
+  validation before publishing; this intermediate compiler failure is base
+  drift, not an REC-126 product-code failure.
+REC-109 pre-merge gate, 2026-07-23 11:31 PDT:
+
+- Merged current `origin/main` at `e09708109` into
+  `codex/rec-109-import-review-button`. The overlapping
+  `WanderRootView.swift` conflict was resolved by preserving both REC-109's
+  durable import-store/content-aware Add detents and REC-122's save-flow
+  dismissal lifecycle. Profile and Add overlaps were also inspected against
+  the exact `origin/main` diff.
+- Final visual behavior uses a 480-point resting Add sheet when pending imports
+  render `Import Review` and a 410-point resting sheet when the row is absent.
+  Pending-state captures on iPhone 17 Pro and smaller iPhone 17e show the review
+  row fully visible with a normal bottom inset and no oversized blank area.
+- The complete post-merge suite passed 589/589 with zero failures on iPhone 17e
+  / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec109-17e/Logs/Test/Test-Wander-2026.07.23_11-28-10--0700.xcresult`.
+  A prior iPhone 17 Pro run lost its simulator service hub and reported one
+  source-contract failure while the device service was dying; the exact test
+  then passed independently and in the complete healthy-simulator run.
+- The post-merge universal generic iOS Simulator build passed for arm64 and
+  x86_64. `xcodegen generate` produced no project diff and
+  `git diff --check` passes.
+- Pre-landing review of the exact nine-file diff against `origin/main` found no
+  blocking correctness, state-transition, navigation, accessibility, privacy,
+  persistence, signing, project-generation, or scope issues. No Greptile
+  comments exist on PR #188; the optional slop scan could not run because
+  `bun` is not installed, and manual source/diff inspection found no slop or
+  unrelated generated files.
+- Ryan explicitly authorized squash-merging PR #188 and pushing the result to
+  `main`. No TestFlight build-number increment, archive/upload, Slack release
+  note, or hosted-data mutation is authorized for this merge-only request.
+
+REC-126 adversarial review fix, 2026-07-23 11:47 PDT:
+
+- An exact-diff adversarial review against `origin/main` found that the
+  long-lived REC-126 branch had accidentally resurrected shared-visit invitee
+  notes, ratings, question answers, and photo downloads while preserving
+  cuisine classification through newer mainline save-flow changes. This was
+  unrelated scope drift and would have regressed REC-125.
+- Restored mainline's blank invitee-metadata behavior and its regression test,
+  while retaining the intended place classification and restaurant cuisine.
+  `WanderTests/WanderStoreTests.swift` now has no diff from `origin/main`; the
+  only remaining navigation-test delta is REC-126's cuisine picker contract.
+- The branch is based on current `origin/main` commit `0f43390e2`. Run the
+  complete suite again on the corrected exact head before publishing PR #189.
+
+REC-126 corrected-head validation, 2026-07-23 11:48 PDT:
+
+- The corrected full iPhone 17e / iOS 26.5 suite passed 598/598 with zero
+  failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-46-27--0700.xcresult`.
+- `git diff --check` passes. The final fetch found that `main` advanced with
+  REC-125 itself plus its completion record (`f946737b5`), exactly the changes
+  whose behavior the adversarial pass restored. Commit the reviewed correction,
+  merge that latest main, confirm the resulting scope diff, and rerun the
+  affected gate before publishing.
+
+REC-126 exact-main publish gate, 2026-07-23 11:52 PDT:
+
+- Merged current `origin/main` through REC-135 commit `379974b19`. Product and
+  test files integrated automatically; the only manual resolution preserved
+  both complete histories in this append-only log.
+- The exact-main focused cuisine taxonomy, cuisine navigation, and REC-125
+  metadata-isolation gates passed 43/43 with zero failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-50-19--0700.xcresult`.
+- The immediately preceding corrected full suite passed 598/598 with zero
+  failures. The exact product state is equivalent for the shared-visit
+  correction, and `git diff --check` passes. The branch is zero commits behind
+  current main and the remaining scope diff is restricted to REC-126 cuisine
+  implementation, tests, migrations/smoke coverage, taxonomy, and this log.
+## 2026-07-22 21:55 PDT - Codex - REC-125 invitation defaults
+
+Agent: Codex using the rec.me feedback bug workflow and iOS fix workflow
+Branch: `codex/rec-125-invitation-defaults`
+Worktree: `/private/tmp/recme-rec125-invitation-defaults`
+Linear: `REC-125` (`In Progress`)
+
+Goal: stop a shared-visit invitation from defaulting the inviter's personal
+metadata into the invitee's save form. Preserve only category and
+subcategory/cuisine defaults; notes, tags, rating, photos, and stealth should
+start blank.
+
+Starting status:
+
+- Fetched `origin`, created this isolated worktree from latest `origin/main`,
+  then fast-forwarded it to exact main commit `8e69138f4`. The worktree is
+  clean and zero commits behind. The root checkout has unrelated modified and
+  untracked files and remains untouched.
+- Reviewed current worktrees and recent coordination entries. No active branch
+  overlaps the expected product/test files. `MapScreen.swift` is a designated
+  high-conflict file, so this task remains isolated and the diff will be kept to
+  the `MapPlaceSaveContext.sharedVisit` factory.
+- Expected files are `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`, and this log.
+- Triage: P2 bug/regression in the shared-visit acceptance form. The likely
+  cause is `MapPlaceSaveContext.sharedVisit` converting every non-`multi_tag`
+  invitation attribute into initial form answers, which leaks personal
+  rating/question metadata into the invitee's independent copy.
+- The engineering-review gate is not needed: this is an isolated correction to
+  an existing context factory with no new flow, persisted state, schema/RLS,
+  sync, visibility, or product decision. The acceptance criteria fully specify
+  which defaults remain.
+- The checkout intentionally has no `DebugBridge`/`StateServer`, so the iOS-fix
+  snapshot fixture path is unavailable. Reproduce the bug with a focused,
+  deterministic failing Swift regression test before editing runtime code,
+  then run the focused and complete simulator suites.
+
+REC-125 implementation and validation, 2026-07-22 22:04 PDT:
+
+- Added a deterministic shared-visit context regression with non-empty inviter
+  note, 4.5 rating, personal answer, tag, personal label, and photo metadata.
+  Before the runtime edit it failed on the copied rating, note, and answer,
+  proving the reported bug on exact current main.
+- Updated only `MapPlaceSaveContext.sharedVisit`: invitee rating, note, and
+  personal/question answers now start empty. Existing blank photo attachments
+  and personal labels remain blank; the invitee's supplied default visibility
+  remains authoritative; and the invitation's category, subcategory, and
+  restaurant cuisine remain selected.
+- The production shared-visit flow currently exists only for `been` visits:
+  the save form exposes friend invites only for `.been`, and the backend shared
+  visit contract requires a source visit. There is no separate `wanna` invite
+  path that can leak defaults today; this patch enforces the requested metadata
+  boundary at the common invitation acceptance context.
+- Focused post-fix tests passed 2/2 on iPhone 17 Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`.
+  Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-02-41--0700.xcresult`.
+- The complete suite passed 578/578 with zero failures on iPhone 17 Pro /
+  iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-03-42--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine. Existing simulator keychain, location, Supabase formatter, and
+  traditional-headermap warnings remain unrelated and non-fatal.
+- Regenerated the project with XcodeGen; no generated project diff resulted.
+  `git diff --check` passes, and the branch is exact with latest `origin/main`
+  at `8e69138f4`. No schema/RLS, backend RPC, build-number, TestFlight, or
+  release change is included.
+
+REC-125 review handoff, 2026-07-22 22:08 PDT:
+
+- Committed the implementation and regression coverage as `5d916a7c1`
+  (`fix: clear shared visit invitee defaults`), pushed
+  `codex/rec-125-invitation-defaults`, and opened ready PR #180:
+  https://github.com/joelipshutz/wander/pull/180
+- Loaded `/private/tmp/recme-rec125-invitation-defaults/Wander.xcodeproj` in
+  Xcode and verified its branch chooser reports
+  `codex/rec-125-invitation-defaults`; the branch is ready for hands-on testing
+  and review.
+- Linear REC-125 is moving to `In Review` with the PR and validation results.
+  No TestFlight build or release was requested or performed.
+
+REC-125 latest-main landing review, 2026-07-23 11:21 PDT:
+
+- Fetched current `origin/main` at `e09708109`. PR #180 had become conflicting
+  after eight upstream commits, including REC-127 map-launch behavior, REC-122
+  streak work, and build-93/build-94 release records. Rebased both REC-125
+  commits onto current main. Product/test files merged automatically; the only
+  manual conflict was this append-only coordination log, and both complete
+  histories were preserved.
+- The required pre-landing review found one blocking completeness gap:
+  `MapPlaceSaveFlowSheet` still called `loadSharedVisitPhotosIfNeeded()` and
+  downloaded every inviter photo into the invitee's selected attachments after
+  the context initialized blank. Removed that automatic loader, its task call,
+  and its one-use state so shared visits now truly start without inherited
+  photos. The existing explicit backend copy contract remains available if a
+  future opt-in photo-selection surface is designed.
+- Re-run focused REC-125 validation and the complete simulator suite against
+  the rebased/fixed head, then regenerate/audit, publish with lease protection,
+  confirm the hosted merge gate, and squash-merge. No build-number increment,
+  TestFlight archive/upload, or tester Slack note is authorized.
+
+REC-125 latest-main validation and pre-landing review, 2026-07-23 11:34 PDT:
+
+- Focused shared-visit context tests passed 2/2 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-25-50--0700.xcresult`.
+- The complete suite passed 587/587 with zero failures on the same simulator.
+  Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-33-26--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime remains unavailable;
+  its command stopped at destination resolution before building or testing.
+- Regenerated with XcodeGen and confirmed there is no generated project diff.
+  `git diff --check` passes. The diff contains only the shared-visit save
+  context/photo-loader correction, its deterministic regression coverage, and
+  this required coordination log.
+- Pre-landing review is clear after removing the automatic shared-photo loader.
+  No remaining blocking data-loss, persistence, concurrency, security/privacy,
+  accessibility, signing, schema/RLS/RPC, enum-contract, distribution, or
+  scope issue was found. There are no Greptile comments, prior gstack reviews,
+  related `TODOS.md` items, failing hosted checks, or PR hold labels to resolve.
+  No implementation plan file was present to compare.
+- The optional gstack review-history/telemetry wrapper could not be used because
+  the environment safety policy blocked transmission of private repository and
+  session metadata. The full local source/diff/checklist/test review was
+  completed without telemetry; this does not affect the code or merge gate.
+
+REC-125 exact-main merge gate, 2026-07-23 11:39 PDT:
+
+- `origin/main` advanced during validation to `0f43390e2` through PR #188
+  (`feat: move place imports to Add`). Rebased the three REC-125 commits onto
+  that exact head. The only conflict was this append-only log; both REC-109 and
+  REC-125 histories were preserved. The new Add/import implementation did not
+  overlap the REC-125 product or test files.
+- Re-ran both focused REC-125 tests on the exact rebased head: 2/2 passed with
+  zero failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-35-23--0700.xcresult`.
+- Re-ran the complete suite on the exact rebased head: 590/590 passed with zero
+  failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-37-53--0700.xcresult`.
+  Publish with lease protection, confirm GitHub still reports the ready PR
+  clean and mergeable against exact `main`, then perform the authorized squash
+  merge. No TestFlight or release action is included.
+
+REC-125 completion, 2026-07-23 11:42 PDT:
+
+- Published exact reviewed head `0fe71f611`, confirmed ready PR #180 was zero
+  commits behind `main`, `CLEAN` / `MERGEABLE`, and had no failing checks or
+  hold labels, then squash-merged it as
+  `cff9e0689101d21f2fc43934a51aeaf93904ff01`.
+- The final product keeps only category, subcategory, and restaurant cuisine
+  from a shared-visit invitation. Invitee rating, note, question answers/tags,
+  personal labels, photos, and visibility choice begin independently. The
+  pre-landing review specifically removed the remaining automatic inviter-photo
+  download path.
+- Final validation is 2/2 focused REC-125 tests and 590/590 complete tests on
+  iPhone 17 Pro / iOS 26.5, plus XcodeGen with no project diff and a clean
+  `git diff --check`. No known blocking issue remains.
+- Added the PR, exact-head validation, review finding, and merge SHA to Linear
+  REC-125, then moved it from In Review to Done. The already-merged remote
+  feature branch was deleted explicitly after GitHub's local cleanup step was
+  blocked by another worktree holding `main`.
+- No TestFlight build-number increment, archive/upload, public-group action,
+  Slack release note, or other release mutation was requested or performed.
+  This change will ride the next explicitly requested release batch.
+## 2026-07-23 10:07 PDT - Codex - REC-135 Match Broken Import
+
+Agent: Codex
+Branch: `codex/rec-135-match-broken-import`
+Worktree: `/private/tmp/recme-rec135-match-place`
+Linear: `REC-135` (`In Progress`)
+
+Goal: update the broken-import “Match a Place” flow so its search is prefilled
+from the import, returns selectable place matches using the app's MapKit place
+search contract, permits one selection, and enables a full-width confirmation
+button only after selection.
+
+Starting status:
+
+- Fetched `origin` and created this isolated worktree from clean
+  `origin/main` at `92adcdc89`. The primary checkout contains unrelated
+  `.gitignore` and `.pnpm-store/` changes, so no work will be done there.
+- Existing worktrees do not overlap the expected implementation files.
+- REC-135 moved from Backlog to In Progress before implementation.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`,
+  focused place-import tests under `WanderTests/`, and this coordination log.
+  `project.yml`, the Xcode project, schema/RLS, auth, and build metadata are
+  outside scope unless implementation inspection proves otherwise.
+- The current rescue screen only exposes separate Name/Area fields and a
+  toolbar Search action, then dismisses immediately when a result is found.
+  It does not show candidates or require explicit single-selection confirmation.
+
+Implementation and validation checkpoint, 2026-07-23 10:23 PDT:
+
+- Replaced the destructive search-and-dismiss rescue flow with a prefilled,
+  single-field search surface that automatically loads MapKit matches, supports
+  repeat searches, displays one-selectable result cards, and keeps the
+  full-width Match Place button disabled until a result is selected. The source
+  URL remains below the button.
+- Split candidate preview from confirmation in `PlaceImportStore`. Preview uses
+  the existing `DevicePlaceImportResolver.resolveManualSearch` /
+  `MapKitPlaceResolver` path but does not mutate or persist the import. Explicit
+  confirmation trims and persists the query/area, all displayed candidates,
+  and exactly one selected candidate, while refusing to resurrect a completed,
+  duplicate, or dismissed item.
+- Added regressions proving preview search leaves the durable import unchanged
+  and confirmation persists exactly the selected candidate id.
+- Focused REC-135 tests passed twice after the final stale-import guard: 2 tests,
+  0 failures. Final result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-22-22--0700.xcresult`.
+- The full suite passed before the final one-line stale-import guard: 586 tests,
+  0 failures. Result:
+  `/private/tmp/DerivedData-rec135-focused/Logs/Test/Test-Wander-2026.07.23_10-21-31--0700.xcresult`.
+  The final focused rerun rebuilt the app and store successfully.
+- The documented iPhone 16 Plus / iOS 18.6 simulator is not installed on this
+  machine. Validation used the available iPhone 17 Pro / iOS 26.5 runtime. Only
+  existing traditional-headermap, Swift concurrency, and simulator/keychain
+  warnings appeared; no REC-135 compile or test warning was introduced.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+
+Local review handoff, 2026-07-23 10:28 PDT:
+
+- Implementation committed as `41a8c855c` (`feat: improve broken import place
+  matching`) on `codex/rec-135-match-broken-import`.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified Xcode's branch chooser reports
+  `codex/rec-135-match-broken-import`; package resolution completed and normal
+  background indexing began.
+- A push was attempted so the required review PR could be opened, but the
+  managed environment declined code upload because the chat request did not
+  explicitly authorize network egress. The committed branch remains local.
+  To resume remote review, explicitly authorize pushing the branch, then run
+  `git push -u origin codex/rec-135-match-broken-import` from this worktree and
+  open a ready PR to `main`.
+- REC-135 is ready for local Xcode testing/review. Linear is moved to In Review
+  with validation and the local-only handoff recorded. No known implementation
+  blocker remains; the only incomplete workflow item is the policy-blocked
+  push/PR.
+
+Map-preview review follow-up, 2026-07-23 10:38 PDT:
+
+- Ryan requested a native Apple Maps preview between the search field and place
+  results so users can understand where candidate places are. The map should
+  update from the active search criteria.
+- Refetched `origin`; this isolated worktree is clean and two local commits
+  ahead of `origin/main`. No other worktree overlaps the REC-135 files.
+- Moved REC-135 from In Review back to In Progress for the follow-up.
+- Expected scope remains
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused import-search UI
+  support/tests as needed, and this coordination log. The map will reuse the
+  existing MapKit candidate coordinates and will not add a backend or schema
+  contract.
+
+Map-preview follow-up completion, 2026-07-23 11:02 PDT:
+
+- Added an interactive Apple Maps preview between the search field and results.
+  It refits to each returned candidate set, supports pan/zoom, and disappears
+  while a changed query is awaiting new results.
+- Map pins and result cards use the same numbered selection state. Selecting
+  either surface highlights both and enables `Match Place`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-map-focused/Logs/Test/Test-Wander-2026.07.23_10-50-54--0700.xcresult`.
+  The earlier focused manual-search regression run also passed 2 tests,
+  0 failures.
+- Reviewed the final native UI on iPhone 17 Pro and the smaller iPhone 17e.
+  Both show the fitted map between search and cards without clipping; numbered
+  markers remain legible, and the selected card/pin state is synchronized.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified the branch chooser reports
+  `codex/rec-135-match-broken-import`. The branch is ready for local review.
+- Committed the map follow-up as `85954bd05` (`feat: add map to broken import
+  matching`). Moved REC-135 back to In Review and posted its validation and
+  local-only branch handoff in Linear. A push/PR remains intentionally pending
+  because code upload was not explicitly authorized.
+
+Dynamic-map landing follow-up, 2026-07-23 11:07 PDT:
+
+- Ryan requested one final correction before landing REC-135: the Apple Maps
+  camera must actively refit whenever a newly submitted search returns a
+  different candidate set, then the completed branch should be squash-merged
+  and pushed to `main`.
+- Refetched `origin`; `codex/rec-135-match-broken-import` is clean, four commits
+  ahead of and zero commits behind `origin/main`. The isolated worktree remains
+  appropriate because the primary checkout is on unrelated REC-88 work.
+- Reviewed the shared rec.me landing workflow, gstack pre-landing review
+  workflow/checklist, Linear workflow, and `DESIGN.md`. No pending explicit
+  TestFlight release is part of this merge-only request, so no build-number
+  bump, archive, upload, or Slack release note is authorized.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused regression tests
+  if a suitable view-state boundary exists, and this append-only coordination
+  log. No schema, backend, or project-membership change is expected.
+
+Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
+
+- Replaced the one-time `Map(initialPosition:)` seed with a bound
+  `MapCameraPosition`. Every successful manual search now computes a padded
+  region from that exact candidate set and assigns it to the camera, so
+  subsequent result sets recenter and refit instead of inheriting the first
+  viewport.
+- Focused manual-search and region-fitting coverage passed: 11 tests, 0
+  failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-10-53--0700.xcresult`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-27-53--0700.xcresult`.
+- Reinstalled a disposable fixture on the smaller iPhone 17e and reviewed the
+  actual MapKit flow. The initial Blue Bottle results fitted the Los Angeles
+  candidate spread; changing the query to `Santa Monica Pier` replaced the
+  pins and visibly recentered/zoomed the map around the pier before displaying
+  the four new result cards.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- During validation, `origin/main` advanced by two commits. The completed local
+  correction will be committed, rebased onto the latest `origin/main`, and
+  revalidated before the ready PR is squash-merged.
+- Rebased cleanly onto current `origin/main` (`e09708109`); the only manual
+  resolution preserved both append-only agent-log histories. The complete
+  post-rebase suite passed 588 tests with 0 failures:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-30-09--0700.xcresult`.
+- Completed the pre-landing scope, concurrency, state, persistence,
+  accessibility, MapKit, test, documentation-staleness, and distribution
+  review against current `origin/main`. Scope is clean and there are zero
+  unresolved critical or informational findings. Specialist subagents were
+  not dispatched because this session does not authorize delegation; the same
+  testing, security/data-safety, and native-design lenses were applied
+  directly. No related root-document or TODO update is required.
+- At the publish gate, `origin/main` advanced again with REC-109 / PR #188,
+  which moves the import entry point from Profile to Add and overlaps the same
+  import view/test files. Rebased onto exact current `origin/main`
+  (`0f43390e2`). Source and tests merged automatically; the only manual
+  resolution preserved both append-only log histories.
+- The complete exact post-integration suite passed 591 tests with 0 failures on
+  iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-37-02--0700.xcresult`.
+  `git diff --check` remains clean.
+- Reinstalled the exact build and disposable pending-import fixture on iPhone
+  17e. The newly moved Add sheet shows `Import Review`, opens the unresolved
+  Blue Bottle item, and exposes `Search for the place`; this confirms REC-135's
+  matcher remains reachable through REC-109's new navigation. The earlier
+  exact matcher QA already verified the result-driven Los Angeles to Santa
+  Monica Pier camera refit.
+- PR #193 opened ready, then detected two additional `main` commits that landed
+  during publication (`cff9e0689` REC-125 plus its completion record). Rebased
+  onto exact `origin/main` (`f946737b5`); those source changes affect Map save
+  defaults, not REC-135 files, and only the append-only log required manual
+  resolution.
+- Final exact-head focused validation passed 12/12 manual-search,
+  region-fitting, and Add import-navigation tests:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-46-05--0700.xcresult`.
+  The immediately preceding exact REC-109-integrated branch passed the complete
+  591/591 suite. Republish PR #193 with force-with-lease, confirm hosted
+  mergeability, then squash-merge; no TestFlight action is part of this gate.
+
+REC-135 completion, 2026-07-23 11:49 PDT:
+
+- Ready PR #193 was clean and mergeable on exact current `main`, with no
+  required hosted checks or review blockers, then squash-merged as
+  `379974b19c38d6cdac8bf0138a04272f25972825`.
+- GitHub completed the remote merge before its local cleanup encountered an
+  unrelated existing `main` worktree. Verified `origin/main` at the squash
+  commit and explicitly deleted the merged
+  `codex/rec-135-match-broken-import` remote branch.
+- Final evidence remains 591/591 complete tests after the overlapping REC-109
+  import-navigation integration, 12/12 exact-head focused tests after the last
+  unrelated `main` update, clean pre-landing review, and iPhone 17e visual QA
+  of the Los Angeles-to-Santa-Monica result-driven camera refit.
+- Linear REC-135 has the PR, validation, and merge evidence and is Done. No
+  known blocking issue remains.
+- No TestFlight build-number increment, archive/upload, public-group change, or
+  Slack release note was performed. The merged feature will ride the next
+  explicitly requested TestFlight batch from latest `main`.
+
+REC-126 completion, 2026-07-23 11:56 PDT:
+
+- Ready PR #189 was current with `main`, reported no conflicts, had no hosted
+  checks or review comments, and was squash-merged as
+  `d60cf4cb75ed6d509aa214c2e68ae457ce330e06`.
+- Shipped deterministic cuisine preselection, the production Cuisine Atlas,
+  173 unique cuisines grouped across five canonical regions, the requested
+  country gaps plus Greek/Japanese/Poke, the `Americas & Pacific` filter label,
+  and the `filter` subheader.
+- Hosted Supabase data is complete across the current population: 41/41
+  restaurant saves have a cuisine and 0 remain missing. The inference is
+  deterministic; no OpenAI API or place/user data transmission was added.
+- Final validation remains 598/598 complete tests, 43/43 exact-main focused
+  cuisine/navigation/metadata-isolation gates, hosted Supabase smoke coverage,
+  `git diff --check`, and visual/accessibility QA on iPhone 17 Pro and iPhone
+  17e. The pre-landing adversarial pass caught and corrected unrelated
+  shared-visit metadata drift before publication.
+- Linear REC-126 has the PR, merge SHA, hosted-data result, validation, and
+  review evidence and is Done. No known blocking issue remains.
+- No TestFlight build-number increment, archive/upload, public-group change, or
+  Slack release note was performed. The merged feature will ride the next
+  explicitly requested TestFlight batch from latest `main`.
