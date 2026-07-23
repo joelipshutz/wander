@@ -11,7 +11,7 @@ struct WanderRootView: View {
     @State private var selectedTab: WanderTab
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
-    @State private var addSheetDetent = AddSheetLayout.restingDetent
+    @State private var addSheetDetent: PresentationDetent
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
@@ -49,7 +49,13 @@ struct WanderRootView: View {
                 persistence: persistence
             )
         )
-        _importStore = StateObject(wrappedValue: PlaceImportStore())
+        let importStore = PlaceImportStore()
+        _importStore = StateObject(wrappedValue: importStore)
+        _addSheetDetent = State(
+            initialValue: AddSheetLayout.restingDetent(
+                hasPendingImports: importStore.summary.hasPendingImports
+            )
+        )
     }
 
     var body: some View {
@@ -114,7 +120,7 @@ struct WanderRootView: View {
         }
         .sheet(isPresented: $isPresentingAdd, onDismiss: {
             addTabResetToken = UUID()
-            addSheetDetent = AddSheetLayout.restingDetent
+            addSheetDetent = addSheetRestingDetent
         }) {
             AddScreen(
                 importStore: importStore,
@@ -126,7 +132,12 @@ struct WanderRootView: View {
                 .environmentObject(store)
                 .environmentObject(auth)
                 .environmentObject(backend)
-                .presentationDetents(AddSheetLayout.detents, selection: $addSheetDetent)
+                .presentationDetents(
+                    AddSheetLayout.detents(
+                        hasPendingImports: importStore.summary.hasPendingImports
+                    ),
+                    selection: $addSheetDetent
+                )
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(28)
                 .presentationBackground(WanderTheme.surfaceBone.color)
@@ -218,6 +229,10 @@ struct WanderRootView: View {
         .onChange(of: importStore.items) { _, _ in
             reconcilePlaceImports()
         }
+        .onChange(of: importStore.summary.hasPendingImports) { _, _ in
+            guard addSheetDetent != .large else { return }
+            addSheetDetent = addSheetRestingDetent
+        }
         .onOpenURL { url in
             if let route = Self.sharedProfileRoute(for: url) {
                 sharedProfile = route
@@ -239,12 +254,18 @@ struct WanderRootView: View {
         } set: { newTab in
             if newTab == .add {
                 addTabResetToken = UUID()
-                addSheetDetent = AddSheetLayout.restingDetent
+                addSheetDetent = addSheetRestingDetent
                 isPresentingAdd = true
             } else {
                 selectedTab = newTab
             }
         }
+    }
+
+    private var addSheetRestingDetent: PresentationDetent {
+        AddSheetLayout.restingDetent(
+            hasPendingImports: importStore.summary.hasPendingImports
+        )
     }
 
     private func reconcilePlaceImports() {

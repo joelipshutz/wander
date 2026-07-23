@@ -372,7 +372,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("AddImportSection("))
         XCTAssertTrue(addScreen.contains("PlaceImportSourceScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
-        XCTAssertTrue(addScreen.contains("PresentationDetent.height(560)"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 410"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 480"))
+        XCTAssertTrue(
+            root.contains(
+                "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
+            )
+        )
+        XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))

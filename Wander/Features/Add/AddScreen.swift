@@ -5,8 +5,16 @@ import UIKit
 import Vision
 
 enum AddSheetLayout {
-    static let restingDetent = PresentationDetent.height(560)
-    static let detents: Set<PresentationDetent> = [restingDetent, .large]
+    static let emptyRestingHeight: CGFloat = 410
+    static let pendingReviewRestingHeight: CGFloat = 480
+
+    static func restingDetent(hasPendingImports: Bool) -> PresentationDetent {
+        .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
+    }
+
+    static func detents(hasPendingImports: Bool) -> Set<PresentationDetent> {
+        [restingDetent(hasPendingImports: hasPendingImports), .large]
+    }
 }
 
 struct AddScreen: View {
@@ -53,6 +61,10 @@ struct AddScreen: View {
         candidates.first { $0.id == selectedCandidateID } ?? candidates.first
     }
 
+    private var restingDetent: PresentationDetent {
+        AddSheetLayout.restingDetent(hasPendingImports: importStore.summary.hasPendingImports)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -87,12 +99,12 @@ struct AddScreen: View {
                     }
                 } else if !shouldStayExpanded {
                     withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
-                        selectedDetent = AddSheetLayout.restingDetent
+                        selectedDetent = restingDetent
                     }
                 }
             }
             .onChange(of: selectedDetent) { _, detent in
-                guard detent == AddSheetLayout.restingDetent, isQuickAddFocused else { return }
+                guard detent == restingDetent, isQuickAddFocused else { return }
                 isQuickAddFocused = false
             }
             .sheet(item: $addSaveFlow) { context in
@@ -344,7 +356,7 @@ struct AddScreen: View {
         selectedImportSource = nil
         showsImportInbox = false
         opensImportInboxAfterSource = false
-        selectedDetent = AddSheetLayout.restingDetent
+        selectedDetent = restingDetent
     }
 
     private func resetAfterSave() {
@@ -379,7 +391,7 @@ struct AddScreen: View {
         }
 
         if step == .source {
-            selectedDetent = AddSheetLayout.restingDetent
+            selectedDetent = restingDetent
         }
     }
 
@@ -580,7 +592,7 @@ struct AddScreen: View {
         isShowingInlineCandidateResults = false
         quickAddQuery = ""
         withAnimation(.snappy(duration: 0.32, extraBounce: 0)) {
-            selectedDetent = AddSheetLayout.restingDetent
+            selectedDetent = restingDetent
         }
     }
 
