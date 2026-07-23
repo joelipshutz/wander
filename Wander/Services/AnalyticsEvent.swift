@@ -23,6 +23,8 @@ enum WanderAnalyticsEvents {
     static let firstPlaceStarted = "first_place_started"
     static let placeCandidateShown = "place_candidate_shown"
     static let placeSaved = "place_saved"
+    static let saveStreakAdvanced = "save_streak_advanced"
+    static let saveStreakSameDaySave = "save_streak_same_day_save"
     static let visibilityChanged = "visibility_changed"
     static let followCreated = "follow_created"
     static let followRemoved = "follow_removed"

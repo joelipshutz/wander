@@ -191,6 +191,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let sourceArtifacts: [SourceArtifactRecord]
     let extractionJobs: [ExtractionJobRecord]
     let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]?
+    let saveStreakDatesByUserID: [String: [Date]]?
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
@@ -219,6 +220,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         sourceArtifacts = store.sourceArtifacts.map(SourceArtifactRecord.init)
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
         providerCategoryEnrichmentAttemptedAtByKey = store.providerCategoryEnrichmentAttemptedAtByKey
+        saveStreakDatesByUserID = store.saveStreakDatesByUserID
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
@@ -232,6 +234,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         var restoredProfiles = profiles.map { $0.model() }
         restoredProfiles.removeAll { $0.id == restoredCurrentUser.id || $0.localID == restoredCurrentUser.localID }
         restoredProfiles.insert(restoredCurrentUser, at: 0)
+        let fallbackStreakDates = Dictionary(grouping: userPlaces, by: \.userID)
+            .mapValues { $0.map(\.savedAt) }
 
         return RestoredState(
             currentUser: restoredCurrentUser,
@@ -254,6 +258,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             sourceArtifacts: shouldResetSavedPlaces ? [] : sourceArtifacts.map { $0.model() },
             extractionJobs: shouldResetSavedPlaces ? [] : extractionJobs.map { $0.model() },
             providerCategoryEnrichmentAttemptedAtByKey: providerCategoryEnrichmentAttemptedAtByKey ?? [:],
+            saveStreakDatesByUserID: shouldResetSavedPlaces
+                ? [:]
+                : saveStreakDatesByUserID ?? fallbackStreakDates,
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
@@ -283,6 +290,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let sourceArtifacts: [LocalSourceArtifact]
         let extractionJobs: [LocalExtractionJob]
         let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
+        let saveStreakDatesByUserID: [String: [Date]]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool

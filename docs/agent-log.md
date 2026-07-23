@@ -17818,6 +17818,107 @@ Final outcome:
   calendar map and repeat-visit badge checklist and reply in the Slack thread
   with device, account/email if relevant, screenshots, and exact repro steps.
 
+## 2026-07-22 21:03 PDT - Codex - REC-122 Streak Celebration Design
+
+Agent: Codex using `design-shotgun` and Linear workflows
+Branch: `codex/rec-122-streak-design`
+Worktree: `/private/tmp/recme-rec122-streak-design`
+Linear: `REC-122` (`In Progress`)
+
+Goal: design and compare local mocks before production implementation for a
+quiet daily save streak plus a high-delight first-qualifying-save-of-the-day
+celebration.
+
+Starting status and coordination:
+
+- Fetched `origin`, inspected the shared checkout and all worktrees, and created
+  this clean isolated worktree from exact `origin/main` at `9de2e42` because the
+  root checkout is on an unrelated gone REC-60 branch and Profile is a
+  high-conflict surface.
+- Current product direction from Joe: streaks must not become a permanent loud
+  fixture. A compact streak module lives on the owner Profile below the Been
+  area and above the calendar. Saving either Been or Wanna Go counts toward the
+  streak. Only the first qualifying save of the day earns the large celebratory
+  moment, with confetti and a flame motif.
+- This pass is design-only. No SwiftUI production behavior, persistence,
+  backend/schema, build number, TestFlight release, or public communication is
+  authorized yet.
+- Expected durable repo file is this coordination log. Design variants and the
+  comparison board stay in the design workflow's persistent artifact directory,
+  outside the repo. Relevant source is read-only context: `DESIGN.md`, Profile
+  presentation files, the Add/save flow, and approved profile mocks.
+- Mission Control task creation was attempted, but local
+  `http://localhost:4000` is not running. Linear REC-122 was found and moved
+  from Todo to In Progress before design work began.
+
+Design checkpoint, 2026-07-22 21:17 PDT:
+
+- Built one fully local, interactive HTML/CSS/JS comparison board with three
+  directions. Each includes the first-qualifying-save-of-the-day full-screen
+  celebration and the owner Profile placement directly below Been/Wanna and
+  above the calendar:
+  - A, Flame Bloom: large hand-drawn terracotta flame plus a soft Profile card.
+  - B, Streak Window: saved-place ticket, four-day path, and a calm
+    `today is covered` Profile status.
+  - C, Firecracker: oversized streak count plus the quietest hairline Profile
+    row.
+- Proposed interaction contract shown in the mock: Been and Wanna both
+  qualify; the first qualifying save on a local calendar day gets confetti and
+  an approximately 1.8-second dismissible takeover; later qualifying saves that
+  day get a short confetti pop over the normal save confirmation, with no second
+  takeover or streak increment.
+- Persistent local artifacts:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/streak-celebration-20260722/`
+  (`design-board.html`, `variant-A.png`, `variant-B.png`, `variant-C.png`).
+  These remain outside the repo per the design workflow.
+- Visual QA used the installed Chrome binary. All three sections rendered at
+  iPhone proportions with correct Profile hierarchy. Interaction QA confirmed
+  42 confetti pieces and 44 active entrance animations on replay, all three
+  Profile modules present, and no console errors after a clean reload.
+- The external AI image generator and later Linear screenshot upload were both
+  rejected because they would export internal design details without a separate
+  approval. No bypass was attempted. The local implementation and screenshots
+  are complete; Linear can receive a text-only progress note.
+- Recommendation awaiting Joe's review: combine A's warm, unmistakably rec.me
+  takeover with C's ultra-quiet Profile row. No direction has been approved and
+  no production SwiftUI is implemented yet.
+
+Handoff checkpoint, 2026-07-22 21:19 PDT:
+
+- Pushed branch `codex/rec-122-streak-design` and opened draft coordination PR
+  [#175](https://github.com/joelipshutz/wander/pull/175). The tracked diff is
+  intentionally only this agent log; the visual artifacts remain local user
+  data under the gstack design directory.
+- Added the trigger contract, three directions, recommendation, and PR link to
+  Linear REC-122 in comment `ae6aa116-8922-4190-ab0f-d82a9bb156dc`; the issue
+  remains In Progress while design feedback is pending.
+- Exact restart: open `design-board.html`, use the Replay controls to compare
+  the motion, and select A/B/C or a mix. After Joe confirms the direction, save
+  the approved choice and update the taste profile, then plan/implement the
+  SwiftUI and streak state contract on this short-lived branch or a fresh
+  implementation branch.
+- No build/test run was required because production code did not change. No
+  build-number bump, archive, TestFlight upload, or Slack message was made.
+
+Feedback refinement, 2026-07-22 21:55 PDT:
+
+- Joe selected B's dark Streak Window takeover and C's minimal Profile row,
+  with a request for the saved-place ticket to flip or travel across the
+  takeover if feasible.
+- Updated the local comparison board with a B/C selected hybrid. The ticket now
+  begins face-down near the lower-left, travels upward across the screen,
+  rotates through its edge, and lands face-up with the saved place in about
+  1.08 seconds. The Profile uses C's hairline row directly between Been/Wanna
+  and the calendar.
+- Added an explicit production motion guardrail: Reduce Motion should replace
+  the spatial flip/flight with a short fade. The mock keeps the existing
+  confetti and first-qualifying-save-of-the-day contract.
+- Interaction QA in Chrome confirmed the named `ticket-fly` 3D animation, two
+  card faces, 45 concurrent celebration animations, the selected C Profile row,
+  and zero console errors. New persistent artifacts are `variant-BC.png` and
+  `variant-BC-motion.png` beside the existing board.
+- The refined hybrid is awaiting Joe's visual confirmation before writing
+  `approved.json` or treating it as the production implementation target.
 ## 2026-07-22 19:34 PDT - Codex - REC-130 List Tile Cover Fallbacks
 
 Agent: Codex using the rec.me feedback, iOS fix, Linear, and GitHub publish
@@ -18410,6 +18511,110 @@ Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
   sandbox rejected its ability to enqueue local review metadata for later
   cross-machine artifact sync. This does not affect the code/diff review or
   release gate. Result: `Pre-Landing Review: No issues found.`
+Implementation start, 2026-07-22 22:20 PDT:
+
+- Joe approved and explicitly asked to ship the refined B/C direction: B's
+  dark full-screen Streak Window takeover, a saved-place ticket that travels
+  and flips face-up, and C's quiet hairline Profile row below Been/Wanna and
+  above the calendar. The approved artifact is recorded in local
+  `approved.json`; Reduce Motion replaces the spatial flight/flip with a fade.
+- Scope changed from design-only to iOS implementation. REC-122 remains In
+  Progress and draft PR #175 will be updated rather than opening a competing
+  branch/PR.
+- Merged latest `origin/main` (`731a3f3`) before implementation. The only
+  conflict was this append-only log; both REC-122 and current main histories
+  were preserved. Current app metadata is build 93. This feature request does
+  not authorize another build-number bump, archive, TestFlight upload, or
+  tester Slack post.
+- Implementation contract: only a newly created Been or Wanna save qualifies;
+  edits and additional visits do not. The first qualifying save on a local
+  calendar day advances the persisted per-user streak and gets the takeover;
+  later new saves that day keep the same count and get a short confetti pop.
+  The Profile row reports the current run, recent seven-day coverage, and best
+  run without turning Profile into a streak dashboard.
+- Expected production files: a focused streak model/calculator, local-store
+  streak ledger and save event wiring, snapshot persistence, root celebration
+  presentation, owner Profile row, analytics names, focused tests, and this
+  log. No Supabase schema/RPC/RLS or auth contract change is planned.
+
+Implementation checkpoint, 2026-07-22 22:42 PDT:
+
+- Implemented the persisted per-user daily streak ledger and calculator, new-save
+  qualification in both direct and accepted-shared-visit paths, daily takeover
+  versus same-day confetti events, analytics, the full-screen ticket flip/flight,
+  Reduce Motion fallback, and the quiet owner-Profile row between Been/Wanna and
+  the calendar. Snapshot decoding remains backward-compatible; old snapshots
+  derive their initial ledger from saved-place timestamps.
+- The first focused run caught a real ordering bug: the newly appended save was
+  visible before celebration classification, so the first save appeared to be a
+  same-day save. Classification now captures day coverage before insertion.
+- Focused iPhone 16 Plus / iOS 18.6 validation passes 6/6 with zero failures,
+  including calculator continuity/reset, first Been/Wanna takeover, later
+  same-day confetti, edit exclusion, guest-to-signed-in transfer, relaunch
+  persistence, and the debug visual-QA route. Result bundle:
+  `/private/tmp/DerivedData-rec122-streak/Logs/Test/Test-Wander-2026.07.22_22-41-08--0700.xcresult`.
+- A paired physical iPhone is present, but the optional gstack live-device QA
+  bridge is not integrated in this app and expects `@Observable` snapshot hooks.
+  Adding that package would expand the feature scope, so no DebugBridge or device
+  control dependency was added. Visual validation will use the repo-required
+  simulator screenshots on a large and a smaller iPhone via a DEBUG-only streak
+  mockup launch argument plus the real demo-fixture Profile screen.
+
+Visual QA checkpoint, 2026-07-22 22:46 PDT:
+
+- Built and installed build 93 Debug on the iPhone 16 Plus and iPhone 16e,
+  both on iOS 18.6. Captured the settled takeover, the real demo-fixture owner
+  Profile, and an exact-component close-up of the production Been/Wanna ->
+  streak row -> calendar hierarchy. Screenshots are local at
+  `/private/tmp/rec122-visual-qa/` and intentionally are not product assets.
+- The full-screen takeover preserves safe areas, ticket hierarchy, date path,
+  explanatory copy, close affordance, and large serif headline on both sizes
+  without clipping. The small phone still has breathing room below the copy.
+- The production Profile row remains deliberately quieter than the save tiles:
+  flame and `4-day streak` at left, seven compact coverage marks, and `9 best`
+  at right. It fits on the iPhone 16e and sits exactly below Been/Wanna and above
+  the calendar. The surrounding Profile launch also confirmed the feature did
+  not disturb the existing owner surface or tab shell.
+- Added DEBUG-only `-WanderStreakMockup takeover|profileRow` routes following the
+  repo's existing visual-mockup launch-argument pattern. The route is covered by
+  a focused resolver test and compiles out of Release behavior.
+
+REC-122 final validation and pre-landing review, 2026-07-22 22:57 PDT:
+
+- Reviewed the complete branch diff against `origin/main`, with extra attention
+  to local-day calculation, repeated-save de-duplication, new-save versus edit
+  qualification, accepted shared visits, snapshot compatibility, guest account
+  claiming, root-overlay event ordering, Reduce Motion, VoiceOver, generated
+  project scope, and Profile placement. The existing save/store/persistence
+  boundaries remain authoritative; no parallel backend, auth, schema, RLS, RPC,
+  or new dependency was introduced.
+- The review found and fixed two concrete issues. First, the DEBUG Profile QA
+  route used `LazyVGrid` inside the high-conflict Profile scroll source, which
+  tripped two existing source-contract tests; the tiny seven-day mock calendar
+  now uses a non-lazy `Grid`. Second, the takeover's normal 2.2-second auto-close
+  was too short for VoiceOver; VoiceOver now keeps the takeover open until the
+  user dismisses it. Normal timing and same-day confetti behavior are unchanged.
+- The broader interactive `plan-eng-review` workflow is a pre-implementation
+  plan tool whose required scope gate would reopen the already approved B/C
+  direction after implementation. Applied its engineering-risk lens directly
+  to this exact diff instead. The 12-file spread is explained by XcodeGen
+  membership, one focused model, one focused view, the existing store/snapshot
+  seams, owner Profile wiring, analytics, tests, and this required log; collapsing
+  those concerns into fewer large files would increase coupling without reducing
+  behavior.
+- Final exact-state simulator validation passes 583/583 with zero failures on
+  iPhone 16 Plus / iOS 18.6:
+  `/private/tmp/DerivedData-rec122-streak/Logs/Test/Test-Wander-2026.07.22_22-55-42--0700.xcresult`.
+  The final universal iOS Simulator build also completed with
+  `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain unrelated.
+- `git diff --check` passes. The generated project diff only registers
+  `SaveStreak.swift`, `SaveStreakCelebrationView.swift`, and
+  `SaveStreakTests.swift`; build 93, signing, and other build settings are
+  unchanged. Pre-landing result: no remaining issue. Publish this reviewed state,
+  move REC-122 and PR #175 to review, recheck exact latest-main mergeability, and
+  squash-merge. No TestFlight build, archive, upload, or Slack release note is
+  authorized by this request.
 ## 2026-07-22 20:59 PDT - Codex - REC-127 Map Default Behavior
 
 Agent: Codex using Linear and `recme-testflight-feedback-bug-catcher`
@@ -18558,6 +18763,23 @@ Build-93 completion and REC-127 release continuation, 2026-07-22 22:56 PDT:
   squash-merging PR #174, then package the next build number (94) from exact
   latest `main`; build 93 intentionally does not contain REC-127.
 
+REC-122 latest-main landing gate, 2026-07-22 23:04 PDT:
+
+- Fetched and merged exact `origin/main` commit `2b8be08` after REC-127 landed.
+  The app changes merged without conflict; the only conflict was this shared
+  append-only agent log, and both histories were preserved.
+- Re-ran the complete test suite on iPhone 16 Plus / iOS 18.6 against the
+  resulting exact latest-main state: 584/584 tests passed with zero failures.
+  Result bundle:
+  `/private/tmp/DerivedData-rec122-latest/Logs/Test/Test-Wander-2026.07.22_22-58-58--0700.xcresult`.
+- Re-ran the generic iOS Simulator build against the same state; it completed
+  with `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation,
+  traditional-headermap, and test unused-Bool warnings remain unrelated.
+- REC-122 remains implementation-complete with no backend, schema, auth,
+  visibility, build-number, signing, or dependency changes. Next: publish the
+  branch, move PR #175 and Linear to review, verify the hosted merge gate, and
+  squash-merge. No TestFlight action is included in this landing.
+
 ## 2026-07-22 22:58 PDT - Codex - REC-127 TestFlight Build 94
 
 Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
@@ -18616,3 +18838,21 @@ Validation and pre-landing review, 2026-07-22 23:04 PDT:
   no required human decision remains, and no hold or unrelated scope exists.
   Next: commit/push, open and squash-merge the ready build-number PR, then free
   the completed test cache before archiving exact merged main.
+
+REC-122 build-94 merge gate, 2026-07-22 23:09 PDT:
+
+- `main` advanced during the hosted PR check with metadata-only build-94 commit
+  `c0d7f6b`. Merged it into REC-122. `project.yml` and both generated Debug/
+  Release settings remain at build 94, while the generated project still
+  registers `SaveStreak.swift`, `SaveStreakCelebrationView.swift`, and
+  `SaveStreakTests.swift`. The only manual conflict was this append-only log;
+  both histories were preserved.
+- Re-ran the correctly targeted REC-122 suites on iPhone 16 Plus / iOS 18.6:
+  6/6 passed with zero failures. The run rebuilt the exact build-94 app and test
+  targets successfully. Result bundle:
+  `/private/tmp/DerivedData-rec122-latest/Logs/Test/Test-Wander-2026.07.22_23-08-57--0700.xcresult`.
+- The immediately preceding exact product state passed the complete 584/584
+  suite and universal simulator build; the intervening `main` delta is only the
+  separately validated 93 -> 94 build metadata. `git diff --check` remains
+  clean. Republish the exact head, confirm GitHub mergeability, and squash-merge
+  PR #175. No TestFlight upload is part of REC-122 landing.
