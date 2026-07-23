@@ -19301,3 +19301,25 @@ REC-125 exact-main merge gate, 2026-07-23 11:39 PDT:
   Publish with lease protection, confirm GitHub still reports the ready PR
   clean and mergeable against exact `main`, then perform the authorized squash
   merge. No TestFlight or release action is included.
+
+REC-125 completion, 2026-07-23 11:42 PDT:
+
+- Published exact reviewed head `0fe71f611`, confirmed ready PR #180 was zero
+  commits behind `main`, `CLEAN` / `MERGEABLE`, and had no failing checks or
+  hold labels, then squash-merged it as
+  `cff9e0689101d21f2fc43934a51aeaf93904ff01`.
+- The final product keeps only category, subcategory, and restaurant cuisine
+  from a shared-visit invitation. Invitee rating, note, question answers/tags,
+  personal labels, photos, and visibility choice begin independently. The
+  pre-landing review specifically removed the remaining automatic inviter-photo
+  download path.
+- Final validation is 2/2 focused REC-125 tests and 590/590 complete tests on
+  iPhone 17 Pro / iOS 26.5, plus XcodeGen with no project diff and a clean
+  `git diff --check`. No known blocking issue remains.
+- Added the PR, exact-head validation, review finding, and merge SHA to Linear
+  REC-125, then moved it from In Review to Done. The already-merged remote
+  feature branch was deleted explicitly after GitHub's local cleanup step was
+  blocked by another worktree holding `main`.
+- No TestFlight build-number increment, archive/upload, public-group action,
+  Slack release note, or other release mutation was requested or performed.
+  This change will ride the next explicitly requested release batch.
