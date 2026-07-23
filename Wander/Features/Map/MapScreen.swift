@@ -3928,17 +3928,15 @@ struct MapPlaceSaveFlowSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
-
-                    Divider().background(WanderTheme.borderHairline.color)
+                } else {
+                    Button {
+                        placeTypePickerMode = .subcategory
+                        isChoosingPlaceType = true
+                    } label: {
+                        PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
+                    }
+                    .buttonStyle(.plain)
                 }
-
-                Button {
-                    placeTypePickerMode = .subcategory
-                    isChoosingPlaceType = true
-                } label: {
-                    PlaceTypeRow(title: "subcategory", value: display.subcategory ?? "choose one")
-                }
-                .buttonStyle(.plain)
             }
         }
         .background(WanderTheme.surfaceBone.color)
@@ -4622,8 +4620,11 @@ private struct PlaceTypePickerSheet: View {
         let startingMode: PlaceTypePickerMode
         if !hasEditableSelection {
             startingMode = .category
-        } else if initialMode == .cuisine,
-                  primaryCategory != WanderPlaceCategory.restaurantsFood {
+        } else if primaryCategory == WanderPlaceCategory.restaurantsFood,
+                  initialMode == .subcategory {
+            startingMode = .cuisine
+        } else if primaryCategory != WanderPlaceCategory.restaurantsFood,
+                  initialMode == .cuisine {
             startingMode = .subcategory
         } else {
             startingMode = initialMode
@@ -4676,10 +4677,6 @@ private struct PlaceTypePickerSheet: View {
         WanderPlaceCategory.subcategoryGroups(for: selectedPrimaryCategory)
     }
 
-    private var restaurantTypeCount: Int {
-        WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count
-    }
-
     private var restaurantCuisineCount: Int {
         WanderPlaceCategory.restaurantCuisineOptions.count
     }
@@ -4689,18 +4686,10 @@ private struct PlaceTypePickerSheet: View {
     }
 
     private var selectedCategoryCount: Int {
-        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
-            return restaurantTypeCount
-        }
-
         return selectedSubcategories.count
     }
 
     private var selectedSubcategorySubtitle: String {
-        if selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
-            return "\(selectedCategoryTitle) - \(restaurantTypeCount) types"
-        }
-
         return "\(selectedCategoryTitle) - \(selectedCategoryCount) types"
     }
 
@@ -4929,7 +4918,7 @@ private struct PlaceTypePickerSheet: View {
         }
 
         query = ""
-        mode = .subcategory
+        mode = category == WanderPlaceCategory.restaurantsFood ? .cuisine : .subcategory
         onSelect()
     }
 
@@ -5042,6 +5031,12 @@ struct PrimaryCategoryPickerTile: View {
         CategoryPickerVisuals.accentColor(for: category)
     }
 
+    private var optionCountLabel: String {
+        let count = WanderPlaceCategory.subcategorySuggestions(for: category).count
+        let noun = category == WanderPlaceCategory.restaurantsFood ? "cuisines" : "types"
+        return "\(count) \(noun)"
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
@@ -5075,7 +5070,7 @@ struct PrimaryCategoryPickerTile: View {
                     .minimumScaleFactor(0.82)
                     .frame(height: 34, alignment: .topLeading)
 
-                Text("\(WanderPlaceCategory.subcategorySuggestions(for: category).count) types")
+                Text(optionCountLabel)
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.terracotta.color)
             }
@@ -5089,7 +5084,7 @@ struct PrimaryCategoryPickerTile: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(WanderPlaceCategory.broadCategory(for: category)), \(WanderPlaceCategory.subcategorySuggestions(for: category).count) types")
+        .accessibilityLabel("\(WanderPlaceCategory.broadCategory(for: category)), \(optionCountLabel)")
     }
 }
 

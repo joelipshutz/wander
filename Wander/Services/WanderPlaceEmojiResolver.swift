@@ -103,7 +103,7 @@ enum WanderPlaceEmojiResolver {
             return emoji
         }
 
-        if let emoji = firstMatch(in: specificTypes, rules: restaurantTypeRules) {
+        if let emoji = firstMatch(in: specificTypes, rules: restaurantDetailRules) {
             return emoji
         }
 
@@ -113,7 +113,7 @@ enum WanderPlaceEmojiResolver {
             }
         }
 
-        if let emoji = firstMatch(in: [name], rules: restaurantTypeRules) {
+        if let emoji = firstMatch(in: [name], rules: restaurantDetailRules) {
             return emoji
         }
 
@@ -121,7 +121,7 @@ enum WanderPlaceEmojiResolver {
             return emoji
         }
 
-        return firstMatch(in: metadata, rules: restaurantTypeRules) ?? fallback
+        return firstMatch(in: metadata, rules: restaurantDetailRules) ?? fallback
     }
 
     private static func cuisineEmoji(for value: String?) -> String? {
@@ -129,6 +129,7 @@ enum WanderPlaceEmojiResolver {
             return nil
         }
         return restaurantCuisineEmojis[WanderPlaceCategory.normalizedCategoryText(cuisine)]
+            ?? firstMatch(in: [cuisine], rules: restaurantDetailRules)
     }
 
     private static func orderedMetadata(for assignment: PlaceCategoryAssignment) -> [String?] {
@@ -223,7 +224,7 @@ enum WanderPlaceEmojiResolver {
         }
     }()
 
-    private static let restaurantTypeRules: [Rule] = [
+    private static let restaurantDetailRules: [Rule] = [
         Rule(emoji: "🌮", terms: ["taco stand", "taco truck", "taco"]),
         Rule(emoji: "🌯", terms: ["burrito"]),
         Rule(emoji: "🍕", terms: ["pizza", "pizzeria"]),
@@ -231,7 +232,7 @@ enum WanderPlaceEmojiResolver {
         Rule(emoji: "🌭", terms: ["hot dogs", "hot dog"]),
         Rule(emoji: "🥪", terms: ["sandwich", "deli"]),
         Rule(emoji: "🥯", terms: ["bagel"]),
-        Rule(emoji: "🥗", terms: ["salad", "vegetarian", "vegan"]),
+        Rule(emoji: "🥗", terms: ["salad", "vegetarian", "vegan", "gluten-free"]),
         Rule(emoji: "🥞", terms: ["breakfast", "brunch", "diner"]),
         Rule(emoji: "🍗", terms: ["chicken", "wings"]),
         Rule(emoji: "🦪", terms: ["oyster bar", "oyster"]),
@@ -241,11 +242,13 @@ enum WanderPlaceEmojiResolver {
         Rule(emoji: "🥟", terms: ["dumplings", "dumpling", "dim sum"]),
         Rule(emoji: "🍲", terms: ["hot pot", "fondue", "soup"]),
         Rule(emoji: "🧆", terms: ["falafel"]),
-        Rule(emoji: "🥙", terms: ["gyro", "kebab", "shawarma"]),
+        Rule(emoji: "🥙", terms: ["gyro", "kebab", "shawarma", "halal"]),
         Rule(emoji: "🥡", terms: ["takeout"]),
         Rule(emoji: "🍱", terms: ["buffet", "food court", "cafeteria"]),
         Rule(emoji: "🍿", terms: ["snack bar"]),
-        Rule(emoji: "🍽️", terms: ["bar and grill", "gastropub", "fine dining", "casual family", "bistro"])
+        Rule(emoji: "🍷", terms: ["bistro"]),
+        Rule(emoji: "🍺", terms: ["bar and grill", "gastropub"]),
+        Rule(emoji: "🍽️", terms: ["fine dining", "casual family"])
     ]
 
     // These provider types are specific enough to survive an adjacent broad-category mismatch.

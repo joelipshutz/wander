@@ -258,7 +258,11 @@ enum PlaceMemoryDefaultCatalog {
         let cuisineKey = context.cuisineKey
 
         if context.primaryCategory == WanderPlaceCategory.restaurantsFood {
-            if containsAny(key, ["fast food", "food court", "takeout", "cafeteria", "taco stand", "taco truck", "burrito", "taco", "falafel", "gyro", "kebab", "shawarma", "snack bar"]) {
+            let restaurantDetailKey = [key, cuisineKey]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+
+            if containsAny(restaurantDetailKey, ["fast food", "food court", "takeout", "cafeteria", "taco stand", "taco truck", "burrito", "taco", "falafel", "gyro", "kebab", "shawarma", "snack bar"]) {
                 return Defaults(
                     tagOptions: cuisineAware(["quick bite", "low lift", "counter order", "reliable", "good value"], cuisine: context.cuisine),
                     selectedTags: ["quick bite", "good value"],
@@ -271,7 +275,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["fine dining", "steakhouse", "oyster bar", "seafood", "fondue"]) {
+            if containsAny(restaurantDetailKey, ["fine dining", "steakhouse", "oyster bar", "seafood", "fondue"]) {
                 return Defaults(
                     tagOptions: cuisineAware(["special occasion", "date night", "worth planning", "great service", "reservations"], cuisine: context.cuisine),
                     selectedTags: ["special occasion", "worth planning"],
@@ -284,7 +288,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["breakfast", "brunch", "bagel", "sandwich", "deli", "bakery"]) {
+            if containsAny(restaurantDetailKey, ["breakfast", "brunch", "bagel", "sandwich", "deli", "bakery"]) {
                 return Defaults(
                     tagOptions: cuisineAware(["morning stop", "casual", "good coffee", "quick bite", "weekend"], cuisine: context.cuisine),
                     selectedTags: ["morning stop", "quick bite"],
@@ -297,7 +301,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["pizza", "burgers", "hot dogs", "barbecue", "chicken", "wings"]) {
+            if containsAny(restaurantDetailKey, ["pizza", "burgers", "hot dogs", "barbecue", "chicken", "wings"]) {
                 return Defaults(
                     tagOptions: cuisineAware(["comfort food", "group order", "casual", "craveable", "good value"], cuisine: context.cuisine),
                     selectedTags: ["comfort food", "craveable"],
@@ -310,7 +314,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["ramen", "noodles", "dumplings", "dim sum", "hot pot"]) || !cuisineKey.isEmpty {
+            if containsAny(restaurantDetailKey, ["ramen", "noodles", "dumplings", "dim sum", "hot pot"]) || !cuisineKey.isEmpty {
                 let cuisineTag = context.cuisine.map { "\($0) craving" } ?? "craveable"
                 return Defaults(
                     tagOptions: unique([cuisineTag, "comfort food", "worth a detour", "casual", "group-friendly"]),
@@ -825,22 +829,22 @@ enum WanderPlaceCategory {
             "thai restaurant", "sushi restaurant", "korean bbq"
         ],
             subcategories: [
-            "Restaurant", "Fast food", "Fine dining", "Casual/family", "Diner", "Bistro", "Buffet", "Food court",
-            "Takeout", "Cafeteria", "Breakfast", "Brunch", "Sandwich", "Bagel", "Deli", "Salad", "Soup", "Pizza",
-            "Burgers", "Hot dogs", "Barbecue", "Chicken", "Wings", "Seafood", "Oyster bar", "Fish & chips",
-            "Taco stand", "Taco truck", "Steakhouse", "Vegetarian", "Vegan", "Halal", "Ramen", "Noodles",
-            "Dumplings", "Dim sum", "Hot pot", "Fondue", "Burrito", "Taco", "Falafel", "Gyro", "Kebab", "Shawarma",
-            "Bar & grill", "Snack bar", "Gastropub", "American", "Mexican", "Thai", "Vietnamese", "Chinese",
-            "Cantonese", "Taiwanese", "Korean", "Japanese", "Sushi", "Izakaya", "Yakitori", "Yakiniku", "Indian",
-            "North Indian", "South Indian", "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern",
-            "Lebanese", "Persian", "Turkish", "Israeli", "Moroccan", "Mediterranean", "Greek", "Italian", "French",
-            "Spanish", "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss", "Dutch",
-            "Belgian", "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech", "Hungarian",
-            "Romanian", "Croatian", "Ethiopian", "African", "Caribbean", "Jamaican", "Panamanian", "Cuban",
-            "Brazilian", "Argentinian", "Colombian", "Chilean", "Peruvian", "South American", "Latin American",
-            "Tex-Mex", "Southwestern", "Cajun", "Californian", "Hawaiian", "Australian", "Malaysian", "Indonesian",
-            "Filipino", "Burmese", "Cambodian", "Asian", "Asian fusion", "European", "Eastern European", "Danish",
-            "Tibetan", "Mongolian BBQ", "Korean BBQ", "Japanese BBQ", "Japanese curry", "Tonkatsu"
+            "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Italian",
+            "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion", "Sushi", "Ramen",
+            "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
+            "Yakiniku", "North Indian", "South Indian", "Malaysian", "Indonesian", "Filipino", "Burmese",
+            "Cambodian", "Asian", "Tibetan", "Mongolian BBQ", "Korean BBQ", "Japanese BBQ", "Japanese curry",
+            "Tonkatsu", "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern", "Lebanese",
+            "Persian", "Turkish", "Israeli", "Moroccan", "Ethiopian", "African", "Falafel", "Gyro", "Kebab",
+            "Shawarma", "Halal", "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss",
+            "Dutch", "Belgian", "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech",
+            "Hungarian", "Romanian", "Croatian", "European", "Eastern European", "Danish", "Pizza",
+            "Fish & chips", "Fondue", "Caribbean", "Jamaican", "Panamanian", "Cuban", "Brazilian",
+            "Argentinian", "Colombian", "Chilean", "Peruvian", "South American", "Latin American",
+            "Southwestern", "Cajun", "Californian", "Hawaiian", "Australian", "Burgers", "Diner", "Hot dogs",
+            "Barbecue", "Wings", "Steakhouse", "Bar & grill", "Taco stand", "Taco truck", "Burrito", "Taco",
+            "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup",
+            "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
         ],
             isEditable: true
         ),
@@ -1315,36 +1319,35 @@ enum WanderPlaceCategory {
 
     private static let curatedSubcategoryGroups: [String: [PlaceCategorySubcategoryGroup]] = [
         restaurantsFood: [
-            PlaceCategorySubcategoryGroup(title: "Restaurant type", subcategories: [
-                "Restaurant", "Fast food", "Fine dining", "Casual/family", "Diner", "Bistro", "Buffet",
-                "Food court", "Takeout", "Cafeteria", "Breakfast", "Brunch", "Sandwich", "Bagel", "Deli", "Salad",
-                "Soup", "Pizza", "Burgers", "Hot dogs", "Barbecue", "Chicken", "Wings", "Seafood", "Oyster bar",
-                "Fish & chips", "Taco stand", "Taco truck", "Steakhouse", "Vegetarian", "Vegan", "Halal", "Ramen",
-                "Noodles", "Dumplings", "Dim sum", "Hot pot", "Fondue", "Burrito", "Taco", "Falafel", "Gyro",
-                "Kebab", "Shawarma", "Bar & grill", "Snack bar", "Gastropub"
-            ]),
             PlaceCategorySubcategoryGroup(title: "Popular cuisines", subcategories: [
-                "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Sushi", "Indian",
+                "American", "Mexican", "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian",
                 "Italian", "Mediterranean", "Greek", "French", "Spanish", "Tex-Mex", "Asian fusion"
             ], role: .cuisine),
-            PlaceCategorySubcategoryGroup(title: "Asian cuisines", subcategories: [
-                "Cantonese", "Taiwanese", "Izakaya", "Yakitori", "Yakiniku", "North Indian", "South Indian",
-                "Malaysian", "Indonesian", "Filipino", "Burmese", "Cambodian", "Asian", "Tibetan", "Mongolian BBQ",
-                "Korean BBQ", "Japanese BBQ", "Japanese curry", "Tonkatsu"
+            PlaceCategorySubcategoryGroup(title: "Asian", subcategories: [
+                "Sushi", "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese",
+                "Izakaya", "Yakitori", "Yakiniku", "North Indian", "South Indian", "Malaysian", "Indonesian",
+                "Filipino", "Burmese", "Cambodian", "Asian", "Tibetan", "Mongolian BBQ", "Korean BBQ",
+                "Japanese BBQ", "Japanese curry", "Tonkatsu"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Middle East & Africa", subcategories: [
                 "Pakistani", "Sri Lankan", "Bangladeshi", "Afghan", "Middle Eastern", "Lebanese", "Persian",
-                "Turkish", "Israeli", "Moroccan", "Ethiopian", "African"
+                "Turkish", "Israeli", "Moroccan", "Ethiopian", "African", "Falafel", "Gyro", "Kebab", "Shawarma",
+                "Halal"
             ], role: .cuisine),
-            PlaceCategorySubcategoryGroup(title: "European cuisines", subcategories: [
+            PlaceCategorySubcategoryGroup(title: "Europe", subcategories: [
                 "Tapas", "Portuguese", "Basque", "German", "Austrian", "Bavarian", "Swiss", "Dutch", "Belgian",
                 "British", "Irish", "Scandinavian", "Polish", "Ukrainian", "Russian", "Czech", "Hungarian",
-                "Romanian", "Croatian", "European", "Eastern European", "Danish"
+                "Romanian", "Croatian", "European", "Eastern European", "Danish", "Pizza", "Fish & chips", "Fondue"
             ], role: .cuisine),
             PlaceCategorySubcategoryGroup(title: "Americas & Pacific", subcategories: [
                 "Caribbean", "Jamaican", "Panamanian", "Cuban", "Brazilian", "Argentinian", "Colombian", "Chilean",
                 "Peruvian", "South American", "Latin American", "Southwestern", "Cajun", "Californian", "Hawaiian",
-                "Australian"
+                "Australian", "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill",
+                "Taco stand", "Taco truck", "Burrito", "Taco"
+            ], role: .cuisine),
+            PlaceCategorySubcategoryGroup(title: "Misc", subcategories: [
+                "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch", "Soup",
+                "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free", "Snack bar", "Gastropub"
             ], role: .cuisine)
         ],
         coffeeTeaSweets: [
@@ -1795,10 +1798,6 @@ enum WanderPlaceCategory {
         }
 
         return groups
-    }
-
-    static func restaurantTypeGroups() -> [PlaceCategorySubcategoryGroup] {
-        subcategoryGroups(for: restaurantsFood).filter { $0.role == .type }
     }
 
     static func restaurantCuisineGroups() -> [PlaceCategorySubcategoryGroup] {

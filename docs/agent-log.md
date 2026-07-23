@@ -17941,3 +17941,129 @@ Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
 - Rechecked CoreDevice after opening the project. Ryan's physical iPhone is
   still reported as `unavailable`, so a signed device install remains blocked
   until the phone is unlocked/reconnected and appears as available.
+
+## 2026-07-22 21:49 PDT - Codex - REC-126 Restaurant Cuisine Taxonomy
+
+Agent: Codex using the rec.me feedback workflow, Linear, engineering review,
+and design-plan review
+Branch: `codex/rec-126-restaurant-cuisines`
+Worktree: `/private/tmp/recme-rec126-restaurant-cuisine`
+Linear: `REC-126` (`Backlog`; move to `In Progress` before implementation)
+
+Goal: remove the separate subcategory choice for Restaurants & Food, fold the
+retained restaurant-type values into the grouped Cuisine chooser exactly as
+specified in REC-126, remove the five generic/redundant values, validate the
+save-form taxonomy contract, and hand the pushed branch off in Xcode for
+testing/review.
+
+Starting status and coordination:
+
+- Fetched latest `origin/main` and created this clean isolated worktree at
+  `d1e7976a1` because the root checkout is on unrelated REC-88 work with
+  user-owned `.gitignore` and `.pnpm-store/` changes.
+- The root checkout and all unrelated worktrees remain untouched. No active
+  overlapping REC-126 branch or agent-log entry was found.
+- REC-126 currently has no comments or attachments and is in Backlog. Its
+  requested grouping/removal rules are explicit, so triage will lock the
+  smallest compatible data-flow change before implementation.
+- Expected files are
+  `Wander/Services/WanderPlaceCategory.swift`,
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderPlaceCategoryTests.swift`, focused save-flow/navigation
+  contract tests if required by the review, and this coordination log.
+- `project.yml`, build number, Supabase schema/RLS/RPCs, hosted data migration,
+  TestFlight release work, and unrelated category behavior are out of scope
+  unless source inspection proves the existing cross-layer value-type contract
+  must change.
+
+Engineering and design review checkpoint, 2026-07-22 21:56 PDT:
+
+- Scope challenge: the existing grouped taxonomy, `selectedCuisine` state,
+  visit-scoped `restaurant_cuisine` attribute, category picker, and shared
+  taxonomy parity test already solve the hard parts. The smallest complete
+  change is to make every Restaurants & Food child option a cuisine, remove its
+  separate subcategory affordance, preserve canonical/provider subcategory
+  storage for backward compatibility, and update focused tests/mockups. No new
+  service, persisted field, RPC, migration, or data rewrite is needed.
+- Data flow:
+
+      provider category/subcategory (compatibility, unchanged)
+                         |
+                         v
+      Restaurants & Food category -> Cuisine-only picker
+                         |
+                         v
+      selectedCuisine -> restaurant_cuisine visit attribute
+                         |
+                         v
+      local/remote save payload + existing emoji/default presentation
+
+- The issue's retained lists are treated as the complete migration set from the
+  old Restaurant type section. The five explicitly generic values plus
+  unlisted `Buffet` and `Cafeteria` leave the picker; `Gluten-free` is added.
+  Existing canonical `Barbecue` spelling is retained for saved-value/provider
+  compatibility while placing it in the requested Americas & Pacific group.
+- Group order/design is locked to `Popular cuisines`, `Asian`,
+  `Middle East & Africa`, `Europe`, `Americas & Pacific`, then `Misc`.
+  The save form shows Category + Cuisine for Restaurants & Food and Category +
+  Subcategory for every other editable category. Selecting Restaurants & Food
+  routes directly to Cuisine. This is subtraction using the existing
+  `DESIGN.md` components, so no new visual direction or mockup variants are
+  warranted; DEBUG reference screens will be updated to match.
+- Architecture review: clean. Provider/category subcategories remain available
+  to inference and old saves, while the only user-authored second-level value
+  continues through the already-hosted `restaurant_cuisine` contract.
+  Code-quality review: clean with the obsolete restaurant-type helper/count
+  removed rather than retained as empty/dead semantics. Performance review:
+  clean; static option lookup remains linear over roughly 126 values and adds
+  no I/O or observation.
+- Test review requires exact section membership/order and no duplicates,
+  explicit removed/retained assertions, Swift/shared JSON parity, Cuisine-vs-
+  Subcategory structural UI coverage, category-tile copy/accessibility, moved
+  option emoji/default behavior, and existing save/edit cuisine persistence.
+  The focused plan is stored at
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ryanlieblein-codex-rec-126-restaurant-cuisines-eng-review-test-plan-20260722-215452.md`.
+- Failure modes are covered by the plan: a stale subcategory row or wrong
+  post-category route is a UI regression; an ungrouped/duplicate value is a
+  taxonomy regression; a moved cuisine falling back to the broad plate emoji
+  is a presentation regression; shared JSON drift is a cross-runtime
+  regression. Existing provider inference and saved cuisines remain covered by
+  their current tests.
+- NOT in scope: removing the canonical `places.subcategory` field, rewriting
+  old rows/attributes, changing Supabase constraints/RPCs, changing other
+  categories' subcategory model, category-wide design work, build-number or
+  TestFlight release work. Sequential implementation is appropriate because
+  the taxonomy, picker, emoji, mockup, and tests are one small shared contract.
+- Engineering review gate result: clean, 0 unresolved decisions, 0 critical
+  gaps. The gstack review/test artifacts were recorded; its local Bun validator
+  was unavailable, so the bundled Node runtime was used only as a compatible
+  JSON validator to complete the required review-log command.
+
+Implementation and focused-validation checkpoint, 2026-07-22 22:09 PDT:
+
+- Implemented the locked cuisine-only Restaurant & Food flow. The save form now
+  shows Category + Cuisine for restaurants and Category + Subcategory
+  elsewhere; selecting Restaurants & Food routes directly into the Cuisine
+  picker. Category tiles and accessibility copy now report cuisines.
+- Reorganized the Restaurant & Food taxonomy into six cuisine groups with 126
+  unique options, removed the generic/unlisted legacy choices, added
+  `Gluten-free`, and advanced the shared taxonomy mirror to version 7. The
+  canonical provider/default subcategory `Restaurant` remains unchanged for
+  backward compatibility and is no longer user-selectable.
+- Preserved contextual tag/list defaults for restaurant types promoted into
+  cuisine, extended cuisine emoji fallback through the existing restaurant
+  detail rules, and gave `Halal` the specific Middle Eastern dish treatment
+  after the first focused run exposed its generic plate fallback.
+- Updated deterministic taxonomy mockups and added tests for exact group
+  order/count/membership, removed values, shared JSON parity, promoted-cuisine
+  defaults and emoji coverage, and the Restaurant Cuisine-vs-Subcategory UI
+  contract.
+- Ran `xcodegen generate`; it produced no project-file diff. The first focused
+  run failed only the new exhaustive cuisine-emoji assertion for `Halal`; after
+  the targeted fix, the complete focused selection passed 86/86 tests on
+  iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-08-11--0700.xcresult`.
+- `origin/main` advanced by three commits during implementation, including the
+  REC-119 rating explanation in `MapScreen.swift` and new agent-log entries.
+  Integrate those commits before the full-suite and visual validation; preserve
+  both changes if the high-conflict files require manual resolution.

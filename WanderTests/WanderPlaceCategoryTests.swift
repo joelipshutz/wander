@@ -987,7 +987,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 6)
+        XCTAssertEqual(shared.version, 7)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1021,35 +1021,92 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
     }
 
-    func testRestaurantsFoodSubcategoriesSeparateTypeAndCuisineGroups() {
-        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood)
+    func testRestaurantsFoodUsesCuisineOnlyGroups() throws {
+        let groups = WanderPlaceCategory.restaurantCuisineGroups()
 
         XCTAssertEqual(groups.map(\.title), [
-            "Restaurant type",
             "Popular cuisines",
-            "Asian cuisines",
+            "Asian",
             "Middle East & Africa",
-            "European cuisines",
-            "Americas & Pacific"
+            "Europe",
+            "Americas & Pacific",
+            "Misc"
         ])
-        XCTAssertEqual(groups[0].role, .type)
-        XCTAssertTrue(groups[0].subcategories.contains("Restaurant"))
-        XCTAssertTrue(groups[0].subcategories.contains("Taco truck"))
-        XCTAssertEqual(groups[1].role, .cuisine)
-        XCTAssertTrue(groups.flatMap(\.subcategories).contains("Thai"))
-        XCTAssertEqual(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories).count, 47)
-        XCTAssertEqual(WanderPlaceCategory.restaurantCuisineOptions.count, 85)
+        XCTAssertEqual(groups.map(\.subcategories.count), [15, 25, 17, 25, 27, 17])
+        XCTAssertTrue(groups.allSatisfy { $0.role == .cuisine })
 
-        let restaurantTypes = Set(WanderPlaceCategory.restaurantTypeGroups().flatMap(\.subcategories))
-        let cuisines = Set(WanderPlaceCategory.restaurantCuisineOptions)
-        XCTAssertTrue(restaurantTypes.contains("Food court"))
-        XCTAssertTrue(restaurantTypes.contains("Breakfast"))
-        XCTAssertTrue(restaurantTypes.contains("Bagel"))
-        XCTAssertTrue(restaurantTypes.contains("Oyster bar"))
-        XCTAssertTrue(restaurantTypes.contains("Taco truck"))
-        XCTAssertFalse(restaurantTypes.contains("Thai"))
-        XCTAssertFalse(cuisines.contains("Food court"))
-        XCTAssertTrue(cuisines.contains("Thai"))
+        let cuisines = WanderPlaceCategory.restaurantCuisineOptions
+        XCTAssertEqual(cuisines.count, 126)
+        XCTAssertEqual(Set(cuisines).count, cuisines.count)
+        XCTAssertEqual(
+            WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood),
+            groups
+        )
+
+        let expectedByGroup: [String: [String]] = [
+            "Asian": ["Sushi", "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot"],
+            "Middle East & Africa": ["Falafel", "Gyro", "Kebab", "Shawarma", "Halal"],
+            "Europe": ["Pizza", "Fish & chips", "Fondue"],
+            "Americas & Pacific": [
+                "Burgers", "Diner", "Hot dogs", "Barbecue", "Wings", "Steakhouse", "Bar & grill",
+                "Taco stand", "Taco truck", "Burrito", "Taco"
+            ],
+            "Misc": [
+                "Sandwich", "Bagel", "Deli", "Salad", "Bistro", "Food court", "Breakfast", "Brunch",
+                "Soup", "Chicken", "Seafood", "Oyster bar", "Vegetarian", "Vegan", "Gluten-free",
+                "Snack bar", "Gastropub"
+            ]
+        ]
+
+        for (title, expected) in expectedByGroup {
+            let group = try XCTUnwrap(groups.first { $0.title == title })
+            for cuisine in expected {
+                XCTAssertTrue(group.subcategories.contains(cuisine), "\(cuisine) should be in \(title)")
+            }
+        }
+
+        let removedValues = [
+            "Restaurant", "Fast food", "Fine dining", "Casual/family", "Takeout", "Buffet", "Cafeteria"
+        ]
+        for removedValue in removedValues {
+            XCTAssertFalse(cuisines.contains(removedValue), "\(removedValue) should not remain selectable")
+        }
+
+        XCTAssertEqual(WanderPlaceCategory.defaultSubcategory(for: WanderPlaceCategory.restaurantsFood), "Restaurant")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "pizza restaurant"), "Pizza")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
+    }
+
+    func testMovedRestaurantCuisineStillDrivesContextualDefaults() {
+        let quickBite = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Food court",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(quickBite.tagOptions.contains("quick bite"))
+        XCTAssertTrue(quickBite.defaultTags.contains("good value"))
+
+        let breakfast = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Breakfast",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(breakfast.tagOptions.contains("morning stop"))
+        XCTAssertTrue(breakfast.labelOptions.contains("breakfast rotation"))
+
+        let specialOccasion = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Steakhouse",
+            status: .been,
+            locality: "Los Angeles"
+        )
+        XCTAssertTrue(specialOccasion.tagOptions.contains("special occasion"))
+        XCTAssertTrue(specialOccasion.labelOptions.contains("celebration list"))
     }
 
     func testDefaultSuggestionsCoverEveryEditableTaxonomySubcategory() {
