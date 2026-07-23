@@ -18871,3 +18871,38 @@ REC-122 completion, 2026-07-22 23:11 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed for REC-122. The merged feature can be included from latest
   `main` in the next explicitly requested TestFlight batch.
+
+Completion, 2026-07-22 23:15 PDT:
+
+- Squash-merged ready build-number PR #183:
+  https://github.com/joelipshutz/wander/pull/183. Exact release source is
+  merged-main commit `c0d7f6b8f`; REC-127 implementation PR #174 previously
+  merged as `2b8be0823`.
+- `main` advanced only after the build-94 archive/upload began with REC-122
+  (`61b50e6f9`) and its completion log. Build 94 intentionally remains the
+  already-verified `c0d7f6b8f` REC-127 release source; REC-122 is not in build
+  94 and will ride the next explicitly requested TestFlight batch.
+- Deleted only the completed build-94 test DerivedData cache and already-uploaded
+  build-93 archive to make room, then created a fresh detached worktree from
+  exact `origin/main`. Archived `/private/tmp/Wander-0.1-build94.xcarchive`;
+  archive and embedded app metadata both verify rec.me `0.1 (94)`, bundle
+  `com.grayline.wander`, and team `Y7TVK75RZ8`.
+- Export/upload succeeded with automatic App Store distribution signing and
+  `manageAppVersionAndBuildNumber=false`; Xcode reported `Uploaded Wander`,
+  `Upload succeeded`, and `EXPORT SUCCEEDED`.
+- TestFlight helper confirmed App Store Connect build
+  `8b8dcaa6-9b92-41d9-afc5-a84e7931a5e7` is `VALID`, export compliance is
+  false, en-US What to Test is updated, and public group `rec.me Alpha` is
+  attached. The explicit review-submission POST returned the harmless existing
+  QC-state 422, then the final build query reported beta review `APPROVED`.
+- Posted the required tester-facing Slack note:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784787284501749.
+  Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- Linear REC-127 has final PR, merge, validation, build, TestFlight, and Slack
+  evidence and is Done. Mission Control task creation remained unavailable
+  because `localhost:4000` was not running.
+- Final tester focus: normal Map launch uses current-city framing with no
+  selected place/card; location-unavailable fallback remains unselected;
+  notification and explicit place routes still center/select intentionally.
+  Known behavior: current city is a one-shot location fix at the existing
+  city-scale span, not a live follow-camera or reverse-geocoded boundary.
