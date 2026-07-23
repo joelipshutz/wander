@@ -18115,3 +18115,19 @@ REC-119 visual follow-up handoff, 2026-07-22 17:24 PDT:
   In Review.
 - No known blocker remains for Ryan's visual review. No TestFlight build or
   release action was requested or performed.
+
+REC-119 rec.me control-position follow-up start, 2026-07-22 19:31 PDT:
+
+- Ryan approved the direction but reported that the rec.me information button
+  still sits too close beneath the header text and requested that control move
+  farther right. Scope is limited to the rec.me control in both place-profile
+  rating-card presentations; the Fit control and native anchored popover remain
+  unchanged unless visual validation exposes a shared-layout issue.
+- Re-read the Linear workflow and `DESIGN.md`, fetched `origin`, confirmed this
+  isolated worktree was clean, and returned REC-119 from In Review to In
+  Progress. The root checkout has unrelated user/agent work and remains
+  untouched; no overlapping edits are present in this worktree.
+- `origin/main` is four commits ahead with REC-124 and build-92 history. Before
+  editing the high-conflict `MapScreen.swift`, preserve this coordination entry,
+  rebase the branch onto current `origin/main`, then regenerate, test, and
+  recapture the large- and compact-phone SwiftUI mockups.
