@@ -18455,3 +18455,34 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
+
+REC-126 latest-main validation and blocked handoff, 2026-07-22 23:03 PDT:
+
+- Committed the implementation as `cbd242ae2`, merged current `origin/main`
+  commit `8e69138f4`, and resolved the sole conflict in this append-only work log
+  by preserving the complete REC-119, REC-130, and REC-126 histories. Product
+  files merged automatically. XcodeGen then produced no tracked changes, the
+  branch was 0 behind / 2 commits ahead, and `git diff --check` passed.
+- Focused taxonomy/navigation coverage passed 86/86. The complete exact-head
+  iOS suite passed 579/579 with zero failures on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_22-10-46--0700.xcresult`.
+  Existing simulator keychain/location, Supabase formatter concurrency, and
+  traditional-headermap diagnostics remain unrelated and non-fatal.
+- Visual QA passed on iPhone 17 Pro and compact iPhone 17e. The corrected
+  Cuisine picker shows `126 cuisines`, the requested first two groups render
+  without clipping or safe-area issues, and the Restaurant edit screen contains
+  only Category + Cuisine. Captures:
+  `/private/tmp/rec126-17pro-cuisine-final.png`,
+  `/private/tmp/rec126-17e-cuisine.png`, and
+  `/private/tmp/rec126-17pro-edit-final.png`.
+- Publication and Xcode handoff are externally blocked. macOS is locked, so the
+  required computer-use workflow cannot open or verify this isolated project
+  in Xcode. GitHub CLI is installed but `gh auth status` reports the active
+  `ryanlane23` token is invalid, so the repo-required push/ready-PR workflow
+  cannot continue until Ryan runs `gh auth login -h github.com`.
+- Added the validation and exact blockers to REC-126 in Linear comment
+  `6653c48f-5977-4f83-ae91-7edd6b01b2c9`. The issue intentionally remains In
+  Progress. Exact restart: unlock the Mac, reauthenticate `gh`, push
+  `codex/rec-126-restaurant-cuisines`, open a ready PR to `main`, load
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode,
+  verify the branch in Xcode, then update this log and Linear to In Review.
