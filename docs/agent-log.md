@@ -17881,3 +17881,20 @@ Design checkpoint, 2026-07-22 21:17 PDT:
 - Recommendation awaiting Joe's review: combine A's warm, unmistakably rec.me
   takeover with C's ultra-quiet Profile row. No direction has been approved and
   no production SwiftUI is implemented yet.
+
+Handoff checkpoint, 2026-07-22 21:19 PDT:
+
+- Pushed branch `codex/rec-122-streak-design` and opened draft coordination PR
+  [#175](https://github.com/joelipshutz/wander/pull/175). The tracked diff is
+  intentionally only this agent log; the visual artifacts remain local user
+  data under the gstack design directory.
+- Added the trigger contract, three directions, recommendation, and PR link to
+  Linear REC-122 in comment `ae6aa116-8922-4190-ab0f-d82a9bb156dc`; the issue
+  remains In Progress while design feedback is pending.
+- Exact restart: open `design-board.html`, use the Replay controls to compare
+  the motion, and select A/B/C or a mix. After Joe confirms the direction, save
+  the approved choice and update the taste profile, then plan/implement the
+  SwiftUI and streak state contract on this short-lived branch or a fresh
+  implementation branch.
+- No build/test run was required because production code did not change. No
+  build-number bump, archive, TestFlight upload, or Slack message was made.
