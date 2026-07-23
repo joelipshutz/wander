@@ -18160,3 +18160,14 @@ REC-119 rec.me control-position validation, 2026-07-22 19:41 PDT:
   Existing Supabase formatter warnings and simulator diagnostics remain
   unrelated. No build-number, TestFlight, backend, or release action was
   requested or performed.
+
+REC-119 rec.me control-position handoff, 2026-07-22 19:42 PDT:
+
+- Committed the rec.me-only position adjustment as `b74e81ba9` and safely
+  force-updated `codex/rec-119-ratings-info` with lease protection after the
+  latest-main rebase. Ready PR #169 now reports `CLEAN` and `MERGEABLE` at that
+  exact head, with no configured checks:
+  https://github.com/joelipshutz/wander/pull/169
+- Added the revision, visual-review evidence, and 574/574 validation to Linear
+  REC-119, then returned the issue to In Review. No known blocker remains for
+  Ryan's visual approval of the farther-right rec.me control.
