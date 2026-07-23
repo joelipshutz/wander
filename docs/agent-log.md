@@ -18213,3 +18213,13 @@ REC-119 rating-header alignment validation, 2026-07-22 20:56 PDT:
   `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_20-54-57--0700.xcresult`.
   Existing simulator and Supabase formatter diagnostics remain unrelated. No
   backend, build-number, TestFlight, or release action was requested.
+
+REC-119 rating-header alignment handoff, 2026-07-22 20:57 PDT:
+
+- Committed and pushed the alignment revision as `28053ec6f` on
+  `codex/rec-119-ratings-info`, updating ready PR #169. GitHub reports the PR
+  `CLEAN` and `MERGEABLE` at that exact head, with no configured checks:
+  https://github.com/joelipshutz/wander/pull/169
+- Added the exact offsets, screenshots, and 574/574 validation to Linear
+  REC-119, then returned it to In Review. No known blocker remains for Ryan's
+  visual approval; no TestFlight or release work was performed.
