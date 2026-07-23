@@ -19436,3 +19436,45 @@ Map-preview follow-up completion, 2026-07-23 11:02 PDT:
   matching`). Moved REC-135 back to In Review and posted its validation and
   local-only branch handoff in Linear. A push/PR remains intentionally pending
   because code upload was not explicitly authorized.
+
+Dynamic-map landing follow-up, 2026-07-23 11:07 PDT:
+
+- Ryan requested one final correction before landing REC-135: the Apple Maps
+  camera must actively refit whenever a newly submitted search returns a
+  different candidate set, then the completed branch should be squash-merged
+  and pushed to `main`.
+- Refetched `origin`; `codex/rec-135-match-broken-import` is clean, four commits
+  ahead of and zero commits behind `origin/main`. The isolated worktree remains
+  appropriate because the primary checkout is on unrelated REC-88 work.
+- Reviewed the shared rec.me landing workflow, gstack pre-landing review
+  workflow/checklist, Linear workflow, and `DESIGN.md`. No pending explicit
+  TestFlight release is part of this merge-only request, so no build-number
+  bump, archive, upload, or Slack release note is authorized.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused regression tests
+  if a suitable view-state boundary exists, and this append-only coordination
+  log. No schema, backend, or project-membership change is expected.
+
+Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
+
+- Replaced the one-time `Map(initialPosition:)` seed with a bound
+  `MapCameraPosition`. Every successful manual search now computes a padded
+  region from that exact candidate set and assigns it to the camera, so
+  subsequent result sets recenter and refit instead of inheriting the first
+  viewport.
+- Focused manual-search and region-fitting coverage passed: 11 tests, 0
+  failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-10-53--0700.xcresult`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-27-53--0700.xcresult`.
+- Reinstalled a disposable fixture on the smaller iPhone 17e and reviewed the
+  actual MapKit flow. The initial Blue Bottle results fitted the Los Angeles
+  candidate spread; changing the query to `Santa Monica Pier` replaced the
+  pins and visibly recentered/zoomed the map around the pier before displaying
+  the four new result cards.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- During validation, `origin/main` advanced by two commits. The completed local
+  correction will be committed, rebased onto the latest `origin/main`, and
+  revalidated before the ready PR is squash-merged.

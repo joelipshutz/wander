@@ -1592,6 +1592,7 @@ private struct PlaceImportRescueScreen: View {
     @State private var searchFailure: String?
     @State private var lastSubmittedQuery = ""
     @State private var searchRevision = 0
+    @State private var candidateMapPosition: MapCameraPosition = .automatic
     @FocusState private var isSearchFocused: Bool
 
     init(
@@ -1611,8 +1612,8 @@ private struct PlaceImportRescueScreen: View {
                 LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     searchField
 
-                    if let candidateMapRegion {
-                        candidateMap(region: candidateMapRegion)
+                    if candidateMapRegion != nil {
+                        candidateMap
                     }
 
                     if isSearching {
@@ -1765,20 +1766,11 @@ private struct PlaceImportRescueScreen: View {
     }
 
     private var candidateMapRegion: MKCoordinateRegion? {
-        MapRegionFitter.region(
-            fitting: candidates.compactMap { candidate in
-                usableImportCoordinate(
-                    latitude: candidate.latitude,
-                    longitude: candidate.longitude
-                )
-            },
-            minimumSpan: 0.02,
-            paddingMultiplier: 1.5
-        )
+        candidateMapRegion(for: candidates)
     }
 
-    private func candidateMap(region: MKCoordinateRegion) -> some View {
-        Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
+    private var candidateMap: some View {
+        Map(position: $candidateMapPosition, interactionModes: [.pan, .zoom]) {
             ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
                 if let coordinate = usableImportCoordinate(
                     latitude: candidate.latitude,
@@ -1916,10 +1908,28 @@ private struct PlaceImportRescueScreen: View {
         lastSubmittedQuery = normalizedQuery
         switch outcome {
         case .results(let results):
+            if let region = candidateMapRegion(for: results) {
+                candidateMapPosition = .region(region)
+            } else {
+                candidateMapPosition = .automatic
+            }
             candidates = results
         case .failed(let message):
             searchFailure = message
         }
+    }
+
+    private func candidateMapRegion(for candidates: [PlaceCandidate]) -> MKCoordinateRegion? {
+        MapRegionFitter.region(
+            fitting: candidates.compactMap { candidate in
+                usableImportCoordinate(
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude
+                )
+            },
+            minimumSpan: 0.02,
+            paddingMultiplier: 1.5
+        )
     }
 
     private func confirmSelection() {
