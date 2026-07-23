@@ -5928,6 +5928,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.ownRating?.subtitle ?? "0 visits",
                 systemImage: "star.fill",
                 tint: WanderTheme.stateWarning.color,
+                explanation: nil,
                 compact: compact
             )
 
@@ -5938,6 +5939,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                 systemImage: "person.2.fill",
                 tint: WanderTheme.pinSocial.color,
+                explanation: .recMe,
                 compact: compact
             )
 
@@ -5948,6 +5950,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
                 systemImage: "sparkles",
                 tint: WanderTheme.terracotta.color,
+                explanation: .fit,
                 compact: compact
             )
         }
@@ -5961,6 +5964,7 @@ private struct PlaceProfileMetricCard: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let explanation: PlaceRatingExplanation?
     let compact: Bool
 
     var body: some View {
@@ -5971,6 +5975,7 @@ private struct PlaceProfileMetricCard: View {
                 .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                 .background(tint.opacity(0.12))
                 .clipShape(Circle())
+                .offset(x: ratingHeaderHorizontalOffset)
 
             Text(title)
                 .font(.system(size: compact ? 11 : 13, weight: .black))
@@ -5980,6 +5985,7 @@ private struct PlaceProfileMetricCard: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.68)
                 .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
+                .offset(x: ratingHeaderHorizontalOffset)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
@@ -6013,6 +6019,20 @@ private struct PlaceProfileMetricCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if let explanation {
+                PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                    .offset(x: infoButtonHorizontalOffset, y: compact ? -1 : 1)
+            }
+        }
+    }
+
+    private var ratingHeaderHorizontalOffset: CGFloat {
+        explanation == nil ? -5 : -10
+    }
+
+    private var infoButtonHorizontalOffset: CGFloat {
+        explanation == .recMe ? 9 : 6
     }
 
     private var valueFontSize: CGFloat {
