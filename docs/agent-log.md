@@ -18798,3 +18798,14 @@ REC-126 final validation checkpoint, 2026-07-22 23:08 PDT:
   push `codex/rec-126-restaurant-cuisines`, open the ready PR linked to
   REC-126, load this worktree's `Wander.xcodeproj` in Xcode, verify the branch,
   and move REC-126 to In Review with the PR and validation details.
+
+Xcode handoff checkpoint, 2026-07-22 23:11 PDT:
+
+- The Mac was unlocked during the run. Opened
+  `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode and
+  verified the Branch Chooser visibly reports
+  `codex/rec-126-restaurant-cuisines`. Xcode is indexing the generated project;
+  the branch is locally ready for test/review.
+- Updated the existing REC-126 Linear handoff comment with the exact-head test
+  result and Xcode state. GitHub CLI authentication remains the sole blocker:
+  `gh auth status` still reports the active `ryanlane23` token as invalid.
