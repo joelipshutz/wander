@@ -18455,7 +18455,6 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
-
 REC-126 latest-main validation and blocked handoff, 2026-07-22 23:03 PDT:
 
 - Committed the implementation as `cbd242ae2`, merged current `origin/main`
@@ -18486,3 +18485,231 @@ REC-126 latest-main validation and blocked handoff, 2026-07-22 23:03 PDT:
   `codex/rec-126-restaurant-cuisines`, open a ready PR to `main`, load
   `/private/tmp/recme-rec126-restaurant-cuisine/Wander.xcodeproj` in Xcode,
   verify the branch in Xcode, then update this log and Linear to In Review.
+## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-93`
+Worktree: `/private/tmp/recme-build93-release`
+Linear: `REC-134` (`In Progress`)
+
+Goal: package every eligible app change on exact latest `main` after completed
+TestFlight build 92 into rec.me build 93, validate it, upload it, attach it to the
+public TestFlight group, and post the required tester note.
+
+Starting status and coordination:
+
+- Fetched `origin`; exact release base is clean `origin/main` at `8e69138f4`.
+  The root checkout remains on unrelated REC-88 work with user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or switched.
+  Created this isolated release worktree from current main. Existing worktrees
+  are stale or task-specific; no overlapping active edit will be reverted.
+- Build 92 is fully complete: its archive/upload, public-group attachment,
+  external approval, tester Slack note, and durable completion record are all
+  on `main`. Current `project.yml` declares build 92, so there is no unfinished
+  release and this explicit request increments exactly once to build 93.
+- Eligible app delta since build-92 source `a6cb303b9` is exactly:
+  PR #176 / REC-130 (`d1e7976a1`) defining deterministic list-tile photo,
+  category-emoji, and empty-state fallbacks; and PR #169 / REC-119
+  (`d27cb4d12`) adding accessible rec.me/Fit rating explanations with native
+  anchored popovers and the approved header/control alignment. The remaining
+  commits are docs/coordination records.
+- No backend migration, schema/RLS, auth, tester-data mutation, or
+  marketing-version change is included. Marketing version remains `0.1`.
+  Expected tracked release files are `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Tester copy and export
+  options will live under `/private/tmp`, not the repo.
+- Release plan: bump 92 -> 93, regenerate and audit the project, run the full
+  simulator test/build gate, open and merge a ready build-number PR, archive
+  exact resulting latest main, upload with
+  `manageAppVersionAndBuildNumber=false`, run
+  `scripts/testflight-release.mjs` with the archive path, confirm public-group
+  and beta-review state, update Linear, then post to `#testflight-feedback`.
+
+Validation checkpoint, 2026-07-22 22:10 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 92 to 93 in `project.yml`, then ran
+  `xcodegen generate`. Audited the generated project diff: the only
+  `Wander.xcodeproj/project.pbxproj` changes are the two expected Debug/Release
+  build-number values; there is no signing, compiler-setting, or project-member
+  churn. `git diff --check` passes.
+- The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this Mac.
+  Ran the complete suite on the installed iPhone 17 Pro / iOS 26.5 simulator.
+  The first clean-package run had the simulator kill one test process; Xcode
+  reported no assertion failure, restarted the runner, and the same test passed
+  in that run. The test then passed independently, and a complete clean rerun
+  passed 577/577 with zero failures:
+  `/private/tmp/DerivedData-build93-test/Logs/Test/Test-Wander-2026.07.22_22-04-46--0700.xcresult`.
+- The generic universal iOS Simulator build completed with
+  `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain non-blocking and predate this release.
+- Current tracked scope remains exactly `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this coordination log.
+  Tester-facing What-to-Test copy is staged outside the repo at
+  `/private/tmp/recme-build93-what-to-test.md`. Next: run the release diff review,
+  publish and merge the build-number PR, then archive and upload exact merged
+  `main`.
+
+Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
+
+- Applied the repo-required gstack pre-landing checklist to the complete
+  three-file release diff. Scope is clean: `project.yml` and both generated
+  Xcode configurations agree on build 93, and the only other change is this
+  chronological release record. No product, schema, signing, marketing-version,
+  source-membership, CI, or unrelated generated change is present.
+- Critical and informational passes found no actionable issue. SQL/data,
+  concurrency, LLM/shell, enum completeness, field safety, frontend behavior,
+  time-window, type-boundary, and distribution checks are not implicated by the
+  metadata-only diff. Specialist passes were scope-gated; this session is also
+  prohibited from dispatching review subagents.
+- The optional gstack review-history write was not performed because the
+  sandbox rejected its ability to enqueue local review metadata for later
+  cross-machine artifact sync. This does not affect the code/diff review or
+  release gate. Result: `Pre-Landing Review: No issues found.`
+## 2026-07-22 20:59 PDT - Codex - REC-127 Map Default Behavior
+
+Agent: Codex using Linear and `recme-testflight-feedback-bug-catcher`
+Branch: `codex/rec-127-map-default`
+Worktree: `/private/tmp/recme-rec127-map-default`
+Linear: `REC-127` (`In Progress`)
+
+Goal: make the production Map tab open without a selected place and use the
+user's current location as the center of a city-scale initial camera instead of
+defaulting to the seeded Los Angeles region/place fit.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected root status/worktrees, read the latest
+  coordination log, and created this isolated worktree from exact
+  `origin/main` `9de2e42` because `MapScreen.swift` and this log are documented
+  high-conflict files. The root checkout is clean on an unrelated gone branch
+  and remains untouched.
+- Linear REC-127 was created today from Joe's feedback, assigned to Joe, moved
+  from Backlog to In Progress, and is the task source of truth. Mission Control
+  task creation was attempted, but `localhost:4000` is not running.
+- GBrain returned no matching prior KB result. Repo decisions preserve the live
+  native-blue current-location annotation and explicitly avoid live-location
+  broadcasting; this ticket changes only initial camera/selection state.
+
+Engineering review gate: clean. The required gstack review could not use its
+  interactive scope prompt in this non-Plan Codex mode, so the repo workflow's
+  required packet was completed directly against REC-127:
+
+- Scope: keep the change to `MapScreen.swift`, focused navigation/map launch
+  tests, and this log. Reuse `CoreLocationProvider`; add no service, persistence,
+  reverse geocoding, backend, schema, or permission-copy changes.
+- Data flow: normal Map launch -> one-shot current-location lookup -> city-scale
+  `MKCoordinateRegion` -> SwiftUI Map camera. An explicit visual-QA place query
+  or notification place route remains an intentional selection/camera override.
+- Failure mode: if location permission is denied or a usable fix is unavailable,
+  retain the existing deterministic fallback region; the existing recenter
+  control lets the user retry. No place becomes selected as a fallback.
+- Tests: cover city-region center/span and assert the default-selection resolver
+  has no first-visible-place fallback while preserving explicit launch queries.
+- Design lens: no new surface or copy. The empty-selection map state exposes the
+  existing filters/search/recenter controls and removes the unintended place card.
+- Decisions: none unresolved. "Current city" is implemented as current
+  coordinates with the existing city-scale default span, not reverse-geocoded
+  city boundaries and not a precise follow-camera.
+
+Expected files:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Validation checkpoint, 2026-07-22 21:14 PDT:
+
+- Removed the normal-launch fallback that selected the first visible place and
+  the camera path that fit saved-place coordinates. Explicit visual-QA place
+  queries still select and center their requested place.
+- A normal launch now requests one current-location fix through the existing
+  `CoreLocationProvider`, applies the existing `0.12 x 0.14` city-scale span,
+  and synchronizes the map search region. Denied/unavailable location keeps the
+  deterministic fallback region without selecting any place.
+- Notification place routes mark their camera as intentional and update the
+  search region, so a slower location response cannot override a notification
+  destination.
+- Focused tests passed 2/2 on iPhone 16 Plus / iOS 18.6, including the new
+  default-selection/city-region regression and the existing explicit visual-QA
+  place-query contract.
+- Full suite passed 574/574 on iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec127-focused/Logs/Test/Test-Wander-2026.07.22_21-11-59--0700.xcresult`.
+- Generic iOS Simulator build passed. Existing Supabase formatter actor-
+  isolation and traditional-headermap warnings remain unchanged and are not
+  blockers for REC-127.
+- Visual QA used simulated San Francisco coordinates (`37.7749, -122.4194`)
+  with demo fixtures. The iPhone 16e / iOS 18.6 screenshot shows the city-scale
+  map, native blue location dot, and no selected place/card:
+  `/private/tmp/rec127-map-default-iphone16e.png`. The iPhone 16 Plus launch
+  reached the same city framing with no place selection; its first-run system
+  permission prompt was left untouched rather than accepting a UI privacy
+  choice on Joe's behalf.
+- Final diff remains limited to the three expected files. `git diff --check`
+  passes and exact latest `origin/main` `9de2e42` remains the branch base.
+
+Completion, 2026-07-22 21:17 PDT:
+
+- Committed the validated implementation as `c88a473` (`fix: default map to
+  current city`) and pushed `codex/rec-127-map-default`.
+- Opened ready PR https://github.com/joelipshutz/wander/pull/174 against
+  `main`, linked to Linear REC-127. Linear is moving to In Review; the PR
+  review/merge workflow owns Done after merge.
+- No TestFlight build, build-number bump, merge, hosted-data change, or Slack
+  post was requested or performed.
+- Next step: review and merge PR #174. A later explicit TestFlight release can
+  package the change from latest `main`.
+
+TestFlight release preparation, 2026-07-22 22:28 PDT:
+
+- Joe explicitly requested shipping REC-127 to TestFlight. A separate explicit
+  build-93 release for REC-119/REC-130 was already active under Ryan-owned
+  Linear REC-134 and ready PR #181, so this run preserved that release rather
+  than racing or reusing its build number. PR #181 has since squash-merged its
+  metadata-only 92 -> 93 bump to `main`; archive/upload/attachment completion is
+  still pending its release owner.
+- Rebased REC-127 twice as `main` advanced: first over the merged REC-130 and
+  REC-119 app changes, then over build-93 metadata at exact `origin/main`
+  `731a3f39d`. Product and test files merged automatically; the only manual
+  conflicts were append-only `docs/agent-log.md`, and both histories were
+  preserved.
+- Re-ran the exact latest-main gates on Joe's installed iPhone 16 Plus / iOS
+  18.6 simulator. The focused map launch regressions passed 2/2. The complete
+  suite passed 578/578 with zero failures at
+  `/private/tmp/DerivedData-rec127-latest-full/Logs/Test/Test-Wander-2026.07.22_22-16-35--0700.xcresult`.
+  The first full-suite command encountered an Xcode build-database lock from
+  the just-finished focused run; the clean rerun used separate DerivedData and
+  passed. The generic iOS Simulator build also passed.
+- Pre-landing result remains clean: no source conflict with the REC-119 rating
+  UI, no backend/schema/auth/visibility change, no generated project churn,
+  and no unresolved decision. Next: publish the rebased PR head, wait for build
+  93 to finish, squash-merge PR #174, then create and ship the next build from
+  exact latest `main`.
+
+Build-93 completion and REC-127 release continuation, 2026-07-22 22:56 PDT:
+
+- Build 93 had no App Store Connect record or newer Linear/Slack progress more
+  than 30 minutes after its bump PR merged, so this run recorded a takeover on
+  REC-134 and used an isolated detached worktree at exact merged-main commit
+  `731a3f39d`. A read-only App Store Connect check immediately before each
+  archive/upload phase confirmed there was no competing build-93 upload.
+- The first archive attempt failed before producing an archive because the
+  machine had only 201 MB free. Deleted only four disposable DerivedData
+  directories created by this REC-127/release run (about 5.3 GB), then retried
+  without changing source or signing policy. The clean retry succeeded.
+- Archived `/private/tmp/Wander-0.1-build93.xcarchive`; archive and embedded app
+  metadata verify rec.me `0.1 (93)`, bundle `com.grayline.wander`, and team
+  `Y7TVK75RZ8`. Export/upload succeeded with
+  `manageAppVersionAndBuildNumber=false`.
+- `scripts/testflight-release.mjs` confirmed App Store Connect build
+  `0321ec79-1a99-4539-948e-9365290e9543` is `VALID`, set export compliance to
+  false, updated en-US What to Test, attached public group `rec.me Alpha`, and
+  returned external beta review `APPROVED`.
+- Posted the required tester note to `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784786117972389.
+  Public link: https://testflight.apple.com/join/knEhRa6t. REC-134 is Done;
+  REC-119 and REC-130 have build-93 availability comments.
+- REC-127 PR #174 remains exact with `origin/main`, ready, clean, mergeable,
+  578/578 tests passed, and its generic simulator build passed. Continue by
+  squash-merging PR #174, then package the next build number (94) from exact
+  latest `main`; build 93 intentionally does not contain REC-127.

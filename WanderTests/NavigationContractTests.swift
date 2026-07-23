@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import MapKit
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
@@ -925,6 +926,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertNil(MapScreen.resolvedInitialMapPlaceQuery(from: ["Wander", "-WanderMapPlace"]))
         XCTAssertTrue(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander", "-WanderMapSheetExpanded"]))
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
+    }
+
+    @MainActor
+    func testMapScreenDefaultsToAnUnselectedCurrentCityCamera() throws {
+        let center = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+        let region = MapScreen.initialCityRegion(center: center)
+
+        XCTAssertEqual(region.center.latitude, center.latitude, accuracy: 0.000_001)
+        XCTAssertEqual(region.center.longitude, center.longitude, accuracy: 0.000_001)
+        XCTAssertEqual(region.span.latitudeDelta, 0.12, accuracy: 0.000_001)
+        XCTAssertEqual(region.span.longitudeDelta, 0.14, accuracy: 0.000_001)
+
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let initialSelection = try XCTUnwrap(
+            source
+                .components(separatedBy: "private func resolveInitialSelection()")
+                .last?
+                .components(separatedBy: "private func centerMapOnCurrentCityIfNeeded()")
+                .first
+        )
+
+        XCTAssertTrue(initialSelection.contains("let initialPlaceQuery"))
+        XCTAssertFalse(initialSelection.contains("firstVisiblePlace"))
+        XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }
 
     func testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush() throws {
