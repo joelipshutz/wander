@@ -1070,14 +1070,7 @@ private struct PlaceProfileRatingTile: View {
                     .minimumScaleFactor(0.68)
             }
             .foregroundStyle(WanderTheme.textMuted.color)
-            .padding(.trailing, explanation == nil ? 0 : 14)
             .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
-            .overlay(alignment: .trailing) {
-                if let explanation {
-                    PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                        .offset(x: 10)
-                }
-            }
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
@@ -1110,6 +1103,12 @@ private struct PlaceProfileRatingTile: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if let explanation {
+                PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                    .offset(x: 6, y: 2)
+            }
+        }
     }
 
     private var valueFontSize: CGFloat {

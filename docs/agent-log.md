@@ -18063,3 +18063,44 @@ Final REC-112-main gate, 2026-07-22 16:42 PDT:
   ready PR #169 `CLEAN` and `MERGEABLE`, with no configured checks. The final
   rebased implementation commit is `0735ad134`; no known blocker remains for
   Ryan's visual and copy review.
+
+REC-119 visual follow-up start, 2026-07-22 17:10 PDT:
+
+- Ryan requested a revised SwiftUI mockup after reviewing PR #169: move each
+  information button farther right so it no longer sits underneath the metric
+  header, and ensure the explanation uses a native iOS caret popover attached
+  directly to the information button.
+- Fetched `origin`; this isolated branch and worktree are clean, while the root
+  checkout's unrelated user-owned changes remain untouched. Returned REC-119
+  from In Review to In Progress before editing.
+- Expected edits remain limited to the shared rating-info component, the two
+  rating-card layouts, focused presentation tests if needed, generated project
+  metadata only if XcodeGen changes it, and this append-only log. No backend,
+  schema, build-number, TestFlight, or release-note work is authorized.
+
+REC-119 visual follow-up validation, 2026-07-22 17:22 PDT:
+
+- Moved the rec.me and Fit information controls out of each centered title
+  overlay and into the rating card's top-trailing overlay in both place-profile
+  presentations. The metric labels now retain their full centered width while
+  the 44-point controls sit at the cards' right edge, clear of the label text.
+- Kept the shared production interaction as a native SwiftUI `popover` anchored
+  to the information button bounds with `arrowEdge: .top` and compact popover
+  adaptation. A temporary local-only auto-open hook was used solely to capture
+  the presentation and then fully reverted before validation.
+- Regenerated with `xcodegen generate`; no generated project diff resulted.
+  `git diff --check` passed.
+- Reviewed an iPhone 17 Pro closed-state capture at
+  `/private/tmp/rec119-followup-17pro-final.png`, an open native-caret capture at
+  `/private/tmp/rec119-followup-17pro-popover.png`, and an iPhone 17e compact
+  capture at `/private/tmp/rec119-followup-17e-final.png`. The system caret
+  points directly to the relocated rec.me info control, and the compact layout
+  keeps both controls at the top-right of their cards without label overlap.
+- Focused copy contract passed 1/1 on iPhone 17 Pro / iOS 26.5:
+  `PlaceProfilePresentationTests/testRatingExplanationCopyDescribesDistinctSignals`
+  (`/private/tmp/DerivedData-rec119-followup/Logs/Test/Test-Wander-2026.07.22_17-19-51--0700.xcresult`).
+- Full suite passed 573/573 on iPhone 17 Pro / iOS 26.5
+  (`/private/tmp/DerivedData-rec119-followup/Logs/Test/Test-Wander-2026.07.22_17-21-22--0700.xcresult`).
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine, so the available current simulator target was used. Existing
+  simulator keychain, location, and metadata warnings remain non-fatal.

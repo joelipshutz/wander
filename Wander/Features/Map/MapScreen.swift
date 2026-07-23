@@ -5988,14 +5988,7 @@ private struct PlaceProfileMetricCard: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.68)
-                .padding(.trailing, explanation == nil ? 0 : 14)
                 .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
-                .overlay(alignment: .trailing) {
-                    if let explanation {
-                        PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                            .offset(x: compact ? 8 : 10)
-                    }
-                }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
@@ -6029,6 +6022,12 @@ private struct PlaceProfileMetricCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if let explanation {
+                PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                    .offset(x: 6, y: compact ? -1 : 1)
+            }
+        }
     }
 
     private var valueFontSize: CGFloat {
