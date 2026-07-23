@@ -1,6 +1,9 @@
 import MapKit
 import SwiftUI
 import UniformTypeIdentifiers
+#if DEBUG
+import UIKit
+#endif
 
 struct AddImportSection: View {
     let summary: PlaceImportSummary
@@ -1619,8 +1622,8 @@ private struct PlaceImportCandidateCard: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 12, weight: .black))
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing2)
+                .frame(height: 32)
                 .background(color.opacity(0.13))
                 .foregroundStyle(color)
                 .clipShape(Capsule())
@@ -1628,6 +1631,8 @@ private struct PlaceImportCandidateCard: View {
                     Capsule()
                         .stroke(color.opacity(0.32), lineWidth: 1)
                 )
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Save \(candidate.name) as \(title)")
@@ -1646,17 +1651,17 @@ private struct PlaceImportCandidatePhoto: View {
 
             WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 32)
 
-            if let photo {
-                PlaceProfilePhotoImage(
-                    photo: photo,
-                    placeName: candidate.name,
-                    onLoadFailure: { failedPhoto in
-                        if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
-                            self.photo = nil
-                        }
-                    }
-                )
+            #if DEBUG
+            if PlaceImportCandidateMockupPage.isPresented {
+                PlaceImportCandidateMockPhoto(tileIndex: index)
+            } else if let photo {
+                remotePhoto(photo)
             }
+            #else
+            if let photo {
+                remotePhoto(photo)
+            }
+            #endif
         }
         .overlay(alignment: .topLeading) {
             Text("\(index + 1)")
@@ -1669,7 +1674,7 @@ private struct PlaceImportCandidatePhoto: View {
                 .padding(WanderTheme.spacing2)
         }
         .overlay(alignment: .bottom) {
-            if photo?.isGooglePlacesPhoto == true {
+            if showsGoogleAttribution {
                 Text("Google Maps")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(Color.white)
@@ -1680,6 +1685,9 @@ private struct PlaceImportCandidatePhoto: View {
             }
         }
         .task(id: candidate.importPhotoRequest.lookupKey) {
+            #if DEBUG
+            guard !PlaceImportCandidateMockupPage.isPresented else { return }
+            #endif
             photo = nil
             do {
                 let resolvedPhoto = try await backend.placePhoto(for: candidate.importPhotoRequest)
@@ -1691,6 +1699,27 @@ private struct PlaceImportCandidatePhoto: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    private func remotePhoto(_ photo: PlacePhoto) -> some View {
+        PlaceProfilePhotoImage(
+            photo: photo,
+            placeName: candidate.name,
+            onLoadFailure: { failedPhoto in
+                if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {
+                    self.photo = nil
+                }
+            }
+        )
+    }
+
+    private var showsGoogleAttribution: Bool {
+        #if DEBUG
+        if PlaceImportCandidateMockupPage.isPresented {
+            return true
+        }
+        #endif
+        return photo?.isGooglePlacesPhoto == true
     }
 }
 
@@ -1707,7 +1736,8 @@ private extension PlaceCandidate {
     }
 
     var importCategoryTitle: String {
-        let title = WanderPlaceCategory.display(for: categoryAssignment).compactTitle
+        let display = WanderPlaceCategory.display(for: categoryAssignment)
+        let title = display.subcategory ?? display.category
         return title.isEmpty ? "Place" : title
     }
 
@@ -1787,6 +1817,54 @@ struct PlaceImportCandidateMockupRoot: View {
             )
         ]
     )
+}
+
+private struct PlaceImportCandidateMockPhoto: View {
+    let tileIndex: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let croppedImage {
+                Image(uiImage: croppedImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            }
+        }
+        .clipped()
+    }
+
+    private var croppedImage: UIImage? {
+        guard
+            let sourceImage = UIImage(named: "PlaceCarouselPhotos"),
+            let sourceCGImage = sourceImage.cgImage
+        else {
+            return nil
+        }
+
+        let normalizedIndex = max(0, min(tileIndex, 3))
+        let tileWidth = sourceCGImage.width / 2
+        let tileHeight = sourceCGImage.height / 2
+        let column = normalizedIndex % 2
+        let row = normalizedIndex / 2
+        let cropRect = CGRect(
+            x: column * tileWidth,
+            y: row * tileHeight,
+            width: tileWidth,
+            height: tileHeight
+        )
+
+        guard let croppedCGImage = sourceCGImage.cropping(to: cropRect) else {
+            return nil
+        }
+
+        return UIImage(
+            cgImage: croppedCGImage,
+            scale: sourceImage.scale,
+            orientation: sourceImage.imageOrientation
+        )
+    }
 }
 #endif
 
