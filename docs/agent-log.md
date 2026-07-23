@@ -18329,7 +18329,6 @@ REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
   No known follow-up blocker remains. No build-number bump, TestFlight archive
   or upload, or tester Slack note was requested or performed; the change waits
   for a future explicit release batch.
-
 ## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
 
 Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
@@ -18411,3 +18410,84 @@ Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
   sandbox rejected its ability to enqueue local review metadata for later
   cross-machine artifact sync. This does not affect the code/diff review or
   release gate. Result: `Pre-Landing Review: No issues found.`
+## 2026-07-22 20:59 PDT - Codex - REC-127 Map Default Behavior
+
+Agent: Codex using Linear and `recme-testflight-feedback-bug-catcher`
+Branch: `codex/rec-127-map-default`
+Worktree: `/private/tmp/recme-rec127-map-default`
+Linear: `REC-127` (`In Progress`)
+
+Goal: make the production Map tab open without a selected place and use the
+user's current location as the center of a city-scale initial camera instead of
+defaulting to the seeded Los Angeles region/place fit.
+
+Starting status:
+
+- Ran `git fetch origin`, inspected root status/worktrees, read the latest
+  coordination log, and created this isolated worktree from exact
+  `origin/main` `9de2e42` because `MapScreen.swift` and this log are documented
+  high-conflict files. The root checkout is clean on an unrelated gone branch
+  and remains untouched.
+- Linear REC-127 was created today from Joe's feedback, assigned to Joe, moved
+  from Backlog to In Progress, and is the task source of truth. Mission Control
+  task creation was attempted, but `localhost:4000` is not running.
+- GBrain returned no matching prior KB result. Repo decisions preserve the live
+  native-blue current-location annotation and explicitly avoid live-location
+  broadcasting; this ticket changes only initial camera/selection state.
+
+Engineering review gate: clean. The required gstack review could not use its
+  interactive scope prompt in this non-Plan Codex mode, so the repo workflow's
+  required packet was completed directly against REC-127:
+
+- Scope: keep the change to `MapScreen.swift`, focused navigation/map launch
+  tests, and this log. Reuse `CoreLocationProvider`; add no service, persistence,
+  reverse geocoding, backend, schema, or permission-copy changes.
+- Data flow: normal Map launch -> one-shot current-location lookup -> city-scale
+  `MKCoordinateRegion` -> SwiftUI Map camera. An explicit visual-QA place query
+  or notification place route remains an intentional selection/camera override.
+- Failure mode: if location permission is denied or a usable fix is unavailable,
+  retain the existing deterministic fallback region; the existing recenter
+  control lets the user retry. No place becomes selected as a fallback.
+- Tests: cover city-region center/span and assert the default-selection resolver
+  has no first-visible-place fallback while preserving explicit launch queries.
+- Design lens: no new surface or copy. The empty-selection map state exposes the
+  existing filters/search/recenter controls and removes the unintended place card.
+- Decisions: none unresolved. "Current city" is implemented as current
+  coordinates with the existing city-scale default span, not reverse-geocoded
+  city boundaries and not a precise follow-camera.
+
+Expected files:
+
+- `Wander/Features/Map/MapScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Validation checkpoint, 2026-07-22 21:14 PDT:
+
+- Removed the normal-launch fallback that selected the first visible place and
+  the camera path that fit saved-place coordinates. Explicit visual-QA place
+  queries still select and center their requested place.
+- A normal launch now requests one current-location fix through the existing
+  `CoreLocationProvider`, applies the existing `0.12 x 0.14` city-scale span,
+  and synchronizes the map search region. Denied/unavailable location keeps the
+  deterministic fallback region without selecting any place.
+- Notification place routes mark their camera as intentional and update the
+  search region, so a slower location response cannot override a notification
+  destination.
+- Focused tests passed 2/2 on iPhone 16 Plus / iOS 18.6, including the new
+  default-selection/city-region regression and the existing explicit visual-QA
+  place-query contract.
+- Full suite passed 574/574 on iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec127-focused/Logs/Test/Test-Wander-2026.07.22_21-11-59--0700.xcresult`.
+- Generic iOS Simulator build passed. Existing Supabase formatter actor-
+  isolation and traditional-headermap warnings remain unchanged and are not
+  blockers for REC-127.
+- Visual QA used simulated San Francisco coordinates (`37.7749, -122.4194`)
+  with demo fixtures. The iPhone 16e / iOS 18.6 screenshot shows the city-scale
+  map, native blue location dot, and no selected place/card:
+  `/private/tmp/rec127-map-default-iphone16e.png`. The iPhone 16 Plus launch
+  reached the same city framing with no place selection; its first-run system
+  permission prompt was left untouched rather than accepting a UI privacy
+  choice on Joe's behalf.
+- Final diff remains limited to the three expected files. `git diff --check`
+  passes and exact latest `origin/main` `9de2e42` remains the branch base.
