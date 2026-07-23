@@ -17688,3 +17688,23 @@ Pre-landing review checkpoint, 2026-07-22 17:34 PDT:
   573/573 complete tests, generic Simulator build success, clean XcodeGen output,
   and clean `git diff --check`. No unresolved finding remains. Next: push this
   review record, recheck latest `main` and PR state, then squash-merge PR #167.
+
+REC-124 merge completion, 2026-07-22 17:35 PDT:
+
+- Pushed the clean review record, confirmed PR #167 remained open, ready,
+  `CLEAN`, and `MERGEABLE` against exact `origin/main` `5804f8763`, then
+  squash-merged it into `main` as
+  `4d3cc00da96459ece63791346f48954c1bb664b4`.
+- The merge CLI returned a local cleanup error because another isolated worktree
+  already has `main` checked out. Remote verification confirms PR #167 is
+  `MERGED`, `origin/main` resolves to the squash commit, and the merged feature
+  branch was deleted separately. No user-owned checkout was switched or edited.
+- Final validation is 14/14 focused presenter tests, 573/573 full tests, and a
+  successful generic iOS Simulator build. The final behavior counts every
+  distinct owner Been visit/save record on the date badge, including repeated
+  records for one place, while Wanna/other-user records remain excluded and the
+  tapped date list remains canonical-place-de-duplicated.
+- No known REC-124 blocker or follow-up remains. The App Store build number stays
+  91; no archive, upload, TestFlight attachment, or Slack release note was made
+  because this was an explicit merge-only request. REC-124 will ride the next
+  separately requested TestFlight release batch.
