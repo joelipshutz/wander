@@ -179,6 +179,7 @@ struct WanderRootView: View {
             await pushNotifications.refreshAuthorizationStatus()
             await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
+            await refreshWannaGoReminders(for: auth.state)
             while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
                 pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
             }
@@ -216,6 +217,14 @@ struct WanderRootView: View {
         }
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)
+            Task {
+                await refreshWannaGoReminders(for: state)
+            }
+        }
+        .onChange(of: store.wannaGoReminderItems) { _, items in
+            Task {
+                await pushNotifications.reconcileWannaGoReminders(items)
+            }
         }
         .onChange(of: store.sharedVisitInvitations) { _, invitations in
             presentSharedVisitBannerIfNeeded(from: invitations)
@@ -248,6 +257,9 @@ struct WanderRootView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             scheduleSignedInMaintenance(for: auth.state)
+            Task {
+                await refreshWannaGoReminders(for: auth.state)
+            }
         }
         .onDisappear {
             sharedVisitBannerTask?.cancel()
@@ -519,6 +531,7 @@ struct WanderRootView: View {
             let enrichmentSyncCount = enrichedPlaceCount > 0
                 ? await store.syncUnsyncedOwnPlaces(backend: backend)
                 : 0
+            await refreshWannaGoReminders(for: state)
             #if DEBUG
             WanderDebugLog.sync.debug("signed-in maintenance finished synced_count=\(syncedCount, privacy: .public) list_synced_count=\(syncedListCount, privacy: .public) photo_count=\(uploadedPhotoCount, privacy: .public) invite_count=\(sentInviteCount, privacy: .public) enriched_place_count=\(enrichedPlaceCount, privacy: .public) enrichment_sync_count=\(enrichmentSyncCount, privacy: .public)")
             #endif
@@ -544,6 +557,21 @@ struct WanderRootView: View {
         signedInMaintenanceRunID = nil
         signedInMaintenanceUserID = nil
         signedInMaintenanceTask = nil
+    }
+
+    private func refreshWannaGoReminders(for state: AuthState) async {
+        guard case .signedIn = state else {
+            pushNotifications.applyNotificationPreferences(.allDisabled)
+            await pushNotifications.cancelAllWannaGoReminders()
+            return
+        }
+
+        if backend.notificationRepository != nil,
+           let preferences = try? await backend.notificationPreferences() {
+            pushNotifications.applyNotificationPreferences(preferences)
+        }
+        await store.refreshRemoteWannaGoPlans(backend: backend)
+        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {

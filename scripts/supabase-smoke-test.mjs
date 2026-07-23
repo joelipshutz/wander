@@ -1032,6 +1032,113 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID) {
     },
   );
 
+  const plannedPlace = {
+    ...place,
+    canonical_name: "Codex Smoke Dated Wanna",
+    source_provider_place_id: "dated-wanna-save",
+  };
+  const plannedDate = "2099-08-15";
+  const plannedSave = await expectQuery(
+    client,
+    "authenticated public.save_own_place accepts a dated Wanna payload",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(plannedPlace),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "self",
+        nearby_confirmed: false,
+        source_type: "manual",
+        planned_date: plannedDate,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+  const plannedUserPlaceID = plannedSave.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "dated Wanna persists privately and is returned by owner reconciliation",
+    `
+      select
+        up.planned_date::text as stored_date,
+        plan.planned_date::text as reconciled_date
+      from public.user_places up
+      join public.own_wanna_go_plans() plan on plan.user_place_id = up.id
+      where up.id = $1::uuid
+        and up.user_id = $2
+    `,
+    [plannedUserPlaceID, smokeUserID],
+    (result) => result.rows.length === 1
+      && result.rows[0].stored_date === plannedDate
+      && result.rows[0].reconciled_date === plannedDate,
+  );
+
+  await expectQuery(
+    client,
+    "changing a dated Wanna to Been accepts an explicit null plan",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(plannedPlace),
+      JSON.stringify({
+        status: "been",
+        visibility: "self",
+        nearby_confirmed: false,
+        source_type: "manual",
+        rating_score: 4,
+        planned_date: null,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+
+  await expectQuery(
+    client,
+    "Been transition clears the date and removes the reminder plan",
+    `
+      select
+        up.planned_date,
+        (select count(*)::integer from public.own_wanna_go_plans() plan where plan.user_place_id = up.id) as plan_count
+      from public.user_places up
+      where up.id = $1::uuid
+        and up.user_id = $2
+    `,
+    [plannedUserPlaceID, smokeUserID],
+    (result) => result.rows.length === 1
+      && result.rows[0].planned_date === null
+      && result.rows[0].plan_count === 0,
+  );
+
+  await expectQuery(
+    client,
+    "Wanna reminder preference RPC keeps its hardened metadata",
+    `
+      select
+        p.prosecdef as security_definer,
+        'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'public.update_notification_preferences(jsonb)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
+    "notification preference payload enables Wanna go reminders",
+    `
+      select (
+        public.update_notification_preferences(
+          '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true,"wanna_go_reminders_enabled":true}'::jsonb
+        )
+      ).wanna_go_reminders_enabled as enabled
+    `,
+    [],
+    (result) => result.rows[0]?.enabled === true,
+  );
+
   await client.query("reset role");
 }
 
@@ -1975,6 +2082,28 @@ async function assertOwnPlaceRPCMetadata(client) {
     `,
     [],
     (result) => result.rows[0]?.prosecdef === true && result.rows[0]?.pinned_search_path === true,
+  );
+
+  await expectQuery(
+    client,
+    "public save and owner reminder RPCs keep invoker security and authenticated-only grants",
+    `
+      select
+        not save_proc.prosecdef as save_invoker,
+        'search_path=app, public' = any(coalesce(save_proc.proconfig, array[]::text[])) as save_search_path,
+        not plan_proc.prosecdef as plan_invoker,
+        'search_path=public, app' = any(coalesce(plan_proc.proconfig, array[]::text[])) as plan_search_path,
+        has_function_privilege('authenticated', save_proc.oid, 'execute') as save_authenticated,
+        not has_function_privilege('anon', save_proc.oid, 'execute') as save_anon_denied,
+        has_function_privilege('authenticated', plan_proc.oid, 'execute') as plan_authenticated,
+        not has_function_privilege('anon', plan_proc.oid, 'execute') as plan_anon_denied
+      from pg_proc save_proc
+      cross join pg_proc plan_proc
+      where save_proc.oid = 'public.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
+        and plan_proc.oid = 'public.own_wanna_go_plans()'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
   );
 }
 

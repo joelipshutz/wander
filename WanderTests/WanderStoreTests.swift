@@ -1171,6 +1171,122 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.attributes(for: result.userPlaceID).map(\.questionKey), ["coffee_tags"])
     }
 
+    func testWannaPlannedDatePersistsAndBecomesAReminderItem() throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = firstStore.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_planned_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        let saved = try XCTUnwrap(
+            relaunchedStore.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        let reminder = try XCTUnwrap(relaunchedStore.wannaGoReminderItems.first)
+
+        XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(saved.userPlace.plannedDate)), "2026-08-20")
+        XCTAssertEqual(reminder.placeName, "Maru Coffee")
+        XCTAssertEqual(WannaGoDate.storageString(from: reminder.plannedDate), "2026-08-20")
+    }
+
+    func testEditingClearingAndCompletingWannaReconcilesPlannedDate() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_planned_maru",
+            name: "Maru Coffee",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        XCTAssertEqual(store.wannaGoReminderItems.count, 1)
+
+        _ = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: nil
+        )
+        XCTAssertNil(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.plannedDate)
+        XCTAssertTrue(store.wannaGoReminderItems.isEmpty)
+
+        _ = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        XCTAssertNil(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.plannedDate)
+        XCTAssertTrue(store.wannaGoReminderItems.isEmpty)
+    }
+
+    func testRemoteWannaSaveDraftIncludesPlannedDate() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let repository = FakeUserPlaceRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        _ = await store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_planned_maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate,
+            backend: backend
+        )
+
+        let draft = try XCTUnwrap(repository.savedDrafts.first)
+        XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(draft.plannedDate)), "2026-08-20")
+    }
+
     func testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

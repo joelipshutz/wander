@@ -20100,3 +20100,64 @@ Mockup handoff, 2026-07-23 10:28 PDT:
   appropriate, and focused/full regression coverage.
 - No TestFlight build, build-number change, backend migration, hosted data
   mutation, or Slack release note was performed.
+
+Implementation resumed, 2026-07-23 10:34 PDT:
+
+- Ryan approved the mockup and expanded REC-118 to include production
+  persistence/sync plus a local reminder three days before the planned date.
+  The reminder setting, cancellation/rescheduling behavior, and notification
+  tap route to the matching Wanna place card are now explicit acceptance
+  criteria in Linear. REC-118 remains `In Progress`.
+- Continuing in the same isolated worktree and branch. The branch is clean,
+  pushed, two commits ahead of and zero commits behind current `origin/main`;
+  draft PR #187 remains the review surface. The unrelated primary checkout and
+  its user-owned REC-88 changes remain untouched.
+- Before editing, this pass will trace the existing save/RPC model, SwiftData
+  persistence, settings, notification authorization/scheduling, and deep-link
+  routing contracts. Expected high-conflict areas include
+  `Wander/Features/Map/MapScreen.swift`, `Wander/Services/WanderLocalStore.swift`,
+  `project.yml`/the generated project, Supabase migrations, and this log. No
+  other current worktree entry advertises overlapping REC-118 work, but changes
+  will remain isolated and reviewed carefully.
+- Production assumptions to validate in code: the date belongs to the current
+  user's Wanna save rather than the shared place; reminders are device-local,
+  opt-in, and derived from persisted Wanna state; edits, clearing, deletion, or
+  leaving Wanna cancel stale requests; and notification taps reuse the app's
+  existing place-card routing rather than creating a parallel navigation path.
+
+Implementation checkpoint, 2026-07-23 11:16 PDT:
+
+- Wired the optional date through the production Wanna save sheet, local
+  `LocalUserPlace`, file persistence, `UserPlaceDraft`, Supabase save payload,
+  and an owner-only `own_wanna_go_plans` reconciliation RPC. Planned dates stay
+  out of social visible-place RPCs.
+- Added device-local reminder planning for 9:00 AM three calendar days before
+  the saved date, with a 60-request cap to leave headroom under iOS's pending
+  notification limit. Reconciliation removes stale requests after edits,
+  clears, deletions, status changes, preference changes, sign-out, and app
+  refreshes. The local payload reuses `recme://places/<id>` and the existing Map
+  place-card route.
+- Added the account preference `Wanna go reminders`, defaulting off for
+  existing/new preference rows and included in the existing all-notifications
+  enrollment flow. The implementation uses local notifications but keeps the
+  preference server-backed so it follows the current notification settings
+  contract.
+- Added migration `20260723173500_wanna_go_dates_and_reminders.sql`, pgTAP
+  coverage, and the exact production dated-Wanna payload plus metadata/grant
+  assertions to `scripts/supabase-smoke-test.mjs`.
+- `xcodegen generate`, `git diff --check`, and an arm64 simulator build passed.
+  Nine new focused Swift tests now pass across planner timing/copy/timezone,
+  date persistence and clear/status transitions, remote payload/RPC decoding,
+  pending-request headroom, and notification place routing. Existing focused
+  notification preference/routing tests also passed.
+- `supabase test db` could not run because no local Postgres stack is
+  available (`LegacyDbConnectError`). The linked hosted project was confirmed
+  as `wander` (`rugmtlgufrhlxwfkumhw`), but its migration history currently
+  contains REC-126 migrations `20260723063000` and `20260723064500` that are
+  not yet in `origin/main`. Do not push REC-118's migration or claim the hosted
+  smoke test passed until that remote/local history drift is resolved by the
+  REC-126 branch landing (or otherwise being coordinated).
+- `origin/main` advanced by two commits during implementation and overlaps
+  Map/Root/store/generated-project/log files. Next checkpoint is to commit the
+  isolated implementation, rebase onto current `origin/main`, resolve those
+  overlaps deliberately, then rerun focused/full iOS validation.

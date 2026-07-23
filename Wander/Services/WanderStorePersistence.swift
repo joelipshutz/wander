@@ -509,6 +509,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let nearbyConfirmed: Bool
         let visitedAt: Date?
         let savedAt: Date
+        let plannedDate: Date?
         let sourceType: String
         let sourceArtifactID: String?
         let sourceUserPlaceID: String?
@@ -544,6 +545,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             nearbyConfirmed = userPlace.nearbyConfirmed
             visitedAt = userPlace.visitedAt
             savedAt = userPlace.savedAt
+            plannedDate = userPlace.plannedDate
             sourceType = userPlace.sourceType
             sourceArtifactID = userPlace.sourceArtifactID
             sourceUserPlaceID = userPlace.sourceUserPlaceID
@@ -581,6 +583,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 nearbyConfirmed: nearbyConfirmed,
                 visitedAt: visitedAt,
                 savedAt: savedAt,
+                plannedDate: plannedDate,
                 sourceType: sourceType,
                 sourceArtifactID: sourceArtifactID,
                 sourceUserPlaceID: sourceUserPlaceID,

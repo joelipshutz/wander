@@ -369,6 +369,7 @@ private struct TrustAndPrivacySheet: View {
 struct NotificationSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -431,6 +432,11 @@ struct NotificationSettingsSheet: View {
                             title: "Discovery digest",
                             systemImage: "calendar.badge.clock",
                             binding: preferenceBinding(\.discoveryDigestEnabled) { NotificationPreferencesUpdate(discoveryDigestEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Wanna go reminders",
+                            systemImage: "calendar.badge.exclamationmark",
+                            binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
                         )
                     }
                     .padding(WanderTheme.spacing3)
@@ -603,6 +609,8 @@ struct NotificationSettingsSheet: View {
             preferences = pushNotifications.canRegisterForRemoteNotifications && loadedPreferences.pushEnabled
                 ? loadedPreferences
                 : .allDisabled
+            pushNotifications.applyNotificationPreferences(preferences)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
         } catch {
             errorMessage = "Could not load notification settings."
         }
@@ -639,6 +647,7 @@ struct NotificationSettingsSheet: View {
             return
         }
         preferences = enabledPreferences
+        await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
     }
 
     private func disableNotifications() async {
@@ -667,6 +676,8 @@ struct NotificationSettingsSheet: View {
 
         do {
             preferences = try await backend.updateNotificationPreferences(update)
+            pushNotifications.applyNotificationPreferences(preferences)
+            await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
         } catch {
             errorMessage = "Could not save notification settings."
         }

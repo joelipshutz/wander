@@ -322,6 +322,23 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
         return try rows.map { try $0.visiblePlace() }
     }
 
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
+        let rows: [RemoteOwnWannaGoPlanDTO] = try await rpc.call(
+            "own_wanna_go_plans",
+            params: EmptyParams()
+        )
+        return try rows.map { row in
+            guard let plannedDate = WannaGoDate.date(fromStorageString: row.plannedDate) else {
+                throw WanderRemoteError.invalidResponse("Invalid Wanna planned date: \(row.plannedDate)")
+            }
+            return OwnWannaGoPlan(
+                userPlaceID: row.userPlaceID,
+                placeID: row.placeID,
+                plannedDate: plannedDate
+            )
+        }
+    }
+
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
         let result: SaveOwnPlaceResponse = try await rpc.call(
             "save_own_place",
@@ -1570,6 +1587,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
     let followedActivityEnabled: Bool
+    let wannaGoRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case pushEnabled = "push_enabled"
@@ -1580,6 +1598,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 
     var preferences: NotificationPreferences {
@@ -1591,7 +1610,8 @@ private struct NotificationPreferencesResponse: Decodable {
             recommendationsEnabled: recommendationsEnabled,
             captureEnabled: captureEnabled,
             discoveryDigestEnabled: discoveryDigestEnabled,
-            followedActivityEnabled: followedActivityEnabled
+            followedActivityEnabled: followedActivityEnabled,
+            wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false
         )
     }
 }
@@ -1617,6 +1637,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
     let followedActivityEnabled: Bool?
+    let wannaGoRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
         self.pushEnabled = update.pushEnabled
@@ -1627,6 +1648,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
         self.followedActivityEnabled = update.followedActivityEnabled
+        self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1638,6 +1660,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 }
 
@@ -2157,6 +2180,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
     let categoryOverrideSource: String?
     let categoryOverrideConfidence: Double?
     let nearbyConfirmed: Bool
+    let plannedDate: String?
     let sourceType: String
 
     init(draft: UserPlaceDraft) {
@@ -2170,6 +2194,7 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         self.categoryOverrideSource = draft.categoryOverrideSource
         self.categoryOverrideConfidence = draft.categoryOverrideConfidence
         self.nearbyConfirmed = draft.nearbyConfirmed
+        self.plannedDate = draft.plannedDate.map { WannaGoDate.storageString(from: $0) }
         self.sourceType = draft.sourceType
     }
 
@@ -2184,7 +2209,36 @@ private struct SaveOwnPlaceUserPlaceParams: Encodable {
         case categoryOverrideSource = "category_override_source"
         case categoryOverrideConfidence = "category_override_confidence"
         case nearbyConfirmed = "nearby_confirmed"
+        case plannedDate = "planned_date"
         case sourceType = "source_type"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(visibility, forKey: .visibility)
+        try container.encodeIfPresent(note, forKey: .note)
+        try container.encodeIfPresent(ratingSignal, forKey: .ratingSignal)
+        try container.encodeIfPresent(ratingScore, forKey: .ratingScore)
+        try container.encodeIfPresent(categoryOverride, forKey: .categoryOverride)
+        try container.encodeIfPresent(subcategoryOverride, forKey: .subcategoryOverride)
+        try container.encodeIfPresent(categoryOverrideSource, forKey: .categoryOverrideSource)
+        try container.encodeIfPresent(categoryOverrideConfidence, forKey: .categoryOverrideConfidence)
+        try container.encode(nearbyConfirmed, forKey: .nearbyConfirmed)
+        try container.encode(plannedDate, forKey: .plannedDate)
+        try container.encode(sourceType, forKey: .sourceType)
+    }
+}
+
+private struct RemoteOwnWannaGoPlanDTO: Decodable {
+    let userPlaceID: String
+    let placeID: String
+    let plannedDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case userPlaceID = "user_place_id"
+        case placeID = "place_id"
+        case plannedDate = "planned_date"
     }
 }
 
