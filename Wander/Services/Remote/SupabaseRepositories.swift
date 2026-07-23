@@ -1379,6 +1379,41 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         return row.photo
     }
 
+    func visiblePhotoGalleryPage(
+        placeID: String,
+        after cursor: PlacePhotoGalleryCursor?,
+        limit: Int
+    ) async throws -> PlacePhotoGalleryPage {
+        guard let rpc, UUID(uuidString: placeID) != nil else {
+            throw WanderRemoteError.invalidResponse("Place photo gallery requires a canonical place id")
+        }
+
+        let pageSize = min(max(limit, 1), 100)
+        let rows: [VisiblePlacePhotoGalleryRow] = try await rpc.call(
+            "visible_place_photos",
+            params: VisiblePlacePhotoGalleryParams(
+                inputPlaceID: placeID,
+                inputAfterCreatedAt: cursor?.createdAt,
+                inputAfterSortOrder: cursor?.sortOrder,
+                inputAfterPhotoID: cursor?.photoID,
+                inputLimit: pageSize
+            )
+        )
+        let items = rows.map(\.galleryItem)
+        let nextCursor = rows.last.map {
+            PlacePhotoGalleryCursor(
+                createdAt: $0.createdAt,
+                sortOrder: $0.sortOrder,
+                photoID: $0.photoID
+            )
+        }
+        return PlacePhotoGalleryPage(
+            items: items,
+            nextCursor: nextCursor,
+            hasMore: rows.count == pageSize
+        )
+    }
+
     private func visibleUserPhoto(
         for request: PlacePhotoRequest,
         contributedByUserIDs userIDs: [String]
@@ -1454,6 +1489,82 @@ private struct FirstVisiblePlacePhotoByUsersParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case inputPlaceID = "input_place_id"
         case inputUserIDs = "input_user_ids"
+    }
+}
+
+private struct VisiblePlacePhotoGalleryParams: Encodable {
+    let inputPlaceID: String
+    let inputAfterCreatedAt: Date?
+    let inputAfterSortOrder: Int?
+    let inputAfterPhotoID: String?
+    let inputLimit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlaceID = "input_place_id"
+        case inputAfterCreatedAt = "input_after_created_at"
+        case inputAfterSortOrder = "input_after_sort_order"
+        case inputAfterPhotoID = "input_after_photo_id"
+        case inputLimit = "input_limit"
+    }
+}
+
+private struct VisiblePlacePhotoGalleryRow: Decodable {
+    let photoID: String
+    let storageBucket: String
+    let storagePath: String
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date
+    let createdAt: Date
+    let sortOrder: Int
+    let contributorUserID: String
+    let contributorDisplayName: String
+    let contributorHandle: String
+    let contributorAvatarURLString: String?
+    let statusRaw: String
+
+    enum CodingKeys: String, CodingKey {
+        case photoID = "photo_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case width
+        case height
+        case capturedAt = "captured_at"
+        case createdAt = "created_at"
+        case sortOrder = "sort_order"
+        case contributorUserID = "contributor_user_id"
+        case contributorDisplayName = "contributor_display_name"
+        case contributorHandle = "contributor_handle"
+        case contributorAvatarURLString = "contributor_avatar_url"
+        case statusRaw = "status"
+    }
+
+    var galleryItem: PlacePhotoGalleryItem {
+        PlacePhotoGalleryItem(
+            photo: PlacePhoto(
+                provider: "visit_photo",
+                providerPlaceID: photoID,
+                photoURLString: "",
+                width: width,
+                height: height,
+                authorName: nil,
+                authorProfileURLString: nil,
+                authorAvatarURLString: nil,
+                sourcePhotoURLString: nil,
+                flagContentURLString: nil,
+                storageBucket: storageBucket,
+                storagePath: storagePath,
+                localAssetRef: nil
+            ),
+            contributor: PlacePhotoContributor(
+                userID: contributorUserID,
+                displayName: contributorDisplayName,
+                handle: contributorHandle,
+                avatarURLString: contributorAvatarURLString
+            ),
+            capturedAt: capturedAt,
+            status: PlaceStatus(rawValue: statusRaw)
+        )
     }
 }
 

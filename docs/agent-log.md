@@ -19065,3 +19065,67 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
+
+REC-133 production implementation restart, 2026-07-23 11:22 PDT:
+
+- Agent/tool: Codex. Goal: convert the approved debug-only place-photo carousel
+  mock into the real place-card experience, update the full-screen treatment to
+  match Ryan's supplied black photo-viewer reference without its trash button,
+  remove the separate `View Profile` action, and make the username itself the
+  profile-navigation link.
+- Continuing in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`; draft PR #186 and Linear REC-133 remain
+  the coordination surfaces. REC-133 was moved back to In Progress.
+- Refreshed `origin` and merged the three newer `main` commits through
+  `e09708109`. The only conflict was the append-only `docs/agent-log.md`; both
+  histories were preserved in merge commit `642510337`. The worktree is
+  otherwise clean and ahead of its remote by the current-main merge.
+- Existing worktrees show no active overlap on the intended REC-133 production
+  files. The original root checkout remains on unrelated REC-88 work and will
+  not be touched.
+- Expected scope after code tracing: the production place-profile/card SwiftUI
+  surface, photo/profile repository or backend contracts and models if the
+  existing visit-photo path is insufficient, matching unit/contract tests,
+  generated Xcode membership when required, and this log. Any Supabase/RLS/RPC
+  change will include the repository-mandated SQL and hosted smoke coverage.
+  No TestFlight release is requested.
+
+REC-133 production implementation checkpoint, 2026-07-23 11:58 PDT:
+
+- Implemented the real place-profile hero carousel and full-screen photo viewer:
+  Google Maps remains first, user photos page lazily without a fixed maximum,
+  user attribution includes avatar/name/timestamp/status, and only the
+  underlined username navigates to `ProfileDetailView`. The full-screen surface
+  has a black canvas and close control with no trash or separate `View Profile`
+  action.
+- Added `public.visible_place_photos(...)` as a stable security-invoker RPC with
+  a pinned `search_path`, authenticated-only execute grant, cursor pagination,
+  RLS-authoritative follows/blocks, and explicit exclusion of non-Everyone saves
+  and private/deleted contributor profiles. The iOS gallery intentionally avoids
+  caching these pages and refreshes when the viewer opens/app becomes active so
+  a visibility or profile-privacy change revokes stale photos.
+- Confirmed the linked target is Supabase project `rugmtlgufrhlxwfkumhw`.
+  Hosted migration `20260723183000_visible_place_photo_gallery.sql` applied
+  successfully after a dry run showed it was the only pending migration. Two
+  already-hosted REC-126 migration files not yet on `main` were copied
+  byte-for-byte from `origin/codex/rec-126-restaurant-cuisines` only to align
+  local history for the push, then removed from this branch.
+- Validation so far:
+  - focused `PlacePhotoGalleryTests` plus the repository mapping test: 5 passed;
+  - strict hosted `visible_place_photo_gallery.sql`: 12/12 passed inside a
+    rolled-back transaction, covering grants/security metadata, Google/user
+    ordering inputs, attribution, pagination, stealth, private profiles, and
+    blocks;
+  - mandated linked `scripts/supabase-smoke-test.mjs --linked`: passed;
+  - Node syntax check: passed; pinned `pg` install reported zero
+    vulnerabilities;
+  - local `supabase test db` could not run because Docker is not installed, so
+    the hosted pgTAP and smoke checks are the recorded database validation;
+  - simulator visual QA passed on iPhone 17 Pro and smaller iPhone 17e using
+    `rec133-viewer-17pro.png` and `rec133-viewer-17e.png`; both retain readable
+    attribution, safe-area spacing, paging dots, and the username-only link.
+- `origin/main` advanced again during validation. Next: commit this checkpoint,
+  merge latest `origin/main` while preserving its removal of the obsolete
+  debug-only carousel handoff, regenerate the Xcode project, run the full suite,
+  then push/update draft PR #186 and Linear REC-133.

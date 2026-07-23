@@ -208,7 +208,15 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var localPhoto: PlacePhoto? {
-        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+        guard !store.isPrivateProfile,
+              saves.contains(where: {
+                  $0.visiblePlace.owner.id == currentUserID
+                      && $0.visiblePlace.userPlace.visibility == .followers
+              })
+        else {
+            return nil
+        }
+        return store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
     }
 
     private var photoResolutionKey: String {
@@ -320,10 +328,16 @@ private struct PlaceProfileFullView: View {
     let onBack: () -> Void
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
-    @State private var photo: PlacePhoto?
-    @State private var failedGooglePhotoID: String?
+    @State private var providerPhoto: PlacePhoto?
+    @State private var userPhotos: [PlacePhotoGalleryItem] = []
+    @State private var galleryCursor: PlacePhotoGalleryCursor?
+    @State private var galleryHasMore = true
+    @State private var isLoadingGallery = false
+    @State private var selectedHeaderPhotoID: String?
+    @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
 
     var body: some View {
         GeometryReader { proxy in
@@ -333,13 +347,18 @@ private struct PlaceProfileFullView: View {
             VStack(spacing: 0) {
                 PlaceProfileMapHeader(
                     place: place,
-                    photo: photo,
+                    photos: galleryItems,
+                    selectedPhotoID: $selectedHeaderPhotoID,
                     action: action,
                     shareURL: shareURL,
                     shareText: shareText,
                     topInset: headerTopInset,
                     onBack: onBack,
                     onAction: onAction,
+                    onOpenPhoto: { photoID in
+                        viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
+                    },
+                    onNearEnd: loadMoreIfNeeded,
                     onPhotoLoadFailure: handlePhotoLoadFailure
                 )
 
@@ -380,69 +399,176 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
-        .task(id: photoResolutionKey) {
-            await resolvePhoto()
+        .task(id: place.photoLookupKey) {
+            await reloadGallery()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await reloadVisibleUserPhotos()
+            }
+        }
+        .fullScreenCover(item: $viewerRoute) { route in
+            PlacePhotoGalleryViewer(
+                placeName: place.name,
+                photos: galleryItems,
+                initialPhotoID: route.photoID,
+                currentUserID: currentUserID,
+                onNearEnd: loadMoreIfNeeded,
+                onRefresh: reloadVisibleUserPhotos,
+                onPhotoLoadFailure: handlePhotoLoadFailure
+            )
         }
     }
 
-    private var localPhoto: PlacePhoto? {
-        store.firstVisitPhoto(forPlaceID: place.id).map(PlacePhoto.init(localVisitPhoto:))
+    private var galleryItems: [PlacePhotoGalleryItem] {
+        PlacePhotoGalleryPresenter.items(
+            providerPhoto: providerPhoto,
+            userPhotos: userPhotos
+        )
     }
 
-    private var photoResolutionKey: String {
-        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
+    private func reloadGallery() async {
+        guard !isLoadingGallery else { return }
+        isLoadingGallery = true
+
+        async let providerResult = resolvedProviderPhoto()
+        async let firstPageResult = resolvedUserPhotoPage(after: nil)
+        let (resolvedProvider, firstPage) = await (providerResult, firstPageResult)
+
+        guard !Task.isCancelled else {
+            isLoadingGallery = false
+            return
+        }
+
+        providerPhoto = resolvedProvider
+        userPhotos = firstPage?.items ?? []
+        galleryCursor = firstPage?.nextCursor
+        galleryHasMore = firstPage?.hasMore ?? false
+        isLoadingGallery = false
+        reconcileSelectedPhoto()
     }
 
-    private func resolvePhoto() async {
-        let resolutionKey = photoResolutionKey
-        let localPhoto = localPhoto
-        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
-        photo = localPhoto
+    private func reloadVisibleUserPhotos() async {
+        guard !isLoadingGallery else { return }
+        isLoadingGallery = true
+        let firstPage = await resolvedUserPhotoPage(after: nil)
+        guard !Task.isCancelled else {
+            isLoadingGallery = false
+            return
+        }
+        userPhotos = firstPage?.items ?? []
+        galleryCursor = firstPage?.nextCursor
+        galleryHasMore = firstPage?.hasMore ?? false
+        isLoadingGallery = false
+        reconcileSelectedPhoto()
+    }
+
+    private func resolvedProviderPhoto() async -> PlacePhoto? {
         do {
             let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
             try Task.checkCancellation()
-            let resolvedPhoto: PlacePhoto
-            if remotePhoto.isGooglePlacesPhoto,
-               remotePhoto.providerPlaceID == failedGooglePhotoID {
-                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
-            } else {
-                resolvedPhoto = remotePhoto
-            }
-            try Task.checkCancellation()
-            guard resolutionKey == photoResolutionKey else { return }
-            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
-                photo = resolvedPhoto
-            }
-            if resolvedPhoto.isGooglePlacesPhoto {
+            if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
                     placeID: place.id,
-                    primaryType: resolvedPhoto.providerPrimaryType,
-                    types: resolvedPhoto.providerTypes ?? [],
+                    primaryType: remotePhoto.providerPrimaryType,
+                    types: remotePhoto.providerTypes ?? [],
                     backend: backend
                 )
+                return remotePhoto
             }
+            return nil
         } catch is CancellationError {
-            return
+            return nil
         } catch {
-            guard resolutionKey == photoResolutionKey else { return }
-            photo = localPhoto
             #if DEBUG
             WanderDebugLog.remote.debug(
                 "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
+            return nil
         }
     }
 
-    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
-        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
-        if failedPhoto.isGooglePlacesPhoto {
-            failedGooglePhotoID = failedPhoto.providerPlaceID
-        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
-            photo = nil
-        } else {
-            photo = localPhoto
+    private func resolvedUserPhotoPage(
+        after cursor: PlacePhotoGalleryCursor?
+    ) async -> PlacePhotoGalleryPage? {
+        guard UUID(uuidString: place.id) != nil else { return nil }
+        do {
+            return try await backend.visiblePlacePhotoGalleryPage(
+                placeID: place.id,
+                after: cursor
+            )
+        } catch is CancellationError {
+            return nil
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.debug(
+                "place photo gallery unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            return nil
         }
+    }
+
+    private func loadMoreIfNeeded(_ visiblePhotoID: String) {
+        guard galleryHasMore,
+              !isLoadingGallery,
+              PlacePhotoGalleryPresenter.shouldLoadMore(
+                visibleItemID: visiblePhotoID,
+                items: galleryItems
+              )
+        else {
+            return
+        }
+
+        Task {
+            await loadNextUserPhotoPage()
+        }
+    }
+
+    private func loadNextUserPhotoPage() async {
+        guard galleryHasMore, !isLoadingGallery, let galleryCursor else { return }
+        isLoadingGallery = true
+        let page = await resolvedUserPhotoPage(after: galleryCursor)
+        guard !Task.isCancelled else {
+            isLoadingGallery = false
+            return
+        }
+
+        if let page {
+            userPhotos = PlacePhotoGalleryPresenter.merging(
+                existing: userPhotos,
+                incoming: page.items
+            )
+            self.galleryCursor = page.nextCursor
+            galleryHasMore = page.hasMore && !page.items.isEmpty
+        } else {
+            galleryHasMore = false
+        }
+        isLoadingGallery = false
+        reconcileSelectedPhoto()
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        if failedPhoto.isGooglePlacesPhoto {
+            if providerPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
+                providerPhoto = nil
+            }
+        } else {
+            userPhotos.removeAll {
+                $0.photo.providerPlaceID == failedPhoto.providerPlaceID
+            }
+        }
+        reconcileSelectedPhoto()
+    }
+
+    private func reconcileSelectedPhoto() {
+        let ids = Set(galleryItems.map(\.id))
+        if let selectedHeaderPhotoID, ids.contains(selectedHeaderPhotoID) {
+            return
+        }
+        selectedHeaderPhotoID = galleryItems.first?.id
     }
 
     private var heading: some View {
@@ -730,29 +856,350 @@ private struct PlaceProfileFullView: View {
     }
 }
 
+private struct PlacePhotoGalleryViewerRoute: Identifiable {
+    let photoID: String
+
+    var id: String { photoID }
+}
+
+private struct PlacePhotoContributorProfileRoute: Identifiable {
+    let id: String
+}
+
+private struct PlacePhotoGalleryViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var store: WanderStore
+
+    let placeName: String
+    let photos: [PlacePhotoGalleryItem]
+    let currentUserID: String
+    let onNearEnd: (String) -> Void
+    let onRefresh: @MainActor () async -> Void
+    let onPhotoLoadFailure: (PlacePhoto) -> Void
+
+    @State private var selectedPhotoID: String?
+    @State private var selectedProfileRoute: PlacePhotoContributorProfileRoute?
+
+    init(
+        placeName: String,
+        photos: [PlacePhotoGalleryItem],
+        initialPhotoID: String,
+        currentUserID: String,
+        onNearEnd: @escaping (String) -> Void,
+        onRefresh: @escaping @MainActor () async -> Void,
+        onPhotoLoadFailure: @escaping (PlacePhoto) -> Void
+    ) {
+        self.placeName = placeName
+        self.photos = photos
+        self.currentUserID = currentUserID
+        self.onNearEnd = onNearEnd
+        self.onRefresh = onRefresh
+        self.onPhotoLoadFailure = onPhotoLoadFailure
+        _selectedPhotoID = State(initialValue: initialPhotoID)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    HStack {
+                        viewerButton(systemImage: "xmark", action: dismiss.callAsFunction)
+                        Spacer()
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
+
+                    Spacer(minLength: WanderTheme.spacing3)
+
+                    photoPager
+                        .frame(
+                            height: max(
+                                240,
+                                min(proxy.size.height * 0.62, 680)
+                            )
+                        )
+
+                    positionIndicator
+                        .frame(minHeight: 44)
+                        .padding(.vertical, WanderTheme.spacing2)
+
+                    attributionCard
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.bottom, max(WanderTheme.spacing4, proxy.safeAreaInsets.bottom))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            await onRefresh()
+            if let selectedPhotoID {
+                onNearEnd(selectedPhotoID)
+            }
+        }
+        .onChange(of: selectedPhotoID) { _, photoID in
+            if let photoID {
+                onNearEnd(photoID)
+            }
+        }
+        .onChange(of: photos.map(\.id)) { _, ids in
+            guard !ids.isEmpty else {
+                dismiss()
+                return
+            }
+            if let selectedPhotoID, ids.contains(selectedPhotoID) {
+                return
+            }
+            selectedPhotoID = ids.first
+        }
+        .fullScreenCover(item: $selectedProfileRoute) { route in
+            ProfileDetailView(profileID: route.id)
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+        }
+    }
+
+    private var photoPager: some View {
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(photos) { item in
+                        PlaceProfilePhotoImage(
+                            photo: item.photo,
+                            placeName: placeName,
+                            contentMode: .fit,
+                            onLoadFailure: onPhotoLoadFailure
+                        )
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .id(item.id)
+                        .onAppear {
+                            onNearEnd(item.id)
+                        }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $selectedPhotoID)
+        }
+    }
+
+    @ViewBuilder
+    private var positionIndicator: some View {
+        if photos.count <= 5 {
+            HStack(spacing: 10) {
+                ForEach(photos) { item in
+                    Circle()
+                        .fill(item.id == selectedItem?.id ? Color.white : Color.white.opacity(0.34))
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .accessibilityLabel(positionAccessibilityLabel)
+        } else if let positionLabel {
+            Text(positionLabel)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(Color.white.opacity(0.14))
+                .clipShape(Capsule())
+                .accessibilityLabel("Photo \(positionLabel)")
+        }
+    }
+
+    @ViewBuilder
+    private var attributionCard: some View {
+        if let selectedItem {
+            if let contributor = selectedItem.contributor {
+                userAttributionCard(item: selectedItem, contributor: contributor)
+            } else {
+                googleAttributionCard(photo: selectedItem.photo)
+            }
+        }
+    }
+
+    private func userAttributionCard(
+        item: PlacePhotoGalleryItem,
+        contributor: PlacePhotoContributor
+    ) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            WanderAvatar(
+                initials: contributor.initials,
+                avatarURL: contributor.avatarURLString,
+                size: 48,
+                color: WanderTheme.pinSocial.color
+            )
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(contributor.userID == currentUserID ? "You" : contributor.displayName)
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Button {
+                        selectedProfileRoute = PlacePhotoContributorProfileRoute(id: contributor.userID)
+                    } label: {
+                        Text("@\(contributor.handle)")
+                            .font(.system(size: 14, weight: .bold))
+                            .underline()
+                            .foregroundStyle(WanderTheme.stateSuccess.color)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(contributor.displayName)'s profile")
+
+                    if let timestamp = timestampText(item.capturedAt) {
+                        Text("· \(timestamp)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                }
+            }
+
+            Spacer(minLength: WanderTheme.spacing2)
+
+            if let status = item.status {
+                statusPill(status)
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private func googleAttributionCard(photo: PlacePhoto) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: "map.fill")
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .frame(width: 48, height: 48)
+                .background(WanderTheme.categorySage.color.opacity(0.22))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Google Maps")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                if let authorName = photo.authorName, !authorName.isEmpty {
+                    Text("Photo by \(authorName)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                } else {
+                    Text("Place photo")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+
+            Spacer()
+
+            if let sourceURL = photo.sourcePhotoURL {
+                Link(destination: sourceURL) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(width: 44, height: 44)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(Circle())
+                }
+                .accessibilityLabel("Open photo in Google Maps")
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private func statusPill(_ status: PlaceStatus) -> some View {
+        Text(status == .been ? "been" : "wanna go")
+            .font(.system(size: 13, weight: .black))
+            .foregroundStyle(WanderTheme.stateSuccess.color)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 38)
+            .background(WanderTheme.categorySage.color.opacity(0.24))
+            .clipShape(Capsule())
+    }
+
+    private func viewerButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(Color.white.opacity(0.18))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close photo viewer")
+    }
+
+    private var selectedItem: PlacePhotoGalleryItem? {
+        if let selectedPhotoID,
+           let selected = photos.first(where: { $0.id == selectedPhotoID }) {
+            return selected
+        }
+        return photos.first
+    }
+
+    private var positionLabel: String? {
+        PlacePhotoGalleryPresenter.positionLabel(
+            selectedID: selectedPhotoID,
+            items: photos
+        )
+    }
+
+    private var positionAccessibilityLabel: String {
+        guard let positionLabel else { return "Photo viewer" }
+        return "Photo \(positionLabel)"
+    }
+
+    private func timestampText(_ date: Date?) -> String? {
+        date?.formatted(
+            .dateTime
+                .month(.abbreviated)
+                .day()
+                .year()
+                .hour()
+                .minute()
+        )
+    }
+}
+
 private struct PlaceProfileMapHeader: View {
     static let minimumFullBleedTopInset: CGFloat = 54
 
     let place: PlaceSheetPlace
-    let photo: PlacePhoto?
+    let photos: [PlacePhotoGalleryItem]
+    @Binding var selectedPhotoID: String?
     let action: PlaceSheetAction
     let shareURL: URL?
     let shareText: String
     let topInset: CGFloat
     let onBack: () -> Void
     let onAction: () -> Void
+    let onOpenPhoto: (String) -> Void
+    let onNearEnd: (String) -> Void
     let onPhotoLoadFailure: (PlacePhoto) -> Void
 
     var body: some View {
         ZStack {
             mapFallback
 
-            if let photo {
-                PlaceProfilePhotoImage(
-                    photo: photo,
-                    placeName: place.name,
-                    onLoadFailure: onPhotoLoadFailure
-                )
+            if !photos.isEmpty {
+                photoPager
             }
 
             LinearGradient(
@@ -764,13 +1211,26 @@ private struct PlaceProfileMapHeader: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .allowsHitTesting(false)
 
-            if let photo, photo.isGooglePlacesPhoto {
+            if let selectedPhoto {
                 VStack {
                     Spacer()
-                    HStack {
+
+                    HStack(alignment: .bottom, spacing: WanderTheme.spacing2) {
+                        photoSource(for: selectedPhoto)
                         Spacer()
-                        PlacePhotoAttribution(photo: photo)
+
+                        if let positionLabel {
+                            Text(positionLabel)
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .frame(minHeight: 44)
+                                .background(Color.black.opacity(0.68))
+                                .clipShape(Capsule())
+                                .accessibilityLabel("Photo \(positionLabel)")
+                        }
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.bottom, WanderTheme.spacing3)
@@ -830,6 +1290,84 @@ private struct PlaceProfileMapHeader: View {
         .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
         .clipped()
+    }
+
+    private var photoPager: some View {
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(photos) { item in
+                        Button {
+                            onOpenPhoto(item.id)
+                        } label: {
+                            PlaceProfilePhotoImage(
+                                photo: item.photo,
+                                placeName: place.name,
+                                onLoadFailure: onPhotoLoadFailure
+                            )
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(accessibilityLabel(for: item))
+                        .id(item.id)
+                        .onAppear {
+                            onNearEnd(item.id)
+                        }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $selectedPhotoID)
+        }
+    }
+
+    @ViewBuilder
+    private func photoSource(for item: PlacePhotoGalleryItem) -> some View {
+        if item.isGooglePlacesPhoto {
+            PlacePhotoAttribution(photo: item.photo)
+        } else if let contributor = item.contributor {
+            HStack(spacing: 7) {
+                WanderAvatar(
+                    initials: contributor.initials,
+                    avatarURL: contributor.avatarURLString,
+                    size: 24,
+                    color: WanderTheme.pinSocial.color
+                )
+                Text("@\(contributor.handle)")
+                    .font(.system(size: 12, weight: .black))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 9)
+            .frame(minHeight: 44)
+            .background(Color.black.opacity(0.68))
+            .foregroundStyle(.white)
+            .clipShape(Capsule())
+            .accessibilityLabel("Photo by \(contributor.displayName)")
+        }
+    }
+
+    private var selectedPhoto: PlacePhotoGalleryItem? {
+        if let selectedPhotoID,
+           let selected = photos.first(where: { $0.id == selectedPhotoID }) {
+            return selected
+        }
+        return photos.first
+    }
+
+    private var positionLabel: String? {
+        PlacePhotoGalleryPresenter.positionLabel(
+            selectedID: selectedPhotoID,
+            items: photos
+        )
+    }
+
+    private func accessibilityLabel(for item: PlacePhotoGalleryItem) -> String {
+        if let contributor = item.contributor {
+            return "Open place photo by \(contributor.displayName) full screen"
+        }
+        return "Open Google Maps photo of \(place.name) full screen"
     }
 
     @ViewBuilder
@@ -910,6 +1448,7 @@ private struct PlacePhotoAttribution: View {
 struct PlaceProfilePhotoImage: View {
     let photo: PlacePhoto
     let placeName: String
+    var contentMode: ContentMode = .fill
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
     @State private var image: Image?
@@ -922,7 +1461,7 @@ struct PlaceProfilePhotoImage: View {
                 if let image {
                     image
                         .resizable()
-                        .scaledToFill()
+                        .aspectRatio(contentMode: contentMode)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
                         .transition(.opacity)

@@ -596,7 +596,9 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
                     )
                     .frame(maxHeight: min(580, proxy.size.height * 0.66))
 
-                    Spacer(minLength: WanderTheme.spacing3)
+                    pageIndicator
+                        .padding(.top, WanderTheme.spacing4)
+                        .padding(.bottom, WanderTheme.spacing4)
 
                     attribution
                         .padding(.horizontal, WanderTheme.spacing4)
@@ -623,29 +625,29 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
 
             Spacer()
 
-            Text("\(selectedIndex + 1) of \(photos.count)")
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(Color.white.opacity(0.86))
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(height: 36)
-                .background(Color.white.opacity(0.12))
-                .clipShape(Capsule())
-
-            Spacer()
-
-            Button(action: {}) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .black))
-                    .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.12))
-                    .foregroundStyle(Color.white)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Share photo")
+            Color.clear
+                .frame(width: 44, height: 44)
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, topInset + WanderTheme.spacing2)
+    }
+
+    @ViewBuilder
+    private var pageIndicator: some View {
+        if photos.count <= 5 {
+            HStack(spacing: 10) {
+                ForEach(photos) { photo in
+                    Circle()
+                        .fill(photo.id == selectedPhotoID ? Color.white : Color.white.opacity(0.38))
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .accessibilityLabel("Photo \(selectedIndex + 1) of \(photos.count)")
+        } else {
+            Text("\(selectedIndex + 1) of \(photos.count)")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(Color.white.opacity(0.86))
+        }
     }
 
     @ViewBuilder
@@ -657,61 +659,64 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
                     Image(systemName: "map.fill")
                         .font(.system(size: 18, weight: .black))
                         .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(0.12))
-                        .foregroundStyle(Color.white)
+                        .background(WanderTheme.surfaceSand.color)
+                        .foregroundStyle(WanderTheme.textInk.color)
                         .clipShape(Circle())
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Google Maps place photo")
                             .font(.system(size: 15, weight: .black))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(WanderTheme.textInk.color)
                         Text("Always first in this gallery")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.62))
+                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
 
                     Spacer()
                 }
                 .padding(WanderTheme.spacing3)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
             case let .user(profile):
-                Button {
-                    onOpenProfile(profile)
-                } label: {
-                    HStack(spacing: WanderTheme.spacing3) {
-                        PlacePhotoCarouselAvatar(profile: profile, size: 48)
-                            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                HStack(spacing: WanderTheme.spacing3) {
+                    PlacePhotoCarouselAvatar(profile: profile, size: 48)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(profile.name)
-                                .font(.system(size: 16, weight: .black))
-                                .foregroundStyle(Color.white)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(profile.name)
+                            .font(.system(size: 16, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+
+                        Button {
+                            onOpenProfile(profile)
+                        } label: {
                             Text("@\(profile.handle)")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(WanderTheme.pinSocial.color)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
                                 .underline()
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open @\(profile.handle)'s profile")
 
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("VIEW PROFILE")
-                                .font(.system(size: 10, weight: .black))
-                                .foregroundStyle(Color.white.opacity(0.65))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .black))
-                                .foregroundStyle(Color.white)
-                        }
+                        Text("Jul 22, 2026 at 23:31")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
-                    .padding(WanderTheme.spacing3)
-                    .frame(maxWidth: .infinity, minHeight: 72)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    .contentShape(Rectangle())
+
+                    Spacer()
+
+                    Text("been")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(height: 38)
+                        .background(Color(red: 0.88, green: 0.94, blue: 0.91))
+                        .clipShape(Capsule())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(profile.name)'s profile")
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 88)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
             }
         }
     }
