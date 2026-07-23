@@ -5980,6 +5980,7 @@ private struct PlaceProfileMetricCard: View {
                 .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                 .background(tint.opacity(0.12))
                 .clipShape(Circle())
+                .offset(x: ratingHeaderHorizontalOffset)
 
             Text(title)
                 .font(.system(size: compact ? 11 : 13, weight: .black))
@@ -5989,6 +5990,7 @@ private struct PlaceProfileMetricCard: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.68)
                 .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
+                .offset(x: ratingHeaderHorizontalOffset)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
@@ -6025,9 +6027,17 @@ private struct PlaceProfileMetricCard: View {
         .overlay(alignment: .topTrailing) {
             if let explanation {
                 PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: explanation == .recMe ? 14 : 6, y: compact ? -1 : 1)
+                    .offset(x: infoButtonHorizontalOffset, y: compact ? -1 : 1)
             }
         }
+    }
+
+    private var ratingHeaderHorizontalOffset: CGFloat {
+        explanation == nil ? 0 : -5
+    }
+
+    private var infoButtonHorizontalOffset: CGFloat {
+        explanation == .recMe ? 9 : 6
     }
 
     private var valueFontSize: CGFloat {

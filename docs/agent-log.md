@@ -18171,3 +18171,45 @@ REC-119 rec.me control-position handoff, 2026-07-22 19:42 PDT:
 - Added the revision, visual-review evidence, and 574/574 validation to Linear
   REC-119, then returned the issue to In Review. No known blocker remains for
   Ryan's visual approval of the farther-right rec.me control.
+
+REC-119 rating-header alignment follow-up start, 2026-07-22 20:49 PDT:
+
+- Ryan requested that the rec.me and Fit header groups move left together with
+  their leading people/sparkles symbols because the groups do not appear
+  optically centered, then requested the rec.me information control move 5
+  points left from its latest position.
+- Re-read the Linear workflow and `DESIGN.md`, fetched `origin`, confirmed this
+  isolated worktree is clean and current with `origin/main`, and returned
+  REC-119 from In Review to In Progress. The root checkout's unrelated work and
+  all other worktrees remain untouched; no overlapping edit is present here.
+- Scope is the two rating-card implementations plus this log. Preserve the Fit
+  info-control position, native caret popover, 44-point targets, card geometry,
+  copy, backend, build number, and release state. Validate on iPhone 17 Pro and
+  iPhone 17e, then rerun focused and full tests before updating PR #169.
+
+REC-119 rating-header alignment validation, 2026-07-22 20:56 PDT:
+
+- Added a shared optical header offset in both rating-card implementations. The
+  rec.me and Fit header content moves 5 points left as a complete visual unit;
+  in the native tile the leading people/sparkles symbol and text stay together,
+  and in the compact metric card its symbol and title receive the same offset.
+  Your Rating remains centered and unchanged.
+- Moved only the rec.me information control 5 points left, from trailing offset
+  `x: 14` to `x: 9`. The Fit information control remains at `x: 6`, and both
+  controls retain their 44-point targets and native button-anchored popovers.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused rating-copy contract passed 1/1 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_20-50-09--0700.xcresult`.
+- Visually reviewed the closed alignment on iPhone 17 Pro at
+  `/private/tmp/rec119-aligned-17pro-final.png` and iPhone 17e at
+  `/private/tmp/rec119-aligned-17e-final.png`. Both rating header groups now read
+  as optically centered relative to the detached info controls without overlap.
+- Reviewed the updated native-caret state at
+  `/private/tmp/rec119-aligned-17pro-popover.png`; the caret follows the rec.me
+  control 5 points left. The local-only auto-open capture hook was fully reverted
+  before final validation, so production remains tap-to-open.
+- The complete suite passed 574/574 with zero failures on iPhone 17 Pro / iOS
+  26.5 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_20-54-57--0700.xcresult`.
+  Existing simulator and Supabase formatter diagnostics remain unrelated. No
+  backend, build-number, TestFlight, or release action was requested.

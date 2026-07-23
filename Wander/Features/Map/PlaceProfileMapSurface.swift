@@ -1071,6 +1071,7 @@ private struct PlaceProfileRatingTile: View {
             }
             .foregroundStyle(WanderTheme.textMuted.color)
             .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
+            .offset(x: ratingHeaderHorizontalOffset)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
@@ -1106,9 +1107,17 @@ private struct PlaceProfileRatingTile: View {
         .overlay(alignment: .topTrailing) {
             if let explanation {
                 PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: explanation == .recMe ? 14 : 6, y: 2)
+                    .offset(x: infoButtonHorizontalOffset, y: 2)
             }
         }
+    }
+
+    private var ratingHeaderHorizontalOffset: CGFloat {
+        explanation == nil ? 0 : -5
+    }
+
+    private var infoButtonHorizontalOffset: CGFloat {
+        explanation == .recMe ? 9 : 6
     }
 
     private var valueFontSize: CGFloat {
