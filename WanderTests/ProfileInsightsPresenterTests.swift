@@ -28,8 +28,16 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
     }
 
-    func testMultipleVisitsOnOneDayProduceOneDayWithCount() throws {
+    func testCalendarDateBadgesCountOwnerBeenVisitsIncludingRepeatedPlaces() throws {
         let fixture = makeFixture()
+        let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
+        let laterThatDay = try XCTUnwrap(
+            fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8, hour: 21))
+        )
+        fixture.visits[2].visitedAt = laterThatDay
+        fixture.visits[3].visitedAt = laterThatDay
+        fixture.visits[4].visitedAt = laterThatDay
+
         let insights = ProfileInsightsPresenter.present(
             ownerID: fixture.ownerID,
             userPlaces: fixture.userPlaces,
@@ -38,11 +46,64 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             month: fixture.month,
             calendar: fixture.calendar
         )
-        let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
 
-        XCTAssertEqual(insights.monthVisitCounts[day], 2)
-        XCTAssertEqual(insights.monthPlaceIDs[day], ["coffee"])
-        XCTAssertEqual(insights.monthVisitCounts.count, 2)
+        XCTAssertEqual(insights.monthVisitCounts[day], 3)
+        XCTAssertEqual(insights.monthPlaceIDs[day], ["coffee", "dinner"])
+        XCTAssertEqual(insights.monthVisitCounts.count, 1)
+    }
+
+    func testCalendarDateBadgesCanonicalizePlaceAliasesAndRetainMissingPlaceReferences() throws {
+        let fixture = makeFixture()
+        let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
+        let canonicalPlace = LocalPlace(
+            localID: "local-place",
+            serverID: "server-place",
+            canonicalName: "Canonical Place",
+            category: WanderPlaceCategory.restaurantsFood,
+            latitude: 34,
+            longitude: -118
+        )
+        let localAlias = LocalUserPlace(
+            localID: "local-alias-save",
+            userID: fixture.ownerID,
+            placeID: canonicalPlace.localID,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let serverAlias = LocalUserPlace(
+            localID: "server-alias-save",
+            userID: fixture.ownerID,
+            placeID: canonicalPlace.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let missingPlace = LocalUserPlace(
+            localID: "missing-place-save",
+            userID: fixture.ownerID,
+            placeID: "missing-place",
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let visits = [
+            LocalPlaceVisit(localID: "local-alias-visit", userPlaceID: localAlias.id, visitedAt: day),
+            LocalPlaceVisit(localID: "server-alias-visit", userPlaceID: serverAlias.id, visitedAt: day),
+            LocalPlaceVisit(localID: "missing-place-visit", userPlaceID: missingPlace.id, visitedAt: day)
+        ]
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: fixture.ownerID,
+            userPlaces: [localAlias, serverAlias, missingPlace],
+            visits: visits,
+            places: [canonicalPlace],
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertEqual(insights.monthVisitCounts[day], 3)
+        XCTAssertEqual(insights.monthPlaceIDs[day], ["missing-place", "server-place"])
     }
 
     func testCountryCanonicalizerDeduplicatesCodesAndNames() {

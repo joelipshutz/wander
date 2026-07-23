@@ -17451,3 +17451,240 @@ Merge completion, 2026-07-22 16:37 PDT:
 - Per the merge-only request, the App Store build number remains unchanged and
   no TestFlight/Slack release action was taken. REC-112 is eligible for the next
   explicitly requested release batch.
+## 2026-07-22 15:52 PDT - Codex - REC-124 calendar badge counts
+
+Agent: Codex using the Linear, rec.me Feedback Feature/Bug Workflow, and
+`plan-eng-review` workflows
+Branch: `codex/rec-124-calendar-badges`
+Worktree: `/private/tmp/recme-rec124-calendar-badges`
+Linear: `REC-124` (`Backlog` at checkout; move to `In Progress` before editing)
+
+Goal: fix Profile calendar date badges so each day counts distinct places the
+displayed profile owner saved as Been, not raw visit rows or other users' saves;
+add regression coverage, validate the branch, and open a ready PR.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `6d717d23b`. The root checkout has unrelated user-owned
+  `.gitignore` and `.pnpm-store/` changes, so it will not be edited or switched.
+  No active worktree is editing the expected REC-124 files.
+- Linear REC-124 has no comments, attachments, screenshot, or backend timestamp.
+  Classified as a P2 local Profile presentation regression. PostHog/Supabase log
+  triage is not useful because the faulty aggregation is deterministic in the
+  pure presenter. Design review is not needed because layout, styling, copy,
+  affordances, and interaction remain unchanged.
+- Root cause is verified in
+  `Wander/Features/Profile/ProfileInsightsPresenter.swift`: active inputs are
+  already filtered to the owner, Been status, and non-deleted rows, but lines
+  285-292 increment `monthVisitCounts` once per visit while separately building
+  a distinct per-day `monthPlaceIDs` set. The existing regression fixture proves
+  two same-day visits to one owner save currently produce badge `2` with only
+  one drill-in place.
+
+Engineering review packet:
+
+- Scope challenge: reuse the existing owner/Been filter, month interval,
+  canonical place lookup, per-day place-ID set, and presenter cache. The
+  smallest complete fix derives each badge from the same distinct place set as
+  its drill-in and names the field for place-count semantics. Expected files are
+  `Wander/Features/Profile/ProfileInsightsPresenter.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this log.
+- Data flow:
+  `visits -> active owner Been user-place lookup -> selected month -> calendar
+  day -> canonical place-ID set -> badge count + drill-in IDs`.
+- Failure modes: duplicate visits for one place must count once; distinct owned
+  Been places on one day must each count; Wanna and other-user visits must count
+  zero; a temporarily missing place row retains its saved place ID rather than
+  dropping the date. Existing timezone/month filtering remains unchanged.
+- Test plan: replace the contradictory raw-visit-count assertion with a focused
+  distinct-place regression that includes duplicate owner visits, a second
+  owned Been place, an owner Wanna visit, and another user's Been visit on the
+  same date; keep the existing owner/status/timezone/cache coverage; then run
+  the focused presenter suite and full simulator suite.
+- Review sections: architecture 0 issues, code quality 0 issues after the field
+  rename is included, performance 0 issues (the set-based aggregation remains
+  O(visits)), test review 1 mandatory regression gap folded into the plan, 0
+  critical gaps, and no unresolved decisions. Sequential implementation only;
+  no parallel lane is useful for one presenter path.
+- Explicitly out of scope: month summary metrics, visit history semantics,
+  profile/map/list redesign, backend/schema/RLS, analytics, build number,
+  TestFlight, and Slack. Outside-voice and CEO/design reviews are not warranted
+  for this isolated, source-verified two-module regression.
+
+Implementation checkpoint, 2026-07-22 16:02 PDT:
+
+- Replaced the raw per-day visit-row counter with a count derived from the same
+  canonical place-ID set used by calendar drill-ins. Repeated visits to one
+  place now count once, local/server aliases collapse to the same place, and a
+  missing place row retains its referenced ID rather than erasing the day.
+- Renamed the presenter and view contract from visit-count to place-count
+  semantics and changed the day-cell accessibility label from visits to places.
+  The existing owner, Been-status, deletion, and month filters remain the
+  authoritative eligibility gate.
+- Added focused regressions covering duplicate visits, two distinct owner Been
+  places, an owner Wanna save, another user's Been save, local/server aliases,
+  a missing place reference, and the existing timezone boundary.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused `ProfileInsightsPresenterTests` suite
+  passed 14/14 on the installed iPhone 17 Pro / iOS 26.5 simulator:
+  `/private/tmp/DerivedData-rec124-focused/Logs/Test/Test-Wander-2026.07.22_15-57-28--0700.xcresult`.
+- The prescribed iPhone 16 Plus / iOS 18.6 simulator is not installed. An
+  initial sandboxed attempt also stopped before app code because CoreSimulator
+  and dependency networking were unavailable; neither infrastructure attempt
+  is counted as validation. Existing `WanderSupabaseClient` concurrency
+  warnings remain unrelated.
+- `origin/main` advanced by one commit during implementation. Commit this
+  isolated change, update it onto current `origin/main`, then run the complete
+  suite as the final review gate before publication.
+
+Final validation checkpoint, 2026-07-22 16:09 PDT:
+
+- Committed the implementation, fetched origin, and rebased onto current
+  `origin/main` at `3dac3a362`. The only conflict was this append-only
+  coordination log; the upstream REC-116 history and complete REC-124 history
+  were both preserved. The rebased implementation commit is `724cf1559`.
+- Ran `xcodegen generate` after the rebase with no generated project diff.
+  `git diff --check` remains clean, and the branch contains only the presenter,
+  calendar view, focused test, and coordination-log changes described above.
+- The complete post-rebase suite passed 573/573 with zero failures on the
+  installed iPhone 17 Pro / iOS 26.5 simulator:
+  `/private/tmp/DerivedData-rec124-postrebase/Logs/Test/Test-Wander-2026.07.22_16-04-23--0700.xcresult`.
+  Focused presenter coverage remains 14/14 at the earlier result bundle.
+- The plan engineering gate is clean: 0 unresolved decisions, 0 critical gaps,
+  and the one identified test gap is implemented. Its required local review-log
+  helper could not persist the dashboard row because this machine lacks `bun`;
+  `gstack-review-read` therefore reports `NO_REVIEWS`, while the full review
+  packet and outcome are retained in this durable log. This tooling gap does
+  not affect source or XCTest validation.
+- Existing `WanderSupabaseClient` concurrency warnings appeared again and are
+  unrelated. No backend, schema, RLS, analytics, build-number, TestFlight, or
+  Slack release action was performed. Next: push the branch, open a ready PR,
+  link it to REC-124, and move the issue to In Review.
+
+Build-91-main publication gate, 2026-07-22 16:12 PDT:
+
+- `origin/main` advanced once more with the build-91 release metadata while the
+  first complete suite was running. Rebased onto exact current main
+  `9dfc5e9d6`, preserving its TestFlight release entry and the REC-124 history;
+  the implementation commit is now `da696752b`.
+- Regenerated the project with no tracked diff and reran the exact full suite
+  on the build-91 base. All 573/573 tests passed with zero failures on iPhone 17
+  Pro / iOS 26.5. Final result bundle:
+  `/private/tmp/DerivedData-rec124-postrebase/Logs/Test/Test-Wander-2026.07.22_16-10-40--0700.xcresult`.
+- A final `git fetch origin` confirms the branch is current with main and
+  `git diff --check` passes. This is the publication gate for the ready PR.
+
+Publication and review handoff, 2026-07-22 16:14 PDT:
+
+- Pushed `codex/rec-124-calendar-badges` and opened ready PR
+  [#167](https://github.com/joelipshutz/wander/pull/167) against `main`.
+  GitHub reports the PR open, non-draft, `CLEAN`, with exactly the two Profile
+  source files, presenter tests, and this log; no checks are configured.
+- Attached PR #167 to Linear REC-124 and moved the issue from In Progress to
+  In Review. Validation for reviewer handoff is 14/14 focused presenter tests
+  and 573/573 complete tests on the exact build-91 main base.
+- Review acceptance: one badge count per distinct owner-saved Been place on a
+  date; repeat visits do not inflate it; Wanna and other users' saves do not
+  contribute; tapping the date yields the same distinct place set named by the
+  badge. Keep REC-124 In Review until the behavior and PR are accepted.
+- No release was requested or performed. Any TestFlight packaging of this app
+  change requires a separate explicit release request after merge.
+
+Xcode device-test handoff, 2026-07-22 16:19 PDT:
+
+- Opened this worktree's `Wander.xcodeproj` in Xcode and verified the toolbar
+  reports branch `codex/rec-124-calendar-badges`, scheme `Wander`, and run
+  destination `Ry’s iPhone`.
+- Started Build and Run. Compilation completed and Xcode reached the device
+  install/launch step, but paused with “Unlock Ry’s iPhone to Continue” because
+  the phone is locked. Xcode remains open on the correct branch and is waiting.
+- Exact continuation: unlock Ry’s iPhone; Xcode should resume launching Wander.
+  If it does not resume automatically, dismiss the lock sheet and press Run
+  once. No source, configuration, backend, build-number, or TestFlight change
+  was made for this hands-on test handoff.
+
+REC-124 acceptance correction, 2026-07-22 17:21 PDT:
+
+- Agent/tool: Codex. Goal: revise PR #167 so every distinct owner Been
+  visit/save record increments the date badge, including repeated saves of the
+  same place on the same day, then validate and merge the ready change to
+  `main`. Branch: `codex/rec-124-calendar-badges`; worktree:
+  `/private/tmp/recme-rec124-calendar-badges`.
+- Pre-work state: implementation worktree clean; `origin/main` is `5804f8763`
+  after REC-112 merged, while this branch is behind at `88053b8b8`. The root
+  checkout remains separately dirty with user-owned work and is not being
+  touched. Build 91 is fully released; this merge-only request does not
+  authorize a new TestFlight build, build-number bump, or Slack release note.
+- This clarification supersedes the earlier distinct-place badge acceptance
+  wording above. Data flow is now: visit rows -> owner Been records ->
+  de-duplicate aliases of the same visit ID -> calendar day -> raw visit count
+  for the badge. The day drill-in continues to use canonical distinct place
+  IDs, so two Been records for one place produce badge `2` and one place in the
+  list. Wanna records, other users' records, soft-deleted rows, and duplicate
+  aliases of one visit record remain excluded.
+- Expected files: `Wander/Features/Profile/ProfileInsightsPresenter.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this log. REC-112 also
+  touched the Profile calendar area on current `main`; update the branch first
+  and preserve its map behavior while resolving any overlap.
+- Full `/plan-eng-review` invocation skipped: this is a narrow, reversible
+  presenter semantic correction using the already-filtered visit stream, with
+  no new architecture, persistence, backend, schema, or product surface. Apply
+  the data-flow/failure/test lens directly, then run focused and full XCTest
+  coverage plus the required pre-landing review workflow.
+
+Acceptance-correction implementation and validation, 2026-07-22 17:30 PDT:
+
+- Rebased the branch onto current `origin/main` at `5804f8763`. The only
+  conflict was the expected append-only agent log; preserved build-91, REC-112,
+  and REC-124 histories. REC-112's calendar-list map behavior remains intact.
+- Restored badge and accessibility semantics to Been visit counts. The badge is
+  derived from the filtered, unique visit-record stream, so two distinct Been
+  visit records for the same place on one day count as `2`; the canonical
+  per-day place-ID set remains separate and de-duplicated for drill-in routing.
+- Updated the regression to place two Coffee Been visits and one Dinner Been
+  visit on the same day, alongside a Wanna visit and another user's Been visit.
+  It now requires badge `3`, drill-in IDs `[coffee, dinner]`, and one counted
+  calendar day. The alias/missing-reference case requires three visit records
+  with two canonical drill-in IDs.
+- `xcodegen generate` completed with no generated project diff and
+  `git diff --check` passes. Focused `ProfileInsightsPresenterTests` passed
+  14/14; result bundle:
+  `/private/tmp/DerivedData-rec124-followup/Logs/Test/Test-Wander-2026.07.22_17-23-39--0700.xcresult`.
+- The full iOS suite passed 573/573 with zero failures on iPhone 17 Pro / iOS
+  26.5; result bundle:
+  `/private/tmp/DerivedData-rec124-followup/Logs/Test/Test-Wander-2026.07.22_17-27-19--0700.xcresult`.
+  The generic iOS Simulator build also succeeded. Existing Supabase formatter
+  actor-isolation warnings and simulator diagnostics remain unrelated.
+- No visual layout, backend, schema/RLS, analytics, build number, TestFlight,
+  or Slack release change was made. Next: commit this correction, force-update
+  the rebased PR branch, revise PR #167's acceptance copy, complete the required
+  pre-landing review, and squash-merge if the gate remains clean.
+
+Pre-landing review checkpoint, 2026-07-22 17:34 PDT:
+
+- Committed the acceptance correction as `8f3452b57`, force-updated the rebased
+  feature branch, and revised PR #167 so its summary explicitly says repeat Been
+  visit/save records increment the badge while the date drill-in stays
+  de-duplicated by canonical place.
+- Completed the gstack pre-landing checklist against the complete current diff.
+  Pass 1 found no SQL/data, concurrency, LLM trust, shell, enum, auth, or security
+  surface. Pass 2 found no field, time-window, type-boundary, view, pipeline,
+  completeness, TODO, or documentation-staleness issue. The source diff is one
+  canonical place-ID resolution; focused tests cover the corrected badge/list
+  cardinality. Pre-Landing Review: no issues found; quality score 10.0.
+- Specialist reviews were skipped for scope: the production diff is two lines in
+  one pure presenter, with no schema/API/migration/design/performance/crypto or
+  bundle impact, and the exact regression plus full suite already passed. There
+  are no Greptile, review, inline, or conversation comments; no checks are
+  configured. GitHub reports PR #167 open, ready, `CLEAN`, and `MERGEABLE`.
+- The optional gstack tracking initializer was not run because the permission
+  reviewer rejected its potential session/repository telemetry egress. The
+  substantive checklist and evidence are recorded here; no attempt was made to
+  bypass that restriction. `gstack-review-read` reports `NO_REVIEWS`.
+- Final exact-head gates before this docs-only checkpoint: 14/14 focused tests,
+  573/573 complete tests, generic Simulator build success, clean XcodeGen output,
+  and clean `git diff --check`. No unresolved finding remains. Next: push this
+  review record, recheck latest `main` and PR state, then squash-merge PR #167.

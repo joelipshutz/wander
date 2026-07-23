@@ -288,7 +288,8 @@ enum ProfileInsightsPresenter {
             let day = calendar.startOfDay(for: visit.visitedAt)
             monthVisitCounts[day, default: 0] += 1
             if let userPlace = userPlaceByID[visit.userPlaceID] {
-                monthPlaceIDs[day, default: []].insert(userPlace.placeID)
+                let canonicalPlaceID = placeByID[userPlace.placeID]?.id ?? userPlace.placeID
+                monthPlaceIDs[day, default: []].insert(canonicalPlaceID)
             }
         }
 
