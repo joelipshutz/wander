@@ -18104,3 +18104,14 @@ REC-119 visual follow-up validation, 2026-07-22 17:22 PDT:
   The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
   machine, so the available current simulator target was used. Existing
   simulator keychain, location, and metadata warnings remain non-fatal.
+
+REC-119 visual follow-up handoff, 2026-07-22 17:24 PDT:
+
+- Committed and pushed the revised SwiftUI mockup as `195697973` on
+  `codex/rec-119-ratings-info`, updating ready PR #169:
+  https://github.com/joelipshutz/wander/pull/169
+- Verified PR #169 at that head is `CLEAN` and `MERGEABLE`, with no configured
+  checks. Added the visual and test results to REC-119 and returned the issue to
+  In Review.
+- No known blocker remains for Ryan's visual review. No TestFlight build or
+  release action was requested or performed.
