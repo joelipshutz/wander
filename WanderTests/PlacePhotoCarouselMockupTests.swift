@@ -104,5 +104,16 @@ final class PlacePhotoCarouselMockupTests: XCTestCase {
         )
         XCTAssertEqual(Set(photos.map(\.id)).count, photos.count)
     }
+
+    func testViewerFixtureExercisesLongCurrentUserAttribution() {
+        let photos = PlacePhotoCarouselMockData.viewerPhotos
+
+        XCTAssertEqual(photos[1].id, "maya-photo")
+        guard case let .user(profile) = photos[1].source else {
+            return XCTFail("The viewer should start on a representative user photo")
+        }
+        XCTAssertEqual(profile.name, "You")
+        XCTAssertEqual(profile.handle, "ryan_lieblein")
+    }
 }
 #endif

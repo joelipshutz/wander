@@ -42,8 +42,8 @@ struct PlacePhotoCarouselMockupRoot: View {
                 )
             case .viewer:
                 PlacePhotoCarouselFullscreenHost(
-                    photos: PlacePhotoCarouselMockData.visiblePhotos,
-                    initialPhotoID: PlacePhotoCarouselMockData.visiblePhotos[1].id,
+                    photos: PlacePhotoCarouselMockData.viewerPhotos,
+                    initialPhotoID: PlacePhotoCarouselMockData.viewerPhotos[1].id,
                     onClose: {}
                 )
             case .hundredPhotos:
@@ -137,6 +137,15 @@ enum PlacePhotoCarouselMockPrivacyFilter {
 }
 
 enum PlacePhotoCarouselMockData {
+    static let currentUser = PlacePhotoCarouselMockProfile(
+        id: "current-user",
+        name: "You",
+        handle: "ryan_lieblein",
+        city: "Los Angeles, CA",
+        bio: "Saving the places I actually want to remember.",
+        avatarTileIndex: 0
+    )
+
     static let maya = PlacePhotoCarouselMockProfile(
         id: "maya",
         name: "Maya Patel",
@@ -233,6 +242,17 @@ enum PlacePhotoCarouselMockData {
     ]
 
     static let visiblePhotos = PlacePhotoCarouselMockPrivacyFilter.visiblePhotos(from: candidates)
+
+    static let viewerPhotos: [PlacePhotoCarouselMockPhoto] = visiblePhotos.map { photo in
+        guard photo.id == "maya-photo" else {
+            return photo
+        }
+        return PlacePhotoCarouselMockPhoto(
+            id: photo.id,
+            source: .user(currentUser),
+            imageTileIndex: photo.imageTileIndex
+        )
+    }
 
     static let hundredVisiblePhotos: [PlacePhotoCarouselMockPhoto] = {
         let userPhotos = Array(visiblePhotos.dropFirst())
@@ -498,6 +518,7 @@ private struct PlacePhotoCarouselPager: View {
     let photos: [PlacePhotoCarouselMockPhoto]
     @Binding var selectedPhotoID: String?
     let imageContentMode: ContentMode
+    var horizontalImageInset: CGFloat = 0
     let onTapPhoto: (PlacePhotoCarouselMockPhoto) -> Void
 
     var body: some View {
@@ -509,6 +530,7 @@ private struct PlacePhotoCarouselPager: View {
                         tileIndex: photo.imageTileIndex,
                         contentMode: imageContentMode
                     )
+                    .padding(.horizontal, horizontalImageInset)
                     .containerRelativeFrame(.horizontal)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -523,7 +545,7 @@ private struct PlacePhotoCarouselPager: View {
         }
         .scrollIndicators(.hidden)
         .scrollTargetBehavior(.paging)
-        .scrollPosition(id: $selectedPhotoID)
+        .scrollPosition(id: $selectedPhotoID, anchor: .center)
     }
 
     private func accessibilityLabel(for photo: PlacePhotoCarouselMockPhoto) -> String {
@@ -592,6 +614,7 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
                         photos: photos,
                         selectedPhotoID: $selectedPhotoID,
                         imageContentMode: .fit,
+                        horizontalImageInset: WanderTheme.spacing2,
                         onTapPhoto: { _ in }
                     )
                     .frame(maxHeight: min(580, proxy.size.height * 0.66))
@@ -682,28 +705,39 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
                 HStack(spacing: WanderTheme.spacing3) {
                     PlacePhotoCarouselAvatar(profile: profile, size: 48)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(profile.name)
-                            .font(.system(size: 16, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                mockAttributionName(profile.name)
+                                mockAttributionTimestamp
+                            }
+                            .fixedSize(horizontal: true, vertical: false)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                mockAttributionName(profile.name)
+                                mockAttributionTimestamp
+                            }
+                        }
 
                         Button {
                             onOpenProfile(profile)
                         } label: {
                             Text("@\(profile.handle)")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .foregroundStyle(WanderTheme.stateSuccess.color)
                                 .underline()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                                .allowsTightening(true)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open @\(profile.handle)'s profile")
-
-                        Text("Jul 22, 2026 at 23:31")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
 
-                    Spacer()
+                    Spacer(minLength: WanderTheme.spacing2)
 
                     Text("been")
                         .font(.system(size: 13, weight: .black))
@@ -712,13 +746,28 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
                         .frame(height: 38)
                         .background(Color(red: 0.88, green: 0.94, blue: 0.91))
                         .clipShape(Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(WanderTheme.spacing3)
-                .frame(maxWidth: .infinity, minHeight: 88)
+                .frame(maxWidth: .infinity, minHeight: 96)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
             }
         }
+    }
+
+    private func mockAttributionName(_ name: String) -> some View {
+        Text(name)
+            .font(.system(size: 16, weight: .black))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var mockAttributionTimestamp: some View {
+        Text("Jun 25, 2026 at 12:23")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(WanderTheme.textMuted.color)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var selectedIndex: Int {

@@ -974,8 +974,8 @@ private struct PlacePhotoGalleryViewer: View {
                             contentMode: .fit,
                             onLoadFailure: onPhotoLoadFailure
                         )
-                        .frame(width: proxy.size.width, height: proxy.size.height)
                         .padding(.horizontal, WanderTheme.spacing2)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                         .id(item.id)
                         .onAppear {
                             onNearEnd(item.id)
@@ -985,7 +985,7 @@ private struct PlacePhotoGalleryViewer: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $selectedPhotoID)
+            .scrollPosition(id: $selectedPhotoID, anchor: .center)
         }
     }
 
@@ -1027,7 +1027,10 @@ private struct PlacePhotoGalleryViewer: View {
         item: PlacePhotoGalleryItem,
         contributor: PlacePhotoContributor
     ) -> some View {
-        HStack(spacing: WanderTheme.spacing3) {
+        let displayName = contributor.userID == currentUserID ? "You" : contributor.displayName
+        let timestamp = timestampText(item.capturedAt)
+
+        return HStack(spacing: WanderTheme.spacing3) {
             WanderAvatar(
                 initials: contributor.initials,
                 avatarURL: contributor.avatarURLString,
@@ -1035,34 +1038,43 @@ private struct PlacePhotoGalleryViewer: View {
                 color: WanderTheme.pinSocial.color
             )
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(contributor.userID == currentUserID ? "You" : contributor.displayName)
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 0) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        attributionDisplayName(displayName)
 
-                HStack(spacing: 6) {
-                    Button {
-                        selectedProfileRoute = PlacePhotoContributorProfileRoute(id: contributor.userID)
-                    } label: {
-                        Text("@\(contributor.handle)")
-                            .font(.system(size: 14, weight: .bold))
-                            .underline()
-                            .foregroundStyle(WanderTheme.stateSuccess.color)
-                            .frame(minHeight: 44)
+                        if let timestamp {
+                            attributionTimestamp(timestamp)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(contributor.displayName)'s profile")
+                    .fixedSize(horizontal: true, vertical: false)
 
-                    if let timestamp = timestampText(item.capturedAt) {
-                        Text("· \(timestamp)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
+                    VStack(alignment: .leading, spacing: 2) {
+                        attributionDisplayName(displayName)
+
+                        if let timestamp {
+                            attributionTimestamp(timestamp)
+                        }
                     }
                 }
+
+                Button {
+                    selectedProfileRoute = PlacePhotoContributorProfileRoute(id: contributor.userID)
+                } label: {
+                    Text("@\(contributor.handle)")
+                        .font(.system(size: 14, weight: .bold))
+                        .underline()
+                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .allowsTightening(true)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(contributor.displayName)'s profile")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             Spacer(minLength: WanderTheme.spacing2)
 
@@ -1072,9 +1084,23 @@ private struct PlacePhotoGalleryViewer: View {
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private func attributionDisplayName(_ displayName: String) -> some View {
+        Text(displayName)
+            .font(.system(size: 18, weight: .black))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func attributionTimestamp(_ timestamp: String) -> some View {
+        Text(timestamp)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(WanderTheme.textMuted.color)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func googleAttributionCard(photo: PlacePhoto) -> some View {
@@ -1131,6 +1157,7 @@ private struct PlacePhotoGalleryViewer: View {
             .frame(minHeight: 38)
             .background(WanderTheme.categorySage.color.opacity(0.24))
             .clipShape(Capsule())
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private func viewerButton(systemImage: String, action: @escaping () -> Void) -> some View {

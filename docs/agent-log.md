@@ -20154,6 +20154,53 @@ REC-135 completion, 2026-07-23 11:49 PDT:
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
 
+REC-133 physical-device follow-up validation, 2026-07-23 13:08 PDT:
+
+- Moved each full-screen image's horizontal inset inside an exact
+  viewport-width paging target and anchored scroll position at center. The
+  second photo now settles with no neighboring-photo sliver.
+- Reworked contributor attribution so display name and full timestamp choose a
+  same-line or stacked layout without truncation, and the clickable username
+  has its own 44pt one-line row. The status pill is fixed-size so its label
+  cannot be compressed away by long attribution.
+- Added a representative debug viewer fixture for `You` /
+  `@ryan_lieblein` plus a fixture regression. The focused
+  gallery/mock/repository suite passed 12/12.
+- The exact final head passed 612/612 tests on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec133-followup/Logs/Test/Test-Wander-2026.07.23_13-05-08--0700.xcresult`.
+  `xcodegen generate` produced no project-file drift and `git diff --check`
+  passes.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Screenshots
+  `rec133-followup-viewer-17pro.png` and
+  `rec133-followup-viewer-17e.png` show the centered second page, complete
+  `@ryan_lieblein`, full `Jun 25, 2026 at 12:23` timestamp, and intact
+  `been` pill with no ellipses or adjacent-photo exposure.
+- Pre-landing review of the full PR diff found no critical, informational, or
+  specialist issue. GitHub reports PR #186 ready and mergeable; it has no
+  review or Greptile comments. No TestFlight action is requested.
+
+REC-133 physical-device follow-up and landing start, 2026-07-23 12:32 PDT:
+
+- Agent/tool: Codex. Goal: fix the full-screen pager so every photo snaps
+  exactly to the viewport center with no neighboring-photo sliver, restructure
+  user attribution so the username stays on one line and all date text remains
+  visible without ellipses, then review and squash-merge PR #186 to `main`.
+- Continuing in the clean isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`. `origin/main` remains `9c45b0fbf` and
+  is an ancestor of the branch. No overlapping worktree edits are present.
+- Reviewed Ryan's physical-device screenshot
+  `codex-clipboard-c0b3366f-c978-498c-8eb2-c89d78d3bbd4.png`. The visible
+  previous-photo strip is caused by applying horizontal padding outside each
+  viewport-width paging target; the attribution row also allows the handle to
+  wrap while competing horizontally with the timestamp.
+- Expected files: production and debug place-photo viewer SwiftUI, matching
+  tests if a stable non-visual contract can be expressed, generated project
+  only if membership changes, and this coordination log. This is a narrow
+  visual follow-up: no schema, RPC, RLS, sync, auth, or persistence contract is
+  changing, so a separate architecture review is not warranted. No TestFlight
+  release was requested.
+
 REC-133 production validation and handoff, 2026-07-23 12:06 PDT:
 
 - Production implementation is complete in isolated worktree
