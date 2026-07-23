@@ -19397,3 +19397,38 @@ Local review handoff, 2026-07-23 10:28 PDT:
   with validation and the local-only handoff recorded. No known implementation
   blocker remains; the only incomplete workflow item is the policy-blocked
   push/PR.
+
+Map-preview review follow-up, 2026-07-23 10:38 PDT:
+
+- Ryan requested a native Apple Maps preview between the search field and place
+  results so users can understand where candidate places are. The map should
+  update from the active search criteria.
+- Refetched `origin`; this isolated worktree is clean and two local commits
+  ahead of `origin/main`. No other worktree overlaps the REC-135 files.
+- Moved REC-135 from In Review back to In Progress for the follow-up.
+- Expected scope remains
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused import-search UI
+  support/tests as needed, and this coordination log. The map will reuse the
+  existing MapKit candidate coordinates and will not add a backend or schema
+  contract.
+
+Map-preview follow-up completion, 2026-07-23 11:02 PDT:
+
+- Added an interactive Apple Maps preview between the search field and results.
+  It refits to each returned candidate set, supports pan/zoom, and disappears
+  while a changed query is awaiting new results.
+- Map pins and result cards use the same numbered selection state. Selecting
+  either surface highlights both and enables `Match Place`.
+- Full validation passed on the available iPhone 17 Pro / iOS 26.5 simulator:
+  586 tests, 0 failures. Result:
+  `/private/tmp/DerivedData-rec135-map-focused/Logs/Test/Test-Wander-2026.07.23_10-50-54--0700.xcresult`.
+  The earlier focused manual-search regression run also passed 2 tests,
+  0 failures.
+- Reviewed the final native UI on iPhone 17 Pro and the smaller iPhone 17e.
+  Both show the fitted map between search and cards without clipping; numbered
+  markers remain legible, and the selected card/pin state is synchronized.
+- `git diff --check` passes. No schema/RLS, project membership, build metadata,
+  auth, or backend contract changed. No TestFlight release was requested.
+- Opened `/private/tmp/recme-rec135-match-place/Wander.xcodeproj` in Xcode and
+  verified the branch chooser reports
+  `codex/rec-135-match-broken-import`. The branch is ready for local review.

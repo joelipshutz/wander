@@ -1611,6 +1611,10 @@ private struct PlaceImportRescueScreen: View {
                 LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     searchField
 
+                    if let candidateMapRegion {
+                        candidateMap(region: candidateMapRegion)
+                    }
+
                     if isSearching {
                         HStack(spacing: WanderTheme.spacing2) {
                             ProgressView()
@@ -1640,8 +1644,8 @@ private struct PlaceImportRescueScreen: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
 
-                            ForEach(candidates) { candidate in
-                                candidateButton(candidate)
+                            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+                                candidateButton(candidate, number: index + 1)
                             }
                         }
                     }
@@ -1760,18 +1764,88 @@ private struct PlaceImportRescueScreen: View {
         )
     }
 
-    private func candidateButton(_ candidate: PlaceCandidate) -> some View {
+    private var candidateMapRegion: MKCoordinateRegion? {
+        MapRegionFitter.region(
+            fitting: candidates.compactMap { candidate in
+                usableImportCoordinate(
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude
+                )
+            },
+            minimumSpan: 0.02,
+            paddingMultiplier: 1.5
+        )
+    }
+
+    private func candidateMap(region: MKCoordinateRegion) -> some View {
+        Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
+            ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+                if let coordinate = usableImportCoordinate(
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude
+                ) {
+                    Annotation(candidate.name, coordinate: coordinate) {
+                        Button {
+                            selectedCandidateID = candidate.id
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        selectedCandidateID == candidate.id
+                                            ? WanderTheme.terracotta.color
+                                            : WanderTheme.stateInfo.color
+                                    )
+                                    .frame(width: 34, height: 34)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.9), lineWidth: 2)
+                                    )
+
+                                Text("\(index + 1)")
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(Color.white)
+                            }
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .shadow(color: Color.black.opacity(0.22), radius: 3, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Select match \(index + 1), \(candidate.name)")
+                        .accessibilityValue(
+                            selectedCandidateID == candidate.id ? "Selected" : "Not selected"
+                        )
+                    }
+                    .annotationTitles(.hidden)
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+        .frame(height: 220)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .accessibilityLabel("Map of \(candidates.count) Apple Maps search results")
+    }
+
+    private func candidateButton(_ candidate: PlaceCandidate, number: Int) -> some View {
         let isSelected = selectedCandidateID == candidate.id
         return Button {
             selectedCandidateID = candidate.id
         } label: {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22, weight: .bold))
+                Text("\(number)")
+                    .font(.system(size: 12, weight: .black))
                     .foregroundStyle(
-                        isSelected ? WanderTheme.terracotta.color : WanderTheme.textFaint.color
+                        isSelected ? WanderTheme.textOnAction.color : WanderTheme.stateInfo.color
                     )
                     .frame(width: 28, height: 28)
+                    .background(
+                        isSelected
+                            ? WanderTheme.terracotta.color
+                            : WanderTheme.skyTint.color
+                    )
+                    .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(candidate.name)
@@ -1785,6 +1859,13 @@ private struct PlaceImportRescueScreen: View {
                 }
 
                 Spacer(minLength: 0)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .accessibilityHidden(true)
+                }
             }
             .padding(WanderTheme.spacing3)
             .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
