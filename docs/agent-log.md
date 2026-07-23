@@ -19478,3 +19478,7 @@ Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
 - During validation, `origin/main` advanced by two commits. The completed local
   correction will be committed, rebased onto the latest `origin/main`, and
   revalidated before the ready PR is squash-merged.
+- Rebased cleanly onto current `origin/main` (`e09708109`); the only manual
+  resolution preserved both append-only agent-log histories. The complete
+  post-rebase suite passed 588 tests with 0 failures:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-30-09--0700.xcresult`.
