@@ -19401,3 +19401,17 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
 - No TestFlight archive, upload, build-number increment, or Slack release note
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
+
+REC-126 landing review checkpoint, 2026-07-23 11:38 PDT:
+
+- Updated the branch through REC-122 follow-up main commit `e09708109`; the
+  combined exact-head suite passed 594/594 with zero failures:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.23_11-30-25--0700.xcresult`.
+- The pre-landing scope review caught two unrelated navigation regression tests
+  that earlier branch synchronization had dropped. Restored both while keeping
+  the new restaurant-cuisine navigation contract. A focused run then correctly
+  exposed that `origin/main` had advanced again with PR #188's Add/import
+  implementation, whose test depends on source not yet present on this branch.
+  Commit the test restoration, merge the new `0f43390e2` main head, and rerun
+  validation before publishing; this intermediate compiler failure is base
+  drift, not an REC-126 product-code failure.

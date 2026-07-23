@@ -350,6 +350,41 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+
+        XCTAssertTrue(root.contains("@StateObject private var importStore: PlaceImportStore"))
+        XCTAssertTrue(root.contains("importStore: importStore"))
+        XCTAssertTrue(addScreen.contains("AddImportSection("))
+        XCTAssertTrue(addScreen.contains("PlaceImportSourceScreen("))
+        XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 410"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 480"))
+        XCTAssertTrue(
+            root.contains(
+                "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
+            )
+        )
+        XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
+        XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
+        XCTAssertFalse(profileHome.contains("ImportSection"))
+    }
+
     func testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
@@ -554,6 +589,14 @@ final class NavigationContractTests: XCTestCase {
             .settings
         )
         XCTAssertNil(WanderRootView.resolvedInitialPresentation(from: ["Wander"]))
+    }
+
+    @MainActor
+    func testRootViewCanResolveAddPresentationForVisualQA() {
+        XCTAssertTrue(
+            WanderRootView.resolvedInitialAddPresentation(from: ["Wander", "-WanderOpenAdd"])
+        )
+        XCTAssertFalse(WanderRootView.resolvedInitialAddPresentation(from: ["Wander"]))
     }
 
     func testListsScreenCanResolveInteractiveVisualQAScenarios() {
