@@ -18772,3 +18772,29 @@ Validation and pre-landing review, 2026-07-22 23:04 PDT:
   no required human decision remains, and no hold or unrelated scope exists.
   Next: commit/push, open and squash-merge the ready build-number PR, then free
   the completed test cache before archiving exact merged main.
+
+REC-126 final validation checkpoint, 2026-07-22 23:08 PDT:
+
+- Merged exact latest `origin/main` through metadata-only build-94 commit
+  `c0d7f6b8f` into `codex/rec-126-restaurant-cuisines`. The upstream build
+  number and chronological log were the only changes after the prior
+  REC-126 validation; the feature implementation merged without conflict.
+- Regenerated `Wander.xcodeproj` with XcodeGen. Generation produced no
+  additional tracked changes beyond the expected upstream build-94 metadata.
+- The first exact-head full-suite attempt ended before test bootstrap with a
+  transient simulator process kill. The immediate rerun with normal
+  CoreSimulator access passed all 580/580 tests with zero failures on iPhone
+  17 Pro / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-rec126-focused/Logs/Test/Test-Wander-2026.07.22_23-07-19--0700.xcresult`.
+- Focused REC-126 coverage remains 86/86 passing. Visual QA remains clean on
+  iPhone 17 Pro and iPhone 17e: Restaurant & Food opens a 126-item Cuisine
+  picker, and the edit form contains Category + Cuisine with no Subcategory.
+- Publication and Xcode handoff are the only remaining blockers. GitHub CLI
+  authentication for `ryanlane23` is expired, so the branch cannot yet be
+  pushed and a ready PR cannot yet be opened. The Mac is locked, so Xcode
+  cannot yet be opened and verified on the branch. Keep Linear REC-126 In
+  Progress until both are complete.
+- Exact restart: unlock the Mac and run `gh auth login -h github.com`; then
+  push `codex/rec-126-restaurant-cuisines`, open the ready PR linked to
+  REC-126, load this worktree's `Wander.xcodeproj` in Xcode, verify the branch,
+  and move REC-126 to In Review with the PR and validation details.
