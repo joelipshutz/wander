@@ -19284,3 +19284,20 @@ REC-125 latest-main validation and pre-landing review, 2026-07-23 11:34 PDT:
   the environment safety policy blocked transmission of private repository and
   session metadata. The full local source/diff/checklist/test review was
   completed without telemetry; this does not affect the code or merge gate.
+
+REC-125 exact-main merge gate, 2026-07-23 11:39 PDT:
+
+- `origin/main` advanced during validation to `0f43390e2` through PR #188
+  (`feat: move place imports to Add`). Rebased the three REC-125 commits onto
+  that exact head. The only conflict was this append-only log; both REC-109 and
+  REC-125 histories were preserved. The new Add/import implementation did not
+  overlap the REC-125 product or test files.
+- Re-ran both focused REC-125 tests on the exact rebased head: 2/2 passed with
+  zero failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-35-23--0700.xcresult`.
+- Re-ran the complete suite on the exact rebased head: 590/590 passed with zero
+  failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-37-53--0700.xcresult`.
+  Publish with lease protection, confirm GitHub still reports the ready PR
+  clean and mergeable against exact `main`, then perform the authorized squash
+  merge. No TestFlight or release action is included.
