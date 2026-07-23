@@ -17929,3 +17929,15 @@ Implementation and validation checkpoint, 2026-07-22 20:00 PDT:
   `git diff --check` passes. CoreDevice recognizes Ryan's iPhone identifier
   `871CDC6E-9974-5BB8-B0FE-300B5589AF97`, but currently reports the device as
   `unavailable`; signed build/install/launch is pending reconnection/unlock.
+
+Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
+
+- Opened `/private/tmp/recme-rec130-list-tile-fallback/Wander.xcodeproj` in
+  Xcode. The Xcode branch chooser confirms
+  `codex/rec-130-list-tile-fallback`; the user's dirty root checkout remains
+  untouched. The active run destination is currently the iPhone 17 Pro
+  simulator, so the implementation is available for immediate simulator
+  testing from Xcode.
+- Rechecked CoreDevice after opening the project. Ryan's physical iPhone is
+  still reported as `unavailable`, so a signed device install remains blocked
+  until the phone is unlocked/reconnected and appears as available.
