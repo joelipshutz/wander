@@ -17816,3 +17816,36 @@ Final outcome:
 - No known build-92 release blocker remains. Next: testers should exercise the
   calendar map and repeat-visit badge checklist and reply in the Slack thread
   with device, account/email if relevant, screenshots, and exact repro steps.
+
+## 2026-07-22 21:03 PDT - Codex - REC-122 Streak Celebration Design
+
+Agent: Codex using `design-shotgun` and Linear workflows
+Branch: `codex/rec-122-streak-design`
+Worktree: `/private/tmp/recme-rec122-streak-design`
+Linear: `REC-122` (`In Progress`)
+
+Goal: design and compare local mocks before production implementation for a
+quiet daily save streak plus a high-delight first-qualifying-save-of-the-day
+celebration.
+
+Starting status and coordination:
+
+- Fetched `origin`, inspected the shared checkout and all worktrees, and created
+  this clean isolated worktree from exact `origin/main` at `9de2e42` because the
+  root checkout is on an unrelated gone REC-60 branch and Profile is a
+  high-conflict surface.
+- Current product direction from Joe: streaks must not become a permanent loud
+  fixture. A compact streak module lives on the owner Profile below the Been
+  area and above the calendar. Saving either Been or Wanna Go counts toward the
+  streak. Only the first qualifying save of the day earns the large celebratory
+  moment, with confetti and a flame motif.
+- This pass is design-only. No SwiftUI production behavior, persistence,
+  backend/schema, build number, TestFlight release, or public communication is
+  authorized yet.
+- Expected durable repo file is this coordination log. Design variants and the
+  comparison board stay in the design workflow's persistent artifact directory,
+  outside the repo. Relevant source is read-only context: `DESIGN.md`, Profile
+  presentation files, the Add/save flow, and approved profile mocks.
+- Mission Control task creation was attempted, but local
+  `http://localhost:4000` is not running. Linear REC-122 was found and moved
+  from Todo to In Progress before design work began.
