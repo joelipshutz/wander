@@ -2738,6 +2738,7 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(restaurantBlocks.contains { $0.key == "rating_signal" })
         XCTAssertEqual(restaurantBlocks.map(\.key), ["price", "occasion", "restaurant_tags"])
+        XCTAssertEqual(restaurantBlocks.first { $0.key == "price" }?.defaultValues, [])
         XCTAssertEqual(occasion?.kind, .multiTag)
         XCTAssertEqual(occasion?.valueType, "multi_tag")
         XCTAssertTrue((occasion?.defaultValues.count ?? 0) > 1)
@@ -2767,7 +2768,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
     }
 
-    func testNewSaveKeepsTagStyleOptionsUnselectedByDefault() throws {
+    func testNewSaveKeepsOptionalQuestionSelectionsUnselectedByDefault() throws {
         let candidate = PlaceCandidate(
             id: "mapkit_compact_want",
             name: "Compact Want Cafe",
@@ -2840,7 +2841,7 @@ final class WanderStoreTests: XCTestCase {
                 context: context,
                 status: .been
             ),
-            Set(price.defaultValues)
+            []
         )
 
         let synchronized = MapPlaceSaveDetailsPolicy.synchronizedSelections(
@@ -2854,7 +2855,63 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertEqual(synchronized[bestFor.key], [])
         XCTAssertEqual(synchronized[tags.key], ["late-night"])
-        XCTAssertEqual(synchronized[price.key], Set(price.defaultValues))
+        XCTAssertEqual(synchronized[price.key], [])
+    }
+
+    func testNewSaveContextsClearInheritedPriceFeelWhileEditPreservesIt() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")
+            )
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_price_feel_defaults",
+                name: "Price Feel Cafe",
+                category: WanderPlaceCategory.restaurantsFood,
+                primaryCategory: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.98
+            ),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: "price",
+                    valueType: "price_scale",
+                    stringValue: "$$$"
+                )
+            ]
+        )
+        let visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        let attributes = store.attributes(for: result.userPlaceID)
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+
+        let socialSaveContext = MapPlaceSaveContext.addVisiblePlace(
+            visiblePlace,
+            defaultVisibility: .followers,
+            attributes: attributes
+        )
+        let addVisitContext = MapPlaceSaveContext.addVisitVisiblePlace(
+            visiblePlace,
+            attributes: attributes,
+            latestVisit: visit
+        )
+        let editContext = MapPlaceSaveContext.editVisit(
+            visit,
+            visiblePlace: visiblePlace
+        )
+
+        XCTAssertNil(socialSaveContext.initialAnswers["price"])
+        XCTAssertNil(addVisitContext.initialAnswers["price"])
+        XCTAssertEqual(editContext.initialAnswers["price"], Set(["$$$"]))
     }
 
     func testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows() throws {

@@ -20672,3 +20672,59 @@ Completion, 2026-07-23 14:00 PDT:
 - The original dirty primary checkout and all unrelated worktrees remained
   untouched. Linear REC-137 remains `In Review` only until this completion
   record lands on `main`, then it can be marked `Done`.
+
+## 2026-07-23 14:18 PDT - Codex - REC-138 blank Price Feel defaults
+
+Agent: Codex using `recme-pr-review-merge-release` and Linear workflows
+Branch: `codex/rec-138-price-feel-blank`
+Worktree: `/private/tmp/recme-rec138-price-feel`
+Linear: `REC-138` (`In Progress`, assigned to Ryan)
+
+Goal: make Price Feel start blank anywhere a new place save exposes that
+question, preserve an existing saved Price Feel while editing, validate the
+behavior, and squash-merge the ready PR to `main` as requested.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated branch from exact current
+  `origin/main` commit `38676cec9acf`. The primary checkout remains on unrelated
+  REC-88 work with user-owned `.gitignore` and `.pnpm-store/` changes; those
+  files will not be edited, staged, or reverted.
+- TestFlight build 95 is fully documented as uploaded, attached, and approved,
+  so there is no unfinished explicit release to resume. This request is
+  merge-only: no build-number bump, archive/upload, hosted migration, or tester
+  Slack announcement is authorized.
+- REC-116 deliberately kept single-choice Price Feel meaningful while clearing
+  tag-style defaults. REC-138 narrows that behavior: new save contexts must
+  neither synthesize the template's `$$` default nor inherit a source
+  `price_scale` answer, while edit contexts continue loading stored answers.
+- Expected edits are `Wander/Features/Add/AddQuestionTemplates.swift`,
+  `Wander/Features/Map/MapScreen.swift`, focused regression coverage in
+  `WanderTests/WanderStoreTests.swift`, and this chronological log.
+  `MapScreen.swift` is a documented high-conflict file, so the branch will be
+  refreshed from latest `origin/main` and revalidated before landing.
+
+Implementation and validation checkpoint, 2026-07-23 14:30 PDT:
+
+- Removed the restaurant Price Feel template's `$$` default. New-save answer
+  construction now also drops inherited `price_scale` values, covering both
+  social-save and add-visit entry points, while edit contexts continue loading
+  the saved value unchanged.
+- Added regression coverage for blank template/suggested selections, blank
+  Price Feel in both new-save contexts, and preservation of an existing `$$$`
+  answer when editing.
+- `xcodegen generate` produced no tracked project drift. `git diff --check` and
+  Swift parser checks passed.
+- The prescribed iPhone 16 Plus / iOS 18.6 destination is not installed on
+  this machine. On the available iPhone 17 Pro Max / iOS 26.5 runtime, all
+  three focused regressions passed, followed by the full 627/627-test suite
+  with zero failures or skips. Result bundle:
+  `/private/tmp/DerivedData-rec138-focused/Logs/Test/Test-Wander-2026.07.23_14-27-07--0700.xcresult`.
+- The generic universal iOS Simulator build passed with
+  `CODE_SIGNING_ALLOWED=NO`; its existing traditional-headermap and
+  no-AppIntents warnings remain non-blocking.
+- Pre-landing scope and code review are clean: the diff only changes default
+  answer construction, its focused tests, and this required log. There are no
+  persistence, schema, RPC, RLS, privacy, or security changes. No TestFlight
+  build-number bump, archive/upload, or Slack release note is part of this
+  merge-only request.
