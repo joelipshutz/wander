@@ -171,6 +171,21 @@ final class WanderBackend: ObservableObject {
         return try await placePhotoRepository.visibleUserPhoto(for: request)
     }
 
+    func visiblePlacePhotoGalleryPage(
+        placeID: String,
+        after cursor: PlacePhotoGalleryCursor?,
+        limit: Int = 40
+    ) async throws -> PlacePhotoGalleryPage {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await placePhotoRepository.visiblePhotoGalleryPage(
+            placeID: placeID,
+            after: cursor,
+            limit: limit
+        )
+    }
+
     func placePhotoImageData(for photo: PlacePhoto) async throws -> Data {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured

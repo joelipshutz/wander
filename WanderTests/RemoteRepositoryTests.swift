@@ -1817,6 +1817,66 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testPlacePhotoRepositoryMapsPaginatedVisibleGalleryWithContributorIdentity() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["visible_place_photos"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000133",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_maya/54000000-0000-0000-0000-000000000133/55000000-0000-0000-0000-000000000133.jpg",
+          "width": 1200,
+          "height": 1600,
+          "captured_at": "2026-07-22T18:15:00Z",
+          "created_at": "2026-07-22T18:20:00Z",
+          "sort_order": 2,
+          "contributor_user_id": "user_maya",
+          "contributor_display_name": "Maya Patel",
+          "contributor_handle": "mayap",
+          "contributor_avatar_url": "https://example.com/maya.jpg",
+          "status": "been"
+        }]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: RecordingStorage()
+        )
+        let cursor = PlacePhotoGalleryCursor(
+            createdAt: try XCTUnwrap(
+                ISO8601DateFormatter().date(from: "2026-07-22T17:00:00Z")
+            ),
+            sortOrder: 1,
+            photoID: "55000000-0000-0000-0000-000000000132"
+        )
+
+        let page = try await repository.visiblePhotoGalleryPage(
+            placeID: "50000000-0000-0000-0000-000000000133",
+            after: cursor,
+            limit: 1
+        )
+
+        XCTAssertEqual(page.items.count, 1)
+        XCTAssertEqual(page.items[0].photo.provider, "visit_photo")
+        XCTAssertEqual(page.items[0].contributor?.userID, "user_maya")
+        XCTAssertEqual(page.items[0].contributor?.handle, "mayap")
+        XCTAssertEqual(page.items[0].status, .been)
+        XCTAssertEqual(page.nextCursor?.photoID, "55000000-0000-0000-0000-000000000133")
+        XCTAssertEqual(page.nextCursor?.sortOrder, 2)
+        XCTAssertTrue(page.hasMore)
+        XCTAssertEqual(rpc.calls.map(\.name), ["visible_place_photos"])
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_place_id"] as? String,
+            "50000000-0000-0000-0000-000000000133"
+        )
+        XCTAssertEqual(rpc.rawBodies[0]["input_after_sort_order"] as? Int, 1)
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_after_photo_id"] as? String,
+            "55000000-0000-0000-0000-000000000132"
+        )
+        XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 1)
+        XCTAssertNotNil(rpc.rawBodies[0]["input_after_created_at"] as? String)
+    }
+
     func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
         let rpc = RecordingRPC()
         rpc.responses["first_visible_place_photo"] = """

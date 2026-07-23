@@ -1509,7 +1509,22 @@ protocol SocialPlaceSaveRepository {
 protocol PlacePhotoRepository {
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func visiblePhotoGalleryPage(
+        placeID: String,
+        after cursor: PlacePhotoGalleryCursor?,
+        limit: Int
+    ) async throws -> PlacePhotoGalleryPage
     func imageData(for photo: PlacePhoto) async throws -> Data
+}
+
+extension PlacePhotoRepository {
+    func visiblePhotoGalleryPage(
+        placeID: String,
+        after cursor: PlacePhotoGalleryCursor?,
+        limit: Int
+    ) async throws -> PlacePhotoGalleryPage {
+        throw WanderRemoteError.notConfigured
+    }
 }
 
 @MainActor
