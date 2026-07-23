@@ -1725,6 +1725,50 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
     }
 
+    func testPlacePhotoRepositoryScopesVisiblePhotoToListContributors() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photo_by_users"] = """
+        [{
+          "photo_id": "55000000-0000-0000-0000-000000000003",
+          "storage_bucket": "visit-photos",
+          "storage_path": "user_collaborator/list-cover.jpg",
+          "width": 900,
+          "height": 900
+        }]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: RecordingStorage()
+        )
+        let request = PlacePhotoRequest(
+            placeID: "50000000-0000-0000-0000-000000000003",
+            name: "List cover place",
+            address: "Los Angeles, CA",
+            latitude: 34.05,
+            longitude: -118.25,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "list-cover-place"
+        )
+
+        let photo = try await repository.visibleUserPhoto(
+            for: request.restrictingVisibleUserPhotos(
+                to: [" user_owner ", "user_collaborator", "user_owner", ""]
+            )
+        )
+
+        XCTAssertEqual(photo.providerPlaceID, "55000000-0000-0000-0000-000000000003")
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo_by_users"])
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_place_id"] as? String,
+            "50000000-0000-0000-0000-000000000003"
+        )
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_user_ids"] as? [String],
+            ["user_collaborator", "user_owner"]
+        )
+    }
+
     func testCoordinatePlacePhotoRequestBypassesGoogleFunction() async throws {
         let rpc = RecordingRPC()
         rpc.responses["first_visible_place_photo"] = """

@@ -17321,6 +17321,7 @@ Final outcome:
 - No known release-blocking issue remains. Expanded More options content may
   scroll on smaller devices or at larger Dynamic Type sizes by design; the
   collapsed Been and Wanna flows remain compact and visually parallel.
+
 ## 2026-07-22 15:44 PDT - Codex - REC-112 Calendar Results Map
 
 Agent: Codex using the Linear workflow
@@ -17918,3 +17919,596 @@ Feedback refinement, 2026-07-22 21:55 PDT:
   `variant-BC-motion.png` beside the existing board.
 - The refined hybrid is awaiting Joe's visual confirmation before writing
   `approved.json` or treating it as the production implementation target.
+## 2026-07-22 19:34 PDT - Codex - REC-130 List Tile Cover Fallbacks
+
+Agent: Codex using the rec.me feedback, iOS fix, Linear, and GitHub publish
+workflows
+Branch: `codex/rec-130-list-tile-fallback`
+Worktree: `/private/tmp/recme-rec130-list-tile-fallback`
+Linear: `REC-130` (`In Progress`; related to `REC-113`)
+
+Goal: make list-tile cover rendering deterministic: an eligible owner or
+collaborator user photo, otherwise a Google place photo, otherwise the place's
+category emoji, with a neutral default icon only when the list has no
+renderable place candidate. Build and install the pushed branch on Ryan's
+connected iPhone for direct testing.
+
+Starting status and coordination:
+
+- Fetched latest `origin/main` and created this clean isolated worktree from
+  exact build-92 completion commit `9de2e4290`. The root checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes and remains untouched.
+- No existing issue covered this exact fallback contract, so created REC-130,
+  assigned it to Ryan, linked REC-113, and moved it directly to In Progress.
+- A broad cross-team review is unnecessary, but the scoped engineering review
+  below is required because the exact owner/collaborator rule needs one additive
+  RLS-preserving RPC as well as Lists presentation work.
+- Expected files are Lists cover/resolver source, focused Lists tests, and this
+  append-only log. `project.yml`, build number, schema/RLS, and TestFlight are
+  out of scope. The local GitHub CLI token is stale; the connected GitHub app
+  will be used for the required draft PR after a normal branch push.
+- The iOS-fix StateServer snapshot fixture is unavailable by prior repo
+  decision because this app has no DebugBridge/restore API. The deterministic
+  current source behavior and focused Swift tests will serve as the pre/post
+  regression fixture; a signed branch build will be installed without an app
+  uninstall or data reset for real-device validation.
+
+Engineering review checkpoint, 2026-07-22 19:42 PDT:
+
+- Root cause is verified in source. `ListPreviewMosaic.emptyCover` renders the
+  list-name initial instead of a neutral icon, while
+  `first_visible_place_photo(uuid)` intentionally returns the first photo from
+  any RLS-visible user and accepts no owner/collaborator filter. The live tile
+  also preloads the current user's local photo for every list, even when that
+  user is not the list owner or a collaborator.
+- The smallest complete design reuses the existing photo pipeline and adds one
+  narrow security-invoker RPC for contributor-scoped lookup. The legacy RPC
+  remains unchanged for Map/place-profile callers. List tiles pass a sorted,
+  UUID-validated set containing the list owner and collaborators; the resolver
+  tries an eligible local photo, then the scoped RPC, then the existing Google
+  provider lookup. If all photo paths fail, the existing category emoji remains
+  visible. A list with no preview place renders `bookmark.fill` on the existing
+  sand surface instead of a name initial.
+- Data flow:
+
+      list owner + collaborators
+                 |
+                 v
+      ListPreviewMosaic / photo resolver
+          | eligible local user photo
+          | scoped RLS RPC photo
+          | Google Places photo
+          | category emoji
+          ` no place -> bookmark.fill
+
+- Architecture review: clean. The additive RPC is explicit, preserves RLS,
+  pins `search_path`, denies anon, and does not alter other photo consumers.
+  Code-quality review: clean; the contributor list is computed once on the
+  list projection and threaded only through tile media. Performance review:
+  clean; the tile still makes at most one user-photo metadata lookup followed
+  by the existing provider fallback, with existing coalescing/caches intact.
+- Test review requires: resolver order and contributor-id forwarding including
+  an empty/invalid-id path; repository RPC name/parameters and legacy behavior;
+  UI contract for emoji fallback and `bookmark.fill`; pgTAP metadata/RLS/user
+  filtering; and the hosted rollback smoke using two users' photos for the same
+  place. No untested branch or unresolved architecture/product decision remains.
+- Production failure handling is explicit: missing/deferred RPC deployment,
+  expired auth, unreadable user image, Google failure, and offline network all
+  settle on the place emoji; a list with no renderable place settles on the
+  neutral bookmark. The user is never left with a blank tile.
+- NOT in scope: durable photo caching, quota redesign, list-item hydration,
+  changes to Map/place-profile photo eligibility, build-number/TestFlight work,
+  or a new debug bridge. Sequential implementation is appropriate because the
+  Swift, RPC, and smoke changes share one photo-resolution contract.
+
+Implementation and validation checkpoint, 2026-07-22 20:00 PDT:
+
+- Implemented the locked order for list tiles only: preloaded current-user
+  photo when the current user is the list owner/collaborator; first RLS-visible
+  owner/collaborator photo through the new scoped RPC; existing Google Places
+  photo; existing category emoji; and `bookmark.fill` only when the list has no
+  preview place. Map and place-profile photo behavior remains unchanged.
+- Added `public.first_visible_place_photo_by_users(uuid,text[])` in migration
+  `20260723025000_list_cover_photo_contributors.sql`. It is `STABLE SECURITY
+  INVOKER`, pins `search_path=public, app`, grants only `authenticated`, and
+  preserves the existing visit-photo RLS authority. Added pgTAP metadata,
+  grants, and contributor-filter behavior coverage plus linked hosted smoke
+  coverage for owner, collaborator, unrelated contributor, stranger, and anon.
+- Ran `xcodegen generate`; no generated project diff resulted. Focused iOS
+  regression run passed 17/17 tests. Full iOS suite passed 576/576 tests on the
+  installed iPhone 17 Pro / iOS 26.5 simulator; result bundle:
+  `/private/tmp/DerivedData-rec130-full/Logs/Test/Test-Wander-2026.07.22_19-54-22--0700.xcresult`.
+  Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking and are unrelated to REC-130.
+- Installed the pinned smoke dependencies with the bundled Node runtime, then
+  linked this isolated worktree to confirmed project `rugmtlgufrhlxwfkumhw`.
+  The hosted dry-run reported only the REC-130 migration. Applied it, verified
+  local/remote ledger parity at `20260723025000`, and ran
+  `node scripts/supabase-smoke-test.mjs --linked`; the complete rolled-back
+  hosted suite passed. Docker is not installed, so local pgTAP could not run;
+  the hosted metadata/behavior smoke is the strongest available SQL check.
+- Latest `origin/main` remains `9de2e4290`, exactly this branch base, and
+  `git diff --check` passes. CoreDevice recognizes Ryan's iPhone identifier
+  `871CDC6E-9974-5BB8-B0FE-300B5589AF97`, but currently reports the device as
+  `unavailable`; signed build/install/launch is pending reconnection/unlock.
+
+Xcode handoff checkpoint, 2026-07-22 20:05 PDT:
+
+- Opened `/private/tmp/recme-rec130-list-tile-fallback/Wander.xcodeproj` in
+  Xcode. The Xcode branch chooser confirms
+  `codex/rec-130-list-tile-fallback`; the user's dirty root checkout remains
+  untouched. The active run destination is currently the iPhone 17 Pro
+  simulator, so the implementation is available for immediate simulator
+  testing from Xcode.
+- Rechecked CoreDevice after opening the project. Ryan's physical iPhone is
+  still reported as `unavailable`, so a signed device install remains blocked
+  until the phone is unlocked/reconnected and appears as available.
+
+Merge completion, 2026-07-22 21:45 PDT:
+
+- Ryan visually approved the REC-130 list-tile photo and empty-state behavior
+  from the Xcode branch handoff and explicitly requested the squash merge.
+- Pre-landing review against exact `origin/main` commit `9de2e4290` found no
+  unresolved code, design, security/RLS, test, performance, or scope issues.
+  PR #176 was ready, mergeable, 2 commits ahead and 0 behind, with no CI runs,
+  status checks, review comments, or hold labels. Its 11-file diff matched the
+  Linear acceptance criteria and contained no project/signing or generated
+  junk.
+- Squash-merged
+  `codex/rec-130-list-tile-fallback` through
+  https://github.com/joelipshutz/wander/pull/176. The resulting `main` commit
+  is `d1e7976a10bbba320e0f335636fd54270ec068d4`; a post-merge fetch verified
+  `origin/main` at that exact commit.
+- Validation carried into the merge: focused Swift regressions 17/17, full iOS
+  suite 576/576, `git diff --check`, hosted Supabase migration ledger parity,
+  and the rolled-back linked Supabase smoke. Local pgTAP remains unrun because
+  Docker is not installed; hosted metadata and behavior checks passed.
+- No App Store build number was changed and no archive, upload, TestFlight
+  attachment, or tester-facing Slack release note was created. REC-130 will
+  ride the next explicitly requested TestFlight release batch from `main`.
+## 2026-07-22 15:49 PDT - Codex - REC-119 Rating Explanations
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-119-ratings-info`
+Worktree: `/private/tmp/recme-rec119-ratings-info`
+Linear: `REC-119` (`In Progress`)
+
+Goal: add small, tappable information affordances beside the rec.me and Fit
+rating labels on the map place card, with concise caret-anchored SwiftUI
+popovers explaining each score, then validate and publish a reviewable mockup.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `6d717d23b`. The root checkout contains unrelated user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or reverted.
+- Existing worktrees and the latest coordination log show no active REC-119
+  work or overlapping unmerged edits. `MapScreen.swift` is a documented
+  high-conflict file, so all work stays isolated here.
+- REC-119 is assigned to Ryan and was moved from Backlog to In Progress before
+  implementation. The source request is limited to the two explanations; Your
+  rating remains unchanged.
+- Expected files are `Wander/Features/Map/MapScreen.swift`, a small shared
+  SwiftUI component under `Wander/DesignSystem/`, focused tests under
+  `WanderTests/`, and this append-only coordination log. If the same rating
+  strip is confirmed on the full place-profile surface, the shared component
+  may also be wired into `Wander/Features/Map/PlaceProfileMapSurface.swift` for
+  consistency.
+- No backend, schema/RLS, analytics, build-number, TestFlight, or release-note
+  change is in scope.
+
+Implementation checkpoint, 2026-07-22 16:03 PDT:
+
+- Added a shared SwiftUI `PlaceRatingInfoButton` with a 44-point tap target,
+  VoiceOver label/hint, and compact-adapted native popover with an anchored
+  caret. The rec.me copy explains the followed-people average; Fit explains
+  the personalized signal from ratings, preferences, and followed saves.
+- Wired the affordance beside rec.me rating and Fit rating on both map place
+  card presentations. Your rating intentionally remains unchanged. An initial
+  inline layout truncated the labels, so the buttons were moved into trailing
+  overlays that preserve the full existing titles and card heights.
+- `xcodegen generate` succeeded. The focused copy-contract test passed 1/1 on
+  the available iPhone 17 Pro / iOS 26.5 simulator at
+  `/private/tmp/DerivedData-rec119-focused/Logs/Test/Test-Wander-2026.07.22_15-58-29--0700.xcresult`.
+  The repository's prescribed iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine.
+- Simulator QA confirmed the refined closed-card layout and the native caret
+  popover at `/private/tmp/rec119-17pro-expanded-refined.png` and
+  `/private/tmp/rec119-17pro-recme-popover.png`. The temporary auto-present
+  state used only to capture the popover was removed; production state is
+  closed by default and opens only from the info button.
+- `origin/main` advanced by three commits during implementation, including
+  REC-116 changes to the high-conflict `MapScreen.swift`. Commit the isolated
+  work, rebase it onto current `origin/main`, resolve the overlap carefully,
+  and rerun focused plus full validation before publication.
+
+Latest-main validation and publication, 2026-07-22 16:38 PDT:
+
+- Rebased the implementation onto current `origin/main` at `116318c69`. The
+  only manual conflict was this append-only coordination log; both upstream
+  release history and REC-119 history were preserved. XcodeGen then generated
+  no tracked changes, `git diff --check` passed, and the branch remained one
+  focused commit ahead of main.
+- The post-rebase focused test passed 1/1 at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-31-17--0700.xcresult`.
+  The complete current-main suite passed 573/573 with zero failures at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-34-33--0700.xcresult`.
+  Existing traditional-headermap and Supabase formatter concurrency warnings
+  remain unrelated; iPhone 16 Plus / iOS 18.6 is still unavailable locally.
+- Final closed-state layout QA passed on iPhone 17 Pro and the smaller iPhone
+  17e at `/private/tmp/rec119-17pro-final.png` and
+  `/private/tmp/rec119-17e-final.png`; both retain full metric labels and the
+  original card hierarchy. The anchored rec.me popover capture remains at
+  `/private/tmp/rec119-17pro-recme-popover.png`.
+- Pushed `codex/rec-119-ratings-info` and opened ready PR
+  [#169](https://github.com/joelipshutz/wander/pull/169). The rebased
+  implementation commit is `9560c446d`.
+- Linked PR #169 to Linear REC-119, moved it from In Progress to In Review, and
+  added comment `559f62c5-5429-419a-ae1c-f043693fdf04` with the validation and
+  hands-on review checklist. No build-number bump, TestFlight upload, or Slack
+  release note was requested or performed.
+
+Final REC-112-main gate, 2026-07-22 16:42 PDT:
+
+- `origin/main` advanced again with the REC-112 calendar-map merge and its
+  completion log. Rebased PR #169 onto exact main commit `5804f8763`; the only
+  conflicts were the two append-only coordination-log commits, and the full
+  REC-112, build-91, and REC-119 histories were preserved. Product and test
+  files rebased without conflict.
+- XcodeGen produced no tracked changes and `git diff --check` passed. The final
+  focused REC-119 test passed 1/1 at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-41-48--0700.xcresult`.
+  The complete exact-head suite passed 573/573 with zero failures at
+  `/private/tmp/DerivedData-rec119-postrebase/Logs/Test/Test-Wander-2026.07.22_16-42-20--0700.xcresult`.
+- Safely force-updated the PR branch with lease protection. GitHub now reports
+  ready PR #169 `CLEAN` and `MERGEABLE`, with no configured checks. The final
+  rebased implementation commit is `0735ad134`; no known blocker remains for
+  Ryan's visual and copy review.
+
+REC-119 visual follow-up start, 2026-07-22 17:10 PDT:
+
+- Ryan requested a revised SwiftUI mockup after reviewing PR #169: move each
+  information button farther right so it no longer sits underneath the metric
+  header, and ensure the explanation uses a native iOS caret popover attached
+  directly to the information button.
+- Fetched `origin`; this isolated branch and worktree are clean, while the root
+  checkout's unrelated user-owned changes remain untouched. Returned REC-119
+  from In Review to In Progress before editing.
+- Expected edits remain limited to the shared rating-info component, the two
+  rating-card layouts, focused presentation tests if needed, generated project
+  metadata only if XcodeGen changes it, and this append-only log. No backend,
+  schema, build-number, TestFlight, or release-note work is authorized.
+
+REC-119 visual follow-up validation, 2026-07-22 17:22 PDT:
+
+- Moved the rec.me and Fit information controls out of each centered title
+  overlay and into the rating card's top-trailing overlay in both place-profile
+  presentations. The metric labels now retain their full centered width while
+  the 44-point controls sit at the cards' right edge, clear of the label text.
+- Kept the shared production interaction as a native SwiftUI `popover` anchored
+  to the information button bounds with `arrowEdge: .top` and compact popover
+  adaptation. A temporary local-only auto-open hook was used solely to capture
+  the presentation and then fully reverted before validation.
+- Regenerated with `xcodegen generate`; no generated project diff resulted.
+  `git diff --check` passed.
+- Reviewed an iPhone 17 Pro closed-state capture at
+  `/private/tmp/rec119-followup-17pro-final.png`, an open native-caret capture at
+  `/private/tmp/rec119-followup-17pro-popover.png`, and an iPhone 17e compact
+  capture at `/private/tmp/rec119-followup-17e-final.png`. The system caret
+  points directly to the relocated rec.me info control, and the compact layout
+  keeps both controls at the top-right of their cards without label overlap.
+- Focused copy contract passed 1/1 on iPhone 17 Pro / iOS 26.5:
+  `PlaceProfilePresentationTests/testRatingExplanationCopyDescribesDistinctSignals`
+  (`/private/tmp/DerivedData-rec119-followup/Logs/Test/Test-Wander-2026.07.22_17-19-51--0700.xcresult`).
+- Full suite passed 573/573 on iPhone 17 Pro / iOS 26.5
+  (`/private/tmp/DerivedData-rec119-followup/Logs/Test/Test-Wander-2026.07.22_17-21-22--0700.xcresult`).
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine, so the available current simulator target was used. Existing
+  simulator keychain, location, and metadata warnings remain non-fatal.
+
+REC-119 visual follow-up handoff, 2026-07-22 17:24 PDT:
+
+- Committed and pushed the revised SwiftUI mockup as `195697973` on
+  `codex/rec-119-ratings-info`, updating ready PR #169:
+  https://github.com/joelipshutz/wander/pull/169
+- Verified PR #169 at that head is `CLEAN` and `MERGEABLE`, with no configured
+  checks. Added the visual and test results to REC-119 and returned the issue to
+  In Review.
+- No known blocker remains for Ryan's visual review. No TestFlight build or
+  release action was requested or performed.
+
+REC-119 rec.me control-position follow-up start, 2026-07-22 19:31 PDT:
+
+- Ryan approved the direction but reported that the rec.me information button
+  still sits too close beneath the header text and requested that control move
+  farther right. Scope is limited to the rec.me control in both place-profile
+  rating-card presentations; the Fit control and native anchored popover remain
+  unchanged unless visual validation exposes a shared-layout issue.
+- Re-read the Linear workflow and `DESIGN.md`, fetched `origin`, confirmed this
+  isolated worktree was clean, and returned REC-119 from In Review to In
+  Progress. The root checkout has unrelated user/agent work and remains
+  untouched; no overlapping edits are present in this worktree.
+- `origin/main` is four commits ahead with REC-124 and build-92 history. Before
+  editing the high-conflict `MapScreen.swift`, preserve this coordination entry,
+  rebase the branch onto current `origin/main`, then regenerate, test, and
+  recapture the large- and compact-phone SwiftUI mockups.
+
+REC-119 rec.me control-position validation, 2026-07-22 19:41 PDT:
+
+- Rebased the branch onto current `origin/main` at `9de2e4290`, preserving the
+  complete REC-124, build-92, and REC-119 histories. The only conflict was this
+  append-only coordination log; product files rebased cleanly.
+- Gave the rec.me explanation control a dedicated additional 8-point trailing
+  offset in both place-profile rating-card implementations, moving it from
+  `x: 6` to `x: 14`. The Fit control remains at `x: 6`; card dimensions, label
+  centering, 44-point tap targets, copy, and native popover behavior are
+  otherwise unchanged.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused rating-copy contract passed 1/1 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_19-33-27--0700.xcresult`.
+- Visually reviewed the closed state on iPhone 17 Pro at
+  `/private/tmp/rec119-right-17pro-final.png` and iPhone 17e at
+  `/private/tmp/rec119-right-17e-final.png`. The rec.me icon now sits at the
+  outer-right corner with clear separation from its two-line header and no
+  collision with the adjacent Fit card.
+- Reviewed the open native-caret state at
+  `/private/tmp/rec119-right-17pro-popover.png`; the system caret points to the
+  moved control. The temporary local-only auto-open capture hook was fully
+  reverted before final validation, so production remains tap-to-open.
+- The complete latest-main suite passed 574/574 with zero failures on iPhone 17
+  Pro / iOS 26.5 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_19-39-59--0700.xcresult`.
+  Existing Supabase formatter warnings and simulator diagnostics remain
+  unrelated. No build-number, TestFlight, backend, or release action was
+  requested or performed.
+
+REC-119 rec.me control-position handoff, 2026-07-22 19:42 PDT:
+
+- Committed the rec.me-only position adjustment as `b74e81ba9` and safely
+  force-updated `codex/rec-119-ratings-info` with lease protection after the
+  latest-main rebase. Ready PR #169 now reports `CLEAN` and `MERGEABLE` at that
+  exact head, with no configured checks:
+  https://github.com/joelipshutz/wander/pull/169
+- Added the revision, visual-review evidence, and 574/574 validation to Linear
+  REC-119, then returned the issue to In Review. No known blocker remains for
+  Ryan's visual approval of the farther-right rec.me control.
+
+REC-119 rating-header alignment follow-up start, 2026-07-22 20:49 PDT:
+
+- Ryan requested that the rec.me and Fit header groups move left together with
+  their leading people/sparkles symbols because the groups do not appear
+  optically centered, then requested the rec.me information control move 5
+  points left from its latest position.
+- Re-read the Linear workflow and `DESIGN.md`, fetched `origin`, confirmed this
+  isolated worktree is clean and current with `origin/main`, and returned
+  REC-119 from In Review to In Progress. The root checkout's unrelated work and
+  all other worktrees remain untouched; no overlapping edit is present here.
+- Scope is the two rating-card implementations plus this log. Preserve the Fit
+  info-control position, native caret popover, 44-point targets, card geometry,
+  copy, backend, build number, and release state. Validate on iPhone 17 Pro and
+  iPhone 17e, then rerun focused and full tests before updating PR #169.
+
+REC-119 rating-header alignment validation, 2026-07-22 20:56 PDT:
+
+- Added a shared optical header offset in both rating-card implementations. The
+  rec.me and Fit header content moves 5 points left as a complete visual unit;
+  in the native tile the leading people/sparkles symbol and text stay together,
+  and in the compact metric card its symbol and title receive the same offset.
+  Your Rating remains centered and unchanged.
+- Moved only the rec.me information control 5 points left, from trailing offset
+  `x: 14` to `x: 9`. The Fit information control remains at `x: 6`, and both
+  controls retain their 44-point targets and native button-anchored popovers.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused rating-copy contract passed 1/1 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_20-50-09--0700.xcresult`.
+- Visually reviewed the closed alignment on iPhone 17 Pro at
+  `/private/tmp/rec119-aligned-17pro-final.png` and iPhone 17e at
+  `/private/tmp/rec119-aligned-17e-final.png`. Both rating header groups now read
+  as optically centered relative to the detached info controls without overlap.
+- Reviewed the updated native-caret state at
+  `/private/tmp/rec119-aligned-17pro-popover.png`; the caret follows the rec.me
+  control 5 points left. The local-only auto-open capture hook was fully reverted
+  before final validation, so production remains tap-to-open.
+- The complete suite passed 574/574 with zero failures on iPhone 17 Pro / iOS
+  26.5 at
+  `/private/tmp/DerivedData-rec119-right/Logs/Test/Test-Wander-2026.07.22_20-54-57--0700.xcresult`.
+  Existing simulator and Supabase formatter diagnostics remain unrelated. No
+  backend, build-number, TestFlight, or release action was requested.
+
+REC-119 rating-header alignment handoff, 2026-07-22 20:57 PDT:
+
+- Committed and pushed the alignment revision as `28053ec6f` on
+  `codex/rec-119-ratings-info`, updating ready PR #169. GitHub reports the PR
+  `CLEAN` and `MERGEABLE` at that exact head, with no configured checks:
+  https://github.com/joelipshutz/wander/pull/169
+- Added the exact offsets, screenshots, and 574/574 validation to Linear
+  REC-119, then returned it to In Review. No known blocker remains for Ryan's
+  visual approval; no TestFlight or release work was performed.
+
+REC-119 final header-position and landing start, 2026-07-22 21:13 PDT:
+
+- Ryan approved the direction and requested one final visual adjustment before
+  landing: move all three rating header groups another 4–5 points left, then
+  squash-merge PR #169 and push the result to `main`.
+- Re-read the repo landing workflow, Linear workflow, and `DESIGN.md`; fetched
+  `origin`; confirmed isolated worktree
+  `/private/tmp/recme-rec119-ratings-info` is clean on
+  `codex/rec-119-ratings-info`; and returned Linear REC-119 to In Progress.
+  The branch is current with `origin/main` and 10 commits ahead. The dirty root
+  checkout and unrelated worktrees remain untouched.
+- Expected files are `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/PlaceProfileMapSurface.swift`, and this log. Interpret
+  the request as another 5-point left shift for each complete header group
+  (symbol plus label) while preserving the rec.me/Fit information controls,
+  native caret popovers, 44-point targets, card geometry, copy, and backend.
+  Validate both phone sizes and the full suite, then run the required
+  pre-landing review before merging. This is merge-only work: no build-number,
+  TestFlight, archive, upload, or Slack release action is authorized.
+
+REC-119 final header-position validation, 2026-07-22 21:43 PDT:
+
+- Shifted every rating header group another 5 points left in both place-card
+  presentations. Your Rating now uses `x: -5`; rec.me and Fit use `x: -10`
+  because they retain their previous 5-point optical correction. Each group
+  moves its symbol and label together. The rec.me/Fit info-button offsets,
+  native button-anchored caret popovers, 44-point targets, values, and card
+  geometry are unchanged.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused explanation-copy contract passed 1/1
+  at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-14-29--0700.xcresult`.
+- Visually reviewed the final closed state on iPhone 17 Pro at
+  `/private/tmp/rec119-final-left-17pro.png` and iPhone 17e at
+  `/private/tmp/rec119-final-left-17e.png`. All three symbol-plus-label groups
+  sit farther left without clipping or colliding with either info control.
+- The complete suite passed 574/574 with zero failures on iPhone 17 Pro / iOS
+  26.5 at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-42-24--0700.xcresult`.
+  Existing Supabase formatter warnings and simulator diagnostics remain
+  unrelated. Proceed to the mandatory pre-landing review and PR merge gate.
+
+REC-119 pre-landing review, 2026-07-22 21:44 PDT:
+
+- Ran the repo-required gstack pre-landing review over the complete branch diff
+  plus the uncommitted final position revision against exact `origin/main` at
+  `9de2e4290`. Scope is clean: the diff implements REC-119's two rating
+  explanations, native anchored controls, requested visual-position follow-ups,
+  focused coverage, generated project membership, and the required work log.
+  No unrelated product, backend, schema, release, or build-number change is
+  present.
+- Critical and informational passes found no actionable issue. The new enum is
+  exhaustive at both title/message switches; the shared button preserves the
+  44-point target, VoiceOver copy, and explicit popover anchor; both card
+  consumers pass the intended explanation; and the final screenshots plus
+  574/574 suite validate the user-visible behavior. The slop scan returned no
+  finding. PR #169 has no current Greptile comments, TODO overlap, configured
+  checks, or documentation-staleness issue.
+- The review skill's optional private-artifact synchronization was not run
+  because the sandbox correctly rejected unspecific external artifact export;
+  this does not affect the code/diff review or landing evidence. Pre-landing
+  result: `Pre-Landing Review: No issues found.` Commit and publish this exact
+  reviewed state, refresh the ready PR metadata, then recheck latest-main
+  mergeability immediately before squash merge.
+
+REC-119 latest-main landing gate, 2026-07-22 21:51 PDT:
+
+- `main` advanced twice during the landing review: first with REC-130 PR #176,
+  then with its completion record PR #177. Rebased all 11 REC-119 commits onto
+  exact `origin/main` commit `4633a0a87`. The only conflicts were the expected
+  append-only `docs/agent-log.md` overlaps; the complete upstream REC-130 and
+  branch REC-119 histories were preserved. Product and test files rebased
+  without conflict.
+- Regenerated with XcodeGen after the final rebase; no generated diff resulted,
+  `git diff --check` passed, and the branch is exactly 0 behind / 11 ahead of
+  `origin/main`. The REC-119 product diff is unchanged from the clean review,
+  so the final iPhone 17 Pro and iPhone 17e visual captures remain valid.
+- The complete exact-main suite now passes 577/577 with zero failures on iPhone
+  17 Pro / iOS 26.5 at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-49-26--0700.xcresult`.
+  The three added upstream REC-130 tests account for the count increase.
+  Existing formatter, headermap, and simulator diagnostics remain unrelated.
+  Publish with lease protection, confirm PR #169 is still ready/clean/mergeable
+  at the new head, then squash-merge. No TestFlight or release work is included.
+
+REC-119 squash-merge completion, 2026-07-22 21:53 PDT:
+
+- Safely force-updated the twice-rebased reviewed branch at `fffb26d7f`, then
+  confirmed it was exact with `origin/main`, ready, `CLEAN`, and `MERGEABLE`,
+  with no configured checks. Squash-merged ready PR #169:
+  https://github.com/joelipshutz/wander/pull/169
+- The feature is now on remote `main` as
+  `d27cb4d12b52a139d2cb55a18f20c934ed7b0c74` (`REC-119: Explain place rating
+  scores (#169)`). The merged behavior includes accessible rec.me and Fit info
+  buttons, native control-attached caret popovers, and the approved farther-left
+  alignment for all three icon-and-header groups.
+- Final validation remains the exact-main 577/577 simulator suite at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-49-26--0700.xcresult`
+  plus visual review on iPhone 17 Pro and iPhone 17e. The mandatory pre-landing
+  review found no issue.
+- Moved Linear REC-119 to Done and added merge commit, validation, and release
+  disposition in final comment `6d9d136b-fb13-4e8b-ab6b-00bedec8b631`.
+  No known follow-up blocker remains. No build-number bump, TestFlight archive
+  or upload, or tester Slack note was requested or performed; the change waits
+  for a future explicit release batch.
+
+## 2026-07-22 21:58 PDT - Codex - TestFlight Build 93
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-93`
+Worktree: `/private/tmp/recme-build93-release`
+Linear: `REC-134` (`In Progress`)
+
+Goal: package every eligible app change on exact latest `main` after completed
+TestFlight build 92 into rec.me build 93, validate it, upload it, attach it to the
+public TestFlight group, and post the required tester note.
+
+Starting status and coordination:
+
+- Fetched `origin`; exact release base is clean `origin/main` at `8e69138f4`.
+  The root checkout remains on unrelated REC-88 work with user-owned
+  `.gitignore` and `.pnpm-store/` changes and will not be edited or switched.
+  Created this isolated release worktree from current main. Existing worktrees
+  are stale or task-specific; no overlapping active edit will be reverted.
+- Build 92 is fully complete: its archive/upload, public-group attachment,
+  external approval, tester Slack note, and durable completion record are all
+  on `main`. Current `project.yml` declares build 92, so there is no unfinished
+  release and this explicit request increments exactly once to build 93.
+- Eligible app delta since build-92 source `a6cb303b9` is exactly:
+  PR #176 / REC-130 (`d1e7976a1`) defining deterministic list-tile photo,
+  category-emoji, and empty-state fallbacks; and PR #169 / REC-119
+  (`d27cb4d12`) adding accessible rec.me/Fit rating explanations with native
+  anchored popovers and the approved header/control alignment. The remaining
+  commits are docs/coordination records.
+- No backend migration, schema/RLS, auth, tester-data mutation, or
+  marketing-version change is included. Marketing version remains `0.1`.
+  Expected tracked release files are `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Tester copy and export
+  options will live under `/private/tmp`, not the repo.
+- Release plan: bump 92 -> 93, regenerate and audit the project, run the full
+  simulator test/build gate, open and merge a ready build-number PR, archive
+  exact resulting latest main, upload with
+  `manageAppVersionAndBuildNumber=false`, run
+  `scripts/testflight-release.mjs` with the archive path, confirm public-group
+  and beta-review state, update Linear, then post to `#testflight-feedback`.
+
+Validation checkpoint, 2026-07-22 22:10 PDT:
+
+- Incremented `CURRENT_PROJECT_VERSION` from 92 to 93 in `project.yml`, then ran
+  `xcodegen generate`. Audited the generated project diff: the only
+  `Wander.xcodeproj/project.pbxproj` changes are the two expected Debug/Release
+  build-number values; there is no signing, compiler-setting, or project-member
+  churn. `git diff --check` passes.
+- The prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this Mac.
+  Ran the complete suite on the installed iPhone 17 Pro / iOS 26.5 simulator.
+  The first clean-package run had the simulator kill one test process; Xcode
+  reported no assertion failure, restarted the runner, and the same test passed
+  in that run. The test then passed independently, and a complete clean rerun
+  passed 577/577 with zero failures:
+  `/private/tmp/DerivedData-build93-test/Logs/Test/Test-Wander-2026.07.22_22-04-46--0700.xcresult`.
+- The generic universal iOS Simulator build completed with
+  `** BUILD SUCCEEDED **`. Existing Supabase formatter actor-isolation and
+  traditional-headermap warnings remain non-blocking and predate this release.
+- Current tracked scope remains exactly `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, and this coordination log.
+  Tester-facing What-to-Test copy is staged outside the repo at
+  `/private/tmp/recme-build93-what-to-test.md`. Next: run the release diff review,
+  publish and merge the build-number PR, then archive and upload exact merged
+  `main`.
+
+Pre-landing review checkpoint, 2026-07-22 22:12 PDT:
+
+- Applied the repo-required gstack pre-landing checklist to the complete
+  three-file release diff. Scope is clean: `project.yml` and both generated
+  Xcode configurations agree on build 93, and the only other change is this
+  chronological release record. No product, schema, signing, marketing-version,
+  source-membership, CI, or unrelated generated change is present.
+- Critical and informational passes found no actionable issue. SQL/data,
+  concurrency, LLM/shell, enum completeness, field safety, frontend behavior,
+  time-window, type-boundary, and distribution checks are not implicated by the
+  metadata-only diff. Specialist passes were scope-gated; this session is also
+  prohibited from dispatching review subagents.
+- The optional gstack review-history write was not performed because the
+  sandbox rejected its ability to enqueue local review metadata for later
+  cross-machine artifact sync. This does not affect the code/diff review or
+  release gate. Result: `Pre-Landing Review: No issues found.`

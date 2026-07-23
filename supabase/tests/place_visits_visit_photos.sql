@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(61);
+select plan(68);
 
 select ok(
   exists (
@@ -140,6 +140,47 @@ select ok(
 select ok(
   has_table_privilege('authenticated', 'public.visit_photos', 'select,insert,update,delete'),
   'authenticated has CRUD grants on visit_photos'
+);
+
+select has_function(
+  'public',
+  'first_visible_place_photo_by_users',
+  array['uuid', 'text[]']
+);
+
+select function_privs_are(
+  'public',
+  'first_visible_place_photo_by_users',
+  array['uuid', 'text[]'],
+  'authenticated',
+  array['EXECUTE']
+);
+
+select function_privs_are(
+  'public',
+  'first_visible_place_photo_by_users',
+  array['uuid', 'text[]'],
+  'anon',
+  array[]::text[]
+);
+
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.first_visible_place_photo_by_users(uuid,text[])'::regprocedure
+  ),
+  false,
+  'list cover photo RPC stays security invoker so visit-photo RLS remains authoritative'
+);
+
+select ok(
+  (
+    select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'public.first_visible_place_photo_by_users(uuid,text[])'::regprocedure
+  ),
+  'list cover photo RPC pins search_path'
 );
 
 select is(
@@ -702,6 +743,30 @@ select is(
   (select count(*)::integer from public.visit_photos),
   1,
   'one-way follower can read photo metadata for a visible visit'
+);
+
+select is(
+  (
+    select photo_id::text
+    from public.first_visible_place_photo_by_users(
+      '10000000-0000-0000-0000-000000000101',
+      array['user_owner']::text[]
+    )
+  ),
+  '50000000-0000-0000-0000-000000000101',
+  'list cover photo RPC returns an RLS-visible photo from an eligible contributor'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.first_visible_place_photo_by_users(
+      '10000000-0000-0000-0000-000000000101',
+      array['user_mutual']::text[]
+    )
+  ),
+  0,
+  'list cover photo RPC excludes visible photos whose owner is not an eligible contributor'
 );
 
 select set_config('request.jwt.claim.sub', 'user_nonfollower', true);

@@ -688,9 +688,9 @@ private struct ListPreviewMosaic: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
                 .fill(WanderTheme.surfaceSand.color)
 
-            Text(String(list.name.prefix(1)).uppercased())
-                .font(.system(size: 42, weight: .black, design: .rounded))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.18))
+            Image(systemName: "bookmark.fill")
+                .font(.system(size: 38, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color.opacity(0.34))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -701,7 +701,8 @@ private struct ListPreviewMosaic: View {
             place: place,
             cornerRadius: WanderTheme.radiusSmall,
             fallbackEmojiSize: 22,
-            googleAttributionFontSize: 8
+            googleAttributionFontSize: 8,
+            eligibleUserIDs: list.photoContributorUserIDs
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityHidden(true)
@@ -2928,6 +2929,7 @@ private struct ListPlacePhotoMedia: View {
     let cornerRadius: CGFloat
     let fallbackEmojiSize: CGFloat
     let googleAttributionFontSize: CGFloat
+    var eligibleUserIDs: [String]? = nil
     @State private var resolvedPhoto: ListPlaceResolvedPhoto?
     @State private var resolvedPhotoKey: String?
 
@@ -2976,6 +2978,7 @@ private struct ListPlacePhotoMedia: View {
                 let resolved = await ListPlacePhotoResolver.resolve(
                     request: place.canonicalProfilePlace.photoRequest,
                     preferredUserPhoto: place.preferredUserPhoto,
+                    eligibleUserIDs: eligibleUserIDs,
                     authorizationScopeKey: photoAuthorizationScopeKey,
                     targetPixelSize: targetPixelSize,
                     backend: backend
@@ -2994,6 +2997,7 @@ private struct ListPlacePhotoMedia: View {
         [
             place.canonicalProfilePlace.photoLookupKey,
             place.preferredUserPhoto?.cacheKey ?? "no-preloaded-user-photo",
+            eligibleUserIDs?.sorted().joined(separator: ",") ?? "all-visible-users",
             photoAuthorizationScopeKey
         ]
             .joined(separator: "|")
@@ -3645,6 +3649,11 @@ private struct PlaceListMock: Identifiable, Hashable {
     }
     var isOwnedByCurrentUser: Bool { ownerName == "You" }
     var isCollaborative: Bool { !collaborators.isEmpty }
+    var photoContributorUserIDs: [String] {
+        Array(Set([ownerUserID] + collaborators.map(\.id)))
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
 
     var mapRegion: MKCoordinateRegion {
         MapRegionFitter.region(
@@ -3698,13 +3707,17 @@ private extension PlaceListMock {
         self.description = list.description
         self.ownerName = list.ownerUserID == store.currentUser.id ? "You" : owner?.displayName ?? "Friend"
         self.isStealth = list.isStealth
-        self.collaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
+        let listCollaborators = store.collaborators(for: list).map(ListCollaboratorMock.init(profile:))
+        self.collaborators = listCollaborators
+        let photoContributorUserIDs = Set([list.ownerUserID] + listCollaborators.map(\.id))
         self.places = visiblePlaces.map { visiblePlace in
             ListPlaceMock(
                 cover: visiblePlace,
                 currentUserID: store.currentUser.id,
-                preferredUserPhoto: preferredUserPhotosByPlaceID[visiblePlace.place.id]
-                    .map(PlacePhoto.init(localVisitPhoto:))
+                preferredUserPhoto: photoContributorUserIDs.contains(store.currentUser.id)
+                    ? preferredUserPhotosByPlaceID[visiblePlace.place.id]
+                        .map(PlacePhoto.init(localVisitPhoto:))
+                    : nil
             )
         }
         self.itemCountOverride = list.cachedItemCount
