@@ -28,7 +28,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
     }
 
-    func testCalendarDateBadgesCountDistinctOwnerBeenPlaces() throws {
+    func testCalendarDateBadgesCountOwnerBeenVisitsIncludingRepeatedPlaces() throws {
         let fixture = makeFixture()
         let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
         let laterThatDay = try XCTUnwrap(
@@ -47,9 +47,9 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             calendar: fixture.calendar
         )
 
-        XCTAssertEqual(insights.monthPlaceCounts[day], 2)
+        XCTAssertEqual(insights.monthVisitCounts[day], 3)
         XCTAssertEqual(insights.monthPlaceIDs[day], ["coffee", "dinner"])
-        XCTAssertEqual(insights.monthPlaceCounts.count, 1)
+        XCTAssertEqual(insights.monthVisitCounts.count, 1)
     }
 
     func testCalendarDateBadgesCanonicalizePlaceAliasesAndRetainMissingPlaceReferences() throws {
@@ -102,7 +102,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             calendar: fixture.calendar
         )
 
-        XCTAssertEqual(insights.monthPlaceCounts[day], 2)
+        XCTAssertEqual(insights.monthVisitCounts[day], 3)
         XCTAssertEqual(insights.monthPlaceIDs[day], ["missing-place", "server-place"])
     }
 
@@ -214,7 +214,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         )
         let june30 = try XCTUnwrap(losAngeles.date(from: DateComponents(year: 2026, month: 6, day: 30)))
 
-        XCTAssertEqual(insights.monthPlaceCounts[june30], 1)
+        XCTAssertEqual(insights.monthVisitCounts[june30], 1)
     }
 
     func testMissingOrInvalidPlacesAreDroppedWithoutBreakingOtherInsights() {

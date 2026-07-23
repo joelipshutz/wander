@@ -17634,3 +17634,31 @@ REC-124 acceptance correction, 2026-07-22 17:21 PDT:
   no new architecture, persistence, backend, schema, or product surface. Apply
   the data-flow/failure/test lens directly, then run focused and full XCTest
   coverage plus the required pre-landing review workflow.
+
+Acceptance-correction implementation and validation, 2026-07-22 17:30 PDT:
+
+- Rebased the branch onto current `origin/main` at `5804f8763`. The only
+  conflict was the expected append-only agent log; preserved build-91, REC-112,
+  and REC-124 histories. REC-112's calendar-list map behavior remains intact.
+- Restored badge and accessibility semantics to Been visit counts. The badge is
+  derived from the filtered, unique visit-record stream, so two distinct Been
+  visit records for the same place on one day count as `2`; the canonical
+  per-day place-ID set remains separate and de-duplicated for drill-in routing.
+- Updated the regression to place two Coffee Been visits and one Dinner Been
+  visit on the same day, alongside a Wanna visit and another user's Been visit.
+  It now requires badge `3`, drill-in IDs `[coffee, dinner]`, and one counted
+  calendar day. The alias/missing-reference case requires three visit records
+  with two canonical drill-in IDs.
+- `xcodegen generate` completed with no generated project diff and
+  `git diff --check` passes. Focused `ProfileInsightsPresenterTests` passed
+  14/14; result bundle:
+  `/private/tmp/DerivedData-rec124-followup/Logs/Test/Test-Wander-2026.07.22_17-23-39--0700.xcresult`.
+- The full iOS suite passed 573/573 with zero failures on iPhone 17 Pro / iOS
+  26.5; result bundle:
+  `/private/tmp/DerivedData-rec124-followup/Logs/Test/Test-Wander-2026.07.22_17-27-19--0700.xcresult`.
+  The generic iOS Simulator build also succeeded. Existing Supabase formatter
+  actor-isolation warnings and simulator diagnostics remain unrelated.
+- No visual layout, backend, schema/RLS, analytics, build number, TestFlight,
+  or Slack release change was made. Next: commit this correction, force-update
+  the rebased PR branch, revise PR #167's acceptance copy, complete the required
+  pre-landing review, and squash-merge if the gate remains clean.
