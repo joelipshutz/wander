@@ -18906,3 +18906,39 @@ Completion, 2026-07-22 23:15 PDT:
   notification and explicit place routes still center/select intentionally.
   Known behavior: current city is a one-shot location fix at the existing
   city-scale span, not a live follow-camera or reverse-geocoded boundary.
+
+## 2026-07-23 10:51 PDT - Codex - REC-122 Celebration Dismissal Follow-up
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-122-celebration-dismissal`
+Worktree: `/private/tmp/recme-rec122-celebration-dismissal`
+Linear: `REC-122` (`In Progress`)
+
+Goal: fix Joe's phone-validation finding that the streak celebration starts
+behind the still-dismissing save sheet and disappears too quickly. The save
+sheet must fully leave first; the daily takeover must then remain until the
+user confirms it with an explicit button.
+
+Starting status and diagnosis:
+
+- Started clean from exact `origin/main` commit `92adcdc`; the open Xcode
+  phone-build checkout remains isolated and untouched.
+- Root cause is `WanderRootView.queueSaveStreakCelebration`: it presents after
+  a fixed 180 ms and auto-dismisses the daily takeover after 2.2 seconds. The
+  save store publishes its event before `MapPlaceSaveFlowSheet` calls
+  `dismiss()`, so presentation and timing begin behind SwiftUI's sheet window.
+- The repo intentionally has no `DebugBridge` / `StateServer`, confirmed by
+  source search and the existing iOS review record, so the `ios-fix` HTTP
+  snapshot endpoint is unavailable. Joe's observed phone state plus the exact
+  pre-fix presenter ordering above is the reproduction evidence. Add a native
+  deterministic regression test around the presentation gate instead of
+  introducing unowned debug-server infrastructure.
+- Locked behavior: track save-flow visibility, keep the streak event pending
+  while a save sheet is visible, present only after the sheet disappears, and
+  require a clear confirmation action for the daily takeover. Same-day
+  confetti remains a short non-blocking effect after the same gate.
+- Linear REC-122 was reopened and annotated. Mission Control task creation was
+  attempted but `localhost:4000` is not running.
+
+Expected files: `Wander/App/WanderRootView.swift`,
+`Wander/Features/Map/MapScreen.swift`, focused streak tests, and this log.
