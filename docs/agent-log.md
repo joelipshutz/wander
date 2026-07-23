@@ -20549,3 +20549,79 @@ REC-118 merge completion, 2026-07-23 13:27 PDT:
   hosted migration application, or Slack release note was performed. The
   merged feature will ride the next explicitly requested TestFlight batch from
   latest `main`.
+
+## 2026-07-23 13:35 PDT - Codex - TestFlight Build 95
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/testflight-build-95`
+Worktree: `/private/tmp/recme-testflight-build-95`
+Linear: `REC-137` (`In Progress`, assigned to Ryan)
+
+Goal: package every app change currently merged to exact latest `main` into
+rec.me build 95, deploy the required hosted schema, validate the complete
+release, upload it to App Store Connect, attach it to the public TestFlight
+group, and publish tester-facing notes.
+
+Starting status and release scope:
+
+- Fetched `origin` and created this clean isolated release worktree from exact
+  `origin/main` commit `558a3aebae39a46d59d26ea863cc62e25bcbfa36`.
+  The primary checkout remains on unrelated REC-88 work with user-owned
+  `.gitignore` and `.pnpm-store/` changes; those files will not be edited,
+  staged, or reverted.
+- TestFlight build 94 is fully complete, `VALID`, attached to `rec.me Alpha`,
+  externally approved, documented, and announced. `project.yml` is still at
+  marketing version `0.1`, build 94, so the next release number is 95.
+- Eligible runtime scope since build 94 is REC-122's post-save streak
+  presentation, REC-109's move of place imports to Add, REC-125's blank shared
+  visit invitee defaults, REC-135's improved broken-import place matching and
+  map refit, REC-126's Cuisine Atlas/inference/backfill, REC-133's privacy-safe
+  place photo carousel, and REC-118's optional Wanna date plus three-day
+  reminder/deep link.
+- REC-118 includes a local Supabase migration that was deliberately validated
+  only in a rollback preview before merge. This explicit release will inspect
+  linked migration state, apply the exact reviewed migration to the confirmed
+  hosted project, and rerun the hosted smoke contract before publishing the
+  binary.
+- Expected tracked edits are `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Release notes and export
+  configuration will live under `/private/tmp`, outside the repository.
+- Created Linear REC-137 to track this release, assigned it to Ryan, and moved
+  it to `In Progress` before changing release metadata.
+
+Hosted schema and release-gate checkpoint, 2026-07-23 13:45 PDT:
+
+- Linked only this isolated worktree to the already-confirmed rec.me Supabase
+  project `rugmtlgufrhlxwfkumhw`. Pre-deploy migration history showed local
+  `20260723173500_wanna_go_dates_and_reminders.sql` as the sole missing hosted
+  migration; the newer REC-133 `20260723183000` migration was already present.
+- `supabase db push --linked --include-all --dry-run --yes` confirmed exactly
+  that one reviewed migration. The subsequent push applied it successfully.
+  Post-push migration history now shows both local and hosted
+  `20260723173500` aligned, without repairing, reordering, or modifying any
+  other migration record.
+- The migration's apply-time assertions verified the REC-118 RPC security
+  posture, pinned search paths, authenticated-only grants, and default-off
+  reminder preference. The required linked hosted smoke then passed its
+  rollback-only profile, visibility, photo, quota, Shared Visits, cuisine,
+  Discover, and own-place/reminder metadata contracts.
+- Incremented `CURRENT_PROJECT_VERSION` from 94 to 95 in `project.yml` and ran
+  XcodeGen. Generated project drift is limited to the matching Debug and
+  Release build-number values; marketing version remains `0.1` and there is no
+  signing, compiler, dependency, or source-membership change.
+- The complete release suite passed 626/626 with zero failures and zero skips
+  on iPhone 17 Pro Max / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-build95-gate/Logs/Test/Test-Wander-2026.07.23_13-39-33--0700.xcresult`.
+  The generic universal iOS Simulator build also passed. Existing Supabase
+  formatter actor-isolation, unused test-expression, and traditional-headermap
+  warnings remain unchanged and non-blocking.
+- `git diff --check` passes. The intended tracked release diff remains limited
+  to `project.yml`, `Wander.xcodeproj/project.pbxproj`, and this chronological
+  log. Next: perform the final diff/base review, commit and publish the ready
+  build-number PR linked to REC-137, squash-merge it, then archive exact merged
+  `main`.
+- Final pre-landing review confirmed `origin/main` is unchanged at the exact
+  release base `558a3aeba`; the three-file metadata/log diff contains no
+  unrelated file, generated junk, signing change, or product-code mutation.
+  No blocker or additional human decision remains.
