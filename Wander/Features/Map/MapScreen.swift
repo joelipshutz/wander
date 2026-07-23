@@ -3015,9 +3015,9 @@ struct MapPlaceSaveContext: Identifiable {
             requiresStatusConfirmation: false,
             initialStatus: .been,
             initialVisibility: defaultVisibility,
-            initialRatingScore: invitation.ratingScore,
-            initialNote: invitation.note ?? "",
-            initialAnswers: initialNewSaveAnswers(from: invitation.attributeDrafts),
+            initialRatingScore: nil,
+            initialNote: "",
+            initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: invitation.attributeDrafts),
             initialPhotoAttachments: []
@@ -3480,7 +3480,6 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isLoadingSharedVisitInvitees = false
     @State private var didLoadSharedVisitInvitees = false
     @State private var sharedVisitInviteesError: String?
-    @State private var didLoadSharedVisitPhotos = false
     @State private var errorMessage: String?
     @State private var isShowingOptionalDetails = false
 
@@ -3614,7 +3613,6 @@ struct MapPlaceSaveFlowSheet: View {
                 }
             }
             .task {
-                await loadSharedVisitPhotosIfNeeded()
                 await loadSharedVisitInviteesIfNeeded()
             }
             .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
@@ -4255,34 +4253,6 @@ struct MapPlaceSaveFlowSheet: View {
                 } else {
                     errorMessage = "Sign in to finish this save."
                 }
-            }
-        }
-    }
-
-    private func loadSharedVisitPhotosIfNeeded() async {
-        guard !didLoadSharedVisitPhotos,
-              let invitation = context.sharedVisitInvitation,
-              auth.isSignedIn
-        else { return }
-        didLoadSharedVisitPhotos = true
-
-        for photo in invitation.photos.prefix(MapPlaceSavePhotoAttachment.maximumCount) {
-            do {
-                let data = try await backend.downloadSharedVisitPhoto(
-                    bucket: photo.storageBucket,
-                    path: photo.storagePath
-                )
-                guard let image = UIImage(data: data),
-                      let attachment = MapPlaceSavePhotoAttachment.make(
-                        image: image,
-                        data: data,
-                        contentType: photo.contentType,
-                        sourcePhotoID: photo.photoID
-                      )
-                else { continue }
-                visitPhotoAttachments.append(attachment)
-            } catch {
-                errorMessage = "One shared photo could not be loaded. You can still save the visit."
             }
         }
     }
