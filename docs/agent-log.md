@@ -20625,3 +20625,50 @@ Hosted schema and release-gate checkpoint, 2026-07-23 13:45 PDT:
   release base `558a3aeba`; the three-file metadata/log diff contains no
   unrelated file, generated junk, signing change, or product-code mutation.
   No blocker or additional human decision remains.
+
+Completion, 2026-07-23 14:00 PDT:
+
+- Committed the reviewed release metadata as `6e6e033196a1f81f0055499b598ba9e20f25c79e`,
+  opened ready PR #198, and linked it to Linear REC-137. The PR was current
+  with `main`, automatically mergeable, and contained exactly the three
+  intended files, with zero hosted checks and zero review/comment blockers.
+  Squash-merged it into `main` as
+  `43317142aac30dd46ff4d03ac275874faf74bc9f`, then deleted the merged remote
+  release branch.
+- Created a clean detached archive worktree from that exact merged-main SHA.
+  Signed archive `/private/tmp/Wander-0.1-build95.xcarchive` succeeded and both
+  archive and embedded app metadata verify rec.me `0.1 (95)`, bundle
+  `com.grayline.wander`, arm64, and team `Y7TVK75RZ8`.
+- Export options `/private/tmp/recme-build95-export-options.plist` explicitly
+  set `destination=upload`, `method=app-store-connect`, automatic signing, and
+  `manageAppVersionAndBuildNumber=false`. The first export correctly stopped
+  before upload because the development-only `BU88FB5ZG4` API key lacks cloud
+  distribution signing permission; the Xcode-account fallback was unavailable.
+  Retrying the unchanged archive with the repository's documented replacement
+  App Store Connect key `P4ZR59AXMD` succeeded. Xcode reported `Uploaded
+  Wander`, `Upload succeeded`, and `EXPORT SUCCEEDED`; archive upload metadata
+  independently records `uploadedBuildNumber=95` and success.
+- TestFlight helper confirmed App Store Connect build
+  `ad87b607-f535-4465-b431-d24338dac34d` is `VALID`, non-expired, and marketing
+  version `0.1`; set `usesNonExemptEncryption=false`; published the en-US What
+  to Test checklist; attached build 95 to public group `rec.me Alpha`; submitted
+  external beta review; and returned review state `APPROVED`.
+- Public TestFlight:
+  https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing build-95 note to
+  `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784840371991389
+- Final shipped validation is 626/626 iOS tests with zero failures/skips on
+  iPhone 17 Pro Max / iOS 26.5, a successful generic universal Simulator
+  build, the successfully applied REC-118 hosted migration with aligned
+  migration history, and the required rollback-only linked Supabase smoke.
+  Existing compiler/headermap warnings are unchanged and non-blocking.
+- No known build-95 blocker remains. Tester focus is the post-save streak,
+  imports in Add and broken-import matching, blank Shared Visit invitee
+  metadata, Cuisine Atlas, privacy-safe place-photo paging, and optional Wanna
+  dates/reminders with notification deep linking. Wanna reminders are
+  device-local and require notification permission, push plus Wanna reminder
+  settings, and a still-future three-day fire time.
+- The original dirty primary checkout and all unrelated worktrees remained
+  untouched. Linear REC-137 remains `In Review` only until this completion
+  record lands on `main`, then it can be marked `Done`.
