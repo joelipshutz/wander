@@ -20154,6 +20154,25 @@ REC-135 completion, 2026-07-23 11:49 PDT:
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
 
+REC-133 merge completion, 2026-07-23 13:12 PDT:
+
+- Squash-merged ready PR #186 into `main` as
+  `333439b3fecbd0812917f3aed715bad44ad2fc82` and deleted remote branch
+  `codex/rec-133-place-photo-carousel`.
+- Final validation on the exact feature head passed 612/612 iOS tests on
+  iPhone 17 Pro / iOS 26.5, focused gallery/mock/repository coverage passed
+  12/12, hosted rolled-back pgTAP passed 12/12, and the linked Supabase smoke
+  test passed.
+- Final visual QA passed on iPhone 17 Pro and smaller iPhone 17e. The selected
+  second photo is centered with no neighboring sliver; `@ryan_lieblein`, the
+  full timestamp, and the `been` status remain fully visible.
+- Pre-landing review found no blocking correctness, privacy, security,
+  concurrency, performance, or API-contract issue. GitHub had no hosted checks
+  or review comments, and the PR was current with `origin/main` at merge.
+- No build-number increment, archive, upload, TestFlight group change, or
+  tester-facing Slack release note was performed. REC-133 will ride the next
+  explicitly requested TestFlight release batch from latest `main`.
+
 REC-133 physical-device follow-up validation, 2026-07-23 13:08 PDT:
 
 - Moved each full-screen image's horizontal inset inside an exact
