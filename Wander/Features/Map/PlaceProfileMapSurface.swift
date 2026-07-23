@@ -1113,7 +1113,7 @@ private struct PlaceProfileRatingTile: View {
     }
 
     private var ratingHeaderHorizontalOffset: CGFloat {
-        explanation == nil ? 0 : -5
+        explanation == nil ? -5 : -10
     }
 
     private var infoButtonHorizontalOffset: CGFloat {

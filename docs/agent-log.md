@@ -18223,3 +18223,68 @@ REC-119 rating-header alignment handoff, 2026-07-22 20:57 PDT:
 - Added the exact offsets, screenshots, and 574/574 validation to Linear
   REC-119, then returned it to In Review. No known blocker remains for Ryan's
   visual approval; no TestFlight or release work was performed.
+
+REC-119 final header-position and landing start, 2026-07-22 21:13 PDT:
+
+- Ryan approved the direction and requested one final visual adjustment before
+  landing: move all three rating header groups another 4–5 points left, then
+  squash-merge PR #169 and push the result to `main`.
+- Re-read the repo landing workflow, Linear workflow, and `DESIGN.md`; fetched
+  `origin`; confirmed isolated worktree
+  `/private/tmp/recme-rec119-ratings-info` is clean on
+  `codex/rec-119-ratings-info`; and returned Linear REC-119 to In Progress.
+  The branch is current with `origin/main` and 10 commits ahead. The dirty root
+  checkout and unrelated worktrees remain untouched.
+- Expected files are `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/PlaceProfileMapSurface.swift`, and this log. Interpret
+  the request as another 5-point left shift for each complete header group
+  (symbol plus label) while preserving the rec.me/Fit information controls,
+  native caret popovers, 44-point targets, card geometry, copy, and backend.
+  Validate both phone sizes and the full suite, then run the required
+  pre-landing review before merging. This is merge-only work: no build-number,
+  TestFlight, archive, upload, or Slack release action is authorized.
+
+REC-119 final header-position validation, 2026-07-22 21:43 PDT:
+
+- Shifted every rating header group another 5 points left in both place-card
+  presentations. Your Rating now uses `x: -5`; rec.me and Fit use `x: -10`
+  because they retain their previous 5-point optical correction. Each group
+  moves its symbol and label together. The rec.me/Fit info-button offsets,
+  native button-anchored caret popovers, 44-point targets, values, and card
+  geometry are unchanged.
+- `xcodegen generate` completed with no generated project diff, and
+  `git diff --check` passed. The focused explanation-copy contract passed 1/1
+  at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-14-29--0700.xcresult`.
+- Visually reviewed the final closed state on iPhone 17 Pro at
+  `/private/tmp/rec119-final-left-17pro.png` and iPhone 17e at
+  `/private/tmp/rec119-final-left-17e.png`. All three symbol-plus-label groups
+  sit farther left without clipping or colliding with either info control.
+- The complete suite passed 574/574 with zero failures on iPhone 17 Pro / iOS
+  26.5 at
+  `/private/tmp/DerivedData-rec119-final/Logs/Test/Test-Wander-2026.07.22_21-42-24--0700.xcresult`.
+  Existing Supabase formatter warnings and simulator diagnostics remain
+  unrelated. Proceed to the mandatory pre-landing review and PR merge gate.
+
+REC-119 pre-landing review, 2026-07-22 21:44 PDT:
+
+- Ran the repo-required gstack pre-landing review over the complete branch diff
+  plus the uncommitted final position revision against exact `origin/main` at
+  `9de2e4290`. Scope is clean: the diff implements REC-119's two rating
+  explanations, native anchored controls, requested visual-position follow-ups,
+  focused coverage, generated project membership, and the required work log.
+  No unrelated product, backend, schema, release, or build-number change is
+  present.
+- Critical and informational passes found no actionable issue. The new enum is
+  exhaustive at both title/message switches; the shared button preserves the
+  44-point target, VoiceOver copy, and explicit popover anchor; both card
+  consumers pass the intended explanation; and the final screenshots plus
+  574/574 suite validate the user-visible behavior. The slop scan returned no
+  finding. PR #169 has no current Greptile comments, TODO overlap, configured
+  checks, or documentation-staleness issue.
+- The review skill's optional private-artifact synchronization was not run
+  because the sandbox correctly rejected unspecific external artifact export;
+  this does not affect the code/diff review or landing evidence. Pre-landing
+  result: `Pre-Landing Review: No issues found.` Commit and publish this exact
+  reviewed state, refresh the ready PR metadata, then recheck latest-main
+  mergeability immediately before squash merge.
