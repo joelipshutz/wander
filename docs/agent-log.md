@@ -17604,3 +17604,33 @@ Xcode device-test handoff, 2026-07-22 16:19 PDT:
   If it does not resume automatically, dismiss the lock sheet and press Run
   once. No source, configuration, backend, build-number, or TestFlight change
   was made for this hands-on test handoff.
+
+REC-124 acceptance correction, 2026-07-22 17:21 PDT:
+
+- Agent/tool: Codex. Goal: revise PR #167 so every distinct owner Been
+  visit/save record increments the date badge, including repeated saves of the
+  same place on the same day, then validate and merge the ready change to
+  `main`. Branch: `codex/rec-124-calendar-badges`; worktree:
+  `/private/tmp/recme-rec124-calendar-badges`.
+- Pre-work state: implementation worktree clean; `origin/main` is `5804f8763`
+  after REC-112 merged, while this branch is behind at `88053b8b8`. The root
+  checkout remains separately dirty with user-owned work and is not being
+  touched. Build 91 is fully released; this merge-only request does not
+  authorize a new TestFlight build, build-number bump, or Slack release note.
+- This clarification supersedes the earlier distinct-place badge acceptance
+  wording above. Data flow is now: visit rows -> owner Been records ->
+  de-duplicate aliases of the same visit ID -> calendar day -> raw visit count
+  for the badge. The day drill-in continues to use canonical distinct place
+  IDs, so two Been records for one place produce badge `2` and one place in the
+  list. Wanna records, other users' records, soft-deleted rows, and duplicate
+  aliases of one visit record remain excluded.
+- Expected files: `Wander/Features/Profile/ProfileInsightsPresenter.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `WanderTests/ProfileInsightsPresenterTests.swift`, and this log. REC-112 also
+  touched the Profile calendar area on current `main`; update the branch first
+  and preserve its map behavior while resolving any overlap.
+- Full `/plan-eng-review` invocation skipped: this is a narrow, reversible
+  presenter semantic correction using the already-filtered visit stream, with
+  no new architecture, persistence, backend, schema, or product surface. Apply
+  the data-flow/failure/test lens directly, then run focused and full XCTest
+  coverage plus the required pre-landing review workflow.
