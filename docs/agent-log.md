@@ -20793,3 +20793,31 @@ Checkpoint, 2026-07-23 14:36 PDT:
   Swift 6 actor-isolation and headermap warnings remain unchanged.
 - `origin/main` advanced by two commits during implementation. The feature
   commit will be rebased onto the new head before final validation and PR.
+
+Completion, 2026-07-23 14:49 PDT:
+
+- Rebased onto current `origin/main` at `dd06cc77c`, preserving the concurrent
+  REC-138 coordination log entry. The implementation is committed as
+  `a374aa46f`; the atomic design-review density fix is `192e08837`.
+- Opened ready PR #202:
+  https://github.com/joelipshutz/wander/pull/202
+  The PR links REC-114 and contains only the app route, import candidate UI,
+  focused navigation contract, and this coordination log.
+- Focused REC-114 regression passed after the final design commit: 1 test,
+  0 failures. Full iOS suite passed on iPhone 17 Pro Max / iOS 26.5:
+  628 tests, 0 failures, 0 unexpected. Result bundle:
+  `/tmp/DerivedData-rec114-focused/Logs/Test/Test-Wander-2026.07.23_14-45-42--0700.xcresult`.
+- Generic universal iOS Simulator build succeeded for arm64 and x86_64.
+  Existing Swift 6 formatter actor-isolation and legacy headermap warnings are
+  unchanged and non-blocking.
+- Diff-aware design review found and fixed one medium hierarchy issue: category
+  copy now favors the specific place category, and the 32pt visible Been/Wanna
+  capsules sit inside 44pt touch targets. Final visual screenshots passed on
+  iPhone 17 Pro Max and iPhone 17e at iOS 26.5. The ignored report and images
+  are under `.gstack/design-reports/`.
+- Added the DEBUG-only `-WanderPlaceImportCandidateMockup` route so reviewers
+  can open the exact screen with deterministic photo-backed candidates without
+  changing local import data.
+- No known blocker remains. No build number, archive, TestFlight upload, or
+  tester Slack note was created because this request is branch/review only.
+  The original dirty primary checkout remains untouched.
