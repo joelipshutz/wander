@@ -723,6 +723,11 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct ListTile: View",
             before: "private struct ListPreviewMosaic: View"
         )
+        let previewMosaic = try sourceSection(
+            source,
+            after: "private struct ListPreviewMosaic: View",
+            before: "private struct ListSuggestionsSection: View"
+        )
         let photoMedia = try sourceSection(
             source,
             after: "private struct ListPlacePhotoMedia: View",
@@ -742,6 +747,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(photoMedia.contains("store.currentUser.id"))
         XCTAssertTrue(photoMedia.contains("store.follows"))
         XCTAssertTrue(photoMedia.contains("store.blocks"))
+        XCTAssertTrue(photoMedia.contains("WanderCategoryEmoji(emoji: place.emoji"))
+        XCTAssertTrue(photoMedia.contains("eligibleUserIDs: eligibleUserIDs"))
+        XCTAssertTrue(previewMosaic.contains("Image(systemName: \"bookmark.fill\")"))
+        XCTAssertFalse(previewMosaic.contains("String(list.name.prefix(1))"))
+        XCTAssertTrue(previewMosaic.contains("eligibleUserIDs: list.photoContributorUserIDs"))
+        XCTAssertTrue(source.contains("photoContributorUserIDs.contains(store.currentUser.id)"))
         XCTAssertTrue(
             photoMedia.contains("resolvedPhotoKey == resolutionKey"),
             "A relationship or account change should synchronously hide stale user photos"

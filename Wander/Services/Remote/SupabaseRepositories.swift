@@ -1355,6 +1355,13 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        if let eligibleUserIDs = request.eligibleUserIDs {
+            return try await visibleUserPhoto(
+                for: request,
+                contributedByUserIDs: eligibleUserIDs
+            )
+        }
+
         guard let rpc,
               let placeID = request.placeID,
               UUID(uuidString: placeID) != nil
@@ -1368,6 +1375,36 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         )
         guard let row = rows.first else {
             throw WanderRemoteError.invalidResponse("Place has no visible user photo")
+        }
+        return row.photo
+    }
+
+    private func visibleUserPhoto(
+        for request: PlacePhotoRequest,
+        contributedByUserIDs userIDs: [String]
+    ) async throws -> PlacePhoto {
+        let eligibleUserIDs = Array(
+            Set(userIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        )
+            .filter { !$0.isEmpty }
+            .sorted()
+        guard let rpc,
+              let placeID = request.placeID,
+              UUID(uuidString: placeID) != nil,
+              !eligibleUserIDs.isEmpty
+        else {
+            throw WanderRemoteError.invalidResponse("Place has no eligible list photo contributors")
+        }
+
+        let rows: [FirstVisiblePlacePhotoRow] = try await rpc.call(
+            "first_visible_place_photo_by_users",
+            params: FirstVisiblePlacePhotoByUsersParams(
+                inputPlaceID: placeID,
+                inputUserIDs: eligibleUserIDs
+            )
+        )
+        guard let row = rows.first else {
+            throw WanderRemoteError.invalidResponse("Place has no eligible list contributor photo")
         }
         return row.photo
     }
@@ -1407,6 +1444,16 @@ private struct FirstVisiblePlacePhotoParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case inputPlaceID = "input_place_id"
+    }
+}
+
+private struct FirstVisiblePlacePhotoByUsersParams: Encodable {
+    let inputPlaceID: String
+    let inputUserIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlaceID = "input_place_id"
+        case inputUserIDs = "input_user_ids"
     }
 }
 

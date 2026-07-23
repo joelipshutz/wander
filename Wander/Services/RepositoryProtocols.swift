@@ -758,6 +758,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
     let requiresPhoto: Bool
+    let eligibleUserIDs: [String]?
 
     init(
         placeID: String? = nil,
@@ -767,7 +768,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
         longitude: Double?,
         sourceProvider: String?,
         sourceProviderPlaceID: String?,
-        requiresPhoto: Bool = true
+        requiresPhoto: Bool = true,
+        eligibleUserIDs: [String]? = nil
     ) {
         self.placeID = placeID
         self.name = name
@@ -777,6 +779,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.requiresPhoto = requiresPhoto
+        self.eligibleUserIDs = eligibleUserIDs
     }
 
     enum CodingKeys: String, CodingKey {
@@ -813,6 +816,20 @@ struct PlacePhotoRequest: Encodable, Equatable {
         return provider == "coordinate"
             || sourceProviderPlaceID?.lowercased().hasPrefix("coordinate_") == true
             || normalizedName == "dropped pin"
+    }
+
+    func restrictingVisibleUserPhotos(to userIDs: [String]) -> PlacePhotoRequest {
+        PlacePhotoRequest(
+            placeID: placeID,
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            requiresPhoto: requiresPhoto,
+            eligibleUserIDs: userIDs
+        )
     }
 }
 
