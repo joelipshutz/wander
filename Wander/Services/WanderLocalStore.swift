@@ -5823,6 +5823,7 @@ final class WanderStore: ObservableObject {
             avatarURL: nil,
             bio: nil,
             homeArea: nil,
+            onboardingCompletedAt: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .synced,
             createdAt: .now
@@ -5903,17 +5904,19 @@ final class WanderStore: ObservableObject {
             bio: nil,
             homeArea: nil,
             isPrivateProfile: preferredPrivateProfile,
+            onboardingCompletedAt: nil,
+            isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly,
             createdAt: .now
         )
-        profile.defaultVisibilityRaw = preferredVisibility.rawValue
+        profile.defaultVisibilityRaw = PlaceVisibility.followers.rawValue
 
         withDeferredPersistence {
             currentUser = profile
             profiles.removeAll { $0.localID == localID }
             profiles.insert(profile, at: 0)
-            defaultVisibility = preferredVisibility
-            isPrivateProfile = preferredPrivateProfile
+            defaultVisibility = .followers
+            isPrivateProfile = false
             persist()
         }
     }
@@ -7022,6 +7025,7 @@ final class WanderStore: ObservableObject {
             )
             currentUser.bio = remoteProfile.bio
             currentUser.homeArea = remoteProfile.homeArea
+            currentUser.onboardingCompletedAt = remoteProfile.onboardingCompletedAt
             currentUser.isPrivateProfile = remoteProfile.isPrivateProfile
             currentUser.defaultVisibilityRaw = remoteProfile.defaultVisibility.rawValue
             currentUser.createdAt = remoteProfile.createdAt
@@ -7037,6 +7041,7 @@ final class WanderStore: ObservableObject {
                 profile.avatarURL = currentUser.avatarURL
                 profile.bio = currentUser.bio
                 profile.homeArea = currentUser.homeArea
+                profile.onboardingCompletedAt = currentUser.onboardingCompletedAt
                 profile.isPrivateProfile = currentUser.isPrivateProfile
                 profile.defaultVisibilityRaw = currentUser.defaultVisibilityRaw
                 profile.createdAt = currentUser.createdAt

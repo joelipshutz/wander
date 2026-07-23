@@ -35,6 +35,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>rec.me uses the camera only when you choose to take a photo in the app.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>rec.me uses contacts only to help you find people you already know. It never messages anyone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>UILaunchScreen</key>

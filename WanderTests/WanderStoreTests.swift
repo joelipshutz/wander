@@ -8,6 +8,78 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testSwitchingAccountsDoesNotCarryPrivateProfileSettingsOrIdentity() {
+        let first = LocalProfile(
+            localID: "local_profile_current",
+            serverID: "user_first",
+            handle: "first",
+            displayName: "First Person",
+            avatarURL: "https://example.com/first.jpg",
+            bio: "Private notes",
+            homeArea: "Los Angeles",
+            onboardingCompletedAt: Date(),
+            isPrivateProfile: true,
+            syncState: .synced
+        )
+        first.defaultVisibilityRaw = PlaceVisibility.selfOnly.rawValue
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: first,
+            profiles: [first],
+            places: [],
+            userPlaces: [],
+            placeAttributes: [],
+            follows: [],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+
+        store.apply(authState: .signedIn(AuthSession(
+            userID: "user_second",
+            displayName: "Second Person",
+            handle: "second"
+        )))
+
+        XCTAssertEqual(store.currentUser.serverID, "user_second")
+        XCTAssertEqual(store.currentUser.displayName, "Second Person")
+        XCTAssertEqual(store.currentUser.handle, "second")
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.currentUser.bio)
+        XCTAssertNil(store.currentUser.homeArea)
+        XCTAssertNil(store.currentUser.onboardingCompletedAt)
+        XCTAssertFalse(store.currentUser.isPrivateProfile)
+        XCTAssertFalse(store.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+    }
+
+    func testSigningOutClearsPrivateIdentityFields() {
+        let store = WanderStore(fixtures: .seed())
+        store.updateCurrentUserProfile(
+            displayName: "Sensitive Name",
+            handle: "sensitive",
+            bio: "Private bio",
+            homeArea: "Private city"
+        )
+        store.updateCurrentUserAvatarURL("https://example.com/private.jpg")
+        store.currentUser.onboardingCompletedAt = Date()
+        store.setPrivateProfile(true)
+
+        store.apply(authState: .signedOut)
+
+        XCTAssertNil(store.currentUser.serverID)
+        XCTAssertEqual(store.currentUser.displayName, "You")
+        XCTAssertEqual(store.currentUser.handle, "you")
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.currentUser.bio)
+        XCTAssertNil(store.currentUser.homeArea)
+        XCTAssertNil(store.currentUser.onboardingCompletedAt)
+        XCTAssertFalse(store.currentUser.isPrivateProfile)
+        XCTAssertFalse(store.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+    }
+
     func testPermanentAccountDeletionPurgesAllLocalAccountDataAndPreferences() {
         let store = WanderStore(fixtures: .seed())
         store.defaultVisibility = .mutuals

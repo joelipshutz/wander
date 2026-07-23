@@ -324,6 +324,7 @@ struct WanderRootView: View {
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
+        initialSharedProfileRoute: SharedProfileRoute? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
         analytics: AnalyticsClient = NoopAnalyticsClient(),
@@ -336,7 +337,7 @@ struct WanderRootView: View {
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
-        _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
+        _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: Self.makeStore(

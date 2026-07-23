@@ -131,14 +131,13 @@ Still needs a later visual pass:
 - Block confirmation, blocked profile, and blocked users settings.
 - Settings detail rows beyond the Profile gear entry.
 - Non-follower profile shell with no visible places.
-- Full onboarding screens.
 - Social place detail states when follow/block/visibility changes mid-flow.
 
 Before implementation, run design review against the handoff package and the missing-pass list, then convert the chosen screens into native SwiftUI specs. The handoff follows the warm Rodeo-ish direction: cream/sand surfaces, espresso text, terracotta user pins, sky social pins, chunky rounded controls, and casual travel-buddy copy.
 
 ## Typography
 
-- **Display/Hero:** Funnel Display direction, or equivalent playful grotesque. Use for onboarding, major empty states, and top-level screen headings only.
+- **Display/Hero:** Native editorial serif for first-run onboarding; Funnel Display direction, or equivalent playful grotesque, for other major empty states and top-level screen headings.
 - **Body:** Funnel Sans direction, or equivalent legible sans. Use for body, controls, sheets, cards, and settings.
 - **UI/Labels:** Same as body, medium weight.
 - **Data/Tables:** Same as body with tabular numerals where counts or distances align.
@@ -533,7 +532,7 @@ Hierarchy:
 1. Profile/account basics.
 2. Default place visibility with Everyone/Friends/Self pills and helper copy.
 3. Blocked users.
-4. Contacts status and planned native Contacts affordance.
+4. Contacts status and native Contacts affordance.
 5. Notifications.
 6. Data/sync.
 7. Sign out / account deletion later.
@@ -542,7 +541,7 @@ Rules:
 
 - Use grouped rows on canvas/surface tokens; do not add a fifth bottom tab.
 - Default visibility copy must say what Everyone means: "People who follow you can see this."
-- Contacts can show a planned/disabled state in v0.1, but it must not trigger a native permission prompt until native Contacts work is actually implemented.
+- Contacts can show current authorization state and may request native permission only after an explicit user CTA.
 - Data/sync shows pending, failed, retrying, and synced states without exposing backend jargon.
 
 ### Block And Access-Changed States
@@ -567,7 +566,9 @@ Access changed:
 
 ### Authentication Boundary
 
-The main app is available only after Clerk confirms an active signed-in session.
+Logged-out launches first show the three-slide value carousel, then Clerk sign-up
+or log-in. The main app is available only after Clerk confirms an active signed-in
+session and required first-run identity setup is complete.
 
 Rules:
 
@@ -577,27 +578,30 @@ Rules:
 - A cached device profile is never proof of authentication and must not be inherited by a different account.
 - If session verification fails, show a retryable unavailable state instead of entering the app with cached identity state.
 - Contextual auth-gate copy may remain for transitions already in flight, but it cannot provide a path around the root authentication boundary.
+- Do not show the auth sheet before the value carousel has explained the product.
 
 ## Onboarding Rules
 
 Flow:
 
-1. Clerk sign-in or sign-up.
-2. Welcome / map promise.
-3. Location pre-prompt.
-4. Category preferences.
-5. Add first place education.
-6. Notifications after first save or wanna-go save.
-7. Paywall later, not during first-run onboarding.
+1. Three-slide real-map value carousel: place diary, friends, trusted discovery.
+2. Clerk sign-up or log-in.
+3. Required name and username; profile photo is optional.
+4. Location pre-prompt and native request, with Skip.
+5. Contacts pre-prompt and native request, with Skip.
+6. Trusted friend suggestions with multiselect, with Skip.
+7. Notifications pre-prompt and native request, with Skip.
+8. Main app. Phase B moves steps 4–7 into contextual tutorial moments.
 
 Rules:
 
-- Authentication is required before entering the main app.
-- Returning users go directly from session verification to their prior app state.
+- Auth-first after the value carousel.
+- Returning users go directly from validated session resolution to their prior app state.
 - No paywall during first-run onboarding.
 - Native permission prompts only after explicit CTA.
 - Every permission screen has a skip path.
-- Teach the pin legend lightly, not as a lecture.
+- Auto-advance carousel slides every seven seconds, pauses for VoiceOver,
+  Reduce Motion, and backgrounding, and always supports manual paging.
 
 ## Interaction States
 
@@ -647,6 +651,7 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 - No public badges, mayorships, leaderboards, or ranking people. The private
   save streak is limited to a once-daily celebration and a compact Profile row;
   it must not become a persistent app-shell fixture.
+- No auth sheet before the logged-out value carousel.
 - No early paywall.
 - No generic card-grid marketplace feel.
 
@@ -670,3 +675,4 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 | 2026-06-01 | Keep analytics vendor-neutral | Define event names now behind an interface, choose provider later. |
 | 2026-06-01 | Complete refreshed design review gate for M2 | Missing Discover, other-user profile, followers/following, Settings, auth gate, block, and access-changed states are now specified in the handoff style. |
 | 2026-07-25 | Require authentication at the app boundary | Logged-out or unverifiable sessions must never render the authenticated app or cached person metadata; Clerk sign-in is the non-dismissable root until a session is confirmed. This supersedes the earlier guest-first/no-account-wall rules. |
+| 2026-07-22 | Ship auth-first Phase A onboarding | User-approved flow starts with a three-slide real-map carousel, then Clerk auth, required identity, and skippable location, Contacts, trusted-friend, and notification steps. Editorial serif is reserved for this first-run narrative. Phase B moves permission education into contextual tutorials without redesigning the reusable steps. |

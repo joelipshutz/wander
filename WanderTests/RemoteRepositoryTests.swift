@@ -683,6 +683,7 @@ final class RemoteRepositoryTests: XCTestCase {
             "home_area": "Los Angeles",
             "default_visibility": "mutuals",
             "is_private_profile": true,
+            "onboarding_completed_at": "2026-07-22T12:00:00Z",
             "created_at": "2024-10-01T12:00:00Z"
           }
         ]
@@ -699,6 +700,7 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         XCTAssertEqual(profile?.defaultVisibility, .mutuals)
         XCTAssertEqual(profile?.isPrivateProfile, true)
+        XCTAssertEqual(profile?.onboardingCompletedAt, ISO8601DateFormatter().date(from: "2026-07-22T12:00:00Z"))
         XCTAssertEqual(profile?.createdAt, ISO8601DateFormatter().date(from: "2024-10-01T12:00:00Z"))
         XCTAssertEqual(rpc.calls.map(\.name), ["current_profile"])
         XCTAssertTrue(rpc.rawBodies[0].isEmpty)
@@ -766,6 +768,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "home_area": "Los Angeles",
           "default_visibility": "followers",
           "is_private_profile": false,
+          "onboarding_completed_at": "2026-07-22T12:00:00Z",
           "created_at": "2024-10-01T12:00:00Z"
         }
         """.data(using: .utf8)
@@ -778,7 +781,8 @@ final class RemoteRepositoryTests: XCTestCase {
                 bio: "new bio",
                 homeArea: "Los Angeles",
                 defaultVisibility: .mutuals,
-                isPrivateProfile: true
+                isPrivateProfile: true,
+                markOnboardingComplete: true
             )
         )
 
@@ -791,6 +795,20 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["input_home_area"] as? String, "Los Angeles")
         XCTAssertEqual(rpc.calls[0].body["input_default_visibility"] as? String, "mutuals")
         XCTAssertEqual(rpc.calls[0].body["input_is_private_profile"] as? Bool, true)
+        XCTAssertEqual(rpc.calls[0].body["input_mark_onboarding_complete"] as? Bool, true)
+        XCTAssertNotNil(profile.onboardingCompletedAt)
+    }
+
+    func testProfileHandleAvailabilityCallsNarrowBooleanRPC() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["profile_handle_available"] = "true".data(using: .utf8)
+        let repository = SupabaseProfileRepository(rpc: rpc)
+
+        let available = try await repository.isHandleAvailable("@new_friend")
+
+        XCTAssertTrue(available)
+        XCTAssertEqual(rpc.calls.map(\.name), ["profile_handle_available"])
+        XCTAssertEqual(rpc.calls[0].body["input_handle"] as? String, "@new_friend")
     }
 
     func testMuteRepositoryUsesDedicatedRPCsAndMapsProfiles() async throws {

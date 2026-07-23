@@ -1258,6 +1258,18 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertNil(MapScreen.resolvedInitialMapPlaceQuery(from: ["Wander", "-WanderMapPlace"]))
         XCTAssertTrue(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander", "-WanderMapSheetExpanded"]))
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "diary"]),
+            [.you, .been]
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "friends"]),
+            [.social, .been, .wanna]
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "trusted"]),
+            [.social, .been]
+        )
     }
 
     @MainActor

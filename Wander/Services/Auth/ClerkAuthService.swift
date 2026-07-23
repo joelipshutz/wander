@@ -5,7 +5,7 @@ import ClerkKit
 
 @MainActor
 final class ClerkAuthService: AuthSessionProviding {
-    private(set) var state: AuthState = .signedOut
+    private(set) var state: AuthState = .loading
     private let configuration: WanderBackendConfiguration
 
     #if canImport(ClerkKit)

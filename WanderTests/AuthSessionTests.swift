@@ -49,7 +49,7 @@ final class AuthSessionTests: XCTestCase {
 
         XCTAssertNil(store.activeGate)
         XCTAssertTrue(store.isPresentingNativeAuth)
-        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertEqual(store.state, .loading)
     }
 
     func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {

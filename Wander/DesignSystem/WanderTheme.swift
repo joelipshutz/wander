@@ -76,6 +76,10 @@ enum WanderTheme {
 
     static let tapMinimum: CGFloat = 44
 
+    static func editorialDisplay(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        .system(size: size, weight: weight, design: .serif)
+    }
+
     static let allColorTokens: [WanderColorToken] = [
         canvasWarm, surfaceBone, surfaceRaised, surfaceSand,
         textInk, textMuted, textFaint, textOnAction,

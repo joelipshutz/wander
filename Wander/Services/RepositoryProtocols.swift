@@ -1078,6 +1078,7 @@ struct ProfileDetailsUpdate: Equatable {
     let homeArea: String?
     let defaultVisibility: PlaceVisibility?
     let isPrivateProfile: Bool?
+    let markOnboardingComplete: Bool
 
     init(
         displayName: String? = nil,
@@ -1085,7 +1086,8 @@ struct ProfileDetailsUpdate: Equatable {
         bio: String? = nil,
         homeArea: String? = nil,
         defaultVisibility: PlaceVisibility? = nil,
-        isPrivateProfile: Bool? = nil
+        isPrivateProfile: Bool? = nil,
+        markOnboardingComplete: Bool = false
     ) {
         self.displayName = displayName
         self.handle = handle
@@ -1093,6 +1095,7 @@ struct ProfileDetailsUpdate: Equatable {
         self.homeArea = homeArea
         self.defaultVisibility = defaultVisibility
         self.isPrivateProfile = isPrivateProfile
+        self.markOnboardingComplete = markOnboardingComplete
     }
 }
 
@@ -1443,6 +1446,7 @@ enum SharedVisitDestinationResolution: Equatable {
 protocol ProfileRepository {
     func currentProfile() async throws -> LocalProfile?
     func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile
+    func isHandleAvailable(_ handle: String) async throws -> Bool
     func profile(id: String) async throws -> ProfileViewState
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell]
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation]
@@ -1450,6 +1454,10 @@ protocol ProfileRepository {
 }
 
 extension ProfileRepository {
+    func isHandleAvailable(_ handle: String) async throws -> Bool {
+        throw WanderRemoteError.notImplemented("profile handle availability RPC")
+    }
+
     func discoverProfileRecommendations(limit: Int) async throws -> [DiscoverPeopleRecommendation] {
         throw WanderRemoteError.notImplemented("profile recommendations RPC")
     }
