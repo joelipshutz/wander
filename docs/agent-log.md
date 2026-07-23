@@ -20161,3 +20161,45 @@ Implementation checkpoint, 2026-07-23 11:16 PDT:
   Map/Root/store/generated-project/log files. Next checkpoint is to commit the
   isolated implementation, rebase onto current `origin/main`, resolve those
   overlaps deliberately, then rerun focused/full iOS validation.
+
+Final implementation validation, 2026-07-23 12:02 PDT:
+
+- Rebased the REC-118 commits onto exact current `origin/main` at
+  `9c45b0fbf`, including the landed REC-126 cuisine migrations and completion
+  record. The only product conflict across the rebases was the REC-125
+  shared-invitation save
+  context; it now preserves REC-125's blank invitee rating/note/answers while
+  adding REC-118's explicit `initialPlannedDate: nil`. The append-only
+  coordination log preserved both histories.
+- Fixed the one regression found by the first complete run: owner Wanna-plan
+  refresh now participates in the existing deferred social-surface persistence
+  transaction instead of creating a second snapshot. The exact failing
+  regression then passed independently.
+- The complete post-REC-126 suite passed 609/609 with zero failures on iPhone 17 Pro Max /
+  iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec118-focused/Logs/Test/Test-Wander-2026.07.23_11-56-48--0700.xcresult`.
+  The universal generic iOS Simulator build also passed. Existing Supabase
+  formatter, traditional-headermap, and unused-test-expression warnings remain
+  unrelated and non-fatal.
+- Regenerated with XcodeGen, confirmed a clean generated project and
+  `git diff --check`, and syntax-checked the extended hosted smoke script with
+  Node.
+- Final visual QA passed on iPhone 17 Pro and compact iPhone 17e, both on iOS
+  26.5. The expanded calendar clearly disables past dates; the collapsed
+  selected-date state has no clipping or overlap. Screenshots:
+  `/private/tmp/rec118-calendar-17pro-final-implemented.png` and
+  `/private/tmp/rec118-selected-17e-final-implemented.png`.
+- Implementation commit before this log-only checkpoint is `f84b6a88d`; draft
+  PR #187 remains the review surface:
+  https://github.com/joelipshutz/wander/pull/187.
+- Backend handoff remains intentionally blocked: local pgTAP could not run
+  without a local Postgres stack. REC-126's history is now reconciled, but the
+  linked hosted project also contains remote-only migration
+  `20260723183000_visible_place_photo_gallery.sql`, currently uncommitted in
+  the active REC-133 worktree and absent from `origin/main`. Do not copy that
+  user-owned work or apply REC-118's migration out of sequence; run the hosted
+  migration/smoke gate after REC-133 lands or its history is explicitly
+  coordinated. The iOS implementation, migration, pgTAP, and smoke coverage
+  are ready for that follow-up.
+- No TestFlight build-number increment, archive/upload, hosted migration,
+  tester Slack note, or other release action was requested or performed.
