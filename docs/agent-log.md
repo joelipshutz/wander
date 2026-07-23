@@ -18942,3 +18942,30 @@ Starting status and diagnosis:
 
 Expected files: `Wander/App/WanderRootView.swift`,
 `Wander/Features/Map/MapScreen.swift`, focused streak tests, and this log.
+
+Checkpoint, 2026-07-23 11:06 PDT:
+
+- Replaced the fixed 180 ms presentation guess with explicit save-flow
+  lifecycle tracking. Every `MapPlaceSaveFlowSheet` now registers while it is
+  visible, and each host removes that layer from its actual sheet `onDismiss`.
+  The Add tab's outer sheet is tracked separately so the takeover also waits
+  for both nested sheets to leave.
+- The root presenter cancels pending celebration work whenever a save-flow
+  layer is visible, requeues the still-current event when all layers are gone,
+  then waits a short 140 ms settling interval. Daily takeovers no longer have
+  any auto-dismiss timer; same-day confetti still clears after 720 ms.
+- Replaced the full-screen tap-to-dismiss affordance with an explicit 54 pt
+  `got it` button that respects the bottom safe area. Inspected the resulting
+  takeover on iPhone 16 Plus and iPhone 16e; hierarchy, wrapping, button fit,
+  tap target, and home-indicator clearance are clean on both sizes.
+- Validation: focused REC-122 suites passed 8/8 with zero failures; full suite
+  passed 586/586 with zero failures; the universal iOS Simulator build passed.
+  Result bundles:
+  `/private/tmp/DerivedData-rec122-dismissal/Logs/Test/Test-Wander-2026.07.23_10-58-12--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec122-dismissal/Logs/Test/Test-Wander-2026.07.23_11-02-13--0700.xcresult`.
+- Pre-landing review found no blocking state, accessibility, safe-area,
+  persistence, privacy, signing, project-file, or scope issues. The generic
+  gstack `review` skill is not installed in this environment, so the equivalent
+  source/diff/test/design-system review was completed directly. No TestFlight
+  build or build-number increment is part of this follow-up.

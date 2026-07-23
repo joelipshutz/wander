@@ -28,11 +28,11 @@ struct SaveStreakCelebrationView: View {
                     .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 0) {
-                        Text("REC.ME")
-                            .font(.system(size: 15, weight: .black, design: .rounded))
-                            .tracking(2.2)
-                            .foregroundStyle(WanderTheme.textOnAction.color)
-                            .padding(.top, max(proxy.safeAreaInsets.top, WanderTheme.spacing4) + WanderTheme.spacing4)
+                    Text("REC.ME")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .tracking(2.2)
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .padding(.top, max(proxy.safeAreaInsets.top, WanderTheme.spacing4) + WanderTheme.spacing4)
 
                         Spacer(minLength: WanderTheme.spacing6)
 
@@ -81,22 +81,22 @@ struct SaveStreakCelebrationView: View {
 
                         Spacer(minLength: WanderTheme.spacing6)
 
-                        Button(action: onDismiss) {
-                            Text("got it")
-                                .font(.system(size: 16, weight: .black, design: .rounded))
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: 54)
-                                .background(WanderTheme.surfaceBone.color)
-                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                        }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Closes the streak celebration")
+                    Button(action: onDismiss) {
+                        Text("got it")
+                            .font(.system(size: 16, weight: .black, design: .rounded))
                             .frame(maxWidth: .infinity)
-                            .padding(.bottom, max(proxy.safeAreaInsets.bottom, WanderTheme.spacing4) + WanderTheme.spacing2)
+                            .frame(minHeight: 54)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .background(WanderTheme.surfaceBone.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     }
-                    .padding(.horizontal, WanderTheme.spacing6)
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Closes the streak celebration")
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, max(proxy.safeAreaInsets.bottom, WanderTheme.spacing4) + WanderTheme.spacing2)
                 }
+                .padding(.horizontal, WanderTheme.spacing6)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
