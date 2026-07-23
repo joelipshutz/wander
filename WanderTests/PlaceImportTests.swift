@@ -459,6 +459,69 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(persistence.snapshot.items.first?.helpMessage, "Apple Maps search is temporarily unavailable.")
     }
 
+    func testManualSearchPreviewReturnsCandidatesWithoutMutatingImport() async throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let firstCandidate = placeImportCandidate(
+            name: "Farson Mercantile",
+            locality: "Farson",
+            region: "WY"
+        )
+        let secondCandidate = placeImportCandidate(
+            name: "Farson General Store",
+            locality: "Farson",
+            region: "WY"
+        )
+        let resolver = RecordingPlaceImportResolver(
+            resolution: .candidates(
+                [firstCandidate, secondCandidate],
+                selectedCandidateID: firstCandidate.id
+            )
+        )
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
+        let itemBeforeSearch = try XCTUnwrap(store.item(id: "rec-106-farson-manual-search"))
+
+        let outcome = await store.previewManualSearch(
+            itemID: itemBeforeSearch.id,
+            name: "  Farson Mercantile  ",
+            area: "  Farson, Wyoming  "
+        )
+
+        XCTAssertEqual(outcome, .results([firstCandidate, secondCandidate]))
+        XCTAssertEqual(resolver.lastSeed?.nameHint, "Farson Mercantile")
+        XCTAssertEqual(resolver.lastSeed?.areaHint, "Farson, Wyoming")
+        XCTAssertEqual(store.item(id: itemBeforeSearch.id), itemBeforeSearch)
+        XCTAssertEqual(persistence.snapshot.items.first, snapshot.items.first)
+    }
+
+    func testConfirmManualSearchPersistsOnlyTheSelectedCandidateID() throws {
+        let snapshot = try manualSearchFixtureSnapshot()
+        let persistence = InMemoryPlaceImportPersistence(snapshot: snapshot)
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let firstCandidate = placeImportCandidate(name: "Farson Mercantile")
+        let secondCandidate = placeImportCandidate(name: "Farson General Store")
+
+        store.confirmManualSearch(
+            itemID: "rec-106-farson-manual-search",
+            name: "  Farson Mercantile  ",
+            area: "  Farson, Wyoming  ",
+            candidates: [firstCandidate, secondCandidate],
+            selectedCandidateID: secondCandidate.id
+        )
+
+        let item = try XCTUnwrap(store.item(id: "rec-106-farson-manual-search"))
+        XCTAssertEqual(item.seed.nameHint, "Farson Mercantile")
+        XCTAssertEqual(item.seed.areaHint, "Farson, Wyoming")
+        XCTAssertEqual(item.candidates, [firstCandidate, secondCandidate])
+        XCTAssertEqual(item.selectedCandidateID, secondCandidate.id)
+        XCTAssertEqual(item.state, .ready)
+        XCTAssertNil(item.helpMessage)
+        XCTAssertEqual(persistence.snapshot.items.first, item)
+    }
+
     func testManualSearchPreservesOneWeakMapKitCandidateForReview() async throws {
         let snapshot = try manualSearchFixtureSnapshot()
         let weakCandidate = placeImportCandidate(
