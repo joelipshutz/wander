@@ -17768,3 +17768,51 @@ Validation checkpoint, 2026-07-22 18:01 PDT:
   `Wander.xcodeproj/project.pbxproj`, and this coordination log. Next: commit,
   open the build-92 PR, recheck latest `origin/main`, review and squash-merge,
   then archive and upload exact merged main.
+
+## 2026-07-22 18:12 PDT - Codex - TestFlight Build 92 Completion
+
+Agent: Codex using `recme-pr-review-merge-release`, Linear, and Slack outbound
+workflows
+Branch: `codex/build92-final-log`
+Linear: `REC-128` (`Done`)
+
+Final outcome:
+
+- Ready release PR [#172](https://github.com/joelipshutz/wander/pull/172)
+  contained only the 91 -> 92 build-number bump, regenerated project metadata,
+  and its coordination record. GitHub reported it open, ready, `CLEAN`, and
+  `MERGEABLE`, with no checks, reviews, conversation comments, or inline review
+  comments. Squash-merged it to `main` as
+  `a6cb303b90c81cf00f643ed6d09688576f0a2572`.
+- The exact release candidate passed 573/573 tests on iPhone 17 Pro / iOS 26.5
+  and a generic iOS Simulator build. The prescribed iPhone 16 Plus / iOS 18.6
+  runtime is not installed on this Mac. Test result bundle:
+  `/private/tmp/DerivedData-build92-test/Logs/Test/Test-Wander-2026.07.22_17-56-08--0700.xcresult`.
+- Created signed archive `/private/tmp/Wander-0.1-build92.xcarchive` from exact
+  merged `main`. Archive and embedded app metadata both verify marketing version
+  `0.1`, build `92`, bundle `com.grayline.wander`, and team `Y7TVK75RZ8`.
+  Existing Supabase formatter actor-isolation and traditional-headermap warnings
+  were non-blocking.
+- Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`. `xcodebuild -exportArchive` completed
+  successfully and App Store Connect reported `Uploaded Wander`, `Upload
+  succeeded`, and `EXPORT SUCCEEDED`; the archived build number was not changed.
+- App Store Connect build `1afa8cc1-958e-433e-bb74-d75f2f75dee4` completed
+  processing with state `VALID`. Export compliance is set to
+  `usesNonExemptEncryption=false`, the en-US What-to-Test copy is saved, public
+  group `rec.me Alpha` (`219f52d8-c202-4407-ba55-53eb41d40526`) is attached, and
+  external beta review is `APPROVED`.
+- Build 92 packages REC-112's interactive full-width map for Profile calendar
+  date results and REC-124's one-count-per-owner-Been-visit badge behavior,
+  including repeat visits to one place/day. Date drill-ins intentionally remain
+  canonical-place-de-duplicated. There are no schema, RPC, RLS, hosted-data,
+  signing-policy, or marketing-version changes.
+- Linear REC-128 is Done with final evidence in comment
+  `5054450f-20c3-4d0e-be6a-e2f3bee73193`; REC-112 and REC-124 also received
+  build-92 availability comments.
+- Posted the required tester announcement in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784769095725739.
+  Public TestFlight link: https://testflight.apple.com/join/knEhRa6t.
+- No known build-92 release blocker remains. Next: testers should exercise the
+  calendar map and repeat-visit badge checklist and reply in the Slack thread
+  with device, account/email if relevant, screenshots, and exact repro steps.
