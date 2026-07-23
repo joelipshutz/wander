@@ -20852,3 +20852,28 @@ Checkpoint — 2026-07-23 16:24 PDT:
   contract regression, and this work log. It is ready to publish for review;
   the final PR URL, head commit, and Linear handoff will be recorded after the
   remote artifacts exist.
+
+Completion — 2026-07-23 16:31 PDT:
+
+- Published implementation commit
+  `1b289b49533774a154cf4cef5fad5dfc363487c1` to
+  `codex/rec-129-feed-place-profile` and opened ready PR #203:
+  `https://github.com/joelipshutz/wander/pull/203`.
+- GitHub's compare view reports the branch is automatically mergeable into
+  current `main`; the PR contains one implementation commit and the expected
+  three files before this final docs-only handoff update.
+- The GitHub connector lacked permission to create a PR (`403`) and the local
+  `gh` credential is expired, so the authenticated GitHub web session was used
+  to create the same ready PR without changing branch scope.
+- Final validation remains: focused navigation regression 1/1, rebased full
+  suite 627/627, generic Simulator build succeeded, visual QA passed on iPhone
+  17 Pro and iPhone 17e, and interactive activity-CTA routing reached the
+  current shared place profile.
+- Xcode is open on this isolated worktree's `Wander.xcodeproj`; its Branch
+  Chooser reports `codex/rec-129-feed-place-profile`, with the Wander scheme and
+  iPhone 17 Pro selected. The branch is ready for local test and review.
+- Known coordination item: PR #178 / REC-131 overlaps the two implementation
+  files and may require a narrow conflict resolution if it lands first.
+- No TestFlight build, merge, release, or build-number change was requested or
+  performed. Next step: review PR #203, run any desired local exploratory
+  testing from the already-open Xcode worktree, and merge only after approval.
