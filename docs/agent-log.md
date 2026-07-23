@@ -17898,3 +17898,23 @@ Handoff checkpoint, 2026-07-22 21:19 PDT:
   implementation branch.
 - No build/test run was required because production code did not change. No
   build-number bump, archive, TestFlight upload, or Slack message was made.
+
+Feedback refinement, 2026-07-22 21:55 PDT:
+
+- Joe selected B's dark Streak Window takeover and C's minimal Profile row,
+  with a request for the saved-place ticket to flip or travel across the
+  takeover if feasible.
+- Updated the local comparison board with a B/C selected hybrid. The ticket now
+  begins face-down near the lower-left, travels upward across the screen,
+  rotates through its edge, and lands face-up with the saved place in about
+  1.08 seconds. The Profile uses C's hairline row directly between Been/Wanna
+  and the calendar.
+- Added an explicit production motion guardrail: Reduce Motion should replace
+  the spatial flip/flight with a short fade. The mock keeps the existing
+  confetti and first-qualifying-save-of-the-day contract.
+- Interaction QA in Chrome confirmed the named `ticket-fly` 3D animation, two
+  card faces, 45 concurrent celebration animations, the selected C Profile row,
+  and zero console errors. New persistent artifacts are `variant-BC.png` and
+  `variant-BC-motion.png` beside the existing board.
+- The refined hybrid is awaiting Joe's visual confirmation before writing
+  `approved.json` or treating it as the production implementation target.
