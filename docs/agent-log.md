@@ -20821,3 +20821,11 @@ Completion, 2026-07-23 14:49 PDT:
 - No known blocker remains. No build number, archive, TestFlight upload, or
   tester Slack note was created because this request is branch/review only.
   The original dirty primary checkout remains untouched.
+
+Handoff, 2026-07-23 15:55 PDT:
+
+- Opened `/private/tmp/recme-rec114-place-cards/Wander.xcodeproj` in Xcode and
+  verified the workspace branch chooser shows
+  `codex/rec-114-place-match-cards`. Left
+  `Wander/Features/Profile/ProfileImportViews.swift` positioned on
+  `PlaceImportCandidateCard` for test and code review.
