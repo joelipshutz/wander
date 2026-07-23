@@ -4485,12 +4485,15 @@ final class WanderStore: ObservableObject {
         guard let backend, backend.userPlaceRepository != nil else {
             return
         }
+        let requestUserID = currentUser.id
 
         do {
             let plans = try await backend.ownWannaGoPlans()
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
             applyRemoteWannaGoPlans(plans)
             lastRemoteError = nil
         } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return }
             lastRemoteError = remoteErrorMessage(error)
         }
     }

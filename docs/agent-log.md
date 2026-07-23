@@ -20203,3 +20203,61 @@ Final implementation validation, 2026-07-23 12:02 PDT:
   are ready for that follow-up.
 - No TestFlight build-number increment, archive/upload, hosted migration,
   tester Slack note, or other release action was requested or performed.
+
+Final polish and landing resumed, 2026-07-23 12:18 PDT:
+
+- Ryan requested three final REC-118 interaction/copy changes, followed by a
+  squash merge to `main`: the empty optional row should only say “add a date,”
+  the reminder helper should say “If notifications are on, rec.me will remind
+  you three days before,” and expanding the calendar must not select or
+  prefill a date until the user taps one.
+- The original REC-118 worktree was clean at the start of this pass, but a
+  separate process subsequently staged REC-133 photo-carousel changes there,
+  including overlapping map/project files and removal of REC-118 files. Those
+  changes were not made, modified, unstaged, or reverted by this agent. To
+  preserve them, work moved to the fresh isolated worktree
+  `/private/tmp/recme-rec118-final-polish` on temporary local branch
+  `codex/rec-118-final-polish`, created from clean remote REC-118 head
+  `d4b8cb500`.
+- Remote branch `codex/rec-118-future-date-mockup`, draft PR #187, and Linear
+  REC-118 remain the durable review surfaces. REC-118 is still `In Progress`.
+  Expected files for this polish are `Wander/Features/Map/MapScreen.swift`,
+  the DEBUG mockup for parity, focused tests, and this log.
+- This landing request is not a TestFlight release request. No build-number
+  bump, archive/upload, hosted migration application, or tester Slack note is
+  authorized by this turn.
+
+Pre-merge polish validation, 2026-07-23 13:12 PDT:
+
+- Removed the `OPTIONAL`/“Someday is okay” copy while keeping the field
+  optional, reduced the empty state to “add a date,” and changed the helper to
+  the exact requested sentence: “If notifications are on, rec.me will remind
+  you three days before.”
+- Replaced the graphical single-date picker’s implicit three-day default with
+  an empty `MultiDatePicker` selection. Expanding the calendar now leaves
+  `plannedDate` nil until the user taps a date; a selected date can still be
+  replaced or cleared. Focused reminder and source-contract regressions cover
+  the empty, add, replace, and metadata-normalization paths.
+- Pre-landing review found and fixed one account-switch race adjacent to Wanna
+  plan reconciliation: late notification-preference or remote-plan completions
+  can no longer update a newly signed-in account. A deferred repository
+  regression verifies that a completion from account A cannot clear account
+  B’s planned date.
+- Validation passed: focused REC-118/account-switch regressions (10/10), the
+  complete iOS suite (614/614) on iPhone 17 Pro Max / iOS 26.5, the universal
+  generic iOS Simulator build, Node syntax checking, `git diff --check`, and
+  the linked hosted Supabase smoke with REC-118’s migration plus all 17 pgTAP
+  assertions injected into one rollback-only transaction. The hosted database
+  and migration history were not mutated.
+- The first complete-suite attempt reported one unrelated
+  `testRemoteVisiblePlacesHydrateProfilesAndAttributesWithoutLocalFollow`
+  failure. That test passed independently, and the immediate full rerun passed
+  all 614 tests, confirming the failure was transient.
+- Final visual QA passed on iPhone 17 Pro Max and compact iPhone 17e. Both
+  expanded-calendar screenshots show the current day accent but no selected
+  date: `/private/tmp/rec118-final-empty-calendar-17-pro-max.png` and
+  `/private/tmp/rec118-final-empty-calendar-17e.png`.
+- PR #187 remains the landing surface. Next: commit and push this polish, mark
+  the PR ready and REC-118 `In Review`, confirm it is current with
+  `origin/main`, then squash-merge as requested. No TestFlight or hosted
+  migration deployment is part of this merge-only handoff.

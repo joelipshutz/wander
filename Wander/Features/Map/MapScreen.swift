@@ -3487,7 +3487,6 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var plannedDate: Date?
-    @State private var datePickerSelection: Date
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
     @State private var isRemoving = false
@@ -3521,9 +3520,7 @@ struct MapPlaceSaveFlowSheet: View {
         let initialPlannedDate = context.initialPlannedDate
             .map { WannaGoDate.normalized($0) }
             .flatMap { $0 >= today ? $0 : nil }
-        let suggestedDate = Calendar.autoupdatingCurrent.date(byAdding: .day, value: 3, to: today) ?? today
         _plannedDate = State(initialValue: initialPlannedDate)
-        _datePickerSelection = State(initialValue: initialPlannedDate ?? suggestedDate)
         _visitPhotoAttachments = State(initialValue: context.initialPhotoAttachments)
     }
 
@@ -3797,25 +3794,13 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var plannedDateSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing2) {
-                Text("when do you wanna go?")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Text("OPTIONAL")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .padding(.vertical, 4)
-                    .background(WanderTheme.terracottaTint.color)
-                    .clipShape(Capsule())
-            }
+            Text("when do you wanna go?")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
 
             VStack(spacing: 0) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.22)) {
-                        if !isShowingPlannedDatePicker, plannedDate == nil {
-                            plannedDate = WannaGoDate.normalized(datePickerSelection)
-                        }
                         isShowingPlannedDatePicker.toggle()
                     }
                 } label: {
@@ -3827,11 +3812,19 @@ struct MapPlaceSaveFlowSheet: View {
                             .background(WanderTheme.terracottaTint.color)
                             .clipShape(Circle())
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(plannedDate == nil ? "add a date" : "planned for")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                            Text(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "Someday is okay")
+                        if let plannedDate {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("planned for")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                Text(WannaGoDate.displayString(for: plannedDate))
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.82)
+                            }
+                        } else {
+                            Text("add a date")
                                 .font(.system(size: 14, weight: .black))
                                 .foregroundStyle(WanderTheme.textInk.color)
                                 .lineLimit(1)
@@ -3855,20 +3848,22 @@ struct MapPlaceSaveFlowSheet: View {
                 if isShowingPlannedDatePicker {
                     Divider().background(WanderTheme.borderHairline.color)
 
-                    DatePicker(
+                    MultiDatePicker(
                         "Wanna go date",
                         selection: Binding(
-                            get: { datePickerSelection },
-                            set: { nextDate in
-                                let normalizedDate = WannaGoDate.normalized(nextDate)
-                                datePickerSelection = normalizedDate
-                                plannedDate = normalizedDate
+                            get: {
+                                WannaGoDate.calendarSelection(for: plannedDate)
+                            },
+                            set: { nextSelection in
+                                plannedDate = WannaGoDate.singleDate(
+                                    from: nextSelection,
+                                    replacing: plannedDate
+                                )
                             }
                         ),
-                        in: WannaGoDate.normalized(.now)...,
-                        displayedComponents: .date
+                        in: WannaGoDate.normalized(.now)...
                     )
-                    .datePickerStyle(.graphical)
+                    .labelsHidden()
                     .tint(WanderTheme.terracotta.color)
                     .padding(.horizontal, WanderTheme.spacing2)
 
@@ -3899,7 +3894,7 @@ struct MapPlaceSaveFlowSheet: View {
                     .stroke(WanderTheme.borderHairline.color)
             )
 
-            Text("If notifications are on, rec.me will remind you three days before when there is enough lead time.")
+            Text("If notifications are on, rec.me will remind you three days before.")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .fixedSize(horizontal: false, vertical: true)

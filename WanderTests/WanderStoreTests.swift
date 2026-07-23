@@ -1287,6 +1287,58 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(draft.plannedDate)), "2026-08-20")
     }
 
+    func testRemoteWannaPlanRefreshDiscardsCompletionFromPreviousAccount() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let accountB = AuthSession(userID: "user_b", displayName: "Bee", handle: "bee")
+        store.apply(authState: .signedIn(accountB))
+        let plannedDate = try XCTUnwrap(WannaGoDate.date(fromStorageString: "2026-08-20"))
+
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mapkit_account_b_plan",
+                name: "Account B Cafe",
+                category: "coffee",
+                latitude: 34.0407,
+                longitude: -118.2354,
+                confidence: 0.92
+            ),
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            plannedDate: plannedDate
+        )
+        let accountBPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace
+        )
+        accountBPlace.serverID = "up_account_b_plan"
+        accountBPlace.syncStateRaw = SyncState.synced.rawValue
+
+        let repository = DeferredWannaGoPlanRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Aye", handle: "aye")
+            )
+        )
+
+        let refreshTask = Task {
+            await store.refreshRemoteWannaGoPlans(backend: backend)
+        }
+        while !repository.didRequestPlans {
+            await Task.yield()
+        }
+
+        store.apply(authState: .signedIn(accountB))
+        repository.finish(with: [])
+        await refreshTask.value
+
+        XCTAssertEqual(
+            WannaGoDate.storageString(from: try XCTUnwrap(accountBPlace.plannedDate)),
+            "2026-08-20"
+        )
+    }
+
     func testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -6258,6 +6310,36 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
         if let error {
             throw error
         }
+    }
+}
+
+@MainActor
+private final class DeferredWannaGoPlanRepository: UserPlaceRepository {
+    private var plansContinuation: CheckedContinuation<[OwnWannaGoPlan], Error>?
+    private(set) var didRequestPlans = false
+
+    func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
+        []
+    }
+
+    func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
+        didRequestPlans = true
+        return try await withCheckedThrowingContinuation { continuation in
+            plansContinuation = continuation
+        }
+    }
+
+    func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
+        throw WanderRemoteError.notImplemented("deferred Wanna plan fake")
+    }
+
+    func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
+
+    func delete(userPlaceID: String) async throws {}
+
+    func finish(with plans: [OwnWannaGoPlan]) {
+        plansContinuation?.resume(returning: plans)
+        plansContinuation = nil
     }
 }
 

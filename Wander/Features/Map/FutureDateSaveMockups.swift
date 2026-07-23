@@ -49,7 +49,7 @@ private struct FutureDateSaveMockup: View {
         case .calendar:
             _isShowingMoreOptions = State(initialValue: true)
             _isShowingCalendar = State(initialValue: true)
-            _selectedDate = State(initialValue: suggestedDate)
+            _selectedDate = State(initialValue: nil)
         case .selected:
             _isShowingMoreOptions = State(initialValue: true)
             _isShowingCalendar = State(initialValue: false)
@@ -61,10 +61,16 @@ private struct FutureDateSaveMockup: View {
         calendar.startOfDay(for: Date())
     }
 
-    private var selectedDateBinding: Binding<Date> {
+    private var selectedDateBinding: Binding<Set<DateComponents>> {
         Binding(
-            get: { selectedDate ?? Self.suggestedDate(using: calendar) },
-            set: { selectedDate = calendar.startOfDay(for: $0) }
+            get: { WannaGoDate.calendarSelection(for: selectedDate, calendar: calendar) },
+            set: {
+                selectedDate = WannaGoDate.singleDate(
+                    from: $0,
+                    replacing: selectedDate,
+                    calendar: calendar
+                )
+            }
         )
     }
 
@@ -246,18 +252,9 @@ private struct FutureDateSaveMockup: View {
 
     private var futureDateSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("when do you wanna go?")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-
-                Spacer()
-
-                Text("optional")
-                    .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .textCase(.uppercase)
-            }
+            Text("when do you wanna go?")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
 
             VStack(spacing: 0) {
                 Button {
@@ -275,18 +272,20 @@ private struct FutureDateSaveMockup: View {
                         }
                         .frame(width: 42, height: 42)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(selectedDate == nil ? "plan a date" : "planned for")
+                        if selectedDate == nil {
+                            Text("add a date")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(WanderTheme.textInk.color)
+                        } else {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("planned for")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(WanderTheme.textInk.color)
 
-                            Text(dateSummary)
-                                .font(.system(size: 13, weight: selectedDate == nil ? .medium : .bold))
-                                .foregroundStyle(
-                                    selectedDate == nil
-                                        ? WanderTheme.textMuted.color
-                                        : WanderTheme.terracotta.color
-                                )
+                                Text(dateSummary)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(WanderTheme.terracotta.color)
+                            }
                         }
 
                         Spacer()
@@ -307,13 +306,11 @@ private struct FutureDateSaveMockup: View {
                     Divider()
                         .background(WanderTheme.borderHairline.color)
 
-                    DatePicker(
+                    MultiDatePicker(
                         "Choose a future date",
                         selection: selectedDateBinding,
-                        in: minimumDate...,
-                        displayedComponents: .date
+                        in: minimumDate...
                     )
-                    .datePickerStyle(.graphical)
                     .labelsHidden()
                     .tint(WanderTheme.terracotta.color)
                     .padding(.top, WanderTheme.spacing1)
@@ -354,7 +351,7 @@ private struct FutureDateSaveMockup: View {
                     .stroke(WanderTheme.borderHairline.color)
             )
 
-            Text("Save a day you have in mind, or leave this blank for someday.")
+            Text("If notifications are on, rec.me will remind you three days before.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .fixedSize(horizontal: false, vertical: true)
@@ -414,9 +411,7 @@ private struct FutureDateSaveMockup: View {
     }
 
     private var dateSummary: String {
-        guard let selectedDate else {
-            return "Add one when the plan gets real"
-        }
+        guard let selectedDate else { return "" }
 
         return selectedDate.formatted(
             .dateTime

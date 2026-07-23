@@ -2,7 +2,7 @@
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
@@ -33,7 +33,12 @@ async function main() {
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
   if (options.linked) {
-    runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID);
+    runLinkedSmokeChecks(
+      smokeUserID,
+      collaboratorUserID,
+      strangerUserID,
+      options.migrationPreview,
+    );
     return;
   }
   const dbURL = options.dbURL ?? process.env.WANDER_SUPABASE_DB_URL ?? buildDirectDatabaseURL();
@@ -53,6 +58,10 @@ async function main() {
     await client.connect();
     await client.query("begin");
     try {
+      if (options.migrationPreview) {
+        await client.query(loadMigrationPreview(options.migrationPreview));
+        console.log(`ok - migration preview loaded from ${options.migrationPreview}`);
+      }
       await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
       await runOwnPlaceSmokeChecks(client, smokeUserID);
       await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
@@ -90,6 +99,10 @@ function parseArgs(args) {
       case "--linked":
         parsed.linked = true;
         break;
+      case "--migration-preview":
+        parsed.migrationPreview = requiredValue(args, index, arg);
+        index += 1;
+        break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
@@ -112,11 +125,13 @@ function printHelp() {
 Usage:
   node scripts/supabase-smoke-test.mjs
   node scripts/supabase-smoke-test.mjs --linked
+  node scripts/supabase-smoke-test.mjs --migration-preview <migration.sql>
 
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
+  --migration-preview <path>       Apply one transaction-wrapped migration only inside the rolled-back smoke transaction.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
@@ -125,12 +140,47 @@ Required env when --db-url is omitted:
 Notes:
   Run npm --prefix scripts ci --ignore-scripts once to install the pinned pg dependency.
   Every fixture and behavior mutation runs in one transaction and is rolled back.
+  Migration preview validates hosted compatibility without applying migration history.
 `);
 }
 
-function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
+function loadMigrationPreview(filePath) {
+  const source = readFileSync(resolve(filePath), "utf8").trim();
+  return transactionBody(source, "commit");
+}
+
+function transactionBody(source, closingStatement) {
+  const trimmed = source.trim();
+  const beginMatch = trimmed.match(/^begin;\s*/i);
+  const closingMatch = trimmed.match(new RegExp(`\\s*${closingStatement};$`, "i"));
+  if (!beginMatch || !closingMatch) {
+    throw new Error(
+      `Transaction preview requires a file wrapped by begin; and ${closingStatement};.`,
+    );
+  }
+
+  return trimmed
+    .slice(beginMatch[0].length, trimmed.length - closingMatch[0].length)
+    .trim();
+}
+
+function runLinkedSmokeChecks(
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+  migrationPreviewPath,
+) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
+  const migrationPreviewSQL = migrationPreviewPath
+    ? loadMigrationPreview(migrationPreviewPath)
+    : "";
+  const migrationPreviewTestSQL = migrationPreviewPath
+    ? transactionBody(
+      loadStrictPgTapSQL(new URL("../supabase/tests/wanna_go_reminders.sql", import.meta.url)),
+      "rollback",
+    )
+    : "";
   const cuisineSmokeSQL = loadStrictPgTapSQL(
     new URL("../supabase/tests/restaurant_cuisine_inference.sql", import.meta.url),
   );
@@ -138,7 +188,13 @@ function runLinkedSmokeChecks(smokeUserID, collaboratorUserID, strangerUserID) {
     new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
   );
   try {
-    writeFileSync(filePath, `${buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID)}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`, {
+    writeFileSync(filePath, `${buildLinkedSmokeSQL(
+      smokeUserID,
+      collaboratorUserID,
+      strangerUserID,
+      migrationPreviewSQL,
+      migrationPreviewTestSQL,
+    )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`, {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -185,7 +241,13 @@ $strict_pgtap$;`,
   );
 }
 
-function buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID) {
+function buildLinkedSmokeSQL(
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+  migrationPreviewSQL = "",
+  migrationPreviewTestSQL = "",
+) {
   const smokeUser = sqlString(smokeUserID);
   const collaboratorUser = sqlString(collaboratorUserID);
   const strangerUser = sqlString(strangerUserID);
@@ -196,6 +258,8 @@ function buildLinkedSmokeSQL(smokeUserID, collaboratorUserID, strangerUserID) {
 
   return `
 begin;
+
+${migrationPreviewSQL}
 
 ${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
 
@@ -753,6 +817,8 @@ begin
   end if;
 end
 $shared_remove_persistence$;
+
+${migrationPreviewTestSQL}
 
 reset role;
 rollback;

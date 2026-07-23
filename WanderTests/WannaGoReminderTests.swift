@@ -20,6 +20,69 @@ final class WannaGoReminderTests: XCTestCase {
         )
     }
 
+    func testEmptyCalendarSelectionDoesNotCreateDefaultDate() {
+        XCTAssertNil(
+            WannaGoDate.singleDate(
+                from: [],
+                replacing: nil,
+                calendar: testCalendar()
+            )
+        )
+    }
+
+    func testCalendarSelectionAddsThenReplacesOneDate() throws {
+        let calendar = testCalendar()
+        let firstDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 20))
+        )
+        let secondDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 9, day: 3))
+        )
+        let firstSelection = WannaGoDate.calendarSelection(for: firstDate, calendar: calendar)
+        let selectedFirstDate = try XCTUnwrap(
+            WannaGoDate.singleDate(
+                from: firstSelection,
+                replacing: nil,
+                calendar: calendar
+            )
+        )
+        let replacementSelection = firstSelection.union(
+            WannaGoDate.calendarSelection(for: secondDate, calendar: calendar)
+        )
+
+        let selectedSecondDate = try XCTUnwrap(
+            WannaGoDate.singleDate(
+                from: replacementSelection,
+                replacing: selectedFirstDate,
+                calendar: calendar
+            )
+        )
+
+        XCTAssertEqual(selectedFirstDate, calendar.startOfDay(for: firstDate))
+        XCTAssertEqual(selectedSecondDate, calendar.startOfDay(for: secondDate))
+    }
+
+    func testCalendarSelectionReplacementIgnoresCalendarMetadataDifferences() throws {
+        let calendar = testCalendar()
+        let currentDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 20))
+        )
+        let selection = Set([
+            DateComponents(year: 2026, month: 8, day: 20),
+            DateComponents(year: 2026, month: 9, day: 3)
+        ])
+
+        let replacement = try XCTUnwrap(
+            WannaGoDate.singleDate(
+                from: selection,
+                replacing: currentDate,
+                calendar: calendar
+            )
+        )
+
+        XCTAssertEqual(WannaGoDate.storageString(from: replacement, calendar: calendar), "2026-09-03")
+    }
+
     func testPlannerSchedulesNineAMThreeCalendarDaysBefore() throws {
         let calendar = testCalendar()
         let plannedDate = try XCTUnwrap(

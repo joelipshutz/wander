@@ -19,6 +19,50 @@ enum WannaGoDate {
         calendar.startOfDay(for: date)
     }
 
+    static func calendarSelection(
+        for date: Date?,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Set<DateComponents> {
+        guard let date else {
+            return []
+        }
+
+        var components = calendar.dateComponents(
+            [.era, .year, .month, .day],
+            from: normalized(date, calendar: calendar)
+        )
+        components.calendar = calendar
+        components.timeZone = calendar.timeZone
+        return [components]
+    }
+
+    static func singleDate(
+        from selection: Set<DateComponents>,
+        replacing currentDate: Date?,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date? {
+        guard !selection.isEmpty else {
+            return nil
+        }
+
+        let currentComponents = currentDate.map {
+            calendar.dateComponents([.year, .month, .day], from: normalized($0, calendar: calendar))
+        }
+        let selectedComponents = selection.first { components in
+            guard let currentComponents else { return true }
+            return components.year != currentComponents.year
+                || components.month != currentComponents.month
+                || components.day != currentComponents.day
+        } ?? selection.first
+        guard let selectedComponents,
+              let selectedDate = calendar.date(from: selectedComponents)
+        else {
+            return currentDate.map { normalized($0, calendar: calendar) }
+        }
+
+        return normalized(selectedDate, calendar: calendar)
+    }
+
     static func storageString(
         from date: Date,
         calendar: Calendar = .autoupdatingCurrent

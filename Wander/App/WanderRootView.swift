@@ -568,9 +568,12 @@ struct WanderRootView: View {
 
         if backend.notificationRepository != nil,
            let preferences = try? await backend.notificationPreferences() {
+            guard auth.state == state, !Task.isCancelled else { return }
             pushNotifications.applyNotificationPreferences(preferences)
         }
+        guard auth.state == state, !Task.isCancelled else { return }
         await store.refreshRemoteWannaGoPlans(backend: backend)
+        guard auth.state == state, !Task.isCancelled else { return }
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
     }
 
