@@ -20154,6 +20154,35 @@ REC-135 completion, 2026-07-23 11:49 PDT:
   Slack release note was performed. The merged feature will ride the next
   explicitly requested TestFlight batch from latest `main`.
 
+REC-133 production validation and handoff, 2026-07-23 12:06 PDT:
+
+- Production implementation is complete in isolated worktree
+  `/private/tmp/recme-rec133-place-photo-carousel` on
+  `codex/rec-133-place-photo-carousel`. Feature commit `1b4f777a1` and latest
+  `main` integration commit `25bcec467` are the current implementation head;
+  draft PR #186 is the handoff surface and will be updated to a ready production
+  PR after this final coordination record is committed.
+- Exact-head iOS validation passed 611/611 tests with zero failures on iPhone
+  17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec133-production/Logs/Test/Test-Wander-2026.07.23_12-00-43--0700.xcresult`.
+  The production gallery model/repository-focused run separately passed 5/5.
+- The generic iOS Simulator build passed after rerunning outside the sandbox so
+  Xcode could access CoreSimulator and the pinned Swift packages. The only
+  source warnings are the pre-existing ISO-8601 formatter actor-isolation
+  warnings in `WanderSupabaseClient.swift`.
+- Hosted database validation remains green: the linked REC-133 migration is
+  applied and aligned, strict rolled-back pgTAP passed 12/12, and the mandated
+  exact-head linked Supabase smoke test passed. Docker is not installed, so
+  `supabase test db` was not available; the hosted pgTAP and smoke runs cover
+  the RPC metadata, grants, visibility, profile privacy, blocks, ordering, and
+  cursor paths instead.
+- Visual QA remains approved on iPhone 17 Pro and smaller iPhone 17e:
+  `rec133-viewer-17pro.png` and `rec133-viewer-17e.png`. Both show the requested
+  black viewer, large aspect-fit photo, page indicator, contributor card, and
+  username-only profile link, with no trash or separate profile button.
+- `git diff --check` is clean. No TestFlight build-number increment,
+  archive/upload, public-group change, or Slack release note was performed.
+
 REC-126 completion, 2026-07-23 11:56 PDT:
 
 - Ready PR #189 was current with `main`, reported no conflicts, had no hosted
