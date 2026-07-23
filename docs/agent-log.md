@@ -17870,3 +17870,17 @@ Implementation checkpoint, 2026-07-22 21:26 PDT:
   no build/test pass is claimed. The local `supabase` CLI is not installed, so
   `supabase test db` could not run. The Mac was locked when attempting the
   required Xcode/simulator visual check; unlock is needed to complete it.
+
+Handoff checkpoint, 2026-07-22 21:31 PDT:
+
+- Committed implementation as `236b4a7` (`fix: polish feed featured places and
+  routing`) and will push a draft PR for REC-131. It is intentionally draft:
+  unlock the Mac, compile this exact branch in Xcode, run the focused Feed and
+  Navigation tests plus the full suite, and capture the iPhone 17 Pro and a
+  smaller-phone Feed screenshot before marking it ready.
+- Exact restart point: branch `codex/rec-131-feed-polish`, worktree
+  `/private/tmp/recme-rec131-feed-polish`; migration
+  `20260722213000_feed_featured_social_proof.sql` is additive and has not been
+  applied to hosted Supabase. Run `supabase test db` after installing or
+  exposing the local Supabase CLI, then use the standard hosted metadata check
+  if and when the migration is explicitly applied.
