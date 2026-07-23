@@ -20746,3 +20746,109 @@ Completion, 2026-07-23 14:34 PDT:
   preserve a stored selection. No known blocker or follow-up remains.
 - This was intentionally merge-only. No build number was changed and no
   TestFlight archive, upload, or tester Slack message was produced.
+
+## 2026-07-23 14:23 PDT - Codex - REC-129 Feed place-profile unification
+
+Agent: Codex using Linear, `recme-testflight-feedback-bug-catcher`, and the
+safe local portions of `plan-eng-review` and `investigate`
+Branch: `codex/rec-129-feed-place-profile`
+Worktree: `/private/tmp/recme-rec129-place-profile`
+Linear: `REC-129` (`In Progress`)
+
+Goal: deprecate Feed's remaining direct/legacy place-save entrypoints so every
+Feed place interaction opens the same current place-profile experience used
+from Map, with the profile owning the correct Save/Add Visit action.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` commit `38676cec9acf5725cdb7b17bcdc67bcb30e3a5d7`.
+  The primary checkout has unrelated `.gitignore` and `.pnpm-store/` changes;
+  they remain untouched.
+- Linear REC-129 was read with its Slack attachment context and moved from
+  `Backlog` to `In Progress` before implementation.
+- Remote branch `codex/rec-131-feed-polish` / PR #178 is still represented by
+  Linear REC-131 in `In Review` and also changes `FeedScreen.swift` and
+  `NavigationContractTests.swift`. REC-129 remains based on latest `main` as
+  requested and will keep its diff narrow; reviewers must reconcile that
+  overlap if PR #178 lands first.
+- Root cause confirmed from current code, blame, and the July 22 feed-routing
+  commit: the previous fix introduced `PlaceProfileFullScreen` only for the
+  activity place-name link, while preserving the initial Feed implementation's
+  direct `saveFeaturedPlace` / `save(activity)` closures into
+  `MapPlaceSaveFlowSheet`. Featured cards therefore have no place-profile route,
+  and both Feed save CTAs bypass the shared profile. The existing navigation
+  regression test asserts only `openPlace(place)` in the activity title, so the
+  partial migration passed.
+- Engineering review result: the smallest complete fix is to route Featured
+  cards and activity place CTAs through Feed's existing `openPlace` destination,
+  remove the direct Feed save callbacks, and leave `beginSave` reachable only
+  from the shared profile's context-aware action. No new model, persistence,
+  backend, auth, visibility, or design system behavior is needed. Architecture,
+  code-quality, and performance review found no unresolved decision.
+- Failure mode and test plan: a future Feed CTA could reintroduce a direct save
+  callback even while the place-name regression still passes. Strengthen
+  `NavigationContractTests` to require Featured and activity place actions to
+  call `openPlace`, reject Feed-level `saveFeaturedPlace` / `save(activity)`
+  entrypoints, and retain the canonical profile plus save-sheet assertions.
+  Run the focused navigation test, full iOS suite, generic Simulator build, and
+  simulator visual interaction for Feed Featured and activity entrypoints.
+- Expected tracked files: `Wander/Features/Feed/FeedScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this coordination log.
+  Sequential implementation only; no parallel workstream is useful because
+  runtime and regression changes describe one routing contract.
+- The gstack engineering-review/investigation bootstrap was not run because its
+  requested `~/.gstack` session/telemetry mutation was rejected by the host
+  safety reviewer. No telemetry, gstack config, or external artifact sync was
+  attempted; the required review and root-cause phases were completed locally.
+
+Checkpoint — 2026-07-23 16:01 PDT:
+
+- Added the expanded navigation contract first and confirmed the expected RED
+  result: the focused
+  `NavigationContractTests.testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile`
+  run failed on all 14 assertions that covered the still-legacy Featured and
+  activity CTA paths.
+- Implemented the narrow routing fix. Featured cards and activity place CTAs
+  now call Feed's existing `openPlace` route, display `View place`, and open
+  `PlaceProfileFullScreen`; the direct `saveFeaturedPlace` and
+  `save(FeedActivity)` callbacks were removed. The shared profile remains the
+  single context-aware owner of Save versus Add Visit behavior.
+- Regenerated `Wander.xcodeproj` with `xcodegen generate`; there was no tracked
+  project-file churn.
+- Validation passed:
+  - focused REC-129 navigation regression: 1/1
+  - full iOS suite: 626/626 with zero failures or skips on iPhone 17 Pro Max /
+    iOS 26.5
+  - generic universal iOS Simulator build: succeeded
+  - `git diff --check`: clean
+- Installed the branch build with demo fixtures and visually checked Feed on
+  iPhone 17 Pro and smaller iPhone 17e simulators. Featured and activity cards
+  render `View place` without clipping or safe-area regressions. Interactively
+  opening the Bar Nido activity CTA reached the current shared place profile,
+  including its context-aware `Add visit` action. Screenshots:
+  `/private/tmp/rec129-feed-iphone17pro.png` and
+  `/private/tmp/rec129-feed-iphone17e.png`.
+- Opened `/private/tmp/recme-rec129-place-profile/Wander.xcodeproj` in Xcode and
+  confirmed its Branch Chooser reports
+  `codex/rec-129-feed-place-profile`; the Wander scheme and iPhone 17 Pro run
+  destination are selected.
+- A final fetch found `origin/main` advanced by two non-overlapping commits to
+  `dd06cc77c5405f93c34a6004b998ff80b7ed1474`. The branch will be updated before
+  publication; preserve both branches' appended agent-log entries if Git needs
+  manual reconciliation.
+
+Checkpoint — 2026-07-23 16:24 PDT:
+
+- Rebased the implementation onto current `origin/main`
+  (`dd06cc77c5405f93c34a6004b998ff80b7ed1474`). The only conflict was the
+  append-only coordination log; both REC-138's upstream completion entry and
+  this REC-129 entry were preserved.
+- Re-ran validation against the rebased source:
+  - full iOS suite: 627/627 with zero failures or skips on iPhone 17 Pro Max /
+    iOS 26.5
+  - generic universal iOS Simulator build: succeeded
+- The implementation remains limited to `FeedScreen.swift`, its navigation
+  contract regression, and this work log. It is ready to publish for review;
+  the final PR URL, head commit, and Linear handoff will be recorded after the
+  remote artifacts exist.
