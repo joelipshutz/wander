@@ -105,12 +105,12 @@ launch
 
 ## Implementation Tasks
 
-- [ ] T1 — Add server completion/upsert/availability contracts and pgTAP tests.
-- [ ] T2 — Add shared identity validation, typed errors, and repository coverage.
-- [ ] T3 — Add app-entry coordinator, completion cache, and logged-out carousel.
-- [ ] T4 — Add identity, permission, friend-suggestion, and completion screens.
-- [ ] T5 — Add UI-test target, deterministic launch states, and accessibility tests.
-- [ ] T6 — Update durable product/design decisions and complete visual QA.
+- [x] T1 — Add server completion/upsert/availability contracts and pgTAP tests.
+- [x] T2 — Add shared identity validation, typed errors, and repository coverage.
+- [x] T3 — Add app-entry coordinator, completion cache, and logged-out carousel.
+- [x] T4 — Add identity, permission, friend-suggestion, and completion screens.
+- [x] T5 — Add UI-test target, deterministic launch states, and accessibility tests.
+- [x] T6 — Update durable product/design decisions and complete visual QA.
 
 ## GSTACK REVIEW REPORT
 

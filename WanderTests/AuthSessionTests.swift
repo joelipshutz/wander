@@ -395,7 +395,8 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(facts.first { $0.id == "location" }?.body.contains("does not broadcast live location") == true)
         XCTAssertTrue(facts.first { $0.id == "extraction" }?.body.contains("never auto-save") == true)
         XCTAssertTrue(facts.first { $0.id == "blocks" }?.body.contains("hides profiles, places, search results, and map content") == true)
-        XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("not part of this alpha") == true)
+        XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("asks for Contacts access only") == true)
+        XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("iOS Settings") == true)
     }
 
     func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
