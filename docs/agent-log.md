@@ -19489,3 +19489,18 @@ Dynamic-map validation checkpoint, 2026-07-23 11:29 PDT:
   not dispatched because this session does not authorize delegation; the same
   testing, security/data-safety, and native-design lenses were applied
   directly. No related root-document or TODO update is required.
+- At the publish gate, `origin/main` advanced again with REC-109 / PR #188,
+  which moves the import entry point from Profile to Add and overlaps the same
+  import view/test files. Rebased onto exact current `origin/main`
+  (`0f43390e2`). Source and tests merged automatically; the only manual
+  resolution preserved both append-only log histories.
+- The complete exact post-integration suite passed 591 tests with 0 failures on
+  iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec135-dynamic-map/Logs/Test/Test-Wander-2026.07.23_11-37-02--0700.xcresult`.
+  `git diff --check` remains clean.
+- Reinstalled the exact build and disposable pending-import fixture on iPhone
+  17e. The newly moved Add sheet shows `Import Review`, opens the unresolved
+  Blue Bottle item, and exposes `Search for the place`; this confirms REC-135's
+  matcher remains reachable through REC-109's new navigation. The earlier
+  exact matcher QA already verified the result-driven Los Angeles to Santa
+  Monica Pier camera refit.
