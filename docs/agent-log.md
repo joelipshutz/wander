@@ -19612,3 +19612,170 @@ REC-126 corrected-head validation, 2026-07-23 11:48 PDT:
   whose behavior the adversarial pass restored. Commit the reviewed correction,
   merge that latest main, confirm the resulting scope diff, and rerun the
   affected gate before publishing.
+## 2026-07-22 21:55 PDT - Codex - REC-125 invitation defaults
+
+Agent: Codex using the rec.me feedback bug workflow and iOS fix workflow
+Branch: `codex/rec-125-invitation-defaults`
+Worktree: `/private/tmp/recme-rec125-invitation-defaults`
+Linear: `REC-125` (`In Progress`)
+
+Goal: stop a shared-visit invitation from defaulting the inviter's personal
+metadata into the invitee's save form. Preserve only category and
+subcategory/cuisine defaults; notes, tags, rating, photos, and stealth should
+start blank.
+
+Starting status:
+
+- Fetched `origin`, created this isolated worktree from latest `origin/main`,
+  then fast-forwarded it to exact main commit `8e69138f4`. The worktree is
+  clean and zero commits behind. The root checkout has unrelated modified and
+  untracked files and remains untouched.
+- Reviewed current worktrees and recent coordination entries. No active branch
+  overlaps the expected product/test files. `MapScreen.swift` is a designated
+  high-conflict file, so this task remains isolated and the diff will be kept to
+  the `MapPlaceSaveContext.sharedVisit` factory.
+- Expected files are `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`, and this log.
+- Triage: P2 bug/regression in the shared-visit acceptance form. The likely
+  cause is `MapPlaceSaveContext.sharedVisit` converting every non-`multi_tag`
+  invitation attribute into initial form answers, which leaks personal
+  rating/question metadata into the invitee's independent copy.
+- The engineering-review gate is not needed: this is an isolated correction to
+  an existing context factory with no new flow, persisted state, schema/RLS,
+  sync, visibility, or product decision. The acceptance criteria fully specify
+  which defaults remain.
+- The checkout intentionally has no `DebugBridge`/`StateServer`, so the iOS-fix
+  snapshot fixture path is unavailable. Reproduce the bug with a focused,
+  deterministic failing Swift regression test before editing runtime code,
+  then run the focused and complete simulator suites.
+
+REC-125 implementation and validation, 2026-07-22 22:04 PDT:
+
+- Added a deterministic shared-visit context regression with non-empty inviter
+  note, 4.5 rating, personal answer, tag, personal label, and photo metadata.
+  Before the runtime edit it failed on the copied rating, note, and answer,
+  proving the reported bug on exact current main.
+- Updated only `MapPlaceSaveContext.sharedVisit`: invitee rating, note, and
+  personal/question answers now start empty. Existing blank photo attachments
+  and personal labels remain blank; the invitee's supplied default visibility
+  remains authoritative; and the invitation's category, subcategory, and
+  restaurant cuisine remain selected.
+- The production shared-visit flow currently exists only for `been` visits:
+  the save form exposes friend invites only for `.been`, and the backend shared
+  visit contract requires a source visit. There is no separate `wanna` invite
+  path that can leak defaults today; this patch enforces the requested metadata
+  boundary at the common invitation acceptance context.
+- Focused post-fix tests passed 2/2 on iPhone 17 Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`.
+  Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-02-41--0700.xcresult`.
+- The complete suite passed 578/578 with zero failures on iPhone 17 Pro /
+  iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec125-focused/Logs/Test/Test-Wander-2026.07.22_22-03-42--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime is not installed on this
+  machine. Existing simulator keychain, location, Supabase formatter, and
+  traditional-headermap warnings remain unrelated and non-fatal.
+- Regenerated the project with XcodeGen; no generated project diff resulted.
+  `git diff --check` passes, and the branch is exact with latest `origin/main`
+  at `8e69138f4`. No schema/RLS, backend RPC, build-number, TestFlight, or
+  release change is included.
+
+REC-125 review handoff, 2026-07-22 22:08 PDT:
+
+- Committed the implementation and regression coverage as `5d916a7c1`
+  (`fix: clear shared visit invitee defaults`), pushed
+  `codex/rec-125-invitation-defaults`, and opened ready PR #180:
+  https://github.com/joelipshutz/wander/pull/180
+- Loaded `/private/tmp/recme-rec125-invitation-defaults/Wander.xcodeproj` in
+  Xcode and verified its branch chooser reports
+  `codex/rec-125-invitation-defaults`; the branch is ready for hands-on testing
+  and review.
+- Linear REC-125 is moving to `In Review` with the PR and validation results.
+  No TestFlight build or release was requested or performed.
+
+REC-125 latest-main landing review, 2026-07-23 11:21 PDT:
+
+- Fetched current `origin/main` at `e09708109`. PR #180 had become conflicting
+  after eight upstream commits, including REC-127 map-launch behavior, REC-122
+  streak work, and build-93/build-94 release records. Rebased both REC-125
+  commits onto current main. Product/test files merged automatically; the only
+  manual conflict was this append-only coordination log, and both complete
+  histories were preserved.
+- The required pre-landing review found one blocking completeness gap:
+  `MapPlaceSaveFlowSheet` still called `loadSharedVisitPhotosIfNeeded()` and
+  downloaded every inviter photo into the invitee's selected attachments after
+  the context initialized blank. Removed that automatic loader, its task call,
+  and its one-use state so shared visits now truly start without inherited
+  photos. The existing explicit backend copy contract remains available if a
+  future opt-in photo-selection surface is designed.
+- Re-run focused REC-125 validation and the complete simulator suite against
+  the rebased/fixed head, then regenerate/audit, publish with lease protection,
+  confirm the hosted merge gate, and squash-merge. No build-number increment,
+  TestFlight archive/upload, or tester Slack note is authorized.
+
+REC-125 latest-main validation and pre-landing review, 2026-07-23 11:34 PDT:
+
+- Focused shared-visit context tests passed 2/2 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `testSharedVisitContextStartsInviteeMetadataBlankAndPreservesPlaceClassification`
+  and `testSaveContextFactoriesOnlyRequireStatusForNewChoiceFlows`. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-25-50--0700.xcresult`.
+- The complete suite passed 587/587 with zero failures on the same simulator.
+  Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-33-26--0700.xcresult`.
+  The repo-prescribed iPhone 16 Plus / iOS 18.6 runtime remains unavailable;
+  its command stopped at destination resolution before building or testing.
+- Regenerated with XcodeGen and confirmed there is no generated project diff.
+  `git diff --check` passes. The diff contains only the shared-visit save
+  context/photo-loader correction, its deterministic regression coverage, and
+  this required coordination log.
+- Pre-landing review is clear after removing the automatic shared-photo loader.
+  No remaining blocking data-loss, persistence, concurrency, security/privacy,
+  accessibility, signing, schema/RLS/RPC, enum-contract, distribution, or
+  scope issue was found. There are no Greptile comments, prior gstack reviews,
+  related `TODOS.md` items, failing hosted checks, or PR hold labels to resolve.
+  No implementation plan file was present to compare.
+- The optional gstack review-history/telemetry wrapper could not be used because
+  the environment safety policy blocked transmission of private repository and
+  session metadata. The full local source/diff/checklist/test review was
+  completed without telemetry; this does not affect the code or merge gate.
+
+REC-125 exact-main merge gate, 2026-07-23 11:39 PDT:
+
+- `origin/main` advanced during validation to `0f43390e2` through PR #188
+  (`feat: move place imports to Add`). Rebased the three REC-125 commits onto
+  that exact head. The only conflict was this append-only log; both REC-109 and
+  REC-125 histories were preserved. The new Add/import implementation did not
+  overlap the REC-125 product or test files.
+- Re-ran both focused REC-125 tests on the exact rebased head: 2/2 passed with
+  zero failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-35-23--0700.xcresult`.
+- Re-ran the complete suite on the exact rebased head: 590/590 passed with zero
+  failures. Result:
+  `/private/tmp/DerivedData-rec125-landing/Logs/Test/Test-Wander-2026.07.23_11-37-53--0700.xcresult`.
+  Publish with lease protection, confirm GitHub still reports the ready PR
+  clean and mergeable against exact `main`, then perform the authorized squash
+  merge. No TestFlight or release action is included.
+
+REC-125 completion, 2026-07-23 11:42 PDT:
+
+- Published exact reviewed head `0fe71f611`, confirmed ready PR #180 was zero
+  commits behind `main`, `CLEAN` / `MERGEABLE`, and had no failing checks or
+  hold labels, then squash-merged it as
+  `cff9e0689101d21f2fc43934a51aeaf93904ff01`.
+- The final product keeps only category, subcategory, and restaurant cuisine
+  from a shared-visit invitation. Invitee rating, note, question answers/tags,
+  personal labels, photos, and visibility choice begin independently. The
+  pre-landing review specifically removed the remaining automatic inviter-photo
+  download path.
+- Final validation is 2/2 focused REC-125 tests and 590/590 complete tests on
+  iPhone 17 Pro / iOS 26.5, plus XcodeGen with no project diff and a clean
+  `git diff --check`. No known blocking issue remains.
+- Added the PR, exact-head validation, review finding, and merge SHA to Linear
+  REC-125, then moved it from In Review to Done. The already-merged remote
+  feature branch was deleted explicitly after GitHub's local cleanup step was
+  blocked by another worktree holding `main`.
+- No TestFlight build-number increment, archive/upload, public-group action,
+  Slack release note, or other release mutation was requested or performed.
+  This change will ride the next explicitly requested release batch.
