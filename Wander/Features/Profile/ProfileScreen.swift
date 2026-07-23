@@ -9,7 +9,6 @@ struct ProfileScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    @StateObject private var importStore = PlaceImportStore()
     @State private var showsSettings = false
     @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
@@ -24,9 +23,6 @@ struct ProfileScreen: View {
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
     @State private var showsVisitInvitations = false
     @State private var showsEditProfile = false
-    @State private var selectedImportSource: PlaceImportSource?
-    @State private var showsImportInbox = false
-    @State private var opensImportInboxAfterSource = false
     @State private var selectedMonth = Date.now
     @State private var profileInsightsCache = ProfileInsightsCache()
 
@@ -55,7 +51,6 @@ struct ProfileScreen: View {
                 followerCount: store.followers(of: store.currentUser.id).count,
                 followingCount: store.following(of: store.currentUser.id).count,
                 sharedVisitInvitationCount: store.sharedVisitInvitations.count,
-                importSummary: importStore.summary,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
                 isAvatarSaving: isProfilePhotoSaving,
@@ -67,8 +62,6 @@ struct ProfileScreen: View {
                 memberActions: nil,
                 graphAction: { socialGraphTab = $0 },
                 sharedVisitInvitationsAction: { showsVisitInvitations = true },
-                importSourceAction: { selectedImportSource = $0 },
-                importInboxAction: { showsImportInbox = true },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
                 },
@@ -110,14 +103,6 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
-                .sheet(item: $selectedImportSource, onDismiss: openImportInboxAfterSourceIfNeeded) { source in
-                    PlaceImportSourceScreen(
-                        source: source,
-                        importStore: importStore
-                    ) { _ in
-                        opensImportInboxAfterSource = true
-                    }
-                }
                 .photosPicker(
                     isPresented: $showsProfilePhotoLibrary,
                     selection: $selectedProfilePhotoItem,
@@ -152,19 +137,11 @@ struct ProfileScreen: View {
                     .environmentObject(store)
                     .environmentObject(backend)
                 }
-                .navigationDestination(isPresented: $showsImportInbox) {
-                    PlaceImportInboxScreen(importStore: importStore)
-                        .environmentObject(store)
-                        .environmentObject(auth)
-                        .environmentObject(backend)
-                }
                 .task(id: auth.isSignedIn) {
                     guard auth.isSignedIn else { return }
                     await store.refreshRemoteCurrentProfile(backend: backend)
                     await store.refreshRemoteCurrentUserProfileData(backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
-                    importStore.resumePendingImports()
-                    importStore.reconcileDuplicates(with: importExistingPlaces)
                     handleNotificationRoute(pushNotifications.navigationRequest)
                 }
                 .onChange(of: pushNotifications.navigationRequest) { _, request in
@@ -172,14 +149,9 @@ struct ProfileScreen: View {
                 }
                 .onAppear {
                     openRequestedVisitInvitationInbox()
-                    importStore.resumePendingImports()
-                    importStore.reconcileDuplicates(with: importExistingPlaces)
                 }
                 .onChange(of: visitInvitationInboxRequestID) { _, _ in
                     openRequestedVisitInvitationInbox()
-                }
-                .onChange(of: importStore.items) { _, _ in
-                    importStore.reconcileDuplicates(with: importExistingPlaces)
                 }
                 .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoMenu, titleVisibility: .visible) {
                     if isCameraAvailable {
@@ -198,25 +170,6 @@ struct ProfileScreen: View {
         guard visitInvitationInboxRequestID != nil else { return }
         showsVisitInvitations = true
         visitInvitationInboxRequestID = nil
-    }
-
-    private func openImportInboxAfterSourceIfNeeded() {
-        guard opensImportInboxAfterSource else { return }
-        opensImportInboxAfterSource = false
-        showsImportInbox = true
-    }
-
-    private var importExistingPlaces: [PlaceImportExistingPlace] {
-        store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceImportExistingPlace(
-                userPlaceID: visiblePlace.userPlace.id,
-                name: visiblePlace.place.canonicalName,
-                latitude: visiblePlace.place.latitude,
-                longitude: visiblePlace.place.longitude,
-                sourceProvider: visiblePlace.place.sourceProvider,
-                sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID
-            )
-        }
     }
 
     private var profileInsights: ProfileInsights {
@@ -903,7 +856,6 @@ struct ProfileDetailView: View {
                             followerCount: store.followers(of: profileID).count,
                             followingCount: store.following(of: profileID).count,
                             sharedVisitInvitationCount: 0,
-                            importSummary: nil,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
                             isAvatarSaving: false,
@@ -921,8 +873,6 @@ struct ProfileDetailView: View {
                             ),
                             graphAction: { socialGraphTab = $0 },
                             sharedVisitInvitationsAction: {},
-                            importSourceAction: { _ in },
-                            importInboxAction: {},
                             savedPlacesAction: { status in
                                 savedListMode = status == .been ? .been : .wanna
                             },
