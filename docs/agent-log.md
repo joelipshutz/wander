@@ -19611,6 +19611,20 @@ REC-126 corrected-head validation, 2026-07-23 11:48 PDT:
   whose behavior the adversarial pass restored. Commit the reviewed correction,
   merge that latest main, confirm the resulting scope diff, and rerun the
   affected gate before publishing.
+
+REC-126 exact-main publish gate, 2026-07-23 11:52 PDT:
+
+- Merged current `origin/main` through REC-135 commit `379974b19`. Product and
+  test files integrated automatically; the only manual resolution preserved
+  both complete histories in this append-only log.
+- The exact-main focused cuisine taxonomy, cuisine navigation, and REC-125
+  metadata-isolation gates passed 43/43 with zero failures:
+  `/private/tmp/recme-rec126-restaurant-cuisine/DerivedData/Logs/Test/Test-Wander-2026.07.23_11-50-19--0700.xcresult`.
+- The immediately preceding corrected full suite passed 598/598 with zero
+  failures. The exact product state is equivalent for the shared-visit
+  correction, and `git diff --check` passes. The branch is zero commits behind
+  current main and the remaining scope diff is restricted to REC-126 cuisine
+  implementation, tests, migrations/smoke coverage, taxonomy, and this log.
 ## 2026-07-22 21:55 PDT - Codex - REC-125 invitation defaults
 
 Agent: Codex using the rec.me feedback bug workflow and iOS fix workflow
