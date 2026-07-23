@@ -20526,3 +20526,26 @@ Pre-merge polish validation, 2026-07-23 13:12 PDT:
   (`/private/tmp/DerivedData-rec118-post-main/Logs/Test/Test-Wander-2026.07.23_13-16-33--0700.xcresult`),
   the universal generic Simulator build, and the linked rollback-only
   REC-118 migration preview plus the combined REC-133/REC-118 smoke contracts.
+
+REC-118 merge completion, 2026-07-23 13:27 PDT:
+
+- Ready PR #187 was clean, mergeable, current with `main`, and had no hosted
+  check, review, comment, or Greptile blocker. It was squash-merged into
+  `main` as `d20183c9728d8280ab97e847a3a3973664a2373c`.
+- GitHub completed the merge before local cleanup encountered the preserved
+  REC-118 worktree. Verified `origin/main` at the squash commit and explicitly
+  deleted remote branch `codex/rec-118-future-date-mockup`; the unrelated local
+  worktree and its staged user-owned changes remain untouched.
+- Final exact-head evidence is 626/626 complete iOS tests on iPhone 17 Pro Max
+  / iOS 26.5, 10/10 focused REC-118/account-switch regressions, the universal
+  generic Simulator build, XcodeGen with no drift, clean pre-landing review,
+  and visual QA on iPhone 17 Pro Max plus compact iPhone 17e.
+- The linked hosted smoke passed with REC-118’s migration and all 17 pgTAP
+  assertions inside one rollback-only transaction after REC-133 integration.
+  The hosted database and migration history were not mutated.
+- No known blocking issue remains. Linear REC-118 will be marked Done with the
+  merge SHA and validation evidence.
+- No TestFlight build-number increment, archive/upload, public-group change,
+  hosted migration application, or Slack release note was performed. The
+  merged feature will ride the next explicitly requested TestFlight batch from
+  latest `main`.
