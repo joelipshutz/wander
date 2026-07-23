@@ -18491,3 +18491,15 @@ Validation checkpoint, 2026-07-22 21:14 PDT:
   choice on Joe's behalf.
 - Final diff remains limited to the three expected files. `git diff --check`
   passes and exact latest `origin/main` `9de2e42` remains the branch base.
+
+Completion, 2026-07-22 21:17 PDT:
+
+- Committed the validated implementation as `c88a473` (`fix: default map to
+  current city`) and pushed `codex/rec-127-map-default`.
+- Opened ready PR https://github.com/joelipshutz/wander/pull/174 against
+  `main`, linked to Linear REC-127. Linear is moving to In Review; the PR
+  review/merge workflow owns Done after merge.
+- No TestFlight build, build-number bump, merge, hosted-data change, or Slack
+  post was requested or performed.
+- Next step: review and merge PR #174. A later explicit TestFlight release can
+  package the change from latest `main`.
