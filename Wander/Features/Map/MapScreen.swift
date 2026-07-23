@@ -33,7 +33,7 @@ struct MapScreen: View {
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
-    @State private var didCenterInitialPlaces = false
+    @State private var didResolveInitialCamera = false
     @State private var handlingNotificationRequestID: UUID?
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -88,20 +88,6 @@ struct MapScreen: View {
 
     private var visiblePlaceGroupKeys: [String] {
         visiblePlaceGroups.map(\.key)
-    }
-
-    private var initialCameraPlaces: [VisiblePlace] {
-        guard mapPlaceFilters != nil else { return [] }
-
-        if selectedFilters.contains(.social) {
-            let socialPlaces = visiblePlaces.filter { $0.owner.id != store.currentUser.id }
-            if !socialPlaces.isEmpty {
-                return visiblePlaces
-            }
-        }
-
-        let ownPlaces = store.currentUserVisiblePlaces
-        return ownPlaces.isEmpty ? visiblePlaces : ownPlaces
     }
 
     private var mapPlaceFilters: PlaceFilters? {
@@ -314,14 +300,16 @@ struct MapScreen: View {
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
                 resolveInitialSelection()
-                centerMapOnInitialPlacesIfNeeded()
+            }
+            .task {
+                await centerMapOnCurrentCityIfNeeded()
             }
             .task {
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
-                centerMapOnInitialPlacesIfNeeded()
+                resolveInitialSelection()
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else { return }
@@ -329,7 +317,7 @@ struct MapScreen: View {
                     await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                     await store.refreshSharedVisitInbox(backend: backend)
                     await handleNotificationRoute(pushNotifications.navigationRequest)
-                    centerMapOnInitialPlacesIfNeeded()
+                    resolveInitialSelection()
                 }
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
@@ -337,7 +325,7 @@ struct MapScreen: View {
                     selectedPlaceGroupKey = nil
                     isPlaceProfilePresented = false
                 }
-                centerMapOnInitialPlacesIfNeeded()
+                resolveInitialSelection()
             }
             .onChange(of: mapQuery) { _, _ in
                 let shouldSuppressAutoSelection = suppressNextQueryAutoSelection
@@ -505,15 +493,16 @@ struct MapScreen: View {
         mapQuery = ""
         selectVisiblePlace(visiblePlace)
         isPlaceProfilePresented = false
-        position = .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(
-                    latitude: visiblePlace.place.latitude,
-                    longitude: visiblePlace.place.longitude
-                ),
-                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-            )
+        didResolveInitialCamera = true
+        let notificationRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            ),
+            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         )
+        position = .region(notificationRegion)
+        currentSearchRegion = notificationRegion
         pushNotifications.consumeNavigationRequest(id: requestID)
     }
 
@@ -663,36 +652,44 @@ struct MapScreen: View {
     }
 
     private func resolveInitialSelection() {
-        guard selectedPlaceGroupKey == nil else { return }
+        guard selectedPlaceGroupKey == nil,
+              let initialPlaceQuery
+        else { return }
 
-        if let initialPlaceQuery {
-            let normalized = initialPlaceQuery.lowercased()
-            if let initialPlace = visiblePlaces.first(where: { visiblePlace in
-                visiblePlace.id.lowercased().contains(normalized)
-                    || visiblePlace.place.id.lowercased().contains(normalized)
-                    || visiblePlace.place.canonicalName.lowercased().contains(normalized)
-            }) {
-                selectVisiblePlace(initialPlace)
-            }
-        }
+        let normalized = initialPlaceQuery.lowercased()
+        guard let initialPlace = visiblePlaces.first(where: { visiblePlace in
+            visiblePlace.id.lowercased().contains(normalized)
+                || visiblePlace.place.id.lowercased().contains(normalized)
+                || visiblePlace.place.canonicalName.lowercased().contains(normalized)
+        }) else { return }
 
-        if selectedPlaceGroupKey == nil, let firstVisiblePlace = visiblePlaces.first {
-            selectVisiblePlace(firstVisiblePlace)
-        }
+        selectVisiblePlace(initialPlace)
+        center(on: initialPlace)
+        didResolveInitialCamera = true
     }
 
-    private func centerMapOnInitialPlacesIfNeeded() {
-        guard !didCenterInitialPlaces else { return }
-        let coordinates = initialCameraPlaces.map { visiblePlace in
-            CLLocationCoordinate2D(
-                latitude: visiblePlace.place.latitude,
-                longitude: visiblePlace.place.longitude
-            )
-        }
-        guard let region = MapRegionFitter.region(fitting: coordinates) else { return }
+    private func centerMapOnCurrentCityIfNeeded() async {
+        guard !didResolveInitialCamera,
+              initialPlaceQuery == nil
+        else { return }
 
-        didCenterInitialPlaces = true
+        let coordinate = await currentUserCoordinate()
+        guard !Task.isCancelled,
+              !didResolveInitialCamera,
+              initialPlaceQuery == nil
+        else { return }
+
+        didResolveInitialCamera = true
+        guard let coordinate else { return }
+
+        let region = Self.initialCityRegion(
+            center: CLLocationCoordinate2D(
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+        )
         position = .region(region)
+        currentSearchRegion = region
     }
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {
@@ -1630,6 +1627,10 @@ struct MapScreen: View {
             latitude: currentSearchRegion.center.latitude,
             longitude: currentSearchRegion.center.longitude
         )
+    }
+
+    static func initialCityRegion(center: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        MKCoordinateRegion(center: center, span: defaultRegion.span)
     }
 
     private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {
@@ -5933,6 +5934,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.ownRating?.subtitle ?? "0 visits",
                 systemImage: "star.fill",
                 tint: WanderTheme.stateWarning.color,
+                explanation: nil,
                 compact: compact
             )
 
@@ -5943,6 +5945,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                 systemImage: "person.2.fill",
                 tint: WanderTheme.pinSocial.color,
+                explanation: .recMe,
                 compact: compact
             )
 
@@ -5953,6 +5956,7 @@ private struct PlaceProfileRatingStrip: View {
                 subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
                 systemImage: "sparkles",
                 tint: WanderTheme.terracotta.color,
+                explanation: .fit,
                 compact: compact
             )
         }
@@ -5966,6 +5970,7 @@ private struct PlaceProfileMetricCard: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let explanation: PlaceRatingExplanation?
     let compact: Bool
 
     var body: some View {
@@ -5976,6 +5981,7 @@ private struct PlaceProfileMetricCard: View {
                 .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
                 .background(tint.opacity(0.12))
                 .clipShape(Circle())
+                .offset(x: ratingHeaderHorizontalOffset)
 
             Text(title)
                 .font(.system(size: compact ? 11 : 13, weight: .black))
@@ -5985,6 +5991,7 @@ private struct PlaceProfileMetricCard: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.68)
                 .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
+                .offset(x: ratingHeaderHorizontalOffset)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
@@ -6018,6 +6025,20 @@ private struct PlaceProfileMetricCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if let explanation {
+                PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                    .offset(x: infoButtonHorizontalOffset, y: compact ? -1 : 1)
+            }
+        }
+    }
+
+    private var ratingHeaderHorizontalOffset: CGFloat {
+        explanation == nil ? -5 : -10
+    }
+
+    private var infoButtonHorizontalOffset: CGFloat {
+        explanation == .recMe ? 9 : 6
     }
 
     private var valueFontSize: CGFloat {

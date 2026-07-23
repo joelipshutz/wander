@@ -479,7 +479,8 @@ private struct PlaceProfileFullView: View {
                     title: "Your rating",
                     subtitle: presentation.ownRating?.subtitle ?? "0 visits",
                     systemImage: "star.fill",
-                    tint: WanderTheme.stateWarning.color
+                    tint: WanderTheme.stateWarning.color,
+                    explanation: nil
                 )
 
                 PlaceProfileRatingTile(
@@ -488,7 +489,8 @@ private struct PlaceProfileFullView: View {
                     title: "rec.me rating",
                     subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
                     systemImage: "person.2.fill",
-                    tint: WanderTheme.pinSocial.color
+                    tint: WanderTheme.pinSocial.color,
+                    explanation: .recMe
                 )
 
                 PlaceProfileRatingTile(
@@ -497,7 +499,8 @@ private struct PlaceProfileFullView: View {
                     title: "Fit Rating",
                     subtitle: presentation.fitRating == nil ? "keep saving" : "based on places you like",
                     systemImage: "sparkles",
-                    tint: WanderTheme.terracotta.color
+                    tint: WanderTheme.terracotta.color,
+                    explanation: .fit
                 )
             }
         } else {
@@ -1052,6 +1055,7 @@ private struct PlaceProfileRatingTile: View {
     let subtitle: String
     let systemImage: String
     let tint: Color
+    let explanation: PlaceRatingExplanation?
 
     var body: some View {
         VStack(alignment: .center, spacing: WanderTheme.spacing2) {
@@ -1067,6 +1071,7 @@ private struct PlaceProfileRatingTile: View {
             }
             .foregroundStyle(WanderTheme.textMuted.color)
             .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
+            .offset(x: ratingHeaderHorizontalOffset)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
@@ -1099,6 +1104,20 @@ private struct PlaceProfileRatingTile: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            if let explanation {
+                PlaceRatingInfoButton(explanation: explanation, tint: tint)
+                    .offset(x: infoButtonHorizontalOffset, y: 2)
+            }
+        }
+    }
+
+    private var ratingHeaderHorizontalOffset: CGFloat {
+        explanation == nil ? -5 : -10
+    }
+
+    private var infoButtonHorizontalOffset: CGFloat {
+        explanation == .recMe ? 9 : 6
     }
 
     private var valueFontSize: CGFloat {
