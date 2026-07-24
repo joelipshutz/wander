@@ -1394,6 +1394,8 @@ private struct PlaceImportCandidatePicker: View {
     let selectionAction: (String) -> Void
     let quickSaveAction: (String, PlaceStatus) -> Void
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
+    @State private var profileCandidate: PlaceCandidate?
 
     var body: some View {
         NavigationStack {
@@ -1404,66 +1406,16 @@ private struct PlaceImportCandidatePicker: View {
                     }
 
                     ForEach(Array(item.candidates.enumerated()), id: \.element.id) { index, candidate in
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                            Button {
-                                selectionAction(candidate.id)
+                        PlaceImportCandidateCard(
+                            index: index,
+                            candidate: candidate,
+                            profileAction: {
+                                profileCandidate = candidate
+                            },
+                            quickSaveAction: { status in
+                                quickSaveAction(candidate.id, status)
                                 dismiss()
-                            } label: {
-                                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                                    Text("\(index + 1)")
-                                        .font(.system(size: 12, weight: .black))
-                                        .frame(width: 28, height: 28)
-                                        .background(WanderTheme.skyTint.color)
-                                        .foregroundStyle(WanderTheme.stateInfo.color)
-                                        .clipShape(Circle())
-
-                                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                                        Text(candidate.name)
-                                            .font(.system(size: 16, weight: .black))
-                                            .foregroundStyle(WanderTheme.textInk.color)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        Text(candidate.previewSubtitle())
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(WanderTheme.textMuted.color)
-                                            .lineLimit(3)
-                                    }
-
-                                    Spacer(minLength: WanderTheme.spacing2)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12, weight: .black))
-                                        .foregroundStyle(WanderTheme.textFaint.color)
-                                        .frame(width: 24, height: 24)
-                                }
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-
-                            HStack(spacing: WanderTheme.spacing2) {
-                                quickSaveButton(
-                                    "Been",
-                                    systemImage: "checkmark.circle.fill",
-                                    color: WanderTheme.stateSuccess.color
-                                ) {
-                                    quickSaveAction(candidate.id, .been)
-                                    dismiss()
-                                }
-                                quickSaveButton(
-                                    "Wanna",
-                                    systemImage: "bookmark.fill",
-                                    color: WanderTheme.stateWarning.color
-                                ) {
-                                    quickSaveAction(candidate.id, .wannaGo)
-                                    dismiss()
-                                }
-                            }
-                        }
-                        .padding(WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                         )
                     }
                 }
@@ -1477,6 +1429,66 @@ private struct PlaceImportCandidatePicker: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .navigationDestination(isPresented: profileDestinationBinding) {
+                candidateProfileDestination
+            }
+        }
+    }
+
+    private var profileDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { profileCandidate != nil },
+            set: { isPresented in
+                if !isPresented {
+                    profileCandidate = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var candidateProfileDestination: some View {
+        if let profileCandidate {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(candidate: profileCandidate),
+                saves: saveSummaries(for: profileCandidate),
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .choose,
+                onBack: {
+                    self.profileCandidate = nil
+                },
+                onAction: {
+                    selectionAction(profileCandidate.id)
+                    dismiss()
+                }
+            )
+        }
+    }
+
+    private func saveSummaries(for candidate: PlaceCandidate) -> [PlaceSaveSummary] {
+        store.visiblePlaces()
+            .filter { visiblePlace in
+                if let providerPlaceID = candidate.sourceProviderPlaceID {
+                    return visiblePlace.place.sourceProvider == candidate.sourceProvider
+                        && visiblePlace.place.sourceProviderPlaceID == providerPlaceID
+                }
+                return visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
+            }
+            .map { visiblePlace in
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: store.attributes(for: visiblePlace.userPlace.id)
+                )
+            }
+    }
+
+    private var tasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
+            )
         }
     }
 
@@ -1543,6 +1555,181 @@ private struct PlaceImportCandidatePicker: View {
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
     }
+}
+
+private struct PlaceImportCandidateCard: View {
+    let index: Int
+    let candidate: PlaceCandidate
+    let profileAction: () -> Void
+    let quickSaveAction: (PlaceStatus) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: profileAction) {
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                    candidateArtwork
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text("MATCH \(index + 1)")
+                            .font(.caption2.weight(.heavy))
+                            .tracking(0.7)
+                            .foregroundStyle(WanderTheme.stateInfo.color)
+
+                        Text(candidate.name)
+                            .font(.headline.weight(.heavy))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Label {
+                            Text(candidate.importCategoryTitle)
+                                .lineLimit(1)
+                        } icon: {
+                            Image(systemName: "sparkles")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+
+                        Text(candidate.importLocationSummary)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .frame(width: 24, height: 44)
+                }
+                .padding(WanderTheme.spacing3)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                "Open match \(index + 1), \(candidate.name), "
+                    + "\(candidate.importCategoryTitle), \(candidate.importLocationSummary)"
+            )
+            .accessibilityHint("Shows the place profile and photo")
+
+            Rectangle()
+                .fill(WanderTheme.borderHairline.color)
+                .frame(height: 1)
+                .padding(.horizontal, WanderTheme.spacing3)
+
+            quickActions
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.vertical, WanderTheme.spacing2)
+        }
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        )
+        .shadow(
+            color: WanderTheme.textInk.color.opacity(0.08),
+            radius: 8,
+            x: 0,
+            y: 3
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var candidateArtwork: some View {
+        ZStack {
+            LinearGradient(
+                colors: artworkColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(Color.white.opacity(0.34))
+                .frame(width: 54, height: 54)
+                .offset(x: 25, y: -28)
+
+            Circle()
+                .fill(WanderTheme.surfaceRaised.color.opacity(0.88))
+                .frame(width: 58, height: 58)
+                .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 5, y: 2)
+
+            WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: 34)
+        }
+        .frame(width: artworkSize, height: artworkSize)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                .stroke(Color.white.opacity(0.72), lineWidth: 1)
+        )
+        .overlay(alignment: .topLeading) {
+            Text("\(index + 1)")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 26, height: 26)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(Circle())
+                .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 3, y: 1)
+                .padding(6)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var artworkSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 72 : 82
+    }
+
+    private var artworkColors: [Color] {
+        switch index % 4 {
+        case 1:
+            [WanderTheme.skyTint.color, WanderTheme.categorySage.color.opacity(0.42)]
+        case 2:
+            [WanderTheme.terracottaTint.color, WanderTheme.categorySun.color.opacity(0.48)]
+        case 3:
+            [WanderTheme.categoryMoss.color.opacity(0.26), WanderTheme.surfaceSand.color]
+        default:
+            [WanderTheme.surfaceSand.color, WanderTheme.terracottaTint.color]
+        }
+    }
+
+    @ViewBuilder
+    private var quickActions: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: WanderTheme.spacing1) {
+                beenButton
+                wannaButton
+            }
+        } else {
+            HStack(spacing: WanderTheme.spacing2) {
+                beenButton
+                wannaButton
+            }
+        }
+    }
+
+    private var beenButton: some View {
+        quickSaveButton(
+            "Been",
+            systemImage: "checkmark.circle.fill",
+            color: WanderTheme.stateSuccess.color
+        ) {
+            quickSaveAction(.been)
+        }
+    }
+
+    private var wannaButton: some View {
+        quickSaveButton(
+            "Wanna",
+            systemImage: "bookmark.fill",
+            color: WanderTheme.stateWarning.color
+        ) {
+            quickSaveAction(.wannaGo)
+        }
+    }
 
     private func quickSaveButton(
         _ title: String,
@@ -1552,19 +1739,111 @@ private struct PlaceImportCandidatePicker: View {
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 14, weight: .black))
+                .font(.caption.weight(.heavy))
+                .padding(.horizontal, WanderTheme.spacing2)
                 .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                 .background(color.opacity(0.13))
                 .foregroundStyle(color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                    Capsule()
                         .stroke(color.opacity(0.32), lineWidth: 1)
                 )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Save \(candidate.name) as \(title)")
     }
 }
+
+private extension PlaceCandidate {
+    var importCategoryTitle: String {
+        let display = WanderPlaceCategory.display(for: categoryAssignment)
+        let title = display.subcategory ?? display.category
+        return title.isEmpty ? "Place" : title
+    }
+
+    var importLocationSummary: String {
+        previewSubtitle(includeCategory: false, fallback: "Nearby place")
+    }
+}
+
+#if DEBUG
+enum PlaceImportCandidateMockupPage {
+    static var isPresented: Bool {
+        ProcessInfo.processInfo.arguments.contains("-WanderPlaceImportCandidateMockup")
+    }
+}
+
+struct PlaceImportCandidateMockupRoot: View {
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+
+    var body: some View {
+        PlaceImportCandidatePicker(
+            item: Self.item,
+            selectionAction: { _ in },
+            quickSaveAction: { _, _ in }
+        )
+        .environmentObject(store)
+        .preferredColorScheme(.light)
+    }
+
+    private static let item = PlaceImportItem(
+        id: "rec-114-candidate-mockup",
+        batchID: "rec-114-mockup-batch",
+        source: .googleMaps,
+        seed: PlaceImportSeed(
+            rawText: "Maru Coffee Los Feliz",
+            nameHint: "Maru Coffee",
+            areaHint: "Los Feliz",
+            sourceURLString: nil,
+            sourceLine: 1
+        ),
+        state: .ambiguous,
+        candidates: [
+            PlaceCandidate(
+                id: "rec-114-maru",
+                name: "Maru Coffee",
+                category: "coffee shop",
+                address: "1936 Hillhurst Ave, Los Angeles, CA 90027",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "United States",
+                latitude: 34.10662,
+                longitude: -118.28762,
+                sourceProvider: "google_maps",
+                confidence: 0.95
+            ),
+            PlaceCandidate(
+                id: "rec-114-gget",
+                name: "Go Get Em Tiger",
+                category: "coffee shop",
+                address: "230 N Larchmont Blvd, Los Angeles, CA 90004",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "United States",
+                latitude: 34.07510,
+                longitude: -118.32378,
+                sourceProvider: "google_maps",
+                confidence: 0.82
+            ),
+            PlaceCandidate(
+                id: "rec-114-verve",
+                name: "Verve Coffee Roasters",
+                category: "coffee shop",
+                address: "8925 Melrose Ave, West Hollywood, CA 90069",
+                locality: "West Hollywood",
+                region: "CA",
+                country: "United States",
+                latitude: 34.08088,
+                longitude: -118.38694,
+                sourceProvider: "google_maps",
+                confidence: 0.76
+            )
+        ]
+    )
+}
+#endif
 
 private func usableImportCoordinate(
     latitude: Double?,

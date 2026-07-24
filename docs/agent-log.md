@@ -20747,6 +20747,102 @@ Completion, 2026-07-23 14:34 PDT:
 - This was intentionally merge-only. No build number was changed and no
   TestFlight archive, upload, or tester Slack message was produced.
 
+## 2026-07-23 14:19 PDT - Codex - REC-114 Place Match Card Redesign
+
+Agent: Codex
+Branch: `codex/rec-114-place-match-cards`
+Worktree: `/private/tmp/recme-rec114-place-cards`
+Linear: `REC-114` (`In Progress`)
+
+Goal: redesign the Profile import flow's Review Matches → Choose the Place
+cards with a left-side Google place image, richer place metadata, and compact
+Been/Wanna actions, then validate the branch and open it in Xcode for review.
+
+Starting status:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `38676cec9`. The primary checkout has unrelated
+  `.gitignore` and `.pnpm-store/` changes, so it will remain untouched.
+- Existing worktrees do not include REC-114 or overlap this branch. Linear
+  REC-114 was read with its Slack-linked request and moved from `Backlog` to
+  `In Progress` before implementation.
+- Expected files are
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused tests under
+  `WanderTests/`, and this coordination log. Shared store, project membership,
+  Supabase, and build-number files are out of scope unless inspection proves
+  otherwise.
+- Planned validation is focused import/UI contract coverage, the full iOS
+  suite, a generic iOS Simulator build, and simulator screenshots on a current
+  and smaller phone before the branch is pushed and opened in Xcode.
+
+Checkpoint, 2026-07-23 14:36 PDT:
+
+- Replaced the full-width ambiguous-match rows with enriched horizontal cards:
+  Google Places photo/fallback on the left, numbered match identity, place
+  category and locality, and compact 44pt Been/Wanna capsule actions. The map
+  and direct match selection remain intact.
+- Added a DEBUG-only `-WanderPlaceImportCandidateMockup` launch fixture with
+  three realistic candidates so this exact sheet can be reviewed without
+  mutating a tester's import history. Added source-contract coverage for the
+  enriched card, provider photo lookup, Google attribution, compact actions,
+  and the QA fixture.
+- Focused regression passed on the locally available iPhone 17 Pro Max /
+  iOS 26.5 simulator: 1 test, 0 failures. The repository-documented iPhone 16
+  Plus / iOS 18.6 runtime is not installed on this machine, so visual coverage
+  will use iPhone 17 Pro Max and the smaller iPhone 17e on iOS 26.5. Existing
+  Swift 6 actor-isolation and headermap warnings remain unchanged.
+- `origin/main` advanced by two commits during implementation. The feature
+  commit will be rebased onto the new head before final validation and PR.
+
+Completion, 2026-07-23 14:49 PDT:
+
+- Rebased onto current `origin/main` at `dd06cc77c`, preserving the concurrent
+  REC-138 coordination log entry. The implementation is committed as
+  `a374aa46f`; the atomic design-review density fix is `192e08837`.
+- Opened ready PR #202:
+  https://github.com/joelipshutz/wander/pull/202
+  The PR links REC-114 and contains only the app route, import candidate UI,
+  focused navigation contract, and this coordination log.
+- Focused REC-114 regression passed after the final design commit: 1 test,
+  0 failures. Full iOS suite passed on iPhone 17 Pro Max / iOS 26.5:
+  628 tests, 0 failures, 0 unexpected. Result bundle:
+  `/tmp/DerivedData-rec114-focused/Logs/Test/Test-Wander-2026.07.23_14-45-42--0700.xcresult`.
+- Generic universal iOS Simulator build succeeded for arm64 and x86_64.
+  Existing Swift 6 formatter actor-isolation and legacy headermap warnings are
+  unchanged and non-blocking.
+- Diff-aware design review found and fixed one medium hierarchy issue: category
+  copy now favors the specific place category, and the 32pt visible Been/Wanna
+  capsules sit inside 44pt touch targets. Final visual screenshots passed on
+  iPhone 17 Pro Max and iPhone 17e at iOS 26.5. The ignored report and images
+  are under `.gstack/design-reports/`.
+- Added the DEBUG-only `-WanderPlaceImportCandidateMockup` route so reviewers
+  can open the exact screen with deterministic photo-backed candidates without
+  changing local import data.
+- No known blocker remains. No build number, archive, TestFlight upload, or
+  tester Slack note was created because this request is branch/review only.
+  The original dirty primary checkout remains untouched.
+
+Handoff, 2026-07-23 15:55 PDT:
+
+- Opened `/private/tmp/recme-rec114-place-cards/Wander.xcodeproj` in Xcode and
+  verified the workspace branch chooser shows
+  `codex/rec-114-place-match-cards`. Left
+  `Wander/Features/Profile/ProfileImportViews.swift` positioned on
+  `PlaceImportCandidateCard` for test and code review.
+
+Landing checkpoint, 2026-07-24 00:41 PDT:
+
+- Ryan explicitly requested that REC-114 be pushed to `main`. Re-fetched
+  `origin`; PR #202 remains ready, `MERGEABLE/CLEAN`, current with
+  `origin/main` at `dd06cc77c`, and has no hold label, required check failure,
+  review blocker, or unrelated file.
+- The primary checkout still contains unrelated local work and remains
+  untouched. This isolated worktree is clean at `80d960e0a`; the landing pass
+  will re-run the focused regression and full merge gate, record the result,
+  squash-merge PR #202, and move Linear REC-114 from `In Review` to `Done`.
+- Build 95 is fully uploaded, attached, approved, and documented. This is a
+  merge-only request: no build-number bump, archive/upload, TestFlight helper,
+  or tester Slack message is authorized.
 ## 2026-07-23 14:23 PDT - Codex - REC-129 Feed place-profile unification
 
 Agent: Codex using Linear, `recme-testflight-feedback-bug-catcher`, and the
@@ -20936,6 +21032,49 @@ Merge completion — 2026-07-24 00:42 PDT:
   upload, public-group change, hosted migration, or tester Slack note was
   performed. REC-129 will ride the next explicitly requested TestFlight batch.
 
+## 2026-07-24 00:52 PDT - Codex - REC-114 Merge Review Blocked
+
+Agent: Codex using `recme-pr-review-merge-release`, `review`, Linear, and
+Google's official Places photo documentation
+Branch: `codex/rec-114-place-match-cards`
+Worktree: `/private/tmp/recme-rec114-place-cards`
+Linear: `REC-114` (`In Review`)
+PR: `https://github.com/joelipshutz/wander/pull/202`
+
+Review outcome:
+
+- Do not merge the current implementation yet. The new card renders each
+  resolved provider photo with only a non-interactive `Google Maps` label,
+  even though the backend returns `authorName`, `authorProfileURL`, and
+  `sourcePhotoURL`. Google's current Places photo contract requires supplied
+  author attribution wherever the photo appears and access to the source
+  content. The compact card needs a compliant author/source treatment or a
+  linked larger attributed view.
+- The card starts `backend.placePhoto(...)` automatically for every visible
+  candidate; manual resolution can return eight candidates. The hosted quota
+  is 120 photo requests per user/day and 900 globally/month, so scrolling 15
+  fully populated ambiguous matches can exhaust one user's daily allowance.
+  SwiftUI task cancellation does not cancel the backend's stored provider
+  task. Product input is required on whether candidates after the first three
+  use fallback art or an explicit tap-to-load treatment.
+- The photo and metadata regions are separate VoiceOver buttons with the same
+  candidate-selection action, causing each card's match choice to be announced
+  twice. Hide the photo action from accessibility or otherwise expose one
+  semantic match-selection control.
+- The card changes geometry at accessibility Dynamic Type sizes but uses fixed
+  point-size fonts throughout, so the text itself does not scale. Replace the
+  fixed sizes with semantic or relative fonts and validate at an accessibility
+  text size before landing.
+- The new navigation regression is a source-string contract only. It passed
+  1/1, but does not instantiate the card or verify callback wiring, photo
+  success/failure/cancellation, fallback rendering, or conditional
+  attribution. Add focused behavior coverage with the fix.
+- The branch was merged with `origin/main` at `228c5ccb7`; a subsequent
+  docs-only REC-129 completion advanced `origin/main` to `2470b92ec`. Refresh
+  again and preserve both append-only log entries before the final merge.
+- No TestFlight action is authorized. Keep REC-114 `In Review` and PR #202
+  open until the photo-loading UX decision is made, the blockers are fixed,
+  tests pass, and the branch is refreshed from latest `main`.
 ## 2026-07-24 00:42 PDT - Codex - REC-139 Floating Add-place action
 
 Agent: Codex using Linear
@@ -21071,6 +21210,57 @@ Merge completion — 2026-07-24 11:51 PDT:
 - Linear REC-139 is complete. No build-number bump, archive, upload,
   TestFlight action, or tester Slack note was performed; build 95 remains the
   current release build.
+
+REC-114 direction confirmed — 2026-07-24 12:06 PDT:
+
+- Ryan chose an emoji-first candidate experience instead of provider photos in
+  the ambiguous-match list. The place identity will open the full shared place
+  profile, where the Google photo already loads on explicit user intent with
+  the existing author/source attribution.
+- This resolves the earlier provider quota and attribution blockers without
+  hiding any candidate. The implementation will keep Been/Wanna quick actions,
+  add a profile-level `Choose this place` action, expose one semantic profile
+  link per card, and use Dynamic Type-aware text.
+- Refreshed and merged latest `origin/main` at `e74eb7b64`, preserving
+  REC-139's newer Add flow and both append-only work-log entries. Expected
+  files: `ProfileImportViews.swift`, `MapScreen.swift`,
+  `WanderApp.swift`, focused tests, and this log.
+- Validation plan: focused behavior/contracts, full simulator suite, generic
+  Simulator build, and screenshots on the current large and smaller iPhone
+  targets plus an accessibility Dynamic Type pass. No TestFlight action is
+  authorized.
+
+Emoji-first implementation validation — 2026-07-24 12:29 PDT:
+
+- Replaced eager provider-photo tiles in the ambiguous-candidate list with
+  deterministic category-emoji artwork, a warm raised-card treatment, clear
+  category/location hierarchy, and full-width `Been` / `Wanna` quick actions.
+  Tapping the place identity now opens the shared full place profile; its
+  explicit `Choose this place` action returns the selected candidate to the
+  import flow. The profile preserves the candidate's provider place id, so the
+  existing attributed Google photo path remains intact without consuming
+  provider quota while the list scrolls.
+- Collapsed the candidate identity into one semantic accessibility element,
+  moved card typography to Dynamic Type styles, and stack the quick actions at
+  accessibility sizes. Added runtime coverage that the list makes zero provider
+  metadata/image requests before profile navigation, plus provider-identity and
+  choose-action coverage.
+- Focused regressions passed 3/3. The final full simulator suite passed 631/631
+  with zero failures on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec114-emoji/Logs/Test/Test-Wander-2026.07.24_12-24-55--0700.xcresult`.
+  The independent generic iOS Simulator build also succeeded. Existing
+  Swift-concurrency and headermap warnings remain unrelated.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e, plus Accessibility
+  Large Dynamic Type. The compact layout keeps the artwork and both actions
+  unclipped; the accessibility layout preserves full text and stacks the
+  actions. Screenshots: `/private/tmp/rec114-emoji-17pro-late.png`,
+  `/private/tmp/rec114-emoji-17e.png`, and
+  `/private/tmp/rec114-emoji-17pro-ax.png`.
+- Regenerated with `xcodegen generate`; there was no tracked project-file
+  churn, and `git diff --check` is clean. During final review, `origin/main`
+  advanced from `e74eb7b64` to `9dbbf311c` with REC-136 photo-ranking work.
+  REC-114 will merge that current main and rerun the affected gates before
+  landing. No TestFlight action is authorized.
 ## 2026-07-24 01:36 PDT - Codex - REC-136 place-photo ranking
 
 Agent: Codex using the Linear workflow
@@ -21259,3 +21449,29 @@ Merge completion — 2026-07-24 12:13 PDT:
   archive/upload, TestFlight group change, or tester Slack note was performed.
   The merged migration still requires the normal reviewed hosted deployment
   path, and REC-136 will ride the next explicitly requested TestFlight batch.
+
+REC-114 final merge gate — 2026-07-24 12:33 PDT:
+
+- Merged current `origin/main` at `9dbbf311c`, including REC-136's completed
+  photo-ranking test/SQL changes. The only conflict was the append-only agent
+  log; both work histories were preserved. The final REC-114 net diff remains
+  limited to its three app files, two focused test files, the debug-app
+  environment injection, and this log.
+- Reran the full simulator suite after that merge: 631/631 tests passed with
+  zero failures on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec114-emoji/Logs/Test/Test-Wander-2026.07.24_12-29-15--0700.xcresult`.
+  REC-136 introduced no app-source delta after REC-114's successful generic
+  Simulator build, and the combined full-suite run rebuilt the affected test
+  target successfully.
+- Final correctness, privacy, quota, accessibility, and visual review found no
+  blockers. Candidate cards make no provider requests; the existing shared
+  place profile handles photo loading and author/source attribution after
+  explicit navigation. Each card exposes one place-profile identity action,
+  semantic Dynamic Type styles, 44-point quick actions, and a stacked
+  accessibility layout. `git diff --check` is clean.
+- PR #202 has no reviews, status checks, or review threads. Its one prior
+  internal blocker comment describes the superseded eager-photo design and
+  will be followed with the resolution and current validation. REC-114 remains
+  `In Review` until the ready PR is pushed and squash-merged. This is
+  merge-only: no build-number bump, archive, upload, TestFlight action, hosted
+  migration, or tester Slack note is authorized.

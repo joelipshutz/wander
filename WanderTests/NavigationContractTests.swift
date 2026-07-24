@@ -444,6 +444,40 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
 
+    func testChoosePlaceUsesEmojiCardsWithProfileNavigationAndCompactActions() throws {
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+
+        XCTAssertTrue(importViews.contains("PlaceImportCandidateCard("))
+        XCTAssertTrue(importViews.contains("private var candidateArtwork: some View"))
+        XCTAssertTrue(importViews.contains("WanderCategoryEmoji(emoji: candidate.categoryEmoji"))
+        XCTAssertTrue(importViews.contains("profileCandidate = candidate"))
+        XCTAssertTrue(importViews.contains("PlaceProfileFullScreen("))
+        XCTAssertTrue(importViews.contains("place: PlaceSheetPlace(candidate: profileCandidate)"))
+        XCTAssertTrue(importViews.contains("action: .choose"))
+        XCTAssertTrue(importViews.contains("Shows the place profile and photo"))
+        XCTAssertTrue(importViews.contains("Text(candidate.importCategoryTitle)"))
+        XCTAssertTrue(importViews.contains("Text(candidate.importLocationSummary)"))
+        XCTAssertTrue(importViews.contains("Capsule()"))
+        XCTAssertTrue(importViews.contains(".frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)"))
+        XCTAssertTrue(importViews.contains("-WanderPlaceImportCandidateMockup"))
+        XCTAssertFalse(importViews.contains("PlaceImportCandidatePhoto"))
+        XCTAssertFalse(importViews.contains("candidate.importPhotoRequest"))
+        XCTAssertFalse(importViews.contains("backend.placePhoto(for: candidate.importPhotoRequest)"))
+
+        let cardSource = try XCTUnwrap(
+            importViews
+                .components(separatedBy: "private struct PlaceImportCandidateCard: View")
+                .last?
+                .components(separatedBy: "private extension PlaceCandidate")
+                .first
+        )
+        XCTAssertTrue(cardSource.contains(".font(.headline.weight(.heavy))"))
+        XCTAssertTrue(cardSource.contains(".font(.caption.weight(.medium))"))
+        XCTAssertFalse(cardSource.contains(".font(.system(size:"))
+    }
+
     func testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")

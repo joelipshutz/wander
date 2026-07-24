@@ -4,6 +4,68 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testCandidateProfilePreservesProviderPhotoIdentityAndChooseAction() {
+        let candidate = PlaceCandidate(
+            id: "candidate-maru",
+            name: "Maru Coffee",
+            category: "coffee shop",
+            address: "1936 Hillhurst Ave, Los Angeles, CA",
+            latitude: 34.10662,
+            longitude: -118.28762,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "google-maru-hillhurst",
+            confidence: 0.95
+        )
+
+        let place = PlaceSheetPlace(candidate: candidate)
+
+        XCTAssertEqual(place.photoRequest.name, candidate.name)
+        XCTAssertEqual(place.photoRequest.sourceProvider, "google_maps")
+        XCTAssertEqual(place.photoRequest.sourceProviderPlaceID, "google-maru-hillhurst")
+        XCTAssertEqual(PlaceSheetAction.choose.systemImage, "checkmark")
+        XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
+        XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
+    }
+
+    #if DEBUG
+    @MainActor
+    func testCandidatePickerDoesNotRequestProviderPhotosBeforeOpeningProfile() async throws {
+        let photo = PlacePhoto(
+            provider: "google_places",
+            providerPlaceID: "unused-google-place",
+            photoURLString: "https://lh3.googleusercontent.com/unused-photo",
+            width: 400,
+            height: 300,
+            authorName: "Unused Photographer",
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: "https://www.google.com/maps/unused-photo",
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+        let repository = CachingPlacePhotoRepository(photo: photo, data: Data([0x01]))
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let host = UIHostingController(
+            rootView: PlaceImportCandidateMockupRoot()
+                .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(repository.metadataRequestCount, 0)
+        XCTAssertEqual(repository.imageRequestCount, 0)
+        window.isHidden = true
+    }
+    #endif
+
     func testRatingExplanationCopyDescribesDistinctSignals() {
         XCTAssertEqual(PlaceRatingExplanation.recMe.title, "rec.me rating")
         XCTAssertEqual(
