@@ -21769,3 +21769,13 @@ Implementation and validation checkpoint — 2026-07-24 13:18 PDT:
 - Existing Swift 6 isolation and traditional-headermap warnings remain
   unchanged. No schema, project setting, build number, TestFlight, Slack, or
   WidgetKit changes were made.
+
+Handoff — 2026-07-24 13:19 PDT:
+
+- Follow-up implementation commit: `ed3344dff` (`fix: refine profile calendar
+  states`).
+- Focused tests: 30 passed, 0 failed. Full suite: 636 passed, 0 failed.
+- The tested build is installed on both named simulators and the regenerated
+  `Wander.xcodeproj` has no uncommitted changes.
+- Next step: push the follow-up commits to ready PR #210, update the PR/Linear
+  validation summary, and leave the branch available for Ryan's Xcode testing.
