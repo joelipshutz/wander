@@ -68,20 +68,54 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
     }
 
-    func testFeedActivityRoutesPersonAndPlaceToTheirOwnProfiles() throws {
+    func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
         let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
+        let featuredRail = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedFeaturedRail: View").last?
+                .components(separatedBy: "private struct FeedFeaturedCard: View").first
+        )
+        let featuredCard = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedFeaturedCard: View").last?
+                .components(separatedBy: "private struct FeedActivityList: View").first
+        )
+        let activityList = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityList: View").last?
+                .components(separatedBy: "private enum FeedFeaturedLayout").first
+        )
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
+        )
+        let activityAction = try XCTUnwrap(
+            activityModule.components(separatedBy: "private var actionButton: some View").last?
+                .components(separatedBy: "private var activityVerb: String").first
         )
 
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
         XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(feed.contains("openPlace: openPlace"))
+
+        XCTAssertTrue(featuredRail.contains("let openPlace: (VisiblePlace) -> Void"))
+        XCTAssertTrue(featuredRail.contains("openPlace: openPlace"))
+        XCTAssertFalse(featuredRail.contains("let save:"))
+        XCTAssertTrue(featuredCard.contains("let openPlace: (VisiblePlace) -> Void"))
+        XCTAssertTrue(featuredCard.contains("openPlace(featured.visiblePlace)"))
+        XCTAssertTrue(featuredCard.contains("Label(\"View place\""))
+        XCTAssertFalse(featuredCard.contains("save(featured)"))
+
+        XCTAssertTrue(activityList.contains("let openPlace: (VisiblePlace) -> Void"))
+        XCTAssertFalse(activityList.contains("let save:"))
         XCTAssertTrue(activityModule.contains("openProfile(activity.actor)"))
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
         XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
+        XCTAssertTrue(activityAction.contains("else if let place = activity.place"))
+        XCTAssertTrue(activityAction.contains("openPlace(place)"))
+        XCTAssertTrue(activityAction.contains("Label(\"View place\""))
+        XCTAssertFalse(activityAction.contains("save(activity)"))
+
+        XCTAssertFalse(feed.contains("private func saveFeaturedPlace("))
+        XCTAssertFalse(feed.contains("private func save(_ activity: FeedActivity)"))
     }
 
     func testFeedRefreshFailureKeepsTheFeedStructureInsteadOfShowingAnEmptyState() throws {

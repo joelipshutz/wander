@@ -103,7 +103,7 @@ struct FeedScreen: View {
                 FeedFeaturedRail(
                     places: page.featuredPlaces,
                     openProfile: openProfile,
-                    save: saveFeaturedPlace
+                    openPlace: openPlace
                 )
             }
 
@@ -112,7 +112,6 @@ struct FeedScreen: View {
                 activity: page.activity,
                 openProfile: openProfile,
                 openPlace: openPlace,
-                save: save,
                 openList: openList
             )
 
@@ -167,15 +166,6 @@ struct FeedScreen: View {
 
     private func openList(_ list: LocalPlaceList) {
         pushNotifications.route(to: .list(id: list.id))
-    }
-
-    private func saveFeaturedPlace(_ featured: FeedFeaturedPlace) {
-        beginSave(visiblePlace: featured.visiblePlace)
-    }
-
-    private func save(_ activity: FeedActivity) {
-        guard let place = activity.place else { return }
-        beginSave(visiblePlace: place)
     }
 
     private func beginSave(visiblePlace: VisiblePlace) {
@@ -915,13 +905,17 @@ private struct FeedSectionHeading: View {
 private struct FeedFeaturedRail: View {
     let places: [FeedFeaturedPlace]
     let openProfile: (ProfileShell) -> Void
-    let save: (FeedFeaturedPlace) -> Void
+    let openPlace: (VisiblePlace) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ForEach(places) { featured in
-                    FeedFeaturedCard(featured: featured, openProfile: openProfile, save: save)
+                    FeedFeaturedCard(
+                        featured: featured,
+                        openProfile: openProfile,
+                        openPlace: openPlace
+                    )
                 }
             }
             .padding(.horizontal, 1)
@@ -933,7 +927,7 @@ private struct FeedFeaturedRail: View {
 private struct FeedFeaturedCard: View {
     let featured: FeedFeaturedPlace
     let openProfile: (ProfileShell) -> Void
-    let save: (FeedFeaturedPlace) -> Void
+    let openPlace: (VisiblePlace) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -972,9 +966,9 @@ private struct FeedFeaturedCard: View {
             Spacer(minLength: 0)
 
             Button {
-                save(featured)
+                openPlace(featured.visiblePlace)
             } label: {
-                Label("Save", systemImage: "plus")
+                Label("View place", systemImage: "mappin.and.ellipse")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .frame(maxWidth: .infinity, minHeight: 38)
@@ -982,7 +976,7 @@ private struct FeedFeaturedCard: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Save \(featured.visiblePlace.place.canonicalName) to my map")
+            .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
         }
         .padding(WanderTheme.spacing3)
         .frame(
@@ -1003,7 +997,6 @@ private struct FeedActivityList: View {
     let activity: [FeedActivity]
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
-    let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
@@ -1013,7 +1006,6 @@ private struct FeedActivityList: View {
                     activity: event,
                     openProfile: openProfile,
                     openPlace: openPlace,
-                    save: save,
                     openList: openList
                 )
 
@@ -1041,7 +1033,6 @@ private struct FeedActivityModule: View {
     let activity: FeedActivity
     let openProfile: (ProfileShell) -> Void
     let openPlace: (VisiblePlace) -> Void
-    let save: (FeedActivity) -> Void
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
@@ -1172,11 +1163,11 @@ private struct FeedActivityModule: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("View list \(list.name)")
-        } else if activity.place != nil {
+        } else if let place = activity.place {
             Button {
-                save(activity)
+                openPlace(place)
             } label: {
-                Label("Save to my map", systemImage: "plus")
+                Label("View place", systemImage: "mappin.and.ellipse")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -1185,7 +1176,7 @@ private struct FeedActivityModule: View {
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Save to my map")
+            .accessibilityLabel("Open \(place.place.canonicalName)")
         }
     }
 
