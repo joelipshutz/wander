@@ -21010,3 +21010,49 @@ Completion — 2026-07-24 01:44 PDT:
 - No build-number bump, archive, upload, TestFlight group change, hosted
   migration, or Slack release note was requested or performed. This app change
   can ride the next explicitly requested TestFlight batch after review.
+
+Continuation — 2026-07-24 10:25 PDT:
+
+- Ryan requested the floating primary action copy change from `continue` to
+  `Save` and explicitly asked to push the completed change to `main`.
+- Re-fetched origin and confirmed this isolated worktree is clean on
+  `codex/rec-139-floating-continue`, tracking the pushed PR #205 branch. The
+  primary checkout still contains unrelated user-owned REC-88 changes and
+  remains untouched.
+- Checked the release queue per the repo landing workflow. Build 95 is the
+  current project version and its archive/upload/TestFlight completion is
+  already recorded; no unfinished explicit release is pending. This request is
+  merge-only, so no build-number bump, TestFlight action, or tester Slack note
+  is authorized.
+- Moved Linear REC-139 back to `In Progress` while applying the final copy
+  adjustment. Expected tracked files are `Wander/Features/Add/AddScreen.swift`,
+  its focused navigation/layout contract test, and this coordination log.
+
+Pre-merge validation — 2026-07-24 10:42 PDT:
+
+- Changed the shared floating current-location action copy from `continue` to
+  `Save` and renamed its private Swift property to match. The action still
+  invokes the existing canonical save flow; no behavior or backend contract
+  changed.
+- Added the copy assertion test first and confirmed the expected RED result:
+  the old implementation declared zero `Save` actions and still contained the
+  inline `continue` declaration. The focused regression then passed 1/1:
+  `/private/tmp/DerivedData-rec139-save/Logs/Test/Test-Wander-2026.07.24_10-31-11--0700.xcresult`.
+- Final full simulator suite passed 628/628 with zero failures on iPhone 17 Pro
+  Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec139-save/Logs/Test/Test-Wander-2026.07.24_10-38-24--0700.xcresult`.
+  The required generic iOS Simulator build also succeeded after the final
+  rename. Existing Swift-concurrency and headermap warnings remain unrelated.
+- Regenerated with `xcodegen generate`; there was no tracked project-file
+  churn, and `git diff --check` is clean.
+- Visual and accessibility QA passed on iPhone 17 Pro and smaller iPhone 17e.
+  Both result lists kept the floating button visible and exposed the exact
+  accessibility label `Save`. Screenshots:
+  `/private/tmp/rec139-save-17pro.png` and
+  `/private/tmp/rec139-save-17e.png`.
+- Pre-landing review found no correctness, security, privacy, performance,
+  persistence, or design blockers. PR #205 has no reviews, unresolved threads,
+  comments, or Greptile findings. The one stale internal `Continue` property
+  name was mechanically aligned to `Save` before the final test/build pass.
+- No build-number bump, archive, upload, TestFlight action, or tester Slack note
+  is part of this merge-only request.

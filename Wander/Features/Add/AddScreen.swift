@@ -322,13 +322,13 @@ struct AddScreen: View {
             }
 
             if !showsFloatingCurrentLocationAction {
-                candidateContinueAction
+                candidateSaveAction
             }
         }
     }
 
     private var floatingCandidateAction: some View {
-        candidateContinueAction
+        candidateSaveAction
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing2)
             .padding(.bottom, WanderTheme.spacing3)
@@ -346,8 +346,8 @@ struct AddScreen: View {
             .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 8, y: 4)
     }
 
-    private var candidateContinueAction: some View {
-        WanderPrimaryButton(title: "continue", systemImage: "arrow.right") {
+    private var candidateSaveAction: some View {
+        WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
             openSharedSaveFlow()
         }
     }

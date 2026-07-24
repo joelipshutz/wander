@@ -402,10 +402,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("if showsFloatingCurrentLocationAction"))
         XCTAssertTrue(confirmPlace.contains("if !showsFloatingCurrentLocationAction"))
         XCTAssertEqual(
-            addScreen.components(separatedBy: "WanderPrimaryButton(title: \"continue\"").count - 1,
+            addScreen.components(separatedBy: "WanderPrimaryButton(title: \"Save\"").count - 1,
             1,
-            "The floating and in-flow layouts should share one Continue action implementation."
+            "The floating and in-flow layouts should share one Save action implementation."
         )
+        XCTAssertFalse(addScreen.contains("WanderPrimaryButton(title: \"continue\""))
     }
 
     func testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems() throws {
