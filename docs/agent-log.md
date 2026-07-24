@@ -21006,3 +21006,47 @@ Merge gate — 2026-07-24 09:10 PDT:
   Squash-merge PR #203, delete its remote branch if safe, record the exact
   merge SHA on `main`, mark REC-129 `Done`, and note that the change will ride
   the next explicitly requested TestFlight batch.
+
+## 2026-07-24 00:52 PDT - Codex - REC-114 Merge Review Blocked
+
+Agent: Codex using `recme-pr-review-merge-release`, `review`, Linear, and
+Google's official Places photo documentation
+Branch: `codex/rec-114-place-match-cards`
+Worktree: `/private/tmp/recme-rec114-place-cards`
+Linear: `REC-114` (`In Review`)
+PR: `https://github.com/joelipshutz/wander/pull/202`
+
+Review outcome:
+
+- Do not merge the current implementation yet. The new card renders each
+  resolved provider photo with only a non-interactive `Google Maps` label,
+  even though the backend returns `authorName`, `authorProfileURL`, and
+  `sourcePhotoURL`. Google's current Places photo contract requires supplied
+  author attribution wherever the photo appears and access to the source
+  content. The compact card needs a compliant author/source treatment or a
+  linked larger attributed view.
+- The card starts `backend.placePhoto(...)` automatically for every visible
+  candidate; manual resolution can return eight candidates. The hosted quota
+  is 120 photo requests per user/day and 900 globally/month, so scrolling 15
+  fully populated ambiguous matches can exhaust one user's daily allowance.
+  SwiftUI task cancellation does not cancel the backend's stored provider
+  task. Product input is required on whether candidates after the first three
+  use fallback art or an explicit tap-to-load treatment.
+- The photo and metadata regions are separate VoiceOver buttons with the same
+  candidate-selection action, causing each card's match choice to be announced
+  twice. Hide the photo action from accessibility or otherwise expose one
+  semantic match-selection control.
+- The card changes geometry at accessibility Dynamic Type sizes but uses fixed
+  point-size fonts throughout, so the text itself does not scale. Replace the
+  fixed sizes with semantic or relative fonts and validate at an accessibility
+  text size before landing.
+- The new navigation regression is a source-string contract only. It passed
+  1/1, but does not instantiate the card or verify callback wiring, photo
+  success/failure/cancellation, fallback rendering, or conditional
+  attribution. Add focused behavior coverage with the fix.
+- The branch was merged with `origin/main` at `228c5ccb7`; a subsequent
+  docs-only REC-129 completion advanced `origin/main` to `2470b92ec`. Refresh
+  again and preserve both append-only log entries before the final merge.
+- No TestFlight action is authorized. Keep REC-114 `In Review` and PR #202
+  open until the photo-loading UX decision is made, the blockers are fixed,
+  tests pass, and the branch is refreshed from latest `main`.
