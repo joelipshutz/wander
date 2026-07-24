@@ -66,8 +66,8 @@ struct ProfileScreen: View {
                     savedListMode = status == .been ? .been : .wanna
                 },
                 inCommonAction: {},
-                calendarDateAction: { date, placeIDs in
-                    placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                calendarDateAction: { summary in
+                    placeCollectionRoute = .calendar(summary)
                 },
                 mapSummaryAction: { kind, item in
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
@@ -877,8 +877,8 @@ struct ProfileDetailView: View {
                                 savedListMode = status == .been ? .been : .wanna
                             },
                             inCommonAction: { savedListMode = .inCommon },
-                            calendarDateAction: { date, placeIDs in
-                                placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                            calendarDateAction: { summary in
+                                placeCollectionRoute = .calendar(summary)
                             },
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
@@ -1109,14 +1109,20 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let title: String
     let placeIDs: [String]
     let source: ProfilePlaceCollectionSource
+    let calendarDay: ProfileCalendarDaySummary?
 
-    static func calendar(date: Date, placeIDs: [String], calendar: Calendar = .current) -> Self {
-        let day = calendar.startOfDay(for: date)
+    var includesAllStatuses: Bool {
+        calendarDay != nil
+    }
+
+    static func calendar(_ summary: ProfileCalendarDaySummary, calendar: Calendar = .current) -> Self {
+        let day = calendar.startOfDay(for: summary.date)
         return ProfilePlaceCollectionRoute(
             id: "calendar-\(day.timeIntervalSince1970)",
-            title: date.formatted(.dateTime.month(.wide).day().year()),
-            placeIDs: placeIDs,
-            source: .calendar
+            title: summary.date.formatted(.dateTime.month(.wide).day().year()),
+            placeIDs: summary.placeIDs,
+            source: .calendar,
+            calendarDay: summary
         )
     }
 
@@ -1125,8 +1131,27 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
             id: "map-\(kind.rawValue)-\(item.id)",
             title: item.title,
             placeIDs: item.placeIDs,
-            source: .mapSummary
+            source: .mapSummary,
+            calendarDay: nil
         )
+    }
+
+    func calendarActivity(for visiblePlace: VisiblePlace) -> ProfileCalendarActivityState? {
+        guard let calendarDay else { return nil }
+        let hasVisit = ProfilePlaceCollectionMatcher.matches(
+            visiblePlace,
+            acceptedPlaceIDs: Set(calendarDay.visitPlaceIDs)
+        )
+        let hasWanna = ProfilePlaceCollectionMatcher.matches(
+            visiblePlace,
+            acceptedPlaceIDs: Set(calendarDay.wannaPlaceIDs)
+        )
+        switch (hasVisit, hasWanna) {
+        case (true, true): return .both
+        case (true, false): return .visit
+        case (false, true): return .wanna
+        case (false, false): return nil
+        }
     }
 }
 
@@ -2004,6 +2029,9 @@ private struct SavedPlacesListScreen: View {
         let base = mode == .inCommon
             ? store.placesInCommon(with: profileID)
             : store.visiblePlaces(for: profileID)
+        if collection?.includesAllStatuses == true {
+            return base
+        }
         guard let status = mode.status else { return base }
         return base.filter { $0.userPlace.status == status }
     }
@@ -2051,18 +2079,31 @@ private struct SavedPlacesListScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    if let calendarDay = collection?.calendarDay {
+                        ProfileCalendarDayDetailHeader(summary: calendarDay)
+                    }
                     searchField
                     filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
                     tagFilterDropdown
 
                     if filteredPlaces.isEmpty {
-                        SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                        if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
+                            SmallEmptyRow(
+                                title: "No activity this day",
+                                subtitle: "visits and wanna saves will show up here"
+                            )
+                        } else {
+                            SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                        }
                     } else {
                         ForEach(filteredPlaces) { visiblePlace in
                             Button {
                                 selectedPlace = visiblePlace
                             } label: {
-                                ProfilePlaceRow(visiblePlace: visiblePlace)
+                                ProfilePlaceRow(
+                                    visiblePlace: visiblePlace,
+                                    calendarActivity: collection?.calendarActivity(for: visiblePlace)
+                                )
                             }
                             .buttonStyle(.plain)
                             .accessibilityHint("Shows saved place details")
@@ -2757,6 +2798,15 @@ private struct ProfileStatButtonStyle: ButtonStyle {
 
 private struct ProfilePlaceRow: View {
     let visiblePlace: VisiblePlace
+    let calendarActivity: ProfileCalendarActivityState?
+
+    init(
+        visiblePlace: VisiblePlace,
+        calendarActivity: ProfileCalendarActivityState? = nil
+    ) {
+        self.visiblePlace = visiblePlace
+        self.calendarActivity = calendarActivity
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -2771,6 +2821,9 @@ private struct ProfilePlaceRow: View {
                 Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
+                if let calendarActivity {
+                    ProfileCalendarPlaceActivityLabel(state: calendarActivity)
+                }
             }
             Spacer()
             if let recommendedScore = visiblePlace.recommendedScore,
@@ -2790,6 +2843,104 @@ private struct ProfilePlaceRow: View {
             return visiblePlace.userPlace.status.displayTitle
         }
         return "\(locality) · \(visiblePlace.userPlace.status.displayTitle)"
+    }
+}
+
+private struct ProfileCalendarDayDetailHeader: View {
+    let summary: ProfileCalendarDaySummary
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            metric(value: summary.visitCount, singular: "visit", plural: "visits", color: WanderTheme.terracotta.color)
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+            metric(value: summary.wannaCount, singular: "wanna save", plural: "wanna saves", color: WanderTheme.categorySage.color)
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+            metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func metric(
+        value: Int,
+        singular: String,
+        plural: String,
+        color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(color)
+            Text(value == 1 ? singular : plural)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ProfileCalendarPlaceActivityLabel: View {
+    let state: ProfileCalendarActivityState
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 10, weight: .black))
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(backgroundColor)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(borderColor, lineWidth: 1))
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var title: String {
+        switch state {
+        case .visit: "visited this day"
+        case .wanna: "saved as wanna this day"
+        case .both: "visited + wanna this day"
+        case .none: "no activity this day"
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch state {
+        case .visit: "Visited on this date"
+        case .wanna: "Saved as wanna on this date"
+        case .both: "Visited and saved as wanna on this date"
+        case .none: "No activity on this date"
+        }
+    }
+
+    private var foregroundColor: Color {
+        state == .visit || state == .both
+            ? WanderTheme.terracottaDark.color
+            : WanderTheme.textInk.color
+    }
+
+    private var backgroundColor: Color {
+        switch state {
+        case .visit, .both: WanderTheme.terracottaTint.color
+        case .wanna: WanderTheme.categorySage.color.opacity(0.22)
+        case .none: WanderTheme.surfaceSand.color
+        }
+    }
+
+    private var borderColor: Color {
+        switch state {
+        case .visit: WanderTheme.terracotta.color
+        case .wanna: WanderTheme.categorySage.color
+        case .both: WanderTheme.categorySage.color
+        case .none: WanderTheme.borderHairline.color
+        }
     }
 }
 

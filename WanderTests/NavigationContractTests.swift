@@ -649,9 +649,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2)"))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))
-        XCTAssertTrue(source.contains(".onTapGesture { selectDate(date, day: day) }"))
+        XCTAssertTrue(source.contains(".onTapGesture { dateAction(summary) }"))
         XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
-        XCTAssertTrue(source.contains(".accessibilityAction { selectDate(date, day: day) }"))
+        XCTAssertTrue(source.contains(".accessibilityAction { dateAction(summary) }"))
+        XCTAssertTrue(source.contains("ProfileCalendarActivityMarker("))
+        XCTAssertTrue(source.contains("ProfileCalendarLegend()"))
+        XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
     }
 
     func testProfileScrollUsesAStaticMapSnapshotWithoutReintroducingLazyContainers() throws {

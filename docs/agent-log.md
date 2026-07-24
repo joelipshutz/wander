@@ -21580,3 +21580,102 @@ Latest-main validation checkpoint — 2026-07-24 12:41 PDT:
   `project.yml`, its two generated Xcode settings, and this log. The archive
   must be created only after this ready PR is merged and a clean worktree is
   pinned to the exact resulting `main` SHA.
+
+## 2026-07-24 12:22 PDT - Codex - REC-140 Combined Profile Calendar Activity
+
+Agent: Codex
+Branch: `codex/rec-140-profile-calendar`
+Worktree: `/private/tmp/recme-rec140-profile-calendar`
+Linear: `REC-140` (`In Progress`)
+
+Goal: enhance the existing Profile dining calendar so each day communicates
+the current user's own visits and wanna-saves together: terracotta fill for a
+visit, sage outline for a wanna-save, both treatments when both occurred, and
+a separate `NOW` marker for today. Keep the calendar date drilldown, month
+navigation, Profile scrolling, and existing map/Been/Wanna behavior intact.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` at `9dbbf311c14b70dfde6bfb3dbf468cdfe5f3f999`.
+- The root checkout has unrelated `.gitignore` and `.pnpm-store/` changes and
+  remains untouched. Existing REC-89, REC-94, and REC-124 calendar worktrees
+  are completed/merged and clean; the latest coordination log shows no active
+  overlapping Profile calendar implementation.
+- REC-140 was created in the `recme` team, assigned to Ryan, linked to
+  REC-89/REC-94/REC-124, and moved to `In Progress` before editing.
+- Current `main` already has a production visits-only calendar. Its presenter
+  exposes per-day visit counts and Been place IDs; its date cells use eager
+  `Grid` plus scroll-compatible tap gestures because nested lazy containers and
+  date buttons previously triggered a physical iOS 26 Profile freeze.
+
+Expected files:
+
+- `Wander/Features/Profile/ProfileInsightsPresenter.swift`
+- `Wander/Features/Profile/ProfileOwnerHome.swift`
+- `Wander/Features/Profile/ProfileScreen.swift` only if the combined day-detail
+  route needs status-aware copy or filtering
+- `WanderTests/ProfileInsightsPresenterTests.swift`
+- `WanderTests/NavigationContractTests.swift` if the structural scroll guard
+  must evolve
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Add focused presenter and routing tests for visit-only, wanna-only, combined,
+  empty, multiple-event, historical-wanna, owner filtering, and time-zone/month
+  boundary behavior.
+- Run the focused Profile suites, the full iOS suite, `xcodegen generate` only
+  if project membership changes, and a generic Simulator build.
+- Capture and inspect the current iPhone simulator plus a smaller iPhone,
+  including today, the combined state, the legend, day detail, month
+  navigation, and a vertical scroll through the calendar into the map.
+- Push the completed branch and open a ready PR to `main`; do not merge, bump
+  the build number, archive, upload to TestFlight, or start WidgetKit work in
+  this implementation session.
+
+Implementation and validation checkpoint — 2026-07-24 12:53 PDT:
+
+- Added a per-day calendar summary that independently tracks visit count,
+  wanna-save count, and canonical place IDs. Current Wanna places use
+  `savedAt`; Been places retain their original wanna day through
+  `historicalWantedAt`. Deleted rows and other owners are excluded.
+- Preserved the existing Profile map/rankings as Been-only. The calendar now
+  renders four stable states: plain, terracotta-filled visit, sage-outlined
+  wanna, and a smaller terracotta fill inside a separated sage ring for both.
+  Today remains a separate `NOW` capsule, and a text-plus-shape legend avoids
+  relying on color alone.
+- Calendar taps now carry the full day summary. Day detail includes both
+  statuses, reports visit/wanna/place counts, and gives every row an explicit
+  `visited this day`, `saved as wanna this day`, or combined activity label.
+  Multiple visits affect the detail count without changing the day marker.
+- Preserved REC-94's eager `Grid`, non-Button day cells, tap gesture, and
+  explicit accessibility action. Accessibility now announces today plus exact
+  visit and wanna counts for each date.
+- `xcodegen generate` completed with no project-file diff.
+- Focused simulator validation passed 30/30 tests on iPhone 17 Pro Max,
+  iOS 26.5. Full validation passed 633/633 tests on the same destination;
+  result bundle:
+  `/private/tmp/DerivedData-rec140-focused/Logs/Test/Test-Wander-2026.07.24_12-36-53--0700.xcresult`.
+- Captured and visually inspected the production Profile calendar on iPhone
+  17 Pro Max and iPhone 17e:
+  `/private/tmp/rec140-calendar-iphone17-pro-max-final.png` and
+  `/private/tmp/rec140-calendar-iphone17e-final.png`. The card, legend, NOW
+  capsule, combined marker, spacing, and tab-bar clearance are clean at both
+  sizes.
+- Tapped the combined date in the production app and inspected
+  `/private/tmp/rec140-calendar-day-detail-iphone17-pro-max.png`. The screen
+  reports 3 visits, 1 wanna save, and 4 places; accessibility confirms the
+  Wanna row is present and labeled `Saved as wanna on this date`.
+- Existing unrelated Swift 6 isolation warnings in
+  `WanderSupabaseClient.swift` remain unchanged. No schema, build-number,
+  TestFlight, Slack, or widget work was performed.
+- Rebased the implementation onto current `origin/main` at
+  `e3577b27d` (REC-114 plus its merge record). The only conflict was this
+  append-only work log; both REC-114 and REC-140 histories were preserved.
+  The rebased focused calendar/routing/scroll suite passed 30/30:
+  `/private/tmp/DerivedData-rec140-focused/Logs/Test/Test-Wander-2026.07.24_12-55-50--0700.xcresult`.
+- `origin/main` then advanced to `2485cfa9d` with the build-96 release commit.
+  Rebased again and preserved both append-only histories. That commit changes
+  only `project.yml`, the generated Xcode build number, and this log, so it
+  introduces no app-source delta after the successful rebased focused run.
