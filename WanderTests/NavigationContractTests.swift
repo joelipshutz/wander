@@ -674,6 +674,30 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
     }
 
+    func testProfileCalendarDayDetailUsesSideBySideDropdownsWithoutSearch() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let calendarControls = try XCTUnwrap(
+            source
+                .components(separatedBy: "private var calendarDayFilterControls: some View")
+                .last?
+                .components(separatedBy: "private var searchField: some View")
+                .first
+        )
+
+        XCTAssertTrue(source.contains("if collection?.calendarDay != nil {\n                        calendarDayFilterControls"))
+        XCTAssertTrue(calendarControls.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(calendarControls.contains("title: \"type\""))
+        XCTAssertTrue(calendarControls.contains("title: \"tags\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"all types\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"all tags\""))
+        XCTAssertTrue(calendarControls.contains("Menu {"))
+        XCTAssertTrue(calendarControls.contains("minHeight: WanderTheme.tapMinimum"))
+        XCTAssertFalse(calendarControls.contains("TextField("))
+        XCTAssertFalse(calendarControls.contains("searchField"))
+    }
+
     func testProfileScrollUsesAStaticMapSnapshotWithoutReintroducingLazyContainers() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")

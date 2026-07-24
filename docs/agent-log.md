@@ -21842,3 +21842,71 @@ Latest-main synchronization — 2026-07-24 13:21 PDT:
   project setting, or tested binary changed, so the existing 30/30 focused,
   636/636 full-suite, and two-size visual validation remain exact for the app
   code now under review.
+
+## 2026-07-24 13:31 PDT - Codex - REC-140 Compact Day Filters
+
+Agent: Codex
+Branch: `codex/rec-140-profile-calendar`
+Worktree: `/private/tmp/recme-rec140-profile-calendar`
+Linear: `REC-140` (`In Review`)
+PR: `#210`
+
+Goal: apply Ryan's next Xcode-test refinement to the calendar day detail:
+remove the low-value place search and replace the vertically stacked type
+chips and expanded tag picker with two compact, side-by-side dropdowns.
+
+Starting status and coordination:
+
+- Fetched `origin`; this isolated worktree is clean, synced to its remote, and
+  contains latest `origin/main` with no commits missing.
+- Ready PR #210 is open, clean, and mergeable. REC-140 remains correctly
+  assigned to Ryan and `In Review`.
+- The root checkout's unrelated work remains untouched. This pass is scoped to
+  the existing day-detail filter UI, its source contract test, and this log.
+
+Expected files:
+
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Add a source contract that keeps search out of the calendar day collection
+  and preserves the side-by-side dropdown layout.
+- Run focused Profile navigation/routing tests plus the full iOS suite.
+- Install and visually inspect the exact build on iPhone 17 Pro Max and iPhone
+  17e, including opening both dropdown menus and confirming 44pt targets.
+- Push the completed follow-up to ready PR #210, update REC-140, and reopen the
+  exact branch project in Xcode for Ryan's continued testing.
+
+Implementation and validation checkpoint — 2026-07-24 13:43 PDT:
+
+- Calendar-day detail now renders one `HStack` containing equal-width native
+  Menu controls for `type` and `tags`; both labels retain icons, selection
+  state, a chevron, and the 44pt minimum tap target.
+- Removed the search field only from calendar-day detail. The shared Been,
+  Wanna, and map-summary collections keep their existing search and expanded
+  filter UI because those collections can be materially larger.
+- Type and tag selections continue to filter both map pins and rows. Long
+  selected type names truncate safely in the half-width control while native
+  menus show their full text; the tag menu remains scrollable.
+- Updated the filtered empty-state guidance to `try another type or tag`.
+- Added a navigation source contract for the side-by-side layout, both native
+  menus, 44pt targets, and absence of a TextField in the calendar controls.
+- `xcodegen generate` completed with no generated project diff.
+- Focused Profile routing/navigation validation passed 13/13:
+  `/private/tmp/DerivedData-rec140-compact-filters/Logs/Test/Test-Wander-2026.07.24_13-33-05--0700.xcresult`.
+- Full simulator validation passed 637/637 tests on iPhone 17 Pro Max /
+  iOS 26.5:
+  `/private/tmp/DerivedData-rec140-compact-filters/Logs/Test/Test-Wander-2026.07.24_13-38-45--0700.xcresult`.
+- Installed the exact build on iPhone 17 Pro Max and iPhone 17e. Accessibility
+  exposes only `Type filter` and `Tags filter` pop-up buttons on calendar day
+  detail—no search field—and reports their selected values.
+- Opened both native menus, selected `Coffee, Tea, & Sweets`, confirmed the
+  collection reduced from four to two places, and inspected:
+  `/private/tmp/rec140-compact-filters-iphone17-pro-max.png` and
+  `/private/tmp/rec140-compact-filters-iphone17e.png`.
+- Existing Swift 6 isolation and traditional-headermap warnings remain
+  unchanged. No schema, build number, TestFlight, Slack, or WidgetKit changes
+  were made.

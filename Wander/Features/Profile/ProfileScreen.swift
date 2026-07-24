@@ -2065,9 +2065,13 @@ private struct SavedPlacesListScreen: View {
                     if let calendarDay = collection?.calendarDay {
                         ProfileCalendarDayDetailHeader(summary: calendarDay)
                     }
-                    searchField
-                    filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                    tagFilterDropdown
+                    if collection?.calendarDay != nil {
+                        calendarDayFilterControls
+                    } else {
+                        searchField
+                        filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                        tagFilterDropdown
+                    }
 
                     if filteredPlaces.isEmpty {
                         if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
@@ -2075,6 +2079,8 @@ private struct SavedPlacesListScreen: View {
                                 title: "No activity this day",
                                 subtitle: "been and wanna places will show up here"
                             )
+                        } else if collection?.calendarDay != nil {
+                            SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
                         } else {
                             SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
                         }
@@ -2153,6 +2159,91 @@ private struct SavedPlacesListScreen: View {
                 }
             )
         }
+    }
+
+    private var calendarDayFilterControls: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            compactFilterDropdown(
+                title: "type",
+                systemImage: "square.grid.2x2.fill",
+                allTitle: "all types",
+                values: categories,
+                selectedValue: $selectedCategory,
+                displayTitle: { WanderPlaceCategory.broadCategory(for: $0) }
+            )
+            compactFilterDropdown(
+                title: "tags",
+                systemImage: "tag.fill",
+                allTitle: "all tags",
+                values: metadataTags,
+                selectedValue: $selectedMetadataTag,
+                displayTitle: { $0 }
+            )
+        }
+    }
+
+    private func compactFilterDropdown(
+        title: String,
+        systemImage: String,
+        allTitle: String,
+        values: [String],
+        selectedValue: Binding<String?>,
+        displayTitle: @escaping (String) -> String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Menu {
+                Button {
+                    selectedValue.wrappedValue = nil
+                } label: {
+                    if selectedValue.wrappedValue == nil {
+                        Label(allTitle, systemImage: "checkmark")
+                    } else {
+                        Text(allTitle)
+                    }
+                }
+
+                ForEach(values, id: \.self) { value in
+                    Button {
+                        selectedValue.wrappedValue = value
+                    } label: {
+                        if selectedValue.wrappedValue == value {
+                            Label(displayTitle(value), systemImage: "checkmark")
+                        } else {
+                            Text(displayTitle(value))
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .black))
+                    Text(selectedValue.wrappedValue.map(displayTitle) ?? allTitle)
+                        .font(.system(size: 14, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: WanderTheme.spacing1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .black))
+                }
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title.capitalized) filter")
+            .accessibilityValue(selectedValue.wrappedValue.map(displayTitle) ?? allTitle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var searchField: some View {
