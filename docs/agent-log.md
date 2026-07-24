@@ -21779,3 +21779,15 @@ Handoff — 2026-07-24 13:19 PDT:
   `Wander.xcodeproj` has no uncommitted changes.
 - Next step: push the follow-up commits to ready PR #210, update the PR/Linear
   validation summary, and leave the branch available for Ryan's Xcode testing.
+
+Publication outcome — 2026-07-24 13:20 PDT:
+
+- Pushed the follow-up to `origin/codex/rec-140-profile-calendar`.
+- Updated ready PR #210 to the Been/Wanna terminology and current 636-test
+  validation summary:
+  `https://github.com/joelipshutz/wander/pull/210`.
+- Renamed REC-140 to `Show Been and Wanna together in Profile calendar` and
+  posted the pushed commit, test results, simulator validation, and deferred
+  WidgetKit/TestFlight scope. The issue remains `In Review`.
+- Branch is ready for Ryan's Xcode testing; merge approval is the only next
+  product step for this PR.
