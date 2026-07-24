@@ -818,64 +818,6 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
         )
     }
 
-    func testCalendarRouteReportsVisitWannaAndCombinedPlaceActivity() {
-        let owner = profile(id: "owner")
-        let visit = visiblePlace(
-            owner: owner,
-            userPlaceID: "visit-save",
-            placeLocalID: "visit",
-            placeServerID: nil,
-            name: "Visit",
-            latitude: 34.06,
-            longitude: -118.24,
-            status: .been
-        )
-        let wanna = visiblePlace(
-            owner: owner,
-            userPlaceID: "wanna-save",
-            placeLocalID: "wanna",
-            placeServerID: nil,
-            name: "Wanna",
-            latitude: 34.07,
-            longitude: -118.25,
-            status: .wannaGo
-        )
-        let both = visiblePlace(
-            owner: owner,
-            userPlaceID: "both-save",
-            placeLocalID: "both",
-            placeServerID: nil,
-            name: "Both",
-            latitude: 34.08,
-            longitude: -118.26,
-            status: .been
-        )
-        let unrelated = visiblePlace(
-            owner: owner,
-            userPlaceID: "unrelated-save",
-            placeLocalID: "unrelated",
-            placeServerID: nil,
-            name: "Unrelated",
-            latitude: 34.09,
-            longitude: -118.27,
-            status: .been
-        )
-        let route = ProfilePlaceCollectionRoute.calendar(
-            ProfileCalendarDaySummary(
-                date: Date(timeIntervalSince1970: 0),
-                visitCount: 2,
-                wannaCount: 2,
-                visitPlaceIDs: ["visit", "both"],
-                wannaPlaceIDs: ["wanna", "both"]
-            )
-        )
-
-        XCTAssertEqual(route.calendarActivity(for: visit), .visit)
-        XCTAssertEqual(route.calendarActivity(for: wanna), .wanna)
-        XCTAssertEqual(route.calendarActivity(for: both), .both)
-        XCTAssertNil(route.calendarActivity(for: unrelated))
-    }
-
     func testProjectionGroupsDuplicateSavesAndKeepsInvalidPlaceInTotalCount() throws {
         let currentUser = profile(id: "current")
         let friend = profile(id: "friend")

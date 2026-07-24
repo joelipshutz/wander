@@ -21696,3 +21696,76 @@ Handoff — 2026-07-24 13:01 PDT:
   warnings recorded above. No required work is omitted from this branch.
 - Next step: test PR #210 in Xcode. After approval, merge it to `main`; begin
   the separate WidgetKit work only after that merge, as requested.
+
+## 2026-07-24 13:07 PDT - Codex - REC-140 Calendar Copy and Marker Follow-up
+
+Agent: Codex
+Branch: `codex/rec-140-profile-calendar`
+Worktree: `/private/tmp/recme-rec140-profile-calendar`
+Linear: `REC-140` (`In Review`)
+PR: `#210`
+
+Goal: apply Ryan's first Xcode-test feedback to the combined Profile calendar:
+use `been` and `wanna` consistently in user-facing calendar copy, render Wanna
+days with a dotted sage circle, lift the `NOW` capsule clear of the date
+outline, and remove the redundant activity pills from day-detail place cards.
+
+Starting status and coordination:
+
+- Fetched `origin`; the isolated worktree is clean, exactly aligned with its
+  remote branch, and remains two commits ahead of `origin/main` with no
+  upstream commits missing.
+- Ready PR #210 is open and merge-clean. REC-140 remains correctly assigned to
+  Ryan and `In Review`.
+- The root checkout's unrelated work remains untouched. This follow-up is
+  limited to the existing REC-140 worktree and files already owned by the
+  calendar implementation.
+
+Expected files:
+
+- `Wander/Features/Profile/ProfileOwnerHome.swift`
+- `Wander/Features/Profile/ProfileScreen.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `WanderTests/ProfileInsightsPresenterTests.swift` if the removed
+  presentation-only route helper leaves obsolete coverage
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Regenerate the Xcode project, run focused calendar/routing tests and the full
+  iOS suite, then inspect the calendar and a combined-day detail screen on the
+  current and smaller simulator sizes.
+- Commit and push this follow-up to the existing branch, update ready PR #210,
+  and leave REC-140 in review for Ryan's continued Xcode testing.
+
+Implementation and validation checkpoint — 2026-07-24 13:18 PDT:
+
+- Replaced calendar-facing `visit`/`visits`/`visited` copy with `been`, and
+  `wanna save(s)` with `wanna`, including the month summary, legend,
+  VoiceOver date label, empty state, and combined-day header.
+- Changed the sage Wanna treatment to a round-capped dotted stroke. The
+  combined state keeps the terracotta inner fill inside that dotted sage ring.
+- Moved the `NOW` capsule from `-2` to `-6` points and gave today's marker two
+  more points of top padding so the capsule and day outline have a clear gap.
+- Removed the presentation-only per-row calendar activity helper and all
+  redundant `visited this day` / `saved as wanna this day` pills. Day-detail
+  rows retain place status, locality, recommendation score, and visibility.
+- `xcodegen generate` completed with no generated project diff.
+- Focused Profile calendar/routing/contract validation passed 30/30 tests:
+  `/private/tmp/DerivedData-rec140-followup/Logs/Test/Test-Wander-2026.07.24_13-08-41--0700.xcresult`.
+- Full simulator validation passed 636/636 tests on iPhone 17 Pro Max /
+  iOS 26.5:
+  `/private/tmp/DerivedData-rec140-followup/Logs/Test/Test-Wander-2026.07.24_13-14-15--0700.xcresult`.
+- Installed the exact tested app on the booted iPhone 17 Pro Max and iPhone
+  17e simulators. Accessibility confirmed `3 been • 1 wanna`, today's
+  `3 been, 1 wanna` label, the dotted-state legend, and detail rows without
+  the removed activity labels.
+- Visually inspected:
+  `/private/tmp/rec140-followup-calendar-iphone17-pro-max.png`,
+  `/private/tmp/rec140-followup-calendar-iphone17e.png`, and
+  `/private/tmp/rec140-followup-day-detail-iphone17e.png`. The dotted rings
+  read clearly at both sizes, the `NOW` capsule no longer touches the ring,
+  and the simplified detail layout remains balanced.
+- Existing Swift 6 isolation and traditional-headermap warnings remain
+  unchanged. No schema, project setting, build number, TestFlight, Slack, or
+  WidgetKit changes were made.

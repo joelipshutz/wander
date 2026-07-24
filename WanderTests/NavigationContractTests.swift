@@ -654,7 +654,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".accessibilityAction { dateAction(summary) }"))
         XCTAssertTrue(source.contains("ProfileCalendarActivityMarker("))
         XCTAssertTrue(source.contains("ProfileCalendarLegend()"))
+        XCTAssertTrue(source.contains("style: StrokeStyle("))
+        XCTAssertTrue(source.contains("lineCap: .round"))
+        XCTAssertTrue(source.contains("dash: [0.1, max(3, size * 0.14)]"))
+        XCTAssertTrue(source.contains("item(state: .visit, title: \"been\")"))
+        XCTAssertTrue(source.contains(".offset(y: -6)"))
         XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
+    }
+
+    func testProfileCalendarDayDetailAvoidsRedundantActivityTags() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+
+        XCTAssertFalse(source.contains("ProfileCalendarPlaceActivityLabel"))
+        XCTAssertFalse(source.contains("visited this day"))
+        XCTAssertFalse(source.contains("saved as wanna this day"))
+        XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: \"been\", plural: \"been\""))
+        XCTAssertTrue(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
     }
 
     func testProfileScrollUsesAStaticMapSnapshotWithoutReintroducingLazyContainers() throws {

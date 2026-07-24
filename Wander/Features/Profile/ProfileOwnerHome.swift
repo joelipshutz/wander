@@ -689,9 +689,9 @@ private struct ProfileCalendarSection: View {
     }
 
     private var monthActivitySummary: String {
-        let visits = "\(insights.monthVisitCount) \(insights.monthVisitCount == 1 ? "visit" : "visits")"
-        let wanna = "\(insights.monthWannaCount) \(insights.monthWannaCount == 1 ? "wanna save" : "wanna saves")"
-        return "\(visits)  •  \(wanna)"
+        let been = "\(insights.monthVisitCount) been"
+        let wanna = "\(insights.monthWannaCount) wanna"
+        return "\(been)  •  \(wanna)"
     }
 
     private var monthDays: [Date?] {
@@ -775,7 +775,7 @@ private struct ProfileCalendarDayCell: View {
                     size: 40,
                     label: "\(Calendar.current.component(.day, from: date))"
                 )
-                .padding(.top, isToday ? 11 : 5)
+                .padding(.top, isToday ? 13 : 5)
 
                 if isToday {
                     Text("NOW")
@@ -786,7 +786,7 @@ private struct ProfileCalendarDayCell: View {
                         .background(WanderTheme.surfaceRaised.color)
                         .clipShape(Capsule())
                         .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 0.75))
-                        .offset(y: -2)
+                        .offset(y: -6)
                         .accessibilityHidden(true)
                 }
             }
@@ -802,9 +802,9 @@ private struct ProfileCalendarDayCell: View {
         guard let summary, summary.state != .none else {
             return "\(base)\(today), no activity"
         }
-        let visits = "\(summary.visitCount) \(summary.visitCount == 1 ? "visit" : "visits")"
-        let wanna = "\(summary.wannaCount) \(summary.wannaCount == 1 ? "wanna save" : "wanna saves")"
-        return "\(base)\(today), \(visits), \(wanna)"
+        let been = "\(summary.visitCount) been"
+        let wanna = "\(summary.wannaCount) wanna"
+        return "\(base)\(today), \(been), \(wanna)"
     }
 }
 
@@ -817,7 +817,14 @@ private struct ProfileCalendarActivityMarker: View {
         ZStack {
             if state == .wanna || state == .both {
                 Circle()
-                    .stroke(WanderTheme.categorySage.color, lineWidth: max(1.5, size * 0.065))
+                    .stroke(
+                        WanderTheme.categorySage.color,
+                        style: StrokeStyle(
+                            lineWidth: max(1.5, size * 0.065),
+                            lineCap: .round,
+                            dash: [0.1, max(3, size * 0.14)]
+                        )
+                    )
                     .frame(width: size, height: size)
             }
 
@@ -847,14 +854,14 @@ private struct ProfileCalendarActivityMarker: View {
 private struct ProfileCalendarLegend: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            item(state: .visit, title: "visited")
+            item(state: .visit, title: "been")
             item(state: .wanna, title: "wanna")
             item(state: .both, title: "both")
         }
         .font(.system(size: 11, weight: .bold))
         .foregroundStyle(WanderTheme.textMuted.color)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Calendar legend: filled is visited, outlined is wanna, filled and outlined is both")
+        .accessibilityLabel("Calendar legend: filled is been, dotted outline is wanna, filled with dotted outline is both")
     }
 
     private func item(state: ProfileCalendarActivityState, title: String) -> some View {

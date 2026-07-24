@@ -1136,23 +1136,6 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
         )
     }
 
-    func calendarActivity(for visiblePlace: VisiblePlace) -> ProfileCalendarActivityState? {
-        guard let calendarDay else { return nil }
-        let hasVisit = ProfilePlaceCollectionMatcher.matches(
-            visiblePlace,
-            acceptedPlaceIDs: Set(calendarDay.visitPlaceIDs)
-        )
-        let hasWanna = ProfilePlaceCollectionMatcher.matches(
-            visiblePlace,
-            acceptedPlaceIDs: Set(calendarDay.wannaPlaceIDs)
-        )
-        switch (hasVisit, hasWanna) {
-        case (true, true): return .both
-        case (true, false): return .visit
-        case (false, true): return .wanna
-        case (false, false): return nil
-        }
-    }
 }
 
 enum ProfilePlaceCollectionMatcher {
@@ -2090,7 +2073,7 @@ private struct SavedPlacesListScreen: View {
                         if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
-                                subtitle: "visits and wanna saves will show up here"
+                                subtitle: "been and wanna places will show up here"
                             )
                         } else {
                             SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
@@ -2100,10 +2083,7 @@ private struct SavedPlacesListScreen: View {
                             Button {
                                 selectedPlace = visiblePlace
                             } label: {
-                                ProfilePlaceRow(
-                                    visiblePlace: visiblePlace,
-                                    calendarActivity: collection?.calendarActivity(for: visiblePlace)
-                                )
+                                ProfilePlaceRow(visiblePlace: visiblePlace)
                             }
                             .buttonStyle(.plain)
                             .accessibilityHint("Shows saved place details")
@@ -2798,15 +2778,6 @@ private struct ProfileStatButtonStyle: ButtonStyle {
 
 private struct ProfilePlaceRow: View {
     let visiblePlace: VisiblePlace
-    let calendarActivity: ProfileCalendarActivityState?
-
-    init(
-        visiblePlace: VisiblePlace,
-        calendarActivity: ProfileCalendarActivityState? = nil
-    ) {
-        self.visiblePlace = visiblePlace
-        self.calendarActivity = calendarActivity
-    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
@@ -2821,9 +2792,6 @@ private struct ProfilePlaceRow: View {
                 Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                if let calendarActivity {
-                    ProfileCalendarPlaceActivityLabel(state: calendarActivity)
-                }
             }
             Spacer()
             if let recommendedScore = visiblePlace.recommendedScore,
@@ -2851,10 +2819,10 @@ private struct ProfileCalendarDayDetailHeader: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            metric(value: summary.visitCount, singular: "visit", plural: "visits", color: WanderTheme.terracotta.color)
+            metric(value: summary.visitCount, singular: "been", plural: "been", color: WanderTheme.terracotta.color)
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
-            metric(value: summary.wannaCount, singular: "wanna save", plural: "wanna saves", color: WanderTheme.categorySage.color)
+            metric(value: summary.wannaCount, singular: "wanna", plural: "wanna", color: WanderTheme.categorySage.color)
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
             metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)
@@ -2884,63 +2852,6 @@ private struct ProfileCalendarDayDetailHeader: View {
                 .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct ProfileCalendarPlaceActivityLabel: View {
-    let state: ProfileCalendarActivityState
-
-    var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .black))
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 7)
-            .frame(height: 20)
-            .background(backgroundColor)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(borderColor, lineWidth: 1))
-            .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var title: String {
-        switch state {
-        case .visit: "visited this day"
-        case .wanna: "saved as wanna this day"
-        case .both: "visited + wanna this day"
-        case .none: "no activity this day"
-        }
-    }
-
-    private var accessibilityLabel: String {
-        switch state {
-        case .visit: "Visited on this date"
-        case .wanna: "Saved as wanna on this date"
-        case .both: "Visited and saved as wanna on this date"
-        case .none: "No activity on this date"
-        }
-    }
-
-    private var foregroundColor: Color {
-        state == .visit || state == .both
-            ? WanderTheme.terracottaDark.color
-            : WanderTheme.textInk.color
-    }
-
-    private var backgroundColor: Color {
-        switch state {
-        case .visit, .both: WanderTheme.terracottaTint.color
-        case .wanna: WanderTheme.categorySage.color.opacity(0.22)
-        case .none: WanderTheme.surfaceSand.color
-        }
-    }
-
-    private var borderColor: Color {
-        switch state {
-        case .visit: WanderTheme.terracotta.color
-        case .wanna: WanderTheme.categorySage.color
-        case .both: WanderTheme.categorySage.color
-        case .none: WanderTheme.borderHairline.color
-        }
     }
 }
 
