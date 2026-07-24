@@ -20935,3 +20935,59 @@ Merge completion — 2026-07-24 00:42 PDT:
 - This was intentionally merge-only. Build stays at 95; no TestFlight archive,
   upload, public-group change, hosted migration, or tester Slack note was
   performed. REC-129 will ride the next explicitly requested TestFlight batch.
+
+## 2026-07-24 00:42 PDT - Codex - REC-139 Floating Add-place action
+
+Agent: Codex using Linear
+Branch: `codex/rec-139-floating-continue`
+Worktree: `/private/tmp/recme-rec139-floating-continue`
+Linear: `REC-139` (`In Progress`)
+
+Goal: replace the `I'm here now` candidate list's scroll-ending Continue
+button with a persistent floating action over the list, preserve the existing
+selection and save-flow behavior, validate it, and push the Xcode-ready branch
+for Ryan to test.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from exact `origin/main`
+  commit `228c5ccb7`. The primary checkout is on an unrelated stale REC-88
+  branch with user-owned `.gitignore` and `.pnpm-store/` changes; they remain
+  untouched.
+- Created Linear REC-139, assigned it to Ryan, and moved it to `In Progress`
+  before implementation.
+- No active worktree or recent log entry overlaps
+  `Wander/Features/Add/AddScreen.swift`. The only expected tracked files are
+  that Add view, its focused navigation/layout contract regression, and this
+  coordination log.
+- Current root cause: inline candidate results reuse `confirmPlace`, which
+  places the primary button after every candidate inside the root `ScrollView`.
+  The smallest safe change is to keep non-inline confirm flows unchanged,
+  remove the button from inline candidate content, and present the same action
+  from a bottom safe-area overlay while inline results are visible.
+
+Checkpoint — 2026-07-24 01:36 PDT:
+
+- Added the focused navigation/layout contract first and confirmed the expected
+  RED result: the old Add screen failed all five assertions requiring a
+  current-location-only floating action, bottom safe-area placement, and a
+  single shared Continue implementation.
+- Implemented the narrow UI change in `AddScreen`. Current-location inline
+  results now render the shared Continue action through a persistent bottom
+  safe-area inset with the existing terracotta capsule plus a subtle warm fade
+  and shadow. The candidate list no longer owns that button. Quick-search,
+  link/photo, and other non-current-location confirm flows keep their existing
+  in-flow action, and the action still calls the same `openSharedSaveFlow()`.
+- The focused regression passed 1/1 on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec139-red/Logs/Test/Test-Wander-2026.07.24_00-50-08--0700.xcresult`.
+  The first sandboxed attempt failed before app code because CoreSimulator and
+  package network access were blocked; the approved rerun built normally.
+- Regenerated `Wander.xcodeproj` with `xcodegen generate`; there was no tracked
+  project-file churn. `git diff --check` is clean.
+- Visual and interaction QA passed with live MapKit nearby results on iPhone 17
+  Pro and smaller iPhone 17e. The action remained visible over both result
+  lists, the 17 Pro bottom-of-list capture shows the final candidate fully
+  clear of the button, and tapping Continue on 17e opened the canonical
+  `save this place` sheet for the selected candidate. Screenshots:
+  `/private/tmp/rec139-add-17pro.png` and
+  `/private/tmp/rec139-add-17e.png`.
