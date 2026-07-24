@@ -1,9 +1,50 @@
 import Foundation
 
+enum ProfileCalendarActivityState: String, Equatable, Hashable {
+    case none
+    case visit
+    case wanna
+    case both
+}
+
+struct ProfileCalendarDaySummary: Identifiable, Equatable, Hashable {
+    let date: Date
+    let visitCount: Int
+    let wannaCount: Int
+    let visitPlaceIDs: [String]
+    let wannaPlaceIDs: [String]
+
+    var id: Date { date }
+
+    var state: ProfileCalendarActivityState {
+        switch (visitCount > 0, wannaCount > 0) {
+        case (true, true): .both
+        case (true, false): .visit
+        case (false, true): .wanna
+        case (false, false): .none
+        }
+    }
+
+    var placeIDs: [String] {
+        Array(Set(visitPlaceIDs).union(wannaPlaceIDs)).sorted()
+    }
+
+    static func empty(on date: Date) -> Self {
+        ProfileCalendarDaySummary(
+            date: date,
+            visitCount: 0,
+            wannaCount: 0,
+            visitPlaceIDs: [],
+            wannaPlaceIDs: []
+        )
+    }
+}
+
 struct ProfileInsights: Equatable {
     let month: Date
-    let monthVisitCounts: [Date: Int]
-    let monthPlaceIDs: [Date: [String]]
+    let monthDaySummaries: [Date: ProfileCalendarDaySummary]
+    let monthVisitCount: Int
+    let monthWannaCount: Int
     let monthSpotCount: Int
     let monthCategoryCount: Int
     let monthCityCount: Int
@@ -14,6 +55,22 @@ struct ProfileInsights: Equatable {
 
     var mapCityCount: Int {
         Set(mapPoints.compactMap { CityCanonicalizer.comparisonKey($0.city) }).count
+    }
+
+    var monthVisitCounts: [Date: Int] {
+        monthDaySummaries.compactMapValues { summary in
+            summary.visitCount > 0 ? summary.visitCount : nil
+        }
+    }
+
+    var monthWannaCounts: [Date: Int] {
+        monthDaySummaries.compactMapValues { summary in
+            summary.wannaCount > 0 ? summary.wannaCount : nil
+        }
+    }
+
+    var monthPlaceIDs: [Date: [String]] {
+        monthDaySummaries.mapValues(\.placeIDs)
     }
 }
 
@@ -209,6 +266,8 @@ private struct UserPlaceFingerprint: Equatable {
     let placeID: String
     let statusRaw: String
     let categoryOverride: String?
+    let savedAt: Date
+    let historicalWantedAt: Date?
     let deletedAt: Date?
 
     init(_ userPlace: LocalUserPlace) {
@@ -218,6 +277,8 @@ private struct UserPlaceFingerprint: Equatable {
         placeID = userPlace.placeID
         statusRaw = userPlace.statusRaw
         categoryOverride = userPlace.categoryOverride
+        savedAt = userPlace.savedAt
+        historicalWantedAt = userPlace.historicalWantedAt
         deletedAt = userPlace.deletedAt
     }
 }
@@ -260,6 +321,28 @@ private struct PlaceFingerprint: Equatable {
     }
 }
 
+private struct ProfileCalendarDayAccumulator {
+    var visitCount = 0
+    var wannaCount = 0
+    var visitPlaceIDs: Set<String> = []
+    var wannaPlaceIDs: Set<String> = []
+
+    func summary(on date: Date) -> ProfileCalendarDaySummary {
+        ProfileCalendarDaySummary(
+            date: date,
+            visitCount: visitCount,
+            wannaCount: wannaCount,
+            visitPlaceIDs: visitPlaceIDs.sorted(),
+            wannaPlaceIDs: wannaPlaceIDs.sorted()
+        )
+    }
+}
+
+private struct ProfileWannaActivity {
+    let userPlace: LocalUserPlace
+    let savedAt: Date
+}
+
 enum ProfileInsightsPresenter {
     static func present(
         ownerID: String,
@@ -269,8 +352,11 @@ enum ProfileInsightsPresenter {
         month: Date,
         calendar: Calendar = .current
     ) -> ProfileInsights {
-        let activeBeen = userPlaces.filter {
-            $0.userID == ownerID && $0.status == .been && $0.deletedAt == nil
+        let activeOwnerPlaces = uniqueUserPlaces(userPlaces.filter {
+            $0.userID == ownerID && $0.deletedAt == nil
+        })
+        let activeBeen = activeOwnerPlaces.filter {
+            $0.status == .been
         }
         let userPlaceByID = keyedUserPlaces(activeBeen)
         let placeByID = keyedPlaces(places)
@@ -281,17 +367,44 @@ enum ProfileInsightsPresenter {
         let monthVisits = activeVisits.filter { visit in
             monthInterval?.contains(visit.visitedAt) == true
         }
-
-        var monthVisitCounts: [Date: Int] = [:]
-        var monthPlaceIDs: [Date: Set<String>] = [:]
-        for visit in monthVisits {
-            let day = calendar.startOfDay(for: visit.visitedAt)
-            monthVisitCounts[day, default: 0] += 1
-            if let userPlace = userPlaceByID[visit.userPlaceID] {
-                let canonicalPlaceID = placeByID[userPlace.placeID]?.id ?? userPlace.placeID
-                monthPlaceIDs[day, default: []].insert(canonicalPlaceID)
+        let wannaActivities = activeOwnerPlaces.compactMap { userPlace -> ProfileWannaActivity? in
+            switch userPlace.status {
+            case .wannaGo:
+                ProfileWannaActivity(userPlace: userPlace, savedAt: userPlace.savedAt)
+            case .been:
+                userPlace.historicalWantedAt.map {
+                    ProfileWannaActivity(userPlace: userPlace, savedAt: $0)
+                }
             }
         }
+        let monthWannaActivities = wannaActivities.filter { activity in
+            monthInterval?.contains(activity.savedAt) == true
+        }
+
+        var dayAccumulators: [Date: ProfileCalendarDayAccumulator] = [:]
+        for visit in monthVisits {
+            let day = calendar.startOfDay(for: visit.visitedAt)
+            dayAccumulators[day, default: ProfileCalendarDayAccumulator()].visitCount += 1
+            if let userPlace = userPlaceByID[visit.userPlaceID] {
+                let canonicalPlaceID = placeByID[userPlace.placeID]?.id ?? userPlace.placeID
+                dayAccumulators[day, default: ProfileCalendarDayAccumulator()]
+                    .visitPlaceIDs
+                    .insert(canonicalPlaceID)
+            }
+        }
+        for activity in monthWannaActivities {
+            let day = calendar.startOfDay(for: activity.savedAt)
+            dayAccumulators[day, default: ProfileCalendarDayAccumulator()].wannaCount += 1
+            let canonicalPlaceID = placeByID[activity.userPlace.placeID]?.id ?? activity.userPlace.placeID
+            dayAccumulators[day, default: ProfileCalendarDayAccumulator()]
+                .wannaPlaceIDs
+                .insert(canonicalPlaceID)
+        }
+        let monthDaySummaries = Dictionary(
+            uniqueKeysWithValues: dayAccumulators.map { day, accumulator in
+                (day, accumulator.summary(on: day))
+            }
+        )
 
         let monthUserPlaces = uniqueUserPlaces(
             monthVisits.compactMap { userPlaceByID[$0.userPlaceID] }
@@ -324,8 +437,9 @@ enum ProfileInsightsPresenter {
 
         return ProfileInsights(
             month: calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month,
-            monthVisitCounts: monthVisitCounts,
-            monthPlaceIDs: monthPlaceIDs.mapValues { $0.sorted() },
+            monthDaySummaries: monthDaySummaries,
+            monthVisitCount: monthVisits.count,
+            monthWannaCount: monthWannaActivities.count,
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,

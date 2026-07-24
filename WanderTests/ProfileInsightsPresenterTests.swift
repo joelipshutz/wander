@@ -3,7 +3,7 @@ import XCTest
 @testable import Wander
 
 final class ProfileInsightsPresenterTests: XCTestCase {
-    func testInsightsUseOwnerBeenVisitsAndExcludeWannaAndOtherUsers() throws {
+    func testInsightsKeepMapBeenOnlyAndCalendarIncludesOwnerWannaSaves() throws {
         let fixture = makeFixture()
         let insights = ProfileInsightsPresenter.present(
             ownerID: fixture.ownerID,
@@ -26,9 +26,22 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             ["coffee"]
         )
         XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
+        XCTAssertEqual(insights.monthVisitCount, 3)
+        XCTAssertEqual(insights.monthWannaCount, 1)
+
+        let day19 = try XCTUnwrap(
+            fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 19))
+        )
+        let daySummary = try XCTUnwrap(insights.monthDaySummaries[day19])
+        XCTAssertEqual(daySummary.state, .both)
+        XCTAssertEqual(daySummary.visitCount, 1)
+        XCTAssertEqual(daySummary.wannaCount, 1)
+        XCTAssertEqual(daySummary.visitPlaceIDs, ["dinner"])
+        XCTAssertEqual(daySummary.wannaPlaceIDs, ["wanna"])
+        XCTAssertEqual(daySummary.placeIDs, ["dinner", "wanna"])
     }
 
-    func testCalendarDateBadgesCountOwnerBeenVisitsIncludingRepeatedPlaces() throws {
+    func testCalendarDaySummariesCountRepeatedOwnerVisitsAndKeepWannaSeparate() throws {
         let fixture = makeFixture()
         let day = try XCTUnwrap(fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 8)))
         let laterThatDay = try XCTUnwrap(
@@ -50,6 +63,110 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(insights.monthVisitCounts[day], 3)
         XCTAssertEqual(insights.monthPlaceIDs[day], ["coffee", "dinner"])
         XCTAssertEqual(insights.monthVisitCounts.count, 1)
+        XCTAssertEqual(insights.monthWannaCount, 1)
+    }
+
+    func testCalendarActivityStateCoversEmptyVisitWannaAndBoth() {
+        let date = Date(timeIntervalSince1970: 0)
+        XCTAssertEqual(ProfileCalendarDaySummary.empty(on: date).state, .none)
+        XCTAssertEqual(
+            ProfileCalendarDaySummary(
+                date: date,
+                visitCount: 1,
+                wannaCount: 0,
+                visitPlaceIDs: ["visit"],
+                wannaPlaceIDs: []
+            ).state,
+            .visit
+        )
+        XCTAssertEqual(
+            ProfileCalendarDaySummary(
+                date: date,
+                visitCount: 0,
+                wannaCount: 1,
+                visitPlaceIDs: [],
+                wannaPlaceIDs: ["wanna"]
+            ).state,
+            .wanna
+        )
+        XCTAssertEqual(
+            ProfileCalendarDaySummary(
+                date: date,
+                visitCount: 2,
+                wannaCount: 3,
+                visitPlaceIDs: ["shared", "visit"],
+                wannaPlaceIDs: ["wanna", "shared"]
+            ).state,
+            .both
+        )
+    }
+
+    func testCalendarIncludesHistoricalWannaOnOriginalSaveDayAfterVisit() throws {
+        let fixture = makeFixture()
+        let wantedDay = try XCTUnwrap(
+            fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 4, hour: 9))
+        )
+        let visitedDay = try XCTUnwrap(
+            fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 22, hour: 19))
+        )
+        let converted = fixture.userPlaces[0]
+        converted.historicalWantedAt = wantedDay
+        fixture.visits[0].visitedAt = visitedDay
+        fixture.visits[1].deletedAt = visitedDay
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+        let wantedDate = fixture.calendar.startOfDay(for: wantedDay)
+        let visitedDate = fixture.calendar.startOfDay(for: visitedDay)
+
+        XCTAssertEqual(insights.monthDaySummaries[wantedDate]?.state, .wanna)
+        XCTAssertEqual(insights.monthDaySummaries[wantedDate]?.wannaPlaceIDs, ["coffee"])
+        XCTAssertEqual(insights.monthDaySummaries[visitedDate]?.state, .visit)
+        XCTAssertEqual(insights.monthDaySummaries[visitedDate]?.visitPlaceIDs, ["coffee"])
+    }
+
+    func testCalendarWannaSavesExcludeOtherOwnersAndDeletedRows() throws {
+        let fixture = makeFixture()
+        let day = try XCTUnwrap(
+            fixture.calendar.date(from: DateComponents(year: 2026, month: 6, day: 25, hour: 10))
+        )
+        let otherWanna = LocalUserPlace(
+            localID: "other-wanna",
+            userID: "other",
+            placeID: fixture.places[0].id,
+            status: .wannaGo,
+            visibility: .followers,
+            savedAt: day,
+            sourceType: "manual"
+        )
+        let deletedWanna = LocalUserPlace(
+            localID: "deleted-wanna",
+            userID: fixture.ownerID,
+            placeID: fixture.places[1].id,
+            status: .wannaGo,
+            visibility: .followers,
+            savedAt: day,
+            sourceType: "manual",
+            deletedAt: day
+        )
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces + [otherWanna, deletedWanna],
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertNil(insights.monthDaySummaries[fixture.calendar.startOfDay(for: day)])
+        XCTAssertEqual(insights.monthWannaCount, 1)
     }
 
     func testCalendarDateBadgesCanonicalizePlaceAliasesAndRetainMissingPlaceReferences() throws {
@@ -215,6 +332,44 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         let june30 = try XCTUnwrap(losAngeles.date(from: DateComponents(year: 2026, month: 6, day: 30)))
 
         XCTAssertEqual(insights.monthVisitCounts[june30], 1)
+    }
+
+    func testWannaTimezoneBoundaryUsesInjectedCalendar() throws {
+        var losAngeles = Calendar(identifier: .gregorian)
+        losAngeles.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let place = LocalPlace(
+            localID: "place",
+            canonicalName: "Late Save",
+            category: WanderPlaceCategory.restaurantsFood,
+            locality: "Los Angeles",
+            country: "US",
+            latitude: 34,
+            longitude: -118
+        )
+        let savedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-01T06:30:00Z"))
+        let userPlace = LocalUserPlace(
+            localID: "up",
+            userID: "owner",
+            placeID: place.id,
+            status: .wannaGo,
+            visibility: .followers,
+            savedAt: savedAt,
+            sourceType: "manual"
+        )
+        let june = try XCTUnwrap(losAngeles.date(from: DateComponents(year: 2026, month: 6, day: 1)))
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: "owner",
+            userPlaces: [userPlace],
+            visits: [],
+            places: [place],
+            month: june,
+            calendar: losAngeles
+        )
+        let june30 = try XCTUnwrap(losAngeles.date(from: DateComponents(year: 2026, month: 6, day: 30)))
+
+        XCTAssertEqual(insights.monthWannaCounts[june30], 1)
+        XCTAssertEqual(insights.monthDaySummaries[june30]?.state, .wanna)
     }
 
     func testMissingOrInvalidPlacesAreDroppedWithoutBreakingOtherInsights() {
@@ -404,6 +559,12 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         assertCacheInvalidates("user place category override") {
             $0.userPlaces[0].categoryOverride = WanderPlaceCategory.thingsToDo
         }
+        assertCacheInvalidates("user place saved date") {
+            $0.userPlaces[0].savedAt = $0.userPlaces[0].savedAt.addingTimeInterval(3_600)
+        }
+        assertCacheInvalidates("user place historical wanted date") {
+            $0.userPlaces[0].historicalWantedAt = Date(timeIntervalSince1970: 1)
+        }
         assertCacheInvalidates("user place deletion") {
             $0.userPlaces[0].deletedAt = Date(timeIntervalSince1970: 1)
         }
@@ -549,6 +710,7 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             placeID: wanna.id,
             status: .wannaGo,
             visibility: .followers,
+            savedAt: day19,
             sourceType: "manual"
         )
         let otherCoffee = LocalUserPlace(
@@ -596,17 +758,25 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
             total: 2,
             placeIDs: ["coffee", "dinner"]
         )
+        let calendarSummary = ProfileCalendarDaySummary(
+            date: Date(timeIntervalSince1970: 0),
+            visitCount: 2,
+            wannaCount: 1,
+            visitPlaceIDs: ["coffee", "shared"],
+            wannaPlaceIDs: ["dinner", "shared"]
+        )
 
         let mapRoute = ProfilePlaceCollectionRoute.mapSummary(kind: .countries, item: summary)
-        let calendarRoute = ProfilePlaceCollectionRoute.calendar(
-            date: Date(timeIntervalSince1970: 0),
-            placeIDs: summary.placeIDs
-        )
+        let calendarRoute = ProfilePlaceCollectionRoute.calendar(calendarSummary)
 
         XCTAssertEqual(mapRoute.source, .mapSummary)
         XCTAssertTrue(mapRoute.source.presentsInteractiveMap)
+        XCTAssertFalse(mapRoute.includesAllStatuses)
         XCTAssertEqual(calendarRoute.source, .calendar)
         XCTAssertTrue(calendarRoute.source.presentsInteractiveMap)
+        XCTAssertTrue(calendarRoute.includesAllStatuses)
+        XCTAssertEqual(calendarRoute.placeIDs, ["coffee", "dinner", "shared"])
+        XCTAssertEqual(calendarRoute.calendarDay, calendarSummary)
     }
 
     func testCollectionMatcherAcceptsCanonicalLocalAndServerPlaceIDs() {

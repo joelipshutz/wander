@@ -50,7 +50,7 @@ struct ProfileOwnerHome: View {
     let sharedVisitInvitationsAction: () -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
     let inCommonAction: () -> Void
-    let calendarDateAction: (Date, [String]) -> Void
+    let calendarDateAction: (ProfileCalendarDaySummary) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
 
@@ -608,7 +608,7 @@ private struct ProfileCalendarSection: View {
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
     let ownerLabel: String
-    let dateAction: (Date, [String]) -> Void
+    let dateAction: (ProfileCalendarDaySummary) -> Void
 
     private var calendar: Calendar { .current }
     private var weekdays: [String] { calendar.veryShortStandaloneWeekdaySymbols }
@@ -636,6 +636,11 @@ private struct ProfileCalendarSection: View {
                 ProfileCalendarMetric(value: insights.monthCityCount, label: "cities")
             }
 
+            Text(monthActivitySummary)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .accessibilityLabel(monthActivitySummary)
+
             Grid(horizontalSpacing: 6, verticalSpacing: WanderTheme.spacing2) {
                 GridRow {
                     ForEach(Array(weekdays.enumerated()), id: \.offset) { _, weekday in
@@ -651,20 +656,27 @@ private struct ProfileCalendarSection: View {
                         ForEach(Array(week.enumerated()), id: \.offset) { _, date in
                             if let date {
                                 let day = calendar.startOfDay(for: date)
-                                ProfileCalendarDayCell(date: date, visitCount: insights.monthVisitCounts[day])
+                                let summary = insights.monthDaySummaries[day]
+                                    ?? ProfileCalendarDaySummary.empty(on: day)
+                                ProfileCalendarDayCell(
+                                    date: date,
+                                    summary: summary,
+                                    isToday: calendar.isDateInToday(date)
+                                )
                                     .contentShape(Rectangle())
-                                    .onTapGesture { selectDate(date, day: day) }
+                                    .onTapGesture { dateAction(summary) }
                                     .accessibilityAddTraits(.isButton)
                                     .accessibilityHint("Shows places from this date")
-                                    .accessibilityAction { selectDate(date, day: day) }
+                                    .accessibilityAction { dateAction(summary) }
                             } else {
-                                ProfileCalendarDayCell(date: nil, visitCount: nil)
+                                ProfileCalendarDayCell(date: nil, summary: nil, isToday: false)
                             }
                         }
                     }
                 }
             }
 
+            ProfileCalendarLegend()
         }
         .padding(WanderTheme.spacing4)
         .background(WanderTheme.surfaceBone.color)
@@ -674,6 +686,12 @@ private struct ProfileCalendarSection: View {
 
     private var monthTitle: String {
         selectedMonth.formatted(.dateTime.month(.wide).year())
+    }
+
+    private var monthActivitySummary: String {
+        let been = "\(insights.monthVisitCount) been"
+        let wanna = "\(insights.monthWannaCount) wanna"
+        return "\(been)  •  \(wanna)"
     }
 
     private var monthDays: [Date?] {
@@ -705,9 +723,6 @@ private struct ProfileCalendarSection: View {
         }
     }
 
-    private func selectDate(_ date: Date, day: Date) {
-        dateAction(date, insights.monthPlaceIDs[day] ?? [])
-    }
 }
 
 private struct ProfileMonthButton: View {
@@ -749,40 +764,112 @@ private struct ProfileCalendarMetric: View {
 
 private struct ProfileCalendarDayCell: View {
     let date: Date?
-    let visitCount: Int?
+    let summary: ProfileCalendarDaySummary?
+    let isToday: Bool
 
     var body: some View {
-        ZStack {
-            if visitCount != nil {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                    .fill(WanderTheme.terracotta.color)
-            }
-
+        ZStack(alignment: .top) {
             if let date {
-                Text("\(Calendar.current.component(.day, from: date))")
-                    .font(.system(size: 14, weight: visitCount == nil ? .bold : .black))
-                    .foregroundStyle(visitCount == nil ? WanderTheme.textInk.color : WanderTheme.textOnAction.color)
-            }
+                ProfileCalendarActivityMarker(
+                    state: summary?.state ?? .none,
+                    size: 40,
+                    label: "\(Calendar.current.component(.day, from: date))"
+                )
+                .padding(.top, isToday ? 13 : 5)
 
-            if let visitCount, visitCount > 1 {
-                Text("\(visitCount)")
-                    .font(.system(size: 10, weight: .black))
-                    .frame(width: 18, height: 18)
-                    .background(WanderTheme.textInk.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-                    .offset(x: 15, y: -15)
+                if isToday {
+                    Text("NOW")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .padding(.horizontal, 5)
+                        .frame(height: 13)
+                        .background(WanderTheme.surfaceRaised.color)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 0.75))
+                        .offset(y: -6)
+                        .accessibilityHidden(true)
+                }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 42)
+        .frame(maxWidth: .infinity, minHeight: 50)
         .accessibilityLabel(accessibilityLabel)
     }
 
     private var accessibilityLabel: String {
         guard let date else { return "" }
         let base = date.formatted(.dateTime.month(.wide).day())
-        guard let visitCount else { return base }
-        return "\(base), \(visitCount) \(visitCount == 1 ? "visit" : "visits")"
+        let today = isToday ? ", today" : ""
+        guard let summary, summary.state != .none else {
+            return "\(base)\(today), no activity"
+        }
+        let been = "\(summary.visitCount) been"
+        let wanna = "\(summary.wannaCount) wanna"
+        return "\(base)\(today), \(been), \(wanna)"
+    }
+}
+
+private struct ProfileCalendarActivityMarker: View {
+    let state: ProfileCalendarActivityState
+    let size: CGFloat
+    let label: String?
+
+    var body: some View {
+        ZStack {
+            if state == .wanna || state == .both {
+                Circle()
+                    .stroke(
+                        WanderTheme.categorySage.color,
+                        style: StrokeStyle(
+                            lineWidth: max(1.5, size * 0.065),
+                            lineCap: .round,
+                            dash: [0.1, max(3, size * 0.14)]
+                        )
+                    )
+                    .frame(width: size, height: size)
+            }
+
+            if state == .visit || state == .both {
+                Circle()
+                    .fill(WanderTheme.terracotta.color)
+                    .frame(
+                        width: state == .both ? size - 8 : size - 4,
+                        height: state == .both ? size - 8 : size - 4
+                    )
+            }
+
+            if let label {
+                Text(label)
+                    .font(.system(size: size * 0.35, weight: state == .none || state == .wanna ? .bold : .black))
+                    .foregroundStyle(
+                        state == .visit || state == .both
+                            ? WanderTheme.textOnAction.color
+                            : WanderTheme.textInk.color
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private struct ProfileCalendarLegend: View {
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            item(state: .visit, title: "been")
+            item(state: .wanna, title: "wanna")
+            item(state: .both, title: "both")
+        }
+        .font(.system(size: 11, weight: .bold))
+        .foregroundStyle(WanderTheme.textMuted.color)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Calendar legend: filled is been, dotted outline is wanna, filled with dotted outline is both")
+    }
+
+    private func item(state: ProfileCalendarActivityState, title: String) -> some View {
+        HStack(spacing: 5) {
+            ProfileCalendarActivityMarker(state: state, size: 18, label: nil)
+                .accessibilityHidden(true)
+            Text(title)
+        }
     }
 }
 

@@ -66,8 +66,8 @@ struct ProfileScreen: View {
                     savedListMode = status == .been ? .been : .wanna
                 },
                 inCommonAction: {},
-                calendarDateAction: { date, placeIDs in
-                    placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                calendarDateAction: { summary in
+                    placeCollectionRoute = .calendar(summary)
                 },
                 mapSummaryAction: { kind, item in
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
@@ -877,8 +877,8 @@ struct ProfileDetailView: View {
                                 savedListMode = status == .been ? .been : .wanna
                             },
                             inCommonAction: { savedListMode = .inCommon },
-                            calendarDateAction: { date, placeIDs in
-                                placeCollectionRoute = .calendar(date: date, placeIDs: placeIDs)
+                            calendarDateAction: { summary in
+                                placeCollectionRoute = .calendar(summary)
                             },
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
@@ -1109,14 +1109,20 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let title: String
     let placeIDs: [String]
     let source: ProfilePlaceCollectionSource
+    let calendarDay: ProfileCalendarDaySummary?
 
-    static func calendar(date: Date, placeIDs: [String], calendar: Calendar = .current) -> Self {
-        let day = calendar.startOfDay(for: date)
+    var includesAllStatuses: Bool {
+        calendarDay != nil
+    }
+
+    static func calendar(_ summary: ProfileCalendarDaySummary, calendar: Calendar = .current) -> Self {
+        let day = calendar.startOfDay(for: summary.date)
         return ProfilePlaceCollectionRoute(
             id: "calendar-\(day.timeIntervalSince1970)",
-            title: date.formatted(.dateTime.month(.wide).day().year()),
-            placeIDs: placeIDs,
-            source: .calendar
+            title: summary.date.formatted(.dateTime.month(.wide).day().year()),
+            placeIDs: summary.placeIDs,
+            source: .calendar,
+            calendarDay: summary
         )
     }
 
@@ -1125,9 +1131,11 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
             id: "map-\(kind.rawValue)-\(item.id)",
             title: item.title,
             placeIDs: item.placeIDs,
-            source: .mapSummary
+            source: .mapSummary,
+            calendarDay: nil
         )
     }
+
 }
 
 enum ProfilePlaceCollectionMatcher {
@@ -2004,6 +2012,9 @@ private struct SavedPlacesListScreen: View {
         let base = mode == .inCommon
             ? store.placesInCommon(with: profileID)
             : store.visiblePlaces(for: profileID)
+        if collection?.includesAllStatuses == true {
+            return base
+        }
         guard let status = mode.status else { return base }
         return base.filter { $0.userPlace.status == status }
     }
@@ -2051,12 +2062,28 @@ private struct SavedPlacesListScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    searchField
-                    filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
-                    tagFilterDropdown
+                    if let calendarDay = collection?.calendarDay {
+                        ProfileCalendarDayDetailHeader(summary: calendarDay)
+                    }
+                    if collection?.calendarDay != nil {
+                        calendarDayFilterControls
+                    } else {
+                        searchField
+                        filterSection(title: "type", values: categories, selectedValue: $selectedCategory)
+                        tagFilterDropdown
+                    }
 
                     if filteredPlaces.isEmpty {
-                        SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                        if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
+                            SmallEmptyRow(
+                                title: "No activity this day",
+                                subtitle: "been and wanna places will show up here"
+                            )
+                        } else if collection?.calendarDay != nil {
+                            SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
+                        } else {
+                            SmallEmptyRow(title: "No matching places", subtitle: "try clearing search or filters")
+                        }
                     } else {
                         ForEach(filteredPlaces) { visiblePlace in
                             Button {
@@ -2132,6 +2159,91 @@ private struct SavedPlacesListScreen: View {
                 }
             )
         }
+    }
+
+    private var calendarDayFilterControls: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            compactFilterDropdown(
+                title: "type",
+                systemImage: "square.grid.2x2.fill",
+                allTitle: "all types",
+                values: categories,
+                selectedValue: $selectedCategory,
+                displayTitle: { WanderPlaceCategory.broadCategory(for: $0) }
+            )
+            compactFilterDropdown(
+                title: "tags",
+                systemImage: "tag.fill",
+                allTitle: "all tags",
+                values: metadataTags,
+                selectedValue: $selectedMetadataTag,
+                displayTitle: { $0 }
+            )
+        }
+    }
+
+    private func compactFilterDropdown(
+        title: String,
+        systemImage: String,
+        allTitle: String,
+        values: [String],
+        selectedValue: Binding<String?>,
+        displayTitle: @escaping (String) -> String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Menu {
+                Button {
+                    selectedValue.wrappedValue = nil
+                } label: {
+                    if selectedValue.wrappedValue == nil {
+                        Label(allTitle, systemImage: "checkmark")
+                    } else {
+                        Text(allTitle)
+                    }
+                }
+
+                ForEach(values, id: \.self) { value in
+                    Button {
+                        selectedValue.wrappedValue = value
+                    } label: {
+                        if selectedValue.wrappedValue == value {
+                            Label(displayTitle(value), systemImage: "checkmark")
+                        } else {
+                            Text(displayTitle(value))
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .black))
+                    Text(selectedValue.wrappedValue.map(displayTitle) ?? allTitle)
+                        .font(.system(size: 14, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: WanderTheme.spacing1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .black))
+                }
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title.capitalized) filter")
+            .accessibilityValue(selectedValue.wrappedValue.map(displayTitle) ?? allTitle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var searchField: some View {
@@ -2790,6 +2902,47 @@ private struct ProfilePlaceRow: View {
             return visiblePlace.userPlace.status.displayTitle
         }
         return "\(locality) · \(visiblePlace.userPlace.status.displayTitle)"
+    }
+}
+
+private struct ProfileCalendarDayDetailHeader: View {
+    let summary: ProfileCalendarDaySummary
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            metric(value: summary.visitCount, singular: "been", plural: "been", color: WanderTheme.terracotta.color)
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+            metric(value: summary.wannaCount, singular: "wanna", plural: "wanna", color: WanderTheme.categorySage.color)
+            Divider()
+                .overlay(WanderTheme.borderHairline.color)
+            metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func metric(
+        value: Int,
+        singular: String,
+        plural: String,
+        color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)")
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(color)
+            Text(value == 1 ? singular : plural)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
