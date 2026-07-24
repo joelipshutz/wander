@@ -32,12 +32,16 @@ async function main() {
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
+  if (options.migrationTest && (!options.linked || !options.migrationPreview)) {
+    throw new Error("--migration-test requires --linked and --migration-preview.");
+  }
   if (options.linked) {
     runLinkedSmokeChecks(
       smokeUserID,
       collaboratorUserID,
       strangerUserID,
       options.migrationPreview,
+      options.migrationTest,
     );
     return;
   }
@@ -103,6 +107,10 @@ function parseArgs(args) {
         parsed.migrationPreview = requiredValue(args, index, arg);
         index += 1;
         break;
+      case "--migration-test":
+        parsed.migrationTest = requiredValue(args, index, arg);
+        index += 1;
+        break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
@@ -126,12 +134,14 @@ Usage:
   node scripts/supabase-smoke-test.mjs
   node scripts/supabase-smoke-test.mjs --linked
   node scripts/supabase-smoke-test.mjs --migration-preview <migration.sql>
+  node scripts/supabase-smoke-test.mjs --linked --migration-preview <migration.sql> --migration-test <test.sql>
 
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
   --migration-preview <path>       Apply one transaction-wrapped migration only inside the rolled-back smoke transaction.
+  --migration-test <path>          With --linked and --migration-preview, run one strict pgTAP file in the same rollback-only transaction.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
@@ -141,6 +151,7 @@ Notes:
   Run npm --prefix scripts ci --ignore-scripts once to install the pinned pg dependency.
   Every fixture and behavior mutation runs in one transaction and is rolled back.
   Migration preview validates hosted compatibility without applying migration history.
+  Migration test mode skips the broader smoke suite so an unrelated hosted quota cannot mask the targeted pgTAP result.
 `);
 }
 
@@ -169,6 +180,7 @@ function runLinkedSmokeChecks(
   collaboratorUserID,
   strangerUserID,
   migrationPreviewPath,
+  migrationTestPath,
 ) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
@@ -177,7 +189,11 @@ function runLinkedSmokeChecks(
     : "";
   const migrationPreviewTestSQL = migrationPreviewPath
     ? transactionBody(
-      loadStrictPgTapSQL(new URL("../supabase/tests/wanna_go_reminders.sql", import.meta.url)),
+      loadStrictPgTapSQL(
+        migrationTestPath
+          ? new URL(resolve(migrationTestPath), "file:")
+          : new URL("../supabase/tests/wanna_go_reminders.sql", import.meta.url),
+      ),
       "rollback",
     )
     : "";
@@ -188,13 +204,16 @@ function runLinkedSmokeChecks(
     new URL("../supabase/tests/discover_profile_recommendations.sql", import.meta.url),
   );
   try {
-    writeFileSync(filePath, `${buildLinkedSmokeSQL(
-      smokeUserID,
-      collaboratorUserID,
-      strangerUserID,
-      migrationPreviewSQL,
-      migrationPreviewTestSQL,
-    )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`, {
+    const linkedSQL = migrationTestPath
+      ? `begin;\n${migrationPreviewSQL}\n${migrationPreviewTestSQL}\nrollback;`
+      : `${buildLinkedSmokeSQL(
+        smokeUserID,
+        collaboratorUserID,
+        strangerUserID,
+        migrationPreviewSQL,
+        migrationPreviewTestSQL,
+      )}\n${cuisineSmokeSQL}\n${discoverSmokeSQL}`;
+    writeFileSync(filePath, linkedSQL, {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -210,7 +229,11 @@ function runLinkedSmokeChecks(
         .join("\n");
       throw new Error(details || "linked Supabase query failed");
     }
-    console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+    if (migrationTestPath) {
+      console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${migrationTestPath}`);
+    } else {
+      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -219,6 +242,9 @@ function runLinkedSmokeChecks(
 function loadStrictPgTapSQL(fileURL) {
   const source = readFileSync(fileURL, "utf8");
   const finishStatement = "select * from finish();";
+  if (source.includes("from finish() as result(message);")) {
+    return source;
+  }
   if (!source.includes(finishStatement)) {
     throw new Error(`pgTAP smoke file is missing its finish statement: ${fileURL.pathname}`);
   }
@@ -576,16 +602,23 @@ do $owner_photo_gallery$
 declare
   visible_count integer;
   attributed_count integer;
+  ranked_contributors text[];
+  rank_cursors integer[];
 begin
   select count(*)::integer,
-         count(*) filter (where contributor_user_id = ${smokeUser})::integer
-    into visible_count, attributed_count
+         count(*) filter (where contributor_user_id = ${smokeUser})::integer,
+         array_agg(contributor_user_id order by sort_order),
+         array_agg(sort_order order by sort_order)
+    into visible_count, attributed_count, ranked_contributors, rank_cursors
   from public.visible_place_photos((
     select p.id from public.places p
     where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
   ));
-  if visible_count <> 2 or attributed_count <> 1 then
-    raise exception 'owner place-photo gallery ordering/attribution fixture failed';
+  if visible_count <> 2
+     or attributed_count <> 1
+     or ranked_contributors is distinct from array[${smokeUser}, ${collaboratorUser}]::text[]
+     or rank_cursors is distinct from array[0, 1]::integer[] then
+    raise exception 'owner place-photo gallery ranking/attribution fixture failed';
   end if;
 end
 $owner_photo_gallery$;
@@ -649,16 +682,20 @@ end
 $follower_scoped_photo$;
 
 do $follower_photo_gallery$
-declare visible_count integer;
+declare
+  visible_count integer;
+  ranked_contributors text[];
 begin
-  select count(*)::integer into visible_count
+  select count(*)::integer,
+         array_agg(contributor_user_id order by sort_order)
+    into visible_count, ranked_contributors
   from public.visible_place_photos((
     select p.id from public.places p
     where p.source_provider = 'codex_smoke' and p.source_provider_place_id = 'place-list-rpc-smoke'
-  ))
-  where contributor_user_id = ${smokeUser};
-  if visible_count <> 1 then
-    raise exception 'follower place-photo gallery visibility failed';
+  ));
+  if visible_count <> 2
+     or ranked_contributors is distinct from array[${collaboratorUser}, ${smokeUser}]::text[] then
+    raise exception 'follower place-photo gallery ownership/follow ranking failed';
   end if;
 end
 $follower_photo_gallery$;
@@ -2163,7 +2200,7 @@ async function runFirstVisiblePlacePhotoChecks(
   );
   const ownerGalleryFirstPage = await expectQuery(
     client,
-    "owner place-photo gallery keeps public user photos ordered and attributed",
+    "owner place-photo gallery ranks own photo before followed contributors",
     `
       select *
       from public.visible_place_photos($1::uuid, null, null, null, 1)
@@ -2171,6 +2208,7 @@ async function runFirstVisiblePlacePhotoChecks(
     [smokePlaceID],
     (result) => result.rows.length === 1
       && result.rows[0]?.photo_id === expectedPhotoID
+      && result.rows[0]?.sort_order === 0
       && result.rows[0]?.contributor_user_id === smokeUserID
       && result.rows[0]?.contributor_handle,
   );
@@ -2194,6 +2232,7 @@ async function runFirstVisiblePlacePhotoChecks(
       ownerGalleryFirstPage.rows[0].photo_id,
     ],
     (result) => result.rows[0]?.photo_id === expectedCollaboratorPhotoID
+      && result.rows[0]?.sort_order === 1
       && result.rows[0]?.contributor_user_id === collaboratorUserID,
   );
 
@@ -2214,14 +2253,16 @@ async function runFirstVisiblePlacePhotoChecks(
   );
   await expectQuery(
     client,
-    "follower place-photo gallery returns public contributors only",
+    "follower place-photo gallery ranks own photo before a followed contributor",
     `
-      select count(*)::integer as count
+      select array_agg(contributor_user_id order by sort_order) as contributor_ids,
+             array_agg(sort_order order by sort_order) as rank_cursors
       from public.visible_place_photos($1::uuid)
-      where contributor_user_id = $2
     `,
-    [smokePlaceID, smokeUserID],
-    (result) => result.rows[0]?.count === 1,
+    [smokePlaceID],
+    (result) => JSON.stringify(result.rows[0]?.contributor_ids)
+        === JSON.stringify([collaboratorUserID, smokeUserID])
+      && JSON.stringify(result.rows[0]?.rank_cursors) === JSON.stringify([0, 1]),
   );
 
   await client.query("reset role");

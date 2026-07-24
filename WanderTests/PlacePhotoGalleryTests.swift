@@ -2,21 +2,23 @@ import XCTest
 @testable import Wander
 
 final class PlacePhotoGalleryTests: XCTestCase {
-    func testPresenterKeepsGoogleFirstAndDeduplicatesUserPhotos() {
+    func testPresenterKeepsGoogleFirstPreservesServerRankingAndDeduplicatesUserPhotos() {
         let google = photo(provider: "google_places", id: "google")
-        let maya = userItem(id: "maya-1", userID: "maya", handle: "mayap")
-        let duplicateMaya = userItem(id: "maya-1", userID: "maya", handle: "mayap")
-        let andrew = userItem(id: "andrew-1", userID: "andrew", handle: "andrewc")
+        let mine = userItem(id: "mine-1", userID: "viewer", handle: "viewer")
+        let followed = userItem(id: "followed-1", userID: "maya", handle: "mayap")
+        let popular = userItem(id: "popular-1", userID: "andrew", handle: "andrewc")
+        let duplicateFollowed = userItem(id: "followed-1", userID: "maya", handle: "mayap")
 
         let items = PlacePhotoGalleryPresenter.items(
             providerPhoto: google,
-            userPhotos: [maya, duplicateMaya, andrew]
+            userPhotos: [mine, followed, popular, duplicateFollowed]
         )
 
         XCTAssertEqual(items.map(\.id), [
             "google_places|google",
-            "visit_photo|maya-1",
-            "visit_photo|andrew-1"
+            "visit_photo|mine-1",
+            "visit_photo|followed-1",
+            "visit_photo|popular-1"
         ])
         XCTAssertTrue(items[0].isGooglePlacesPhoto)
     }
