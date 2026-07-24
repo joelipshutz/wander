@@ -21261,3 +21261,191 @@ Emoji-first implementation validation — 2026-07-24 12:29 PDT:
   advanced from `e74eb7b64` to `9dbbf311c` with REC-136 photo-ranking work.
   REC-114 will merge that current main and rerun the affected gates before
   landing. No TestFlight action is authorized.
+## 2026-07-24 01:36 PDT - Codex - REC-136 place-photo ranking
+
+Agent: Codex using the Linear workflow
+Branch: `codex/rec-136-photo-ranking`
+Worktree: `/private/tmp/recme-rec136-photo-ranking`
+Linear: `REC-136` (`In Progress`, assigned to Ryan)
+
+Goal: implement the place-profile photo-carousel order requested in REC-136:
+Google place imagery first, then the current user's photos, followed accounts'
+photos, and remaining popular contributors ranked by follower count, with
+Google imagery retained as the empty-gallery fallback.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` commit `2470b92ec`. The primary checkout contains unrelated
+  `.gitignore` and `.pnpm-store/` changes; they remain untouched.
+- Read the current Linear issue, assigned it to Ryan, and moved it from
+  `Backlog` to `In Progress` before implementation.
+- No active worktree is editing the expected production surface. REC-133
+  previously introduced the carousel and is already merged; its implementation
+  and tests will be treated as the baseline.
+- Expected files are the place-photo gallery presenter/surface under
+  `Wander/Features/Map/`, focused gallery tests under `WanderTests/`, and this
+  coordination log. Backend/schema/RLS changes will only be considered if the
+  existing gallery payload does not expose enough relationship and follower
+  metadata to rank safely.
+
+Implementation and validation checkpoint — 2026-07-24 01:58 PDT:
+
+- The existing iOS presenter already prepends the single Google Places image,
+  preserves the RPC's user-photo order, deduplicates by provider/photo id, and
+  naturally leaves Google as the fallback when no user photo is visible.
+  `PlacePhotoGalleryTests` now names and locks that contract explicitly with
+  own, followed, and popular-account fixtures.
+- Added `20260724090000_rank_visible_place_photos.sql`, replacing the existing
+  same-signature `visible_place_photos` RPC without changing its return shape.
+  It remains `SECURITY INVOKER`, pins `search_path = public, app`, revokes
+  `public`/`anon`, grants only `authenticated`, and ranks only rows already
+  admitted by the existing RLS and gallery privacy predicates.
+- The eligible user-photo tail is ordered by viewer ownership, followed
+  account, future policy-visible non-followed account, then follower count and
+  stable photo fields. The current v0.1 RLS contract intentionally excludes
+  non-followed accounts, so the final social tier is future-compatible rather
+  than a privacy expansion. A repeated Google row is not manufactured because
+  the client has one provider image; that image remains both first choice and
+  empty-user-gallery fallback.
+- Extended `visible_place_photo_gallery.sql` with viewer-owned, multiple
+  followed-account, and follower-count fixtures. The linked hosted PostgreSQL
+  rollback preview applied the new migration inside one transaction and passed
+  all 12 pgTAP assertions, then rolled back:
+  `node scripts/supabase-smoke-test.mjs --linked --migration-preview
+  supabase/migrations/20260724090000_rank_visible_place_photos.sql
+  --migration-test supabase/tests/visible_place_photo_gallery.sql`.
+- Extended the pinned smoke helper with a targeted rollback-only
+  `--migration-test` mode so unrelated hosted state cannot mask migration
+  coverage. A full linked smoke preview also compiled the migration but stopped
+  on the pre-existing global place-photo quota assertion
+  (`place-photo quota rejected an authenticated request below the caps`) before
+  reaching the gallery assertions. This is not recorded as a full-smoke pass;
+  the exact ranking/RLS path is covered by the passing hosted pgTAP run.
+- `supabase db push --linked --dry-run` resolved exactly
+  `20260724090000_rank_visible_place_photos.sql`. No hosted migration was
+  applied: production deployment was outside the chat's branch-implementation
+  scope, and the attempted approval was rejected. The hosted project remains
+  unchanged.
+- Focused iOS validation passed 4/4 tests:
+  `WanderTests/PlacePhotoGalleryTests` on an installed iPhone 17 Pro Max,
+  iOS 26.5 simulator. The prescribed iPhone 16 Plus / iOS 18.6 runtime is not
+  installed on this machine.
+- Full iOS validation passed 627/627 tests with zero failures on the same
+  simulator. Generic iOS Simulator build also succeeded with
+  `CODE_SIGNING_ALLOWED=NO`. Existing traditional-headermap and Swift 6
+  isolation warnings remain; no REC-136-specific warning or failure was added.
+
+Handoff blocker — 2026-07-24 02:02 PDT:
+
+- Implementation and validation are complete, but the required GitHub publish
+  handoff cannot proceed because `gh auth status` reports that the active
+  `ryanlane23` token is invalid. Per the GitHub publishing workflow, no files
+  were staged, committed, pushed, or opened as a PR after discovering this.
+- REC-136 remains `In Progress`; the Supabase migration remains unapplied.
+- Exact restart: authenticate with `gh auth login -h github.com`, then from
+  `/private/tmp/recme-rec136-photo-ranking` re-run `gh auth status`,
+  `git diff --check`, explicitly stage the five REC-136 files listed by
+  `git status -sb`, commit, push `codex/rec-136-photo-ranking`, and open a ready
+  PR to `main`. Add the PR and validation summary to REC-136, move it to
+  `In Review`, and append the final commit/PR outcome here.
+
+Publishing resumed — 2026-07-24 02:06 PDT:
+
+- Ryan reauthenticated the GitHub CLI; unrestricted `gh auth status` now
+  succeeds for `ryanlane23` with HTTPS Git operations.
+- A fresh fetch found `origin/main` one commit ahead at `d500d63e2` (REC-139).
+  Its production changes do not overlap REC-136; both branches append the
+  shared agent log. REC-136 will be committed and rebased onto that exact main
+  before publication.
+
+Post-rebase validation — 2026-07-24 11:59 PDT:
+
+- Committed the five scoped REC-136 files and rebased onto exact latest
+  `origin/main` `d500d63e2`. The only conflict was the expected additive
+  `docs/agent-log.md` overlap; both REC-139 and REC-136 histories were
+  preserved. No production-code conflict occurred.
+- The full suite on the exact rebased branch passed 628/628 tests with zero
+  failures on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec136-final/Logs/Test/Test-Wander-2026.07.24_11-53-57--0700.xcresult`.
+  This supersedes the pre-rebase 627-test count; the additional passing test
+  came from REC-139 on updated `main`.
+
+PR handoff — 2026-07-24 12:01 PDT:
+
+- Pushed implementation commit `91e7b43a8` on
+  `codex/rec-136-photo-ranking` and opened ready PR #207:
+  `https://github.com/joelipshutz/wander/pull/207`.
+- The GitHub connector returned `403 Resource not accessible by integration`
+  for PR creation, so the repository publishing workflow's authenticated
+  `gh pr create` fallback was used successfully.
+- Validation attached to the PR: full suite 628/628, focused gallery suite
+  4/4, generic Simulator build, hosted rollback-only pgTAP 12/12, migration
+  dry-run, Node syntax check, and clean diff check.
+- Known gap remains the unrelated global place-photo quota failure in the
+  broader linked smoke suite; the exact REC-136 migration and gallery
+  privacy/ranking path passed the dedicated hosted transaction and rolled back.
+- No hosted migration, build-number bump, archive, TestFlight action, or Slack
+  release note was performed. Next step is PR review; the migration should be
+  applied through the normal reviewed deployment path rather than from this
+  implementation session.
+
+Merge gate — 2026-07-24 12:18 PDT:
+
+- Ryan explicitly requested that PR #207 land on `main`. This is merge-only:
+  no hosted Supabase migration, build-number bump, archive/upload, TestFlight
+  group change, or tester Slack note is authorized.
+- Fetched current `origin`. `main` is at `e74eb7b64`, which is already an
+  ancestor of the PR head; TestFlight build 95 is fully documented as uploaded,
+  attached, approved, and announced, so no unfinished explicit release blocks
+  this merge.
+- Applied the repository `recme-pr-review-merge-release` workflow, the gstack
+  diff-review checklist, and the engineering-risk lens. Scope is clean: five
+  files implement and verify REC-136 with no signing, project, generated, or
+  unrelated app-source churn.
+- SQL/security review found no blocker. `visible_place_photos` remains
+  `SECURITY INVOKER`, pins `search_path = public, app`, grants only
+  `authenticated`, and ranks only rows admitted by existing RLS and explicit
+  public-profile/Everyone-visible predicates. The current privacy contract
+  continues to exclude non-followed contributors; popularity breaks ties only
+  among policy-visible contributors. The follower-count lookup uses the
+  existing `(followed_user_id, follower_user_id)` index.
+- Architecture, code-quality, test, pagination/API-contract, performance,
+  shell/LLM, enum/value, and distribution passes found no unresolved issue.
+  Existing iOS presenter behavior prepends Google, preserves RPC ranking, and
+  deduplicates rows; the RPC keeps its signature and return shape.
+- GitHub reports PR #207 open, ready, automatically mergeable, and clean. It
+  has zero review submissions, zero review threads, zero top-level comments,
+  zero Greptile comments, no labels/hold signal, and no hosted status checks.
+- Exact branch validation remains: full iOS suite 628/628, focused gallery
+  suite 4/4, generic Simulator build, hosted rollback-only pgTAP 12/12,
+  migration dry-run, Node syntax check, and clean diff check. The broader
+  linked smoke preview remains blocked by the unrelated global place-photo
+  quota assertion; the exact migration/RLS path passed and rolled back.
+- Merge decision: squash-merge PR #207, delete its remote branch if safe,
+  verify the exact merge SHA on `origin/main`, mark REC-136 `Done`, and note
+  that the migration still requires the normal reviewed hosted deployment
+  path. The app change will ride the next explicitly requested TestFlight
+  batch.
+
+Merge completion — 2026-07-24 12:13 PDT:
+
+- Squash-merged and closed ready PR #207 into `main` as
+  `1e55f03c8e1b3ce49930f077a61e7bff6ddc2ce4`:
+  `https://github.com/joelipshutz/wander/pull/207`.
+- Used the reviewed head guard `182f0a1a9f666c750eae8eab67aaf71588cee0e0`
+  during merge. A post-merge fetch confirmed exact `origin/main` at the squash
+  commit, and the deleted remote feature ref was pruned successfully.
+- Moved Linear REC-136 from `In Review` to `Done` and added the merge SHA,
+  validation evidence, branch cleanup, and release/deployment status.
+- Final validation remains: full iOS suite 628/628, focused gallery suite 4/4,
+  generic Simulator build, hosted rollback-only pgTAP 12/12, migration
+  dry-run, Node syntax check, and clean diff check.
+- The optional gstack preamble/review-history writes were not run because the
+  approval reviewer blocked their potential external telemetry side effect.
+  The full read-only checklist and engineering-risk review were completed and
+  recorded in the merge gate above.
+- This was intentionally merge-only. Build stays at 95; no hosted migration,
+  archive/upload, TestFlight group change, or tester Slack note was performed.
+  The merged migration still requires the normal reviewed hosted deployment
+  path, and REC-136 will ride the next explicitly requested TestFlight batch.
