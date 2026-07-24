@@ -21475,3 +21475,21 @@ REC-114 final merge gate — 2026-07-24 12:33 PDT:
   `In Review` until the ready PR is pushed and squash-merged. This is
   merge-only: no build-number bump, archive, upload, TestFlight action, hosted
   migration, or tester Slack note is authorized.
+
+REC-114 merge completion — 2026-07-24 12:35 PDT:
+
+- Pushed final reviewed head `b79b2aa1e395d3b549483015a717b66a04d81af5`
+  and updated ready PR #202 to describe the emoji-first, explicit-profile-photo
+  direction and its resolved quota, attribution, accessibility, and test
+  blockers.
+- Squash-merged PR #202 into `main` as
+  `98ea8ad36528602ab4e016479831f4315daeaebf`. A post-merge fetch confirmed
+  exact `origin/main` at that commit. The merged remote feature branch was
+  deleted; the isolated local worktree remains open in Xcode for review.
+- Final validation remains: focused REC-114 regressions 3/3; full simulator
+  suite 631/631 after merging current main; generic iOS Simulator build
+  succeeded; visual QA passed on iPhone 17 Pro, smaller iPhone 17e, and
+  Accessibility Large; `git diff --check` clean.
+- Linear REC-114 is complete. This was intentionally merge-only: build 95
+  remains unchanged, and no archive, upload, TestFlight group change, hosted
+  migration, or tester Slack note was performed.
