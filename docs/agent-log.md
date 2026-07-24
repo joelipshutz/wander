@@ -21056,3 +21056,18 @@ Pre-merge validation — 2026-07-24 10:42 PDT:
   name was mechanically aligned to `Save` before the final test/build pass.
 - No build-number bump, archive, upload, TestFlight action, or tester Slack note
   is part of this merge-only request.
+
+Merge completion — 2026-07-24 11:51 PDT:
+
+- Pushed final feature head `bf17f8fb3` and updated PR #205's title to
+  `REC-139: float nearby-place Save action`.
+- Squash-merged and closed PR #205 into `main`:
+  `d500d63e29ab8aa2d9e69b2b318f2bd637c92d48`.
+  A post-merge fetch confirmed exact `origin/main` at that commit.
+- Final validation remains: focused regression 1/1, full simulator suite
+  628/628 with zero failures, generic iOS Simulator build succeeded, and
+  visual/accessibility QA passed on iPhone 17 Pro and iPhone 17e with the exact
+  `Save` label.
+- Linear REC-139 is complete. No build-number bump, archive, upload,
+  TestFlight action, or tester Slack note was performed; build 95 remains the
+  current release build.
