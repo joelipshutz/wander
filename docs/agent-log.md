@@ -21199,3 +21199,41 @@ PR handoff — 2026-07-24 12:01 PDT:
   release note was performed. Next step is PR review; the migration should be
   applied through the normal reviewed deployment path rather than from this
   implementation session.
+
+Merge gate — 2026-07-24 12:18 PDT:
+
+- Ryan explicitly requested that PR #207 land on `main`. This is merge-only:
+  no hosted Supabase migration, build-number bump, archive/upload, TestFlight
+  group change, or tester Slack note is authorized.
+- Fetched current `origin`. `main` is at `e74eb7b64`, which is already an
+  ancestor of the PR head; TestFlight build 95 is fully documented as uploaded,
+  attached, approved, and announced, so no unfinished explicit release blocks
+  this merge.
+- Applied the repository `recme-pr-review-merge-release` workflow, the gstack
+  diff-review checklist, and the engineering-risk lens. Scope is clean: five
+  files implement and verify REC-136 with no signing, project, generated, or
+  unrelated app-source churn.
+- SQL/security review found no blocker. `visible_place_photos` remains
+  `SECURITY INVOKER`, pins `search_path = public, app`, grants only
+  `authenticated`, and ranks only rows admitted by existing RLS and explicit
+  public-profile/Everyone-visible predicates. The current privacy contract
+  continues to exclude non-followed contributors; popularity breaks ties only
+  among policy-visible contributors. The follower-count lookup uses the
+  existing `(followed_user_id, follower_user_id)` index.
+- Architecture, code-quality, test, pagination/API-contract, performance,
+  shell/LLM, enum/value, and distribution passes found no unresolved issue.
+  Existing iOS presenter behavior prepends Google, preserves RPC ranking, and
+  deduplicates rows; the RPC keeps its signature and return shape.
+- GitHub reports PR #207 open, ready, automatically mergeable, and clean. It
+  has zero review submissions, zero review threads, zero top-level comments,
+  zero Greptile comments, no labels/hold signal, and no hosted status checks.
+- Exact branch validation remains: full iOS suite 628/628, focused gallery
+  suite 4/4, generic Simulator build, hosted rollback-only pgTAP 12/12,
+  migration dry-run, Node syntax check, and clean diff check. The broader
+  linked smoke preview remains blocked by the unrelated global place-photo
+  quota assertion; the exact migration/RLS path passed and rolled back.
+- Merge decision: squash-merge PR #207, delete its remote branch if safe,
+  verify the exact merge SHA on `origin/main`, mark REC-136 `Done`, and note
+  that the migration still requires the normal reviewed hosted deployment
+  path. The app change will ride the next explicitly requested TestFlight
+  batch.
