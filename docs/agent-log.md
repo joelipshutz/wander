@@ -21237,3 +21237,25 @@ Merge gate — 2026-07-24 12:18 PDT:
   that the migration still requires the normal reviewed hosted deployment
   path. The app change will ride the next explicitly requested TestFlight
   batch.
+
+Merge completion — 2026-07-24 12:13 PDT:
+
+- Squash-merged and closed ready PR #207 into `main` as
+  `1e55f03c8e1b3ce49930f077a61e7bff6ddc2ce4`:
+  `https://github.com/joelipshutz/wander/pull/207`.
+- Used the reviewed head guard `182f0a1a9f666c750eae8eab67aaf71588cee0e0`
+  during merge. A post-merge fetch confirmed exact `origin/main` at the squash
+  commit, and the deleted remote feature ref was pruned successfully.
+- Moved Linear REC-136 from `In Review` to `Done` and added the merge SHA,
+  validation evidence, branch cleanup, and release/deployment status.
+- Final validation remains: full iOS suite 628/628, focused gallery suite 4/4,
+  generic Simulator build, hosted rollback-only pgTAP 12/12, migration
+  dry-run, Node syntax check, and clean diff check.
+- The optional gstack preamble/review-history writes were not run because the
+  approval reviewer blocked their potential external telemetry side effect.
+  The full read-only checklist and engineering-risk review were completed and
+  recorded in the merge gate above.
+- This was intentionally merge-only. Build stays at 95; no hosted migration,
+  archive/upload, TestFlight group change, or tester Slack note was performed.
+  The merged migration still requires the normal reviewed hosted deployment
+  path, and REC-136 will ride the next explicitly requested TestFlight batch.
