@@ -21493,3 +21493,90 @@ REC-114 merge completion — 2026-07-24 12:35 PDT:
 - Linear REC-114 is complete. This was intentionally merge-only: build 95
   remains unchanged, and no archive, upload, TestFlight group change, hosted
   migration, or tester Slack note was performed.
+
+## 2026-07-24 — Codex — TestFlight build 96 release
+
+Start — 2026-07-24 12:23 PDT:
+
+- Goal: fulfill Ryan's explicit request to package everything newly merged to
+  `main` since completed TestFlight build 95 and publish it as build 96.
+- Linear: created REC-141, assigned to Ryan, and moved it to `In Progress`:
+  `https://linear.app/recme/issue/REC-141/release-latest-main-as-testflight-build-96`.
+- Worktree/branch: reused the clean isolated worktree
+  `/private/tmp/recme-rec136-photo-ranking`, fetched `origin`, and created
+  `codex/testflight-build-96` from exact `origin/main`
+  `9dbbf311c14b70dfde6bfb3dbf468cdfe5f3f999`.
+- The primary checkout remains dirty on unrelated REC-88 work and will not be
+  touched. Existing worktrees were inspected before editing; no release-file
+  overlap was found in this isolated checkout.
+- Build 95 is the last completed release. The initial eligible app set since
+  then was REC-138 (blank Price Feel default), REC-129 (Feed place routing),
+  REC-139 (floating nearby-place Save action), and REC-136 (privacy-aware
+  place-photo ranking).
+- Planned files: `project.yml`, generated
+  `Wander.xcodeproj/project.pbxproj`, and this log. Release artifacts and
+  tester notes will live under `/private/tmp`.
+- REC-136's reviewed migration
+  `supabase/migrations/20260724090000_rank_visible_place_photos.sql` has not
+  yet been applied to the linked hosted project. Before archiving, confirm the
+  linked target and pending migration set, apply only that merged migration,
+  and run hosted gallery-policy/ranking validation. Do not treat the known
+  unrelated global photo-quota smoke assertion as a pass.
+
+Backend deployment checkpoint — 2026-07-24 12:27 PDT:
+
+- `supabase migration list --linked` showed exactly one pending local
+  migration: `20260724090000_rank_visible_place_photos.sql`.
+- `supabase db push --linked --include-all --dry-run --yes` confirmed that
+  exact file was the complete deployment set. Applied it with the corresponding
+  non-dry-run command; the CLI reported successful application.
+- A second linked migration listing confirmed local and remote
+  `20260724090000` are aligned.
+- Ran `supabase db query --linked --file
+  supabase/tests/visible_place_photo_gallery.sql` against the hosted database.
+  The transaction rolled back and exited successfully with the final pgTAP
+  result `ok 12 - gallery RLS excludes photos from blocked contributors`;
+  this is the dedicated 12-test metadata, grants, visibility, privacy, and
+  ranking contract for REC-136.
+- Also ran the required full `scripts/supabase-smoke-test.mjs --linked`. It
+  reached the previously documented unrelated global quota assertion and
+  failed with `place-photo quota rejected an authenticated request below the
+  caps`. This is not recorded as a pass. The exact changed RPC path passed its
+  dedicated hosted rollback-only suite after deployment.
+- Began the build-number change from 95 to 96 in `project.yml`; the generated
+  Xcode project will be refreshed before validation.
+
+Build validation checkpoint — 2026-07-24 12:36 PDT:
+
+- Updated `CURRENT_PROJECT_VERSION` from 95 to 96 in `project.yml` and ran
+  `xcodegen generate`; the generated `Wander.xcodeproj/project.pbxproj`
+  contains the same build number for Debug and Release.
+- Full iOS suite passed on the installed `iPhone 17 Pro Max, OS 26.5`
+  simulator: 628 tests, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-build96-tests/Logs/Test/Test-Wander-2026.07.24_12-25-54--0700.xcresult`.
+- Generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`.
+- Existing Swift concurrency formatter warnings and the traditional headermap
+  warning remain non-blocking; this release introduces no new warning class.
+- Release diff remains limited to the build number in `project.yml`, the two
+  corresponding generated project settings, and this coordination log.
+- During validation, `origin/main` advanced by one app commit:
+  `98ea8ad36` / PR #202 for REC-114, emoji-first place match cards. The release
+  branch must incorporate that commit and rerun the iOS gates before it can be
+  considered the exact latest-`main` build.
+
+Latest-main validation checkpoint — 2026-07-24 12:41 PDT:
+
+- Rebasing the release commit onto `origin/main` at `98ea8ad36` produced only
+  the expected append-only conflict in this log. Preserved both REC-114's
+  upstream merge history and this build 96 history.
+- The release now includes REC-114's emoji-first place-match cards in addition
+  to REC-138, REC-129, REC-139, and REC-136.
+- Reran the full suite after incorporating REC-114: 631 tests, 0 failures on
+  iPhone 17 Pro Max / iOS 26.5. Result bundle:
+  `/private/tmp/DerivedData-build96-tests/Logs/Test/Test-Wander-2026.07.24_12-37-00--0700.xcresult`.
+- Reran the generic universal iOS Simulator build after the rebase; it
+  succeeded for arm64 and x86_64.
+- Current release delta over `origin/main` remains exactly the version bump in
+  `project.yml`, its two generated Xcode settings, and this log. The archive
+  must be created only after this ready PR is merged and a clean worktree is
+  pinned to the exact resulting `main` SHA.
