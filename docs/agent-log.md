@@ -21924,3 +21924,67 @@ Handoff — 2026-07-24 13:44 PDT:
 - Known issues are limited to the unchanged compiler/headermap warnings.
   Product next step remains Ryan's review and eventual PR merge; WidgetKit
   starts only after that merge.
+
+## 2026-07-24 14:21 PDT - Codex - REC-140 Landing Review
+
+Agent: Codex
+Branch: `codex/rec-140-profile-calendar`
+Worktree: `/private/tmp/recme-rec140-profile-calendar`
+Linear: `REC-140` (`In Review`)
+PR: `#210`
+
+Goal: review and squash-merge the completed Profile calendar work into `main`
+after Ryan's explicit landing request, then stop before any TestFlight release.
+
+Starting status and coordination:
+
+- Fetched `origin`; the isolated feature worktree was clean and synchronized
+  with its remote at `98fe51718e`.
+- The branch contains latest `origin/main` (`2e2834f55a`) and is eight commits
+  ahead with no base commits missing.
+- The root checkout and all unrelated worktrees remain untouched. This landing
+  pass expects to change only this append-only coordination log before the
+  feature PR merges.
+- Build 96 is already live/approved and its release record is complete. There
+  is no unfinished explicit TestFlight request to resume, and this merge-only
+  request does not authorize a build-number bump, archive, upload, or Slack
+  announcement.
+
+Landing gates:
+
+- Read the PR, linked Linear issue, full diff, repo design rules, and required
+  pre-landing review checklist.
+- Reconfirm latest-base mergeability, scope, generated-project cleanliness,
+  signing/build-number safety, tests, and two-size visual/accessibility results.
+- Run a fresh generic simulator build when the exact implementation remains
+  unchanged; rerun the full suite only if synchronization changes app code.
+- Squash-merge PR #210, verify `origin/main`, mark REC-140 Done, and record that
+  the feature will ride the next explicitly requested TestFlight batch.
+
+Pre-landing checkpoint — 2026-07-24 14:27 PDT:
+
+- Scope check is clean: the PR contains the requested owner Profile calendar,
+  day-state copy/marker refinements, compact type/tag controls, matching tests,
+  and coordination docs. It contains no WidgetKit, schema, auth, workflow,
+  signing, build-number, or release changes.
+- Reviewed all changed production code and tests. The calendar correctly unions
+  Been and Wanna places, preserves a historical Wanna date after a place moves
+  to Been, and renders distinct visit, Wanna, and combined states. No
+  correctness, security, privacy, data-integrity, or accessibility issue was
+  found.
+- GitHub reports the ready PR clean and mergeable. No CI checks, review
+  comments, or Greptile findings are configured or outstanding.
+- `git diff --check` passed, and the prior `xcodegen generate` produced no
+  project diff.
+- Exact-head focused validation passed 13/13 tests, and the full simulator
+  suite passed 637/637 tests:
+  `/private/tmp/DerivedData-rec140-compact-filters/Logs/Test/Test-Wander-2026.07.24_13-38-45--0700.xcresult`.
+- Exact-head visual/accessibility QA passed on iPhone 17 Pro Max and iPhone 17e,
+  including the dotted sage Wanna marker, combined state, unobstructed `NOW`
+  label, side-by-side native Type/Tags menus, filtering, and 44pt targets.
+- A fresh clean universal simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'generic/platform=iOS Simulator' -derivedDataPath
+  /private/tmp/DerivedData-rec140-landing CODE_SIGNING_ALLOWED=NO`.
+- Only the repository's existing Swift isolation, App Intents metadata, and
+  traditional-headermap warnings remain. No new warning was introduced.
