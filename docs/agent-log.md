@@ -20880,3 +20880,33 @@ Completion — 2026-07-23 16:31 PDT:
 - No TestFlight build, merge, release, or build-number change was requested or
   performed. Next step: review PR #203, run any desired local exploratory
   testing from the already-open Xcode worktree, and merge only after approval.
+
+Merge gate — 2026-07-24 09:10 PDT:
+
+- Ryan explicitly requested that PR #203 land on `main`. This is a merge-only
+  request: no TestFlight build-number bump, archive/upload, public-group change,
+  hosted migration, or tester Slack note is authorized.
+- Fetched current `origin`; `main` remains at the PR's exact reviewed base
+  `dd06cc77c5405f93c34a6004b998ff80b7ed1474`. TestFlight build 95 is fully
+  documented as uploaded, attached, approved, and announced, so there is no
+  unfinished explicit release to resume before this merge.
+- Applied the repo `recme-pr-review-merge-release` gate and the gstack review
+  checklist locally. Scope is clean: the runtime diff only replaces Feed's two
+  remaining direct save callbacks with its existing shared `openPlace` route;
+  the test diff locks Featured and activity CTAs to that route. SQL/data,
+  concurrency, auth/privacy, LLM, shell, enum/value, API, migration,
+  performance, accessibility, and design-system checks found no blocker.
+- GitHub reports PR #203 open, ready (not draft), current with `main`, and
+  automatically mergeable. It has zero review submissions, zero review
+  threads, zero top-level comments, zero Greptile comments, and no hosted
+  status checks.
+- Exact app-source validation remains the post-rebase focused regression 1/1,
+  full suite 627/627 with zero failures/skips, generic Simulator build, visual
+  QA on iPhone 17 Pro and iPhone 17e, and interactive confirmation that the
+  Feed activity CTA reaches the current profile and its `Add visit` action.
+  Commits after the implementation validation change only this chronological
+  coordination log.
+- Merge decision: no unresolved finding or human product decision remains.
+  Squash-merge PR #203, delete its remote branch if safe, record the exact
+  merge SHA on `main`, mark REC-129 `Done`, and note that the change will ride
+  the next explicitly requested TestFlight batch.
