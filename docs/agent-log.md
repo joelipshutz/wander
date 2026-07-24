@@ -21679,3 +21679,20 @@ Implementation and validation checkpoint — 2026-07-24 12:53 PDT:
   Rebased again and preserved both append-only histories. That commit changes
   only `project.yml`, the generated Xcode build number, and this log, so it
   introduces no app-source delta after the successful rebased focused run.
+
+Handoff — 2026-07-24 13:01 PDT:
+
+- Final implementation commit: `c0945d600` (`feat: combine profile calendar
+  activity`) on `codex/rec-140-profile-calendar`, based on build-96
+  `origin/main` at `2485cfa9d`.
+- Pushed the branch and opened ready PR #210:
+  `https://github.com/joelipshutz/wander/pull/210`. The GitHub connector
+  returned a permissions 403 for PR creation, so the authenticated `gh` CLI
+  fallback created the PR successfully.
+- Linked PR #210 to REC-140, moved the Linear issue to `In Review`, and posted
+  focused/full test plus visual/tap-through validation. Leave it in review
+  until Ryan completes Xcode testing and the PR is actually merged.
+- Final known issues are limited to the pre-existing compiler/headermap
+  warnings recorded above. No required work is omitted from this branch.
+- Next step: test PR #210 in Xcode. After approval, merge it to `main`; begin
+  the separate WidgetKit work only after that merge, as requested.
