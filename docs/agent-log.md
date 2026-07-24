@@ -20829,3 +20829,17 @@ Handoff, 2026-07-23 15:55 PDT:
   `codex/rec-114-place-match-cards`. Left
   `Wander/Features/Profile/ProfileImportViews.swift` positioned on
   `PlaceImportCandidateCard` for test and code review.
+
+Landing checkpoint, 2026-07-24 00:41 PDT:
+
+- Ryan explicitly requested that REC-114 be pushed to `main`. Re-fetched
+  `origin`; PR #202 remains ready, `MERGEABLE/CLEAN`, current with
+  `origin/main` at `dd06cc77c`, and has no hold label, required check failure,
+  review blocker, or unrelated file.
+- The primary checkout still contains unrelated local work and remains
+  untouched. This isolated worktree is clean at `80d960e0a`; the landing pass
+  will re-run the focused regression and full merge gate, record the result,
+  squash-merge PR #202, and move Linear REC-114 from `In Review` to `Done`.
+- Build 95 is fully uploaded, attached, approved, and documented. This is a
+  merge-only request: no build-number bump, archive/upload, TestFlight helper,
+  or tester Slack message is authorized.
