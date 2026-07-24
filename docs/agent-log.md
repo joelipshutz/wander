@@ -20977,7 +20977,7 @@ Completion — 2026-07-23 16:31 PDT:
   performed. Next step: review PR #203, run any desired local exploratory
   testing from the already-open Xcode worktree, and merge only after approval.
 
-Merge gate — 2026-07-24 09:10 PDT:
+Merge gate — 2026-07-24 00:39 PDT:
 
 - Ryan explicitly requested that PR #203 land on `main`. This is a merge-only
   request: no TestFlight build-number bump, archive/upload, public-group change,
@@ -21006,6 +21006,31 @@ Merge gate — 2026-07-24 09:10 PDT:
   Squash-merge PR #203, delete its remote branch if safe, record the exact
   merge SHA on `main`, mark REC-129 `Done`, and note that the change will ride
   the next explicitly requested TestFlight batch.
+
+Merge completion — 2026-07-24 00:42 PDT:
+
+- Squash-merged ready PR #203 into `main` as
+  `228c5ccb7b9b63cc51a70c7226a64aba4b7be3fd`:
+  `https://github.com/joelipshutz/wander/pull/203`.
+- GitHub confirmed the pull request merged and closed. Deleted remote branch
+  `codex/rec-129-feed-place-profile` after GitHub reported it safe to remove;
+  the isolated local worktree remains available for historical inspection.
+- Fetched and verified `origin/main` now points at the exact squash commit.
+  The merge contains only the intended Feed routing fix, its navigation
+  regression, and the required chronological work log.
+- Moved Linear REC-129 from `In Review` to `Done` and added the merge SHA,
+  validation evidence, branch cleanup, and release status. No further app
+  change is required for the reported bug.
+- The optional gstack review-history write could not run because this host does
+  not have Bun installed; it was not treated as review evidence. The full
+  checklist result and GitHub gate evidence are recorded directly above.
+- Final validation remains focused regression 1/1, full iOS suite 627/627 with
+  zero failures/skips, generic Simulator build, visual QA on iPhone 17 Pro and
+  iPhone 17e, and interactive confirmation of the current shared profile and
+  `Add visit` action.
+- This was intentionally merge-only. Build stays at 95; no TestFlight archive,
+  upload, public-group change, hosted migration, or tester Slack note was
+  performed. REC-129 will ride the next explicitly requested TestFlight batch.
 
 ## 2026-07-24 00:52 PDT - Codex - REC-114 Merge Review Blocked
 
