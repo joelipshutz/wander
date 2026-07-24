@@ -21180,3 +21180,22 @@ Post-rebase validation — 2026-07-24 11:59 PDT:
   `/private/tmp/DerivedData-rec136-final/Logs/Test/Test-Wander-2026.07.24_11-53-57--0700.xcresult`.
   This supersedes the pre-rebase 627-test count; the additional passing test
   came from REC-139 on updated `main`.
+
+PR handoff — 2026-07-24 12:01 PDT:
+
+- Pushed implementation commit `91e7b43a8` on
+  `codex/rec-136-photo-ranking` and opened ready PR #207:
+  `https://github.com/joelipshutz/wander/pull/207`.
+- The GitHub connector returned `403 Resource not accessible by integration`
+  for PR creation, so the repository publishing workflow's authenticated
+  `gh pr create` fallback was used successfully.
+- Validation attached to the PR: full suite 628/628, focused gallery suite
+  4/4, generic Simulator build, hosted rollback-only pgTAP 12/12, migration
+  dry-run, Node syntax check, and clean diff check.
+- Known gap remains the unrelated global place-photo quota failure in the
+  broader linked smoke suite; the exact REC-136 migration and gallery
+  privacy/ranking path passed the dedicated hosted transaction and rolled back.
+- No hosted migration, build-number bump, archive, TestFlight action, or Slack
+  release note was performed. Next step is PR review; the migration should be
+  applied through the normal reviewed deployment path rather than from this
+  implementation session.
