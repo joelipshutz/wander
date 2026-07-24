@@ -21210,3 +21210,54 @@ Merge completion — 2026-07-24 11:51 PDT:
 - Linear REC-139 is complete. No build-number bump, archive, upload,
   TestFlight action, or tester Slack note was performed; build 95 remains the
   current release build.
+
+REC-114 direction confirmed — 2026-07-24 12:06 PDT:
+
+- Ryan chose an emoji-first candidate experience instead of provider photos in
+  the ambiguous-match list. The place identity will open the full shared place
+  profile, where the Google photo already loads on explicit user intent with
+  the existing author/source attribution.
+- This resolves the earlier provider quota and attribution blockers without
+  hiding any candidate. The implementation will keep Been/Wanna quick actions,
+  add a profile-level `Choose this place` action, expose one semantic profile
+  link per card, and use Dynamic Type-aware text.
+- Refreshed and merged latest `origin/main` at `e74eb7b64`, preserving
+  REC-139's newer Add flow and both append-only work-log entries. Expected
+  files: `ProfileImportViews.swift`, `MapScreen.swift`,
+  `WanderApp.swift`, focused tests, and this log.
+- Validation plan: focused behavior/contracts, full simulator suite, generic
+  Simulator build, and screenshots on the current large and smaller iPhone
+  targets plus an accessibility Dynamic Type pass. No TestFlight action is
+  authorized.
+
+Emoji-first implementation validation — 2026-07-24 12:29 PDT:
+
+- Replaced eager provider-photo tiles in the ambiguous-candidate list with
+  deterministic category-emoji artwork, a warm raised-card treatment, clear
+  category/location hierarchy, and full-width `Been` / `Wanna` quick actions.
+  Tapping the place identity now opens the shared full place profile; its
+  explicit `Choose this place` action returns the selected candidate to the
+  import flow. The profile preserves the candidate's provider place id, so the
+  existing attributed Google photo path remains intact without consuming
+  provider quota while the list scrolls.
+- Collapsed the candidate identity into one semantic accessibility element,
+  moved card typography to Dynamic Type styles, and stack the quick actions at
+  accessibility sizes. Added runtime coverage that the list makes zero provider
+  metadata/image requests before profile navigation, plus provider-identity and
+  choose-action coverage.
+- Focused regressions passed 3/3. The final full simulator suite passed 631/631
+  with zero failures on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec114-emoji/Logs/Test/Test-Wander-2026.07.24_12-24-55--0700.xcresult`.
+  The independent generic iOS Simulator build also succeeded. Existing
+  Swift-concurrency and headermap warnings remain unrelated.
+- Visual QA passed on iPhone 17 Pro and smaller iPhone 17e, plus Accessibility
+  Large Dynamic Type. The compact layout keeps the artwork and both actions
+  unclipped; the accessibility layout preserves full text and stacks the
+  actions. Screenshots: `/private/tmp/rec114-emoji-17pro-late.png`,
+  `/private/tmp/rec114-emoji-17e.png`, and
+  `/private/tmp/rec114-emoji-17pro-ax.png`.
+- Regenerated with `xcodegen generate`; there was no tracked project-file
+  churn, and `git diff --check` is clean. During final review, `origin/main`
+  advanced from `e74eb7b64` to `9dbbf311c` with REC-136 photo-ranking work.
+  REC-114 will merge that current main and rerun the affected gates before
+  landing. No TestFlight action is authorized.

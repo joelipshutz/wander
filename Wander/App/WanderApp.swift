@@ -34,6 +34,7 @@ struct WanderApp: App {
                 PlaceActivityMockupRoot(page: activityMockupPage)
             } else if PlaceImportCandidateMockupPage.isPresented {
                 PlaceImportCandidateMockupRoot()
+                    .environmentObject(auth)
                     .environmentObject(backend)
             } else if let mockupPage = CategoryTaxonomyMockupPage.resolved() {
                 CategoryTaxonomyMockupRoot(page: mockupPage)

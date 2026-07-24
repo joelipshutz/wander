@@ -1048,7 +1048,7 @@ struct MapScreen: View {
                 attributes: store.attributes(for: placeToEdit.userPlace.id),
                 latestVisit: store.visits(for: placeToEdit.userPlace.id).first
             )
-        case .none:
+        case .choose, .none:
             break
         }
     }
@@ -2612,6 +2612,7 @@ enum MapPinOutlineBuilder {
 enum PlaceSheetAction {
     case add
     case addVisit
+    case choose
     case none
 
     static func topLevelAction(currentUserSave: VisiblePlace?) -> PlaceSheetAction {
@@ -2620,8 +2621,8 @@ enum PlaceSheetAction {
 
     var systemImage: String {
         switch self {
-        case .add: "plus"
-        case .addVisit: "plus"
+        case .add, .addVisit: "plus"
+        case .choose: "checkmark"
         case .none: ""
         }
     }
@@ -2630,13 +2631,14 @@ enum PlaceSheetAction {
         switch self {
         case .add: "Save to my map"
         case .addVisit: "Add visit"
+        case .choose: "Choose this place"
         case .none: ""
         }
     }
 
     var isPrimaryAction: Bool {
         switch self {
-        case .add, .addVisit:
+        case .add, .addVisit, .choose:
             true
         case .none:
             false
