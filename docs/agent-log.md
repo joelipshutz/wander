@@ -21449,3 +21449,29 @@ Merge completion — 2026-07-24 12:13 PDT:
   archive/upload, TestFlight group change, or tester Slack note was performed.
   The merged migration still requires the normal reviewed hosted deployment
   path, and REC-136 will ride the next explicitly requested TestFlight batch.
+
+REC-114 final merge gate — 2026-07-24 12:33 PDT:
+
+- Merged current `origin/main` at `9dbbf311c`, including REC-136's completed
+  photo-ranking test/SQL changes. The only conflict was the append-only agent
+  log; both work histories were preserved. The final REC-114 net diff remains
+  limited to its three app files, two focused test files, the debug-app
+  environment injection, and this log.
+- Reran the full simulator suite after that merge: 631/631 tests passed with
+  zero failures on iPhone 17 Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec114-emoji/Logs/Test/Test-Wander-2026.07.24_12-29-15--0700.xcresult`.
+  REC-136 introduced no app-source delta after REC-114's successful generic
+  Simulator build, and the combined full-suite run rebuilt the affected test
+  target successfully.
+- Final correctness, privacy, quota, accessibility, and visual review found no
+  blockers. Candidate cards make no provider requests; the existing shared
+  place profile handles photo loading and author/source attribution after
+  explicit navigation. Each card exposes one place-profile identity action,
+  semantic Dynamic Type styles, 44-point quick actions, and a stacked
+  accessibility layout. `git diff --check` is clean.
+- PR #202 has no reviews, status checks, or review threads. Its one prior
+  internal blocker comment describes the superseded eager-photo design and
+  will be followed with the resolution and current validation. REC-114 remains
+  `In Review` until the ready PR is pushed and squash-merged. This is
+  merge-only: no build-number bump, archive, upload, TestFlight action, hosted
+  migration, or tester Slack note is authorized.
