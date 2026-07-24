@@ -20991,3 +20991,22 @@ Checkpoint — 2026-07-24 01:36 PDT:
   `save this place` sheet for the selected candidate. Screenshots:
   `/private/tmp/rec139-add-17pro.png` and
   `/private/tmp/rec139-add-17e.png`.
+
+Completion — 2026-07-24 01:44 PDT:
+
+- Rebased the implementation onto latest `origin/main` commit `2470b92ec`
+  after REC-129's merge-completion log landed, preserving both chronological
+  entries. Final implementation commit: `4daac2433`.
+- Full simulator suite passed 628/628 with zero failures or skips on iPhone 17
+  Pro Max / iOS 26.5:
+  `/private/tmp/DerivedData-rec139-red/Logs/Test/Test-Wander-2026.07.24_01-38-45--0700.xcresult`.
+  The required generic iOS Simulator build also succeeded. Existing
+  Swift-concurrency and headermap warnings remain unrelated to REC-139.
+- Pushed `codex/rec-139-floating-continue` to origin and opened ready PR #205:
+  `https://github.com/joelipshutz/wander/pull/205`.
+- Handoff is Xcode-ready from
+  `/private/tmp/recme-rec139-floating-continue/Wander.xcodeproj`. Linear
+  REC-139 is moving to `In Review` with the validation and PR attached.
+- No build-number bump, archive, upload, TestFlight group change, hosted
+  migration, or Slack release note was requested or performed. This app change
+  can ride the next explicitly requested TestFlight batch after review.
