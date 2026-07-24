@@ -21580,3 +21580,43 @@ Latest-main validation checkpoint — 2026-07-24 12:41 PDT:
   `project.yml`, its two generated Xcode settings, and this log. The archive
   must be created only after this ready PR is merged and a clean worktree is
   pinned to the exact resulting `main` SHA.
+
+Release completion — 2026-07-24 13:05 PDT:
+
+- GitHub's active “Incident with Pull Requests” temporarily blocked PR
+  creation across GitHub.com, the authenticated CLI, and API. Refreshed the
+  GitHub CLI login through the normal device authorization flow, kept REC-141
+  updated with the outage, and waited for the PR service to recover rather
+  than bypassing the required review gate.
+- Opened ready PR #209 from `codex/testflight-build-96`, confirmed its head
+  `0dd925b76897861ad2f5664ee2f58ecaf59ac949` was cleanly mergeable against
+  exact `origin/main` `e3577b27d5e6a5db276550f084861cb4bf2f912a`, and
+  squash-merged it as
+  `2485cfa9d3d53bd04b2ae863cffee087b7fead83`:
+  `https://github.com/joelipshutz/wander/pull/209`.
+- Created a clean detached worktree at that exact merged `main` SHA and
+  archived build 96 successfully to
+  `/private/tmp/Wander-0.1-build96.xcarchive`. The Release archive emitted only
+  the existing Swift isolation, App Intents metadata, and traditional
+  headermap warnings; signing and validation succeeded.
+- Exported with `manageAppVersionAndBuildNumber=false` and uploaded
+  successfully through Xcode. Archive upload metadata confirmed build 96.
+  App Store Connect build id:
+  `ef4b60cb-0398-4387-9eb9-7a8fb997b950`.
+- `scripts/testflight-release.mjs` confirmed processing state `VALID`, set
+  `usesNonExemptEncryption=false`, updated the en-US What to Test copy,
+  attached build 96 to the public `rec.me Alpha` group, submitted external
+  beta review, and returned review state `APPROVED`.
+- Posted the required tester-facing build 96 note in
+  `#testflight-feedback`, including the public install link, changes, concrete
+  test checklist, known backend smoke gap, and requested repro details:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1784923629461609`.
+- Final validation record: 631/631 iOS tests passed on iPhone 17 Pro Max /
+  iOS 26.5; the generic universal iOS Simulator build passed for arm64 and
+  x86_64; REC-136's hosted migration is applied/aligned; and its dedicated
+  hosted rollback-only pgTAP suite passed 12/12. The broader hosted smoke suite
+  still stops at the pre-existing global place-photo quota assertion and is
+  not recorded as a pass.
+- Public TestFlight link:
+  `https://testflight.apple.com/join/knEhRa6t`. Build 96 is live/approved for
+  external testing. No further release action is required.
