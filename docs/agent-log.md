@@ -21988,3 +21988,26 @@ Pre-landing checkpoint — 2026-07-24 14:27 PDT:
   /private/tmp/DerivedData-rec140-landing CODE_SIGNING_ALLOWED=NO`.
 - Only the repository's existing Swift isolation, App Intents metadata, and
   traditional-headermap warnings remain. No new warning was introduced.
+
+Landing completion — 2026-07-24 14:31 PDT:
+
+- Pushed the final review record to the ready feature branch, then reconfirmed
+  PR #210 was `CLEAN`, `MERGEABLE`, and based on current `origin/main`.
+- Posted the validation summary on PR #210 and squash-merged it at
+  `2bb142550a9bf215a09006127559fdff656ea1fa`:
+  `https://github.com/joelipshutz/wander/pull/210`.
+- Fetched and verified `origin/main` now contains the squash commit. The remote
+  feature branch was deleted.
+- Moved Linear REC-140 to `Done`, attached PR #210, and added the merge SHA,
+  build/test/visual validation, known warnings, and release boundary in a
+  completion comment.
+- No TestFlight release was requested or performed. `CURRENT_PROJECT_VERSION`
+  remains 96; there was no archive, upload, beta-group change, or Slack
+  announcement. The calendar will ship in the next explicitly requested
+  release batch.
+- WidgetKit work remains the next product phase and was intentionally excluded
+  from this landing.
+
+Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
+No known functional issue remains; existing compiler/headermap warnings are
+unchanged.
