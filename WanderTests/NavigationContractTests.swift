@@ -384,6 +384,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testCurrentLocationCandidateActionFloatsAboveScrollableResults() throws {
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let confirmPlace = try XCTUnwrap(
+            addScreen
+                .components(separatedBy: "private var confirmPlace: some View")
+                .last?
+                .components(separatedBy: "private var draftView: some View")
+                .first
+        )
+
+        XCTAssertTrue(addScreen.contains("private var showsFloatingCurrentLocationAction: Bool"))
+        XCTAssertTrue(addScreen.contains("selectedSource == .currentLocation"))
+        XCTAssertTrue(addScreen.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+        XCTAssertTrue(addScreen.contains("if showsFloatingCurrentLocationAction"))
+        XCTAssertTrue(confirmPlace.contains("if !showsFloatingCurrentLocationAction"))
+        XCTAssertEqual(
+            addScreen.components(separatedBy: "WanderPrimaryButton(title: \"Save\"").count - 1,
+            1,
+            "The floating and in-flow layouts should share one Save action implementation."
+        )
+        XCTAssertFalse(addScreen.contains("WanderPrimaryButton(title: \"continue\""))
+    }
+
     func testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
