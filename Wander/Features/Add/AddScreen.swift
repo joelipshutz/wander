@@ -65,6 +65,12 @@ struct AddScreen: View {
         AddSheetLayout.restingDetent(hasPendingImports: importStore.summary.hasPendingImports)
     }
 
+    private var showsFloatingCurrentLocationAction: Bool {
+        isShowingInlineCandidateResults
+            && selectedSource == .currentLocation
+            && selectedCandidate != nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -86,6 +92,11 @@ struct AddScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if showsFloatingCurrentLocationAction {
+                    floatingCandidateAction
+                }
+            }
             .wanderScreen()
             .onChange(of: resetToken) { _, _ in
                 reset()
@@ -310,9 +321,34 @@ struct AddScreen: View {
                 }
             }
 
-            WanderPrimaryButton(title: "continue", systemImage: "arrow.right") {
-                openSharedSaveFlow()
+            if !showsFloatingCurrentLocationAction {
+                candidateSaveAction
             }
+        }
+    }
+
+    private var floatingCandidateAction: some View {
+        candidateSaveAction
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing2)
+            .padding(.bottom, WanderTheme.spacing3)
+            .background(
+                LinearGradient(
+                    colors: [
+                        WanderTheme.canvasWarm.color.opacity(0),
+                        WanderTheme.canvasWarm.color.opacity(0.96)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
+            .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 8, y: 4)
+    }
+
+    private var candidateSaveAction: some View {
+        WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
+            openSharedSaveFlow()
         }
     }
 
