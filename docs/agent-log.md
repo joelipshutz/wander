@@ -22011,3 +22011,117 @@ Landing completion — 2026-07-24 14:31 PDT:
 Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
+
+## 2026-07-24 16:25 PDT - Codex - REC-143 Check-in Ticketing Specification
+
+Agent: Codex
+Branch: `codex/rec-143-checkin-ticketing-spec`
+Worktree: `/private/tmp/recme-rec143-checkin-spec`
+Linear: `REC-143` (`In Progress`)
+
+Goal: audit every user-facing and persisted use of “Been,” define the
+repeatable Check-in/ticket product contract, run the requested engineering plan
+review, and publish an implementation-ready specification without changing app
+behavior.
+
+Starting status and coordination:
+
+- Fetched `origin`; this clean isolated worktree starts at `origin/main`
+  (`74ab31bb0`).
+- The primary checkout contains unrelated `.gitignore` and `.pnpm-store/`
+  changes and remains untouched.
+- A separate isolated branch,
+  `codex/rec-143-ios-design-instrumentation`, contains debug-only live-device
+  review wiring. It does not overlap this specification branch and must not be
+  merged into a production release.
+- The connected iPhone design review is in progress; the first signed Debug
+  device build passed, and screenshot capture is temporarily waiting for the
+  device to be unlocked.
+
+Expected files:
+
+- `docs/plans/2026-07-24-rec-143-check-in-ticketing-spec.md`
+- `docs/agent-log.md`
+- gstack-local design-review, engineering-review, QA-plan, and task artifacts
+  under `~/.gstack/projects/joelipshutz-wander/`
+
+Validation plan:
+
+- exhaustive case-insensitive terminology and data-contract audit;
+- architecture, data-flow, failure-mode, rollout, and test-plan review;
+- `git diff --check` and documentation link/path verification;
+- requested gstack engineering and iOS design review completion.
+
+Engineering review checkpoint — 2026-07-24 16:49 PDT:
+
+- `/plan-eng-review` completed in `FULL_REVIEW` mode with 9 architecture
+  findings, 2 code-quality findings, 8 grouped test gaps, and 3 performance
+  findings. All 18 recommended decisions were selected as requested; no
+  unresolved decision or uncovered critical failure remains in the plan.
+- The independent outside-voice fallback found 9 concerns. The load-bearing
+  changes are: newly created first check-ins are explicit visits (legacy
+  backfill only), create/delete-last writes are atomic, visit deletion has a
+  durable relaunch-safe outbox, historical Wanna restoration is remote and
+  cross-device, and Feed/push semantics distinguish current activity from
+  historical/import/backfill memories.
+- Per-check-in sharing and Feed photo projection were cut from v1. Existing
+  place sharing remains. Private visit media stays out of the SQL Feed
+  projection.
+- Batch Profile hydration and server paging were split to Linear `REC-145`;
+  REC-143 keeps only a grouped projection and lazy card rendering.
+- The required gstack review log, decision record, two project learnings, QA
+  plan, and eight-task JSONL artifact were written and validated. The terminal
+  `GSTACK REVIEW REPORT` is clean, and `git diff --check` passes.
+- Local completion telemetry was recorded. The optional remote telemetry call
+  was blocked by the environment's egress policy and was not retried.
+- The real-device design review remains blocked at this checkpoint: the
+  previously connected iPhone 15 Pro changed from locked to `unavailable`.
+  Instrumentation is built and installed on its isolated draft branch, ready
+  to resume when the phone is connected and unlocked.
+
+Specification and review completion — 2026-07-24 17:24 PDT:
+
+- Finalized `docs/plans/2026-07-24-rec-143-check-in-ticketing-spec.md` with
+  the complete compatibility boundary, atomic data flow, retry/delete
+  semantics, Feed publication matrix, failure table, test topology, rollout,
+  eight-task implementation graph, and terminal clean gstack report.
+- The iOS design review completed through the documented simulator/source
+  fallback. Five relevant surfaces were captured on iPhone 17 Pro Max and
+  compact iPhone 17e. All eight recommended design choices were selected and
+  folded into the spec.
+- The primary visual/product corrections are: count active check-in rows in
+  Profile’s primary statistic, make labeled “Check in again” outrank
+  Directions, give the form an early “When?” and labeled submit, put the newest
+  ticket in the compact first viewport, and route imports through date
+  confirmation.
+- The local design report is
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-24.md`;
+  its ten screenshots are in the adjacent
+  `ios-design-review-2026-07-24-screenshots/` directory.
+- Design status is `DONE_WITH_CONCERNS`: the source/two-size review is
+  complete, while physical-device screenshot/AX, VoiceOver, XXL Dynamic Type,
+  Reduce Motion, and color-filter validation remain explicit pre-ship checks.
+- The plan’s local design, QA, review-log, decision, learning, task-graph,
+  timeline, and analytics artifacts were refreshed. Optional remote telemetry
+  remained blocked by the environment egress policy and was not retried.
+- Validation: `git diff --check`; terminal `GSTACK REVIEW REPORT` sentinel;
+  eight valid T1-T8 JSONL tasks; referenced iOS report and ten PNG captures
+  present. This docs-only branch does not require an app build or TestFlight
+  release.
+
+Final outcome: REC-143 now has an implementation-ready, engineering-cleared
+spec and completed simulator/source iOS design review. App behavior was not
+changed. Publication details will be appended after the ready PR is created.
+
+Publication — 2026-07-24 17:31 PDT:
+
+- Committed the completed spec and review record at `ce9490e35`, pushed
+  `codex/rec-143-checkin-ticketing-spec`, and opened ready PR
+  [#213](https://github.com/joelipshutz/wander/pull/213) against `main`.
+- The GitHub app returned `403 Resource not accessible by integration`; the
+  authenticated `gh` fallback opened the PR successfully.
+- Moved Linear `REC-143` to `In Review`, attached ready PR #213 and draft
+  instrumentation PR #214, and posted the selected decisions, validation,
+  REC-145 follow-up, remaining real-device checks, and release boundary.
+- No TestFlight release, build-number change, archive, upload, or Slack
+  announcement was requested or performed.
