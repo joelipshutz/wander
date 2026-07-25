@@ -22011,3 +22011,49 @@ Landing completion — 2026-07-24 14:31 PDT:
 Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
+
+## 2026-07-25 12:20 PDT - Codex - REC-122 Streak Celebration Hierarchy
+
+Agent: Codex
+Branch: `codex/rec-122-streak-hierarchy`
+Worktree: `/private/tmp/recme-rec122-streak-hierarchy`
+Linear: `REC-122` (`In Progress`)
+
+Goal: apply Joe's screenshot-based refinement to the daily save-streak
+takeover: retain the ticket flip and confetti, replace the poetic count copy
+with a bold numeric `4 day streak!` hierarchy, and replace the loose four-day
+path with a compact seven-day progress card in the rec.me visual system.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `74ab31b`; the root `joe/phone-build-latest` checkout's
+  unrelated untracked `tmp/` directory remains untouched.
+- Reopened REC-122 and recorded the approved visual direction. Mission Control
+  at `localhost:4000` was unavailable, so Linear and this log are the durable
+  tracking surfaces for this pass.
+- The design-consultation workflow routed this existing SwiftUI surface to the
+  focused iOS design review. The shared GBrain KB remained locked after the
+  one permitted retry, so the repo's current design system, implementation,
+  and supplied screenshot are the active sources.
+- The optional design-review artifact sync was not run because its external
+  push behavior was not approved. This does not affect local implementation or
+  validation.
+
+Expected files:
+
+- `Wander/Features/Streak/SaveStreakCelebrationView.swift`
+- `Wander/Models/SaveStreak.swift`
+- `WanderTests/SaveStreakTests.swift`
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Add focused coverage for the seven-day presentation model and exact streak
+  accessibility language.
+- Run the focused streak tests, then the full iOS suite.
+- Install and visually inspect the exact build on iPhone 16 Plus and iPhone
+  16e, including Dynamic Type/compact-height resilience and the existing
+  Reduce Motion path.
+- Push a ready PR, move REC-122 to `In Review`, and open the isolated branch in
+  Xcode for local review. No build-number or TestFlight release is requested.
