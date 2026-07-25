@@ -2,6 +2,10 @@ import MapKit
 import SwiftUI
 import UIKit
 
+private enum ProfileHomeScrollAnchor {
+    static let calendar = "profile.calendar"
+}
+
 enum ProfileHomeMode: Equatable {
     case owner
     case member(relationship: ViewerRelationship, inCommonCount: Int)
@@ -52,39 +56,51 @@ struct ProfileOwnerHome: View {
     let inCommonAction: () -> Void
     let calendarDateAction: (ProfileCalendarDaySummary) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
+    let calendarScrollRequestID: UUID?
+    let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-                identitySection
-                ProfileSharedVisitInboxRow(
-                    invitationCount: sharedVisitInvitationCount,
-                    action: sharedVisitInvitationsAction
-                )
-                savedPlacesSection
-                if mode.isOwner, let saveStreak {
-                    ProfileSaveStreakRow(summary: saveStreak)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                    identitySection
+                    ProfileSharedVisitInboxRow(
+                        invitationCount: sharedVisitInvitationCount,
+                        action: sharedVisitInvitationsAction
+                    )
+                    savedPlacesSection
+                    if mode.isOwner, let saveStreak {
+                        ProfileSaveStreakRow(summary: saveStreak)
+                    }
+                    ProfileCalendarSection(
+                        insights: insights,
+                        selectedMonth: $selectedMonth,
+                        ownerLabel: ownerLabel,
+                        dateAction: calendarDateAction
+                    )
+                    .id(ProfileHomeScrollAnchor.calendar)
+                    ProfileMapSection(
+                        profile: profile,
+                        insights: insights,
+                        beenCount: stats.been,
+                        ownerLabel: ownerLabel,
+                        summaryAction: mapSummaryAction
+                    )
                 }
-                ProfileCalendarSection(
-                    insights: insights,
-                    selectedMonth: $selectedMonth,
-                    ownerLabel: ownerLabel,
-                    dateAction: calendarDateAction
-                )
-                ProfileMapSection(
-                    profile: profile,
-                    insights: insights,
-                    beenCount: stats.been,
-                    ownerLabel: ownerLabel,
-                    summaryAction: mapSummaryAction
-                )
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing12)
             }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing12)
+            .scrollIndicators(.hidden)
+            .task(id: calendarScrollRequestID) {
+                guard let calendarScrollRequestID else { return }
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(ProfileHomeScrollAnchor.calendar, anchor: .top)
+                onCalendarScrollRequestHandled(calendarScrollRequestID)
+            }
         }
-        .scrollIndicators(.hidden)
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
     }

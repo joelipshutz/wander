@@ -58,6 +58,24 @@ struct ProfileStats: Equatable {
     let friends: Int
 }
 
+struct CurrentUserCalendarProjection {
+    let visiblePlaces: [VisiblePlace]
+    let visits: [LocalPlaceVisit]
+    let isAuthoritative: Bool
+
+    var places: [LocalPlace] {
+        visiblePlaces.map(\.place)
+    }
+
+    var userPlaces: [LocalUserPlace] {
+        visiblePlaces.map(\.userPlace)
+    }
+
+    var attributes: [LocalPlaceAttribute] {
+        visiblePlaces.flatMap(\.attributes)
+    }
+}
+
 struct SmartFilter: Identifiable, Equatable {
     let id: String
     let title: String
@@ -143,6 +161,22 @@ final class WanderStore: ObservableObject {
         userID: String,
         task: Task<[SharedVisitInvitation], Error>
     )?
+    private var currentUserCalendarRefreshTask: (
+        id: UUID,
+        userID: String,
+        task: Task<Bool, Never>
+    )?
+    private struct CurrentUserCalendarLocalFingerprint: Equatable {
+        let userPlaces: [WanderStoreSnapshot.UserPlaceRecord]
+        let attributes: [WanderStoreSnapshot.PlaceAttributeRecord]
+        let visits: [WanderStoreSnapshot.PlaceVisitRecord]
+    }
+    @Published private(set) var isRefreshingCurrentUserCalendarData = false
+    @Published private(set) var currentUserCalendarHydrationRevision: UInt64 = 0
+    private var authoritativeCalendarUserID: String?
+    private var currentUserCalendarLocalFingerprint: CurrentUserCalendarLocalFingerprint?
+    private var currentUserCalendarLocalMutationRevision: UInt64 = 0
+    private var isApplyingAcceptedCurrentUserCalendarHydration = false
     @Published private(set) var sourceArtifacts: [LocalSourceArtifact] = []
     @Published private(set) var extractionJobs: [LocalExtractionJob] = []
     @Published private(set) var remoteVisiblePlaceCache: [VisiblePlace] = [] {
@@ -405,6 +439,7 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.performance.notice(
             "store reconciliation user_places=\(self.userPlaces.count, privacy: .public) visits=\(self.placeVisits.count, privacy: .public) attributes=\(self.placeAttributes.count, privacy: .public) backfill_ms=\((backfillFinishedAt - reconciliationStartedAt) * 1_000, privacy: .public) refresh_ms=\((reconciliationFinishedAt - backfillFinishedAt) * 1_000, privacy: .public)"
         )
+        currentUserCalendarLocalFingerprint = makeCurrentUserCalendarLocalFingerprint()
 
         if shouldPersistAfterRestore {
             persist()
@@ -412,6 +447,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        reconcileCurrentUserCalendarLocalFingerprint()
         invalidatePresentationCaches()
         guard let persistence else { return }
 
@@ -421,6 +457,64 @@ final class WanderStore: ObservableObject {
         }
 
         persistence.save(WanderStoreSnapshot(store: self))
+    }
+
+    private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
+        let ownedUserPlaces = userPlaces
+            .filter { $0.userID == currentUser.id }
+            .sorted { $0.localID < $1.localID }
+        let ownedUserPlaceReferenceIDs = ownedUserPlaces.reduce(into: Set<String>()) {
+            $0.formUnion(Self.referenceIDs(for: $1))
+        }
+        let ownedAttributes = placeAttributes
+            .filter {
+                !$0.localID.hasPrefix("remote_attr_")
+                    && ownedUserPlaceReferenceIDs.contains($0.userPlaceID)
+            }
+            .sorted { $0.localID < $1.localID }
+        let ownedVisits = placeVisits
+            .filter {
+                (!Self.isSyntheticRemoteProfileVisit($0) || $0.syncState != .synced)
+                    && ownedUserPlaceReferenceIDs.contains($0.userPlaceID)
+            }
+            .sorted { $0.localID < $1.localID }
+
+        return CurrentUserCalendarLocalFingerprint(
+            userPlaces: ownedUserPlaces.map(WanderStoreSnapshot.UserPlaceRecord.init),
+            attributes: ownedAttributes.map(WanderStoreSnapshot.PlaceAttributeRecord.init),
+            visits: ownedVisits.map(WanderStoreSnapshot.PlaceVisitRecord.init)
+        )
+    }
+
+    private func reconcileCurrentUserCalendarLocalFingerprint() {
+        let fingerprint = makeCurrentUserCalendarLocalFingerprint()
+        guard let previousFingerprint = currentUserCalendarLocalFingerprint else {
+            currentUserCalendarLocalFingerprint = fingerprint
+            return
+        }
+        guard fingerprint != previousFingerprint else { return }
+
+        currentUserCalendarLocalFingerprint = fingerprint
+        guard !isApplyingAcceptedCurrentUserCalendarHydration else { return }
+
+        currentUserCalendarLocalMutationRevision &+= 1
+        let wasAuthoritative = authoritativeCalendarUserID == currentUser.id
+        authoritativeCalendarUserID = nil
+        if wasAuthoritative {
+            objectWillChange.send()
+        }
+    }
+
+    private func withAcceptedCurrentUserCalendarHydration<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        let wasApplyingAcceptedHydration = isApplyingAcceptedCurrentUserCalendarHydration
+        isApplyingAcceptedCurrentUserCalendarHydration = true
+        defer {
+            currentUserCalendarLocalFingerprint = makeCurrentUserCalendarLocalFingerprint()
+            isApplyingAcceptedCurrentUserCalendarHydration = wasApplyingAcceptedHydration
+        }
+        return try operation()
     }
 
     private func invalidatePresentationCaches() {
@@ -738,6 +832,9 @@ final class WanderStore: ObservableObject {
         switch authState {
         case .signedIn(let session):
             let previousUserID = currentUser.id
+            if previousUserID != session.userID {
+                clearSessionScopedRemoteState()
+            }
             apply(session: session)
             if previousUserID != currentUser.id {
                 discoverPeopleRecommendationsState = .idle
@@ -747,6 +844,7 @@ final class WanderStore: ObservableObject {
             WanderDebugLog.sync.debug("store auth signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
         case .signedOut, .unavailable:
+            clearSessionScopedRemoteState()
             applySignedOutProfile()
             discoverPeopleRecommendationsState = .idle
             analytics.resetIdentity()
@@ -758,6 +856,38 @@ final class WanderStore: ObservableObject {
             WanderDebugLog.sync.debug("store auth loading pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
             break
+        }
+    }
+
+    private func clearSessionScopedRemoteState() {
+        cancelCurrentUserCalendarRefresh()
+        authoritativeCalendarUserID = nil
+
+        let hadRemoteState = !remoteVisiblePlaceCache.isEmpty
+            || placeVisits.contains {
+                Self.isSyntheticRemoteProfileVisit($0) && $0.syncState == .synced
+            }
+            || placeAttributes.contains { $0.localID.hasPrefix("remote_attr_") }
+            || followedFeedPage != nil
+            || feedLoadState != .idle
+            || lastFeedRefreshAt != nil
+            || lastRemoteError != nil
+        guard hadRemoteState else { return }
+
+        withDeferredPersistence {
+            remoteVisiblePlaceCache = []
+            placeVisits.removeAll {
+                Self.isSyntheticRemoteProfileVisit($0) && $0.syncState == .synced
+            }
+            placeAttributes.removeAll {
+                $0.localID.hasPrefix("remote_attr_")
+            }
+            followedFeedPage = nil
+            feedLoadState = .idle
+            lastFeedRefreshAt = nil
+            lastRemoteError = nil
+            objectWillChange.send()
+            persist()
         }
     }
 
@@ -955,6 +1085,8 @@ final class WanderStore: ObservableObject {
         individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
         placeListSyncTask = nil
         individualPlaceListSyncTasks.removeAll()
+        cancelCurrentUserCalendarRefresh()
+        authoritativeCalendarUserID = nil
 
         let empty = WanderFixtures.empty()
         currentUser = empty.currentUser
@@ -998,6 +1130,85 @@ final class WanderStore: ObservableObject {
 
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
+    }
+
+    var currentUserCalendarProjection: CurrentUserCalendarProjection {
+        let localOwnerPlaces = localVisiblePlaces(
+            filters: PlaceFilters(ownerScopes: ["you"])
+        ).places
+        let remoteOwnerPlaces = remoteVisiblePlaceCache.filter {
+            $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil
+        }
+        let isAuthoritative = authoritativeCalendarUserID == currentUser.id
+
+        let projectedPlaces: [VisiblePlace]
+        if isAuthoritative {
+            let dirtyRows = userPlaces.filter {
+                $0.userID == currentUser.id && $0.syncState != .synced
+            }
+            let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
+                $0.formUnion(Self.referenceIDs(for: $1))
+            }
+            let remoteReferenceIDs = remoteOwnerPlaces.reduce(into: Set<String>()) {
+                $0.formUnion(Self.referenceIDs(for: $1.userPlace))
+            }
+            let preservedLocalRows = userPlaces.filter { userPlace in
+                guard userPlace.userID == currentUser.id,
+                      userPlace.deletedAt == nil
+                else { return false }
+                if userPlace.syncState != .synced {
+                    return true
+                }
+                return Self.referenceIDs(for: userPlace)
+                    .isDisjoint(with: remoteReferenceIDs)
+                    && hasUnsyncedCalendarChildren(for: userPlace)
+            }
+            let preservedLocalReferenceIDs = preservedLocalRows.reduce(into: Set<String>()) {
+                $0.formUnion(Self.referenceIDs(for: $1))
+            }
+            let preservedLocalPlaces = localOwnerPlaces.filter {
+                !Self.referenceIDs(for: $0.userPlace)
+                    .isDisjoint(with: preservedLocalReferenceIDs)
+            }
+            let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
+                Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
+            }
+            projectedPlaces = preservedLocalPlaces + unshadowedRemotePlaces
+        } else {
+            projectedPlaces = mergeCalendarVisiblePlaces(
+                localOwnerPlaces + remoteOwnerPlaces
+            )
+        }
+
+        let projectedUserPlaceIDs = projectedPlaces.reduce(into: Set<String>()) {
+            $0.formUnion(Self.referenceIDs(for: $1.userPlace))
+        }
+        let projectedVisits = mergeCalendarVisits(
+            placeVisits.filter {
+                $0.deletedAt == nil && projectedUserPlaceIDs.contains($0.userPlaceID)
+            },
+            isAuthoritative: isAuthoritative
+        )
+
+        return CurrentUserCalendarProjection(
+            visiblePlaces: projectedPlaces,
+            visits: projectedVisits,
+            isAuthoritative: isAuthoritative
+        )
+    }
+
+    private func hasUnsyncedCalendarChildren(for userPlace: LocalUserPlace) -> Bool {
+        let userPlaceReferenceIDs = Self.referenceIDs(for: userPlace)
+        if placeAttributes.contains(where: {
+            userPlaceReferenceIDs.contains($0.userPlaceID)
+                && $0.syncState != .synced
+        }) {
+            return true
+        }
+        return placeVisits.contains {
+            userPlaceReferenceIDs.contains($0.userPlaceID)
+                && $0.syncState != .synced
+        }
     }
 
     /// Loads the local Feed fixture only when a remote Feed repository is not
@@ -2342,6 +2553,73 @@ final class WanderStore: ObservableObject {
         }
 
         return merged
+    }
+
+    private func mergeCalendarVisiblePlaces(_ places: [VisiblePlace]) -> [VisiblePlace] {
+        var seenReferenceIDs = Set<String>()
+        var merged: [VisiblePlace] = []
+
+        for visiblePlace in places {
+            let referenceIDs = Self.referenceIDs(for: visiblePlace.userPlace)
+            guard referenceIDs.isDisjoint(with: seenReferenceIDs) else { continue }
+            seenReferenceIDs.formUnion(referenceIDs)
+            merged.append(visiblePlace)
+        }
+
+        return merged
+    }
+
+    private func mergeCalendarVisits(
+        _ visits: [LocalPlaceVisit],
+        isAuthoritative: Bool
+    ) -> [LocalPlaceVisit] {
+        let ordered = visits.enumerated().sorted { lhs, rhs in
+            let lhsPriority = Self.calendarVisitMergePriority(
+                lhs.element,
+                isAuthoritative: isAuthoritative
+            )
+            let rhsPriority = Self.calendarVisitMergePriority(
+                rhs.element,
+                isAuthoritative: isAuthoritative
+            )
+            return lhsPriority == rhsPriority ? lhs.offset < rhs.offset : lhsPriority < rhsPriority
+        }
+        var seenReferenceIDs = Set<String>()
+        var merged: [LocalPlaceVisit] = []
+
+        for entry in ordered {
+            let referenceIDs = Self.referenceIDs(for: entry.element)
+            guard referenceIDs.isDisjoint(with: seenReferenceIDs) else { continue }
+            seenReferenceIDs.formUnion(referenceIDs)
+            merged.append(entry.element)
+        }
+
+        return merged
+    }
+
+    private static func calendarVisitMergePriority(
+        _ visit: LocalPlaceVisit,
+        isAuthoritative: Bool
+    ) -> Int {
+        if visit.syncState != .synced {
+            return 0
+        }
+        if isSyntheticRemoteProfileVisit(visit) {
+            return isAuthoritative ? 1 : 2
+        }
+        return isAuthoritative ? 2 : 1
+    }
+
+    private static func isSyntheticRemoteProfileVisit(_ visit: LocalPlaceVisit) -> Bool {
+        visit.localID.hasPrefix("remote_profile_visit_")
+    }
+
+    private static func referenceIDs(for userPlace: LocalUserPlace) -> Set<String> {
+        Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
+    }
+
+    private static func referenceIDs(for visit: LocalPlaceVisit) -> Set<String> {
+        Set([visit.id, visit.localID, visit.serverID].compactMap { $0 })
     }
 
     func visiblePlaces(for profileID: String) -> [VisiblePlace] {
@@ -4472,8 +4750,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let visiblePlaces = try await backend.visiblePlaces(in: viewport)
-            remoteVisiblePlaceCache = visiblePlaces
-            hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
+            replaceRemoteViewportVisiblePlaces(visiblePlaces)
             lastRemoteError = nil
         } catch {
             lastRemoteError = remoteErrorMessage(error)
@@ -4703,8 +4980,7 @@ final class WanderStore: ObservableObject {
                 )
             }
             if let viewportPlaces {
-                remoteVisiblePlaceCache = viewportPlaces
-                hydrateRemoteVisiblePlaceMetadata(viewportPlaces)
+                replaceRemoteViewportVisiblePlaces(viewportPlaces)
             }
             if let ownWannaGoPlans {
                 applyRemoteWannaGoPlans(ownWannaGoPlans)
@@ -4742,8 +5018,12 @@ final class WanderStore: ObservableObject {
 
     func refreshRemoteProfileData(profileID: String, backend: WanderBackend?) async {
         guard let backend else { return }
+        if profileID == currentUser.id {
+            await refreshRemoteCurrentUserProfileData(backend: backend)
+            return
+        }
 
-        if profileID != currentUser.id, backend.profileRepository != nil {
+        if backend.profileRepository != nil {
             do {
                 let state = try await backend.profile(id: profileID)
                 upsertRemoteProfileShells([state.shell], preserveExistingProfileMetadataWhenMissing: true)
@@ -4759,21 +5039,301 @@ final class WanderStore: ObservableObject {
     }
 
     func refreshRemoteCurrentUserProfileData(backend: WanderBackend?) async {
-        await refreshRemoteProfileData(profileID: currentUser.id, backend: backend)
+        guard let backend else { return }
+        let requestUserID = currentUser.id
+        _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
+        guard currentUser.id == requestUserID, !Task.isCancelled else { return }
+        await refreshRemoteSocialGraph(userID: requestUserID, backend: backend)
     }
 
-    private func refreshRemoteProfileVisits(profileID: String, backend: WanderBackend) async {
-        guard backend.visitRepository != nil else { return }
+    @discardableResult
+    func refreshRemoteCurrentUserCalendarData(backend: WanderBackend?) async -> Bool {
+        guard let backend, backend.userPlaceRepository != nil else { return true }
+        let requestUserID = currentUser.id
+        let taskID: UUID
+        let task: Task<Bool, Never>
+
+        if let existingTask = currentUserCalendarRefreshTask,
+           existingTask.userID == requestUserID {
+            taskID = existingTask.id
+            task = existingTask.task
+        } else {
+            cancelCurrentUserCalendarRefresh()
+            taskID = UUID()
+            let expectedLocalMutationRevision = currentUserCalendarLocalMutationRevision
+            let createdTask = Task { @MainActor [weak self] in
+                guard let self else { return false }
+                return await self.performCurrentUserCalendarRefresh(
+                    userID: requestUserID,
+                    expectedLocalMutationRevision: expectedLocalMutationRevision,
+                    backend: backend
+                )
+            }
+            currentUserCalendarRefreshTask = (taskID, requestUserID, createdTask)
+            isRefreshingCurrentUserCalendarData = true
+            task = createdTask
+        }
+
+        let refreshed = await task.value
+        if currentUserCalendarRefreshTask?.id == taskID {
+            currentUserCalendarRefreshTask = nil
+            isRefreshingCurrentUserCalendarData = false
+            if refreshed {
+                currentUserCalendarHydrationRevision &+= 1
+            }
+        }
+        return refreshed
+    }
+
+    private struct StagedCurrentUserCalendarData {
+        let visiblePlaces: [VisiblePlace]
+        let visitsByUserPlaceID: [String: [PlaceVisitResult]]?
+    }
+
+    private func performCurrentUserCalendarRefresh(
+        userID: String,
+        expectedLocalMutationRevision: UInt64,
+        backend: WanderBackend
+    ) async -> Bool {
+        do {
+            let fetchedPlaces = try await backend.userPlaces(for: userID)
+            guard currentUser.id == userID,
+                  !Task.isCancelled,
+                  currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
+            else { return false }
+            guard fetchedPlaces.allSatisfy({
+                $0.owner.id == userID && $0.userPlace.userID == userID
+            }) else {
+                throw WanderRemoteError.invalidResponse(
+                    "Current-user calendar response contained another owner's place"
+                )
+            }
+
+            let visiblePlaces = fetchedPlaces.filter { $0.userPlace.deletedAt == nil }
+            let userPlaceIDs = visiblePlaces.map(\.userPlace.id)
+            guard Set(userPlaceIDs).count == userPlaceIDs.count else {
+                throw WanderRemoteError.invalidResponse(
+                    "Current-user calendar response contained duplicate user places"
+                )
+            }
+
+            var visitsByUserPlaceID: [String: [PlaceVisitResult]]?
+            if backend.visitRepository != nil {
+                var stagedVisits: [String: [PlaceVisitResult]] = [:]
+                var seenVisitIDs = Set<String>()
+                for userPlaceID in userPlaceIDs.sorted() {
+                    let visits = try await backend.visits(for: userPlaceID)
+                    guard currentUser.id == userID,
+                          !Task.isCancelled,
+                          currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
+                    else { return false }
+                    guard visits.allSatisfy({ $0.userPlaceID == userPlaceID }) else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar visit response had the wrong parent"
+                        )
+                    }
+                    let visitIDs = visits.map(\.visitID)
+                    guard Set(visitIDs).count == visitIDs.count,
+                          seenVisitIDs.isDisjoint(with: visitIDs)
+                    else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar response contained duplicate visits"
+                        )
+                    }
+                    seenVisitIDs.formUnion(visitIDs)
+                    stagedVisits[userPlaceID] = visits
+                }
+                visitsByUserPlaceID = stagedVisits
+            }
+
+            guard currentUser.id == userID,
+                  !Task.isCancelled,
+                  currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
+            else { return false }
+            applyStagedCurrentUserCalendarData(
+                StagedCurrentUserCalendarData(
+                    visiblePlaces: visiblePlaces,
+                    visitsByUserPlaceID: visitsByUserPlaceID
+                ),
+                userID: userID
+            )
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            guard currentUser.id == userID,
+                  !Task.isCancelled,
+                  currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
+            else { return false }
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    private func cancelCurrentUserCalendarRefresh() {
+        currentUserCalendarRefreshTask?.task.cancel()
+        currentUserCalendarRefreshTask = nil
+        isRefreshingCurrentUserCalendarData = false
+    }
+
+    private func applyStagedCurrentUserCalendarData(
+        _ staged: StagedCurrentUserCalendarData,
+        userID: String
+    ) {
+        let previousOwnerPlaces = remoteVisiblePlaceCache.filter {
+            $0.owner.id == userID
+        }
+        let scopedUserPlaceReferenceIDs = (
+            userPlaces.filter { $0.userID == userID }.flatMap {
+                Self.referenceIDs(for: $0)
+            }
+            + previousOwnerPlaces.flatMap {
+                Self.referenceIDs(for: $0.userPlace)
+            }
+            + staged.visiblePlaces.flatMap {
+                Self.referenceIDs(for: $0.userPlace)
+            }
+        ).reduce(into: Set<String>()) {
+            $0.insert($1)
+        }
+
+        withAcceptedCurrentUserCalendarHydration {
+            withDeferredPersistence {
+                remoteVisiblePlaceCache = remoteVisiblePlaceCache.filter {
+                    $0.owner.id != userID
+                } + staged.visiblePlaces
+                replaceRemoteCurrentUserAttributes(
+                    with: staged.visiblePlaces,
+                    scopedUserPlaceReferenceIDs: scopedUserPlaceReferenceIDs
+                )
+                if let visitsByUserPlaceID = staged.visitsByUserPlaceID {
+                    reconcileCurrentUserCalendarVisits(
+                        visitsByUserPlaceID,
+                        scopedUserPlaceReferenceIDs: scopedUserPlaceReferenceIDs
+                    )
+                }
+                authoritativeCalendarUserID = userID
+                lastRemoteError = nil
+                objectWillChange.send()
+                persist()
+            }
+        }
+    }
+
+    private func replaceRemoteCurrentUserAttributes(
+        with visiblePlaces: [VisiblePlace],
+        scopedUserPlaceReferenceIDs: Set<String>
+    ) {
+        placeAttributes.removeAll {
+            $0.localID.hasPrefix("remote_attr_")
+                && scopedUserPlaceReferenceIDs.contains($0.userPlaceID)
+        }
+        placeAttributes.append(contentsOf: visiblePlaces.flatMap(\.attributes))
+    }
+
+    private func reconcileCurrentUserCalendarVisits(
+        _ visitsByUserPlaceID: [String: [PlaceVisitResult]],
+        scopedUserPlaceReferenceIDs: Set<String>
+    ) {
+        let remoteVisits = visitsByUserPlaceID
+            .keys
+            .sorted()
+            .flatMap { visitsByUserPlaceID[$0] ?? [] }
+        let remoteVisitsByID = Dictionary(
+            uniqueKeysWithValues: remoteVisits.map { ($0.visitID, $0) }
+        )
+        let dirtyVisitReferenceIDs = placeVisits
+            .filter {
+                scopedUserPlaceReferenceIDs.contains($0.userPlaceID)
+                    && $0.syncState != .synced
+            }
+            .reduce(into: Set<String>()) {
+                $0.formUnion(Self.referenceIDs(for: $1))
+            }
+        var consumedRemoteVisitIDs = Set<String>()
+        var reconciledVisits: [LocalPlaceVisit] = []
+        reconciledVisits.reserveCapacity(placeVisits.count + remoteVisits.count)
+
+        for visit in placeVisits {
+            guard scopedUserPlaceReferenceIDs.contains(visit.userPlaceID),
+                  visit.syncState == .synced
+            else {
+                reconciledVisits.append(visit)
+                continue
+            }
+
+            let referenceIDs = Self.referenceIDs(for: visit)
+            guard let remoteVisitID = referenceIDs.first(where: {
+                remoteVisitsByID[$0] != nil
+            }),
+            !dirtyVisitReferenceIDs.contains(remoteVisitID),
+            let result = remoteVisitsByID[remoteVisitID]
+            else {
+                continue
+            }
+
+            applyRemoteVisitResult(result, to: visit)
+            consumedRemoteVisitIDs.insert(remoteVisitID)
+            reconciledVisits.append(visit)
+        }
+
+        for result in remoteVisits
+        where !consumedRemoteVisitIDs.contains(result.visitID)
+            && !dirtyVisitReferenceIDs.contains(result.visitID) {
+            reconciledVisits.append(
+                LocalPlaceVisit(
+                    localID: "remote_profile_visit_\(result.visitID)",
+                    serverID: result.visitID,
+                    userPlaceID: result.userPlaceID,
+                    visitedAt: result.visitedAt,
+                    note: result.note,
+                    ratingScore: result.ratingScore,
+                    tags: result.tags,
+                    backfilledFromUserPlace: result.backfilledFromUserPlace,
+                    syncState: .synced
+                )
+            )
+        }
+
+        placeVisits = reconciledVisits
+    }
+
+    private func applyRemoteVisitResult(
+        _ result: PlaceVisitResult,
+        to visit: LocalPlaceVisit
+    ) {
+        let now = Date.now
+        visit.serverID = result.visitID
+        visit.userPlaceID = result.userPlaceID
+        visit.visitedAt = result.visitedAt
+        visit.note = result.note
+        visit.ratingScore = PlaceRating.normalized(result.ratingScore)
+        visit.setDerivedTags(result.tags)
+        visit.backfilledFromUserPlace = result.backfilledFromUserPlace
+        visit.syncStateRaw = SyncState.synced.rawValue
+        visit.localUpdatedAt = now
+        visit.serverUpdatedAt = now
+        visit.lastSyncError = nil
+        visit.updatedAt = now
+        visit.deletedAt = nil
+    }
+
+    @discardableResult
+    private func refreshRemoteProfileVisits(profileID: String, backend: WanderBackend) async -> Bool {
+        guard backend.visitRepository != nil else { return true }
 
         let remoteUserPlaces = remoteVisiblePlaceCache
             .filter { $0.owner.id == profileID && $0.userPlace.deletedAt == nil }
         let remoteUserPlaceIDs = Set(remoteUserPlaces.map(\.userPlace.id))
-        guard !remoteUserPlaceIDs.isEmpty else { return }
+        guard !remoteUserPlaceIDs.isEmpty else { return true }
 
         var hydrated: [LocalPlaceVisit] = []
+        var refreshedUserPlaceIDs: Set<String> = []
+        var firstError: Error?
         for userPlaceID in remoteUserPlaceIDs.sorted() {
             do {
                 let results = try await backend.visits(for: userPlaceID)
+                refreshedUserPlaceIDs.insert(userPlaceID)
                 hydrated.append(contentsOf: results.map { result in
                     LocalPlaceVisit(
                         localID: "remote_profile_visit_\(result.visitID)",
@@ -4788,14 +5348,15 @@ final class WanderStore: ObservableObject {
                     )
                 })
             } catch {
-                lastRemoteError = remoteErrorMessage(error)
+                firstError = firstError ?? error
             }
         }
 
         let hydratedIDs = Set(hydrated.map(\.id))
         placeVisits.removeAll { visit in
-            visit.localID.hasPrefix("remote_profile_visit_")
-                && remoteUserPlaceIDs.contains(visit.userPlaceID)
+            Self.isSyntheticRemoteProfileVisit(visit)
+                && visit.syncState == .synced
+                && refreshedUserPlaceIDs.contains(visit.userPlaceID)
                 && !hydratedIDs.contains(visit.id)
         }
         for remoteVisit in hydrated where !placeVisits.contains(where: { $0.id == remoteVisit.id }) {
@@ -4803,6 +5364,12 @@ final class WanderStore: ObservableObject {
         }
         objectWillChange.send()
         persist()
+        if let firstError {
+            lastRemoteError = remoteErrorMessage(firstError)
+            return false
+        }
+        lastRemoteError = nil
+        return true
     }
 
     func refreshRemoteSocialGraph(userID: String? = nil, backend: WanderBackend?) async {
@@ -6216,6 +6783,26 @@ final class WanderStore: ObservableObject {
     private func applyRemoteProfileVisiblePlaces(_ visiblePlaces: [VisiblePlace], profileID: String) {
         remoteVisiblePlaceCache.removeAll { $0.owner.id == profileID }
         remoteVisiblePlaceCache.append(contentsOf: visiblePlaces)
+        hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
+    }
+
+    /// Viewport queries are intentionally partial. Keep the current user's
+    /// fully hydrated profile slice so Map/Discover refreshes cannot truncate
+    /// Profile calendar or widget activity outside the visible region.
+    private func replaceRemoteViewportVisiblePlaces(_ visiblePlaces: [VisiblePlace]) {
+        let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
+            $0.owner.id == currentUser.id
+        }
+        var mergedPlaces = visiblePlaces
+
+        for retainedPlace in retainedOwnerPlaces where !mergedPlaces.contains(where: {
+            $0.owner.id == currentUser.id
+                && VisiblePlaceGrouping.matches($0, retainedPlace)
+        }) {
+            mergedPlaces.append(retainedPlace)
+        }
+
+        remoteVisiblePlaceCache = mergeVisiblePlaces(mergedPlaces)
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
     }
 

@@ -1,6 +1,6 @@
 # Setup
 
-Last updated: 2026-06-15
+Last updated: 2026-07-24
 
 ## Requirements
 
@@ -81,6 +81,32 @@ checked in as non-secret project defaults for the Wander alpha project.
 
 Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored and
 only for local overrides.
+
+## Widget Extension And Signing
+
+`WanderWidgets` is one WidgetKit extension with bundle id
+`com.grayline.wander.widgets`. It hosts all three widget configurations: Quick
+Capture, Search, and Activity Calendar. The app and extension share App Group
+`group.com.grayline.wander.shared`.
+
+Only the calendar crosses the App Group boundary. The host app writes a redacted,
+aggregate-only JSON snapshot containing calendar layout and daily Been/Wanna
+counts. Do not add place names, notes, precise locations, user identities, or raw
+place records to that payload. The file lives under the App Group's
+`Library/Caches` directory, is excluded from backup after every atomic write,
+and is cleared immediately when the authenticated identity becomes unavailable
+or changes.
+
+WidgetKit does not offer an inline keyboard. Tapping the Search widget opens Map
+with the in-app search focused; text entry and result population happen in the
+app.
+
+Before a physical-device, archive, or TestFlight build, register the extension
+App ID `com.grayline.wander.widgets` and App Group
+`group.com.grayline.wander.shared` in the Apple Developer portal. Enable the App
+Group for both the host app and extension App IDs, then regenerate or update both
+provisioning profiles. Simulator-only signing does not complete this portal
+setup.
 
 ## Test
 

@@ -22011,3 +22011,247 @@ Landing completion — 2026-07-24 14:31 PDT:
 Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
+
+## 2026-07-24 14:52 PDT - Codex - REC-142 Home Screen Widgets
+
+Agent: Codex
+Branch: `codex/rec-142-widgets`
+Worktree: `/private/tmp/recme-rec142-widgets`
+Linear: `REC-142` (`In Progress`)
+
+Goal: implement one WidgetKit extension with Quick Capture, Quick Search, and
+the system-large Profile activity calendar, including typed in-app routes,
+shared current-user calendar data, accessible widget UI, tests, and simulator
+validation.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `74ab31bb0`. The root checkout has unrelated `.gitignore`
+  and `.pnpm-store/` changes; they belong to the user/another task and will
+  remain untouched.
+- No active agent-log entry or worktree was found for WidgetKit or REC-142.
+  This task necessarily touches high-conflict `project.yml` and regenerated
+  `Wander.xcodeproj/project.pbxproj`, so all implementation stays in this
+  dedicated worktree.
+- Created Linear REC-142 in the `recme` team / `mvp` project, assigned to Ryan,
+  marked High priority, and moved it to `In Progress`.
+- Current platform assumption: standard Home Screen widgets do not host an
+  editable text field or keyboard. Quick Search will therefore open the Map
+  with its native quick-search field already active and focused; this will be
+  verified against the installed SDK/official WidgetKit contracts before
+  implementation.
+- Expected files include `project.yml`, generated project state, app
+  entitlements, a new widget-extension source/entitlements folder, typed
+  app-route and shared snapshot code, Map/Add/Profile integration points,
+  focused tests, and this log. No backend schema, RLS, auth policy, build
+  number, TestFlight, or Slack release action is in scope.
+
+Implementation and validation checkpoint — 2026-07-24 16:10 PDT:
+
+- Added one embedded `WanderWidgets` extension with three configurations:
+  system-small plus Lock Screen Quick Capture, system-medium plus Lock Screen
+  Search, and a system-large Activity Calendar. Quick Capture routes into the
+  existing nearby-place “I'm here now” save flow. Search routes to Map with
+  native search focused; WidgetKit's Home Screen surface cannot host an inline
+  keyboard, so text entry remains in the app.
+- Added strict typed `recme://` routes and one-shot launch requests. The
+  calendar route now dismisses retained Profile sheets and navigation
+  destinations, resets the in-app calendar to the widget's current month, then
+  scrolls to the calendar before acknowledging the request. Later quick
+  capture, search, or shared-profile routes clear any pending calendar request.
+- The calendar renders filled terracotta Been days, dotted dark-sage Wanna
+  days, and a filled-plus-dotted combined state. `NOW` is separated above the
+  marker. Calendar cells expose concise aggregate VoiceOver labels while
+  inactive days are hidden from the widget accessibility tree.
+- Added an App Group snapshot contract that contains only month layout, locale
+  metadata, and per-day Been/Wanna counts. It excludes place names, notes,
+  coordinates, authentication data, and user identity. Snapshot writes are
+  atomic, schema-checked, semantic-change-aware, and cleared when calendar data
+  is unavailable.
+- Added current-owner remote calendar hydration and preserved its fully
+  hydrated place slice across partial Map viewport refreshes. Successful live
+  hydration advances snapshot freshness; failed visit fetches retain prior
+  visits rather than deleting them.
+- `xcodegen generate` completed and the generated project embeds the extension.
+  `git diff --check` passes. A clean generic simulator build passed at
+  `/private/tmp/DerivedData-rec142-final`, and a signed device-specific
+  simulator build passed at `/private/tmp/DerivedData-rec142-signed`.
+- Focused widget integration validation passed 7/7 tests:
+  `/private/tmp/DerivedData-rec142-focused/Logs/Test/Test-Wander-2026.07.24_16-03-37--0700.xcresult`.
+  The complete suite then passed 666/666:
+  `/private/tmp/DerivedData-rec142-focused/Logs/Test/Test-Wander-2026.07.24_16-04-33--0700.xcresult`.
+- Visual QA passed in the widget gallery on iPhone 17 Pro Max and iPhone 17e
+  for Quick Capture, Search, and Activity Calendar with no observed clipping.
+  Final live-route QA on iPhone 17e confirmed nearby candidates plus Save for
+  Quick Capture, a focused `coffee` query plus result for Search, and Calendar
+  correctly unwinding both Settings and a retained Been list. Moving the
+  in-app calendar to June before relaunch confirmed the widget route restores
+  July 2026.
+- The signed simulator app and extension both resolve App Group
+  `group.com.grayline.wander.shared`. Demo-fixture launch wrote
+  `activity-calendar-snapshot.json` into the shared container, and the decoded
+  payload contained July 2026 aggregate state (`3 been`, `1 wanna`, combined
+  day 24) with no place-level content. Physical-device/archive validation still
+  requires the extension App ID and App Group capability to be enabled for
+  both provisioning profiles as documented in `docs/setup.md`.
+- Existing Swift isolation and traditional-headermap warnings remain
+  unchanged. `CURRENT_PROJECT_VERSION` remains 96. No TestFlight archive,
+  upload, beta-group change, or Slack announcement was requested or performed.
+  Independent final diff review and the ready PR remain before handoff.
+
+Review-remediation checkpoint — 2026-07-24 16:33 PDT:
+
+- Added one global, latest-request-wins deep-link handoff for every typed
+  `recme://` route. Each request cancels the prior handoff, broadcasts a
+  one-shot presentation reset, clears root Add/auth/settings/shared-profile
+  presentation state, waits briefly for dismissal, and activates only the
+  still-current capture, search, calendar, or shared-profile destination.
+- Map now handles each reset ID idempotently by dismissing its save sheet and
+  place profile and clearing native/place selection before a widget search
+  runs. Profile similarly dismisses Settings, photo pickers/camera/menu,
+  social sheets, edit/invitation sheets, and retained list/calendar navigation
+  before activating the latest calendar scroll request.
+- App Group calendar data is cleared synchronously before the first signed-in
+  identity in a process, every account-ID change, and definitive
+  signed-out/unavailable state, with hydration markers reset before
+  `WanderStore` changes identity. This prevents an unscoped account-A
+  snapshot from remaining visible while account B hydrates.
+- Root snapshot publication now pauses while the store's atomic calendar
+  refresh is in flight. Only a successful hydration revision for the current
+  authoritative owner projection advances snapshot freshness. The in-app
+  owner Profile calendar/stats and widget publisher use that same
+  `currentUserCalendarProjection`, avoiding partial or differently merged
+  calendar state.
+- Expanded `WanderWidgetIntegrationTests` source-contract coverage for the
+  global reset pipeline, root/Map/Profile dismissal state, latest-request
+  cancellation guard, synchronous identity clear ordering, in-flight and
+  hydration-revision publication gates, shared calendar projection, and the
+  App Group `Library/Caches` plus backup-exclusion contract.
+- `git diff --check` passes. A fresh focused integration run was started with
+  simulator access but intentionally interrupted without a result when the
+  shared store contract changed underneath it; it is not counted as a pass or
+  failure. Per coordination with the owning Codex task, the integrated
+  focused/full test runs will happen after the remaining shared data edits
+  settle.
+- Files changed in this remediation slice:
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `Wander/App/WanderRootView.swift`, `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Profile/ProfileScreen.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.
+
+Calendar-store integrity checkpoint — 2026-07-24 16:37 PDT
+(Codex `/root/widget_diff_review`, branch `codex/rec-142-widgets`):
+
+- Added one current-owner calendar projection shared by the profile/widget
+  surfaces. An authoritative remote hydration now replaces stale synced rows
+  and deleted synced visits while preserving pending/failed local mutations
+  as the offline-first overlay.
+- Current-owner hydration is staged and atomic: owner places, attributes, and
+  every visit collection are validated before any remote calendar state is
+  published. Concurrent callers share one per-user refresh task, and the
+  hydration revision advances only after the refresh-in-flight flag clears.
+- Definitive sign-out, unavailable auth, and direct account switches cancel
+  any owner refresh and clear session-scoped remote place, visit, attribute,
+  and feed caches before the next account can project calendar data.
+- Added store regressions for remote status/date/deletion precedence, pending
+  mutation preservation, visit update/deletion reconciliation, all-or-nothing
+  visit failures, sign-out and direct account-switch isolation, and
+  single-flight refresh behavior.
+- Files changed in this slice: `Wander/Services/WanderLocalStore.swift`,
+  `WanderTests/WanderStoreTests.swift`, and this log.
+- Validation: the generic iOS Simulator build completed successfully with
+  `CODE_SIGNING_ALLOWED=NO` in `DerivedData-storefix`. The documented iPhone
+  16 Plus / iOS 18.6 focused-test destination is not installed, so that
+  command exited 70 before compilation. The same nine focused tests are
+  currently compiling for installed iPhone 17 / iOS 26.5 in xcodebuild
+  session `83489`; no source error had appeared at handoff, but this is not
+  recorded as a pass until the process completes. `git diff --check` passed
+  before the integrated parent edits continued.
+- Known contract gap: the current remote user-place DTO does not carry
+  historical Wanna dates, so a historical Wanna saved only on another device
+  cannot yet be reconstructed by this hydration path. Addressing that requires
+  a backend/DTO contract change outside this store-only remediation.
+- No commit was created by this subtask; the parent widget task owns integrated
+  validation, commit, PR, and Linear updates.
+
+Integrated validation checkpoint — 2026-07-24 16:53 PDT:
+
+- Resolved the Swift 6 isolation diagnostic in the deferred calendar test fake
+  by keeping its suspension and result delivery on `MainActor`; no production
+  behavior changed for this correction.
+- Focused widget, snapshot, route, and current-owner calendar hydration
+  validation passed 31/31 tests:
+  `/private/tmp/DerivedData-rec142-integrated/Logs/Test/Test-Wander-2026.07.24_16-44-22--0700.xcresult`.
+- The complete iOS simulator suite passed 676/676:
+  `/private/tmp/DerivedData-rec142-integrated/Logs/Test/Test-Wander-2026.07.24_16-44-59--0700.xcresult`.
+- A clean universal generic simulator build passed at
+  `/private/tmp/DerivedData-rec142-final`, and a signed iPhone 17 Pro Max /
+  iOS 26.5 build passed at
+  `/private/tmp/DerivedData-rec142-signed-final`.
+- Regenerated `Wander.xcodeproj` from `project.yml` with XcodeGen after the
+  final source edits. `git diff --check` passes, and the branch remains based
+  on current `origin/main`.
+- Installed the signed app on the booted iPhone 17 Pro Max and launched demo
+  fixtures. Live route smoke testing confirmed:
+  - `recme://add/here-now` opens the nearby-place capture flow with Save.
+  - `recme://map/search?q=coffee` dismisses the retained Add sheet, opens Map,
+    prepopulates `coffee`, and presents quick-search results.
+  - `recme://profile/calendar` clears the active Map search presentation,
+    selects Profile, restores the current month, and scrolls the calendar into
+    view.
+- The installed app resolved App Group
+  `group.com.grayline.wander.shared` and wrote
+  `Library/Caches/activity-calendar-snapshot.json`. Its top-level schema and
+  nested day payload contain only calendar metadata plus `dayNumber`, state,
+  and aggregate Been/Wanna counts; no owner ID, place ID/name, note, rating,
+  address, or coordinates are stored.
+- Created follow-up Linear issue
+  `REC-144` (`Persist historical Wanna dates for cross-device calendar
+  hydration`) for the existing backend/DTO gap that prevents a clean second
+  device from reconstructing a Wanna date after the place later becomes Been.
+  Local history remains preserved, and the widget uses the same projection as
+  the in-app calendar, so this is not a widget-parity blocker.
+- Existing Swift isolation and traditional-headermap warnings remain
+  unchanged. `CURRENT_PROJECT_VERSION` remains 96. No TestFlight build,
+  archive, upload, beta-group change, or Slack announcement was requested or
+  performed.
+- Final independent source-only blocker review, commit, push, ready PR, and
+  Linear `In Review` handoff remain.
+
+Final race and live-route validation checkpoint — 2026-07-24 17:42 PDT:
+
+- Remediated the independent review's remaining correctness findings:
+  dirty synthetic calendar visits now participate in hydration mutation
+  fingerprinting and survive session/profile cleanup; calendar visit dedupe is
+  authority-aware; stale/cancelled Map searches are gated before setting their
+  loading state; and deep-link handoffs track physical presentation
+  generations instead of relabeling dismissal callbacks with the latest
+  request.
+- Live simulator QA then exposed a SwiftUI lifecycle ordering case that static
+  review and the original generation tests did not: a sheet's `onDismiss`
+  callback can arrive before its content's `onDisappear`. Added
+  `WanderDeepLinkPresentationRegistry` so either callback order resolves the
+  same oldest physical generation, with regressions for both callback orders
+  and overlapping Add generations.
+- Final focused presentation/navigation validation passed 16/16:
+  `/private/tmp/DerivedData-rec142-integrated/Logs/Test/Test-Wander-2026.07.24_17-37-38--0700.xcresult`.
+  The complete iPhone 17 Pro Max / iOS 26.5 simulator suite passed 689/689:
+  `/private/tmp/DerivedData-rec142-integrated/Logs/Test/Test-Wander-2026.07.24_17-41-29--0700.xcresult`.
+- Regenerated `Wander.xcodeproj` from `project.yml`. A clean universal generic
+  simulator build passed in `/private/tmp/DerivedData-rec142-final`, and the
+  final signed iPhone 17 Pro Max build passed in
+  `/private/tmp/DerivedData-rec142-signed-final`.
+- Final signed-app smoke testing confirmed Quick Capture opens the nearby-place
+  flow; Quick Capture → Search dismisses correctly and prepopulates `coffee`
+  with MapKit results; Search → Calendar clears the Map presentation and
+  scrolls Profile to the current month; and a rapid Capture → Search →
+  Calendar sequence leaves only the latest Calendar route active.
+- `git diff --check` and Swift parsing pass. Existing Swift isolation and
+  traditional-headermap warnings remain unchanged. Build number 96 remains
+  unchanged; this is a branch/PR handoff, not a TestFlight release.
+- The final independent source review passed with no P1/P2 findings. It
+  separately audited calendar hydration/store precedence and deep-link
+  presentation generations, including either SwiftUI dismissal callback order,
+  overlapping generations, late callbacks, and latest-wins handoffs.
+- Commit, ready PR, and Linear `In Review` updates remain for publication.
