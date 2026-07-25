@@ -46,6 +46,46 @@ final class SaveStreakCalculatorTests: XCTestCase {
         )
     }
 
+    func testCelebrationPresentationUsesNumericDayStreakLanguage() {
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.visualCount(for: 4),
+            "4"
+        )
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.accessibilityTitle(for: 4),
+            "4 day streak"
+        )
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.accessibilityTitle(for: 1),
+            "1 day streak"
+        )
+    }
+
+    func testCelebrationPresentationBuildsSevenDayCardEndingToday() {
+        let calendar = testCalendar
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: 4,
+            endingOn: date(2026, 7, 25, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(days.count, 7)
+        XCTAssertEqual(days.map(\.isCovered), [false, false, false, true, true, true, true])
+        XCTAssertEqual(days.filter(\.isToday).count, 1)
+        XCTAssertTrue(days.last?.isToday == true)
+        XCTAssertTrue(days.last?.isCovered == true)
+    }
+
+    func testCelebrationPresentationCapsVisibleCoverageAtSevenDays() {
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: 1_000,
+            endingOn: date(2026, 7, 25, hour: 12),
+            calendar: testCalendar
+        )
+
+        XCTAssertEqual(days.filter(\.isCovered).count, 7)
+    }
+
     func testSummaryDeduplicatesSameDaySavesAndKeepsYesterdayRunActive() throws {
         let calendar = testCalendar
         let dates = [

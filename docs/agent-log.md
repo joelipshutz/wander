@@ -22057,3 +22057,33 @@ Validation plan:
   Reduce Motion path.
 - Push a ready PR, move REC-122 to `In Review`, and open the isolated branch in
   Xcode for local review. No build-number or TestFlight release is requested.
+
+Implementation checkpoint — 2026-07-25 12:32 PDT:
+
+- Retained the existing confetti and spring ticket-flip entrance, then added a
+  short scale/fade reveal for the numeric streak count after the ticket lands.
+- Replaced `four days, still going` / `day one, keep it going` with a centered
+  numeric count and the fixed visual label `day streak!`; VoiceOver receives
+  the corresponding `4 day streak` compound label plus the saved place/status.
+- Replaced the loose four-date path with a compact cream seven-day card. The
+  card derives localized weekday initials from the save date, fills the last
+  seven consecutive streak days, caps longer streaks cleanly, distinguishes
+  today with a dark outline, and adds checks so completion is not color-only.
+- Added focused presentation tests for exact numeric language, the trailing
+  four-of-seven pattern, today's state, and a 1,000-day streak's visible cap.
+- `xcodegen generate` completed with no generated-project diff.
+- The first sandboxed test attempt failed before app compilation because
+  CoreSimulator and package-network access were blocked. The escalated run
+  then exposed one invalid token name (`spacing5`); replaced it with existing
+  8pt-grid tokens and reran successfully.
+- Focused streak validation passed 7/7:
+  `/private/tmp/DerivedData-rec122-streak-hierarchy/Logs/Test/Test-Wander-2026.07.25_12-27-59--0700.xcresult`.
+- Installed the exact focused-test build and inspected the completed takeover
+  on rec.me Streak QA (iPhone 16 Plus) and iPhone 16e, both iOS 18.6. The hero,
+  weekly card, helper copy, and 54pt confirmation control fit without clipping
+  or overlap:
+  `/private/tmp/rec122-streak-hierarchy-iphone16plus.png` and
+  `/private/tmp/rec122-streak-hierarchy-iphone16e.png`.
+- Existing Supabase Swift-isolation, App Intents metadata, simulator-keychain,
+  and resource-manifest warnings remain unrelated. No schema, build number,
+  signing, TestFlight, or Slack change was made.
