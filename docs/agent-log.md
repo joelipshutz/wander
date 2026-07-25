@@ -22120,5 +22120,8 @@ Publication — 2026-07-24 17:31 PDT:
   [#213](https://github.com/joelipshutz/wander/pull/213) against `main`.
 - The GitHub app returned `403 Resource not accessible by integration`; the
   authenticated `gh` fallback opened the PR successfully.
+- Moved Linear `REC-143` to `In Review`, attached ready PR #213 and draft
+  instrumentation PR #214, and posted the selected decisions, validation,
+  REC-145 follow-up, remaining real-device checks, and release boundary.
 - No TestFlight release, build-number change, archive, upload, or Slack
   announcement was requested or performed.
