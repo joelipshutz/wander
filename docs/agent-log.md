@@ -22263,6 +22263,8 @@ REC-142 publication handoff — 2026-07-24 17:46 PDT:
   `codex/rec-142-widgets`.
 - Pushed the branch and opened ready PR
   [#215](https://github.com/joelipshutz/wander/pull/215) against `main`.
+- Moved Linear REC-142 to `In Review`, attached PR #215, and added the
+  validation/privacy/follow-up handoff comment.
 - Final validation remains: focused navigation/presentation tests 16/16,
   complete simulator suite 689/689, clean universal simulator build, signed
   iPhone 17 Pro Max build, two-device-size visual QA, live deep-link route
