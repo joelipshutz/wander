@@ -1,6 +1,11 @@
 import SwiftUI
 import SwiftData
 
+#if DEBUG
+import DebugBridgeCore
+import DebugBridgeUI
+#endif
+
 @main
 struct WanderApp: App {
     @UIApplicationDelegateAdaptor(WanderAppDelegate.self) private var appDelegate
@@ -11,6 +16,11 @@ struct WanderApp: App {
     private let discoverParser: any LLMFilterParser
 
     init() {
+        #if DEBUG
+        StateServer.shared.start()
+        DebugBridgeUIWiring.installAll()
+        #endif
+
         let configuration = WanderBackendConfiguration.current()
         analytics = PostHogAnalyticsClient(configuration: .current()) ?? NoopAnalyticsClient()
         let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
