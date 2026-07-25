@@ -22112,3 +22112,13 @@ Specification and review completion — 2026-07-24 17:24 PDT:
 Final outcome: REC-143 now has an implementation-ready, engineering-cleared
 spec and completed simulator/source iOS design review. App behavior was not
 changed. Publication details will be appended after the ready PR is created.
+
+Publication — 2026-07-24 17:31 PDT:
+
+- Committed the completed spec and review record at `ce9490e35`, pushed
+  `codex/rec-143-checkin-ticketing-spec`, and opened ready PR
+  [#213](https://github.com/joelipshutz/wander/pull/213) against `main`.
+- The GitHub app returned `403 Resource not accessible by integration`; the
+  authenticated `gh` fallback opened the PR successfully.
+- No TestFlight release, build-number change, archive, upload, or Slack
+  announcement was requested or performed.
