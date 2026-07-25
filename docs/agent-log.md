@@ -22255,3 +22255,22 @@ Final race and live-route validation checkpoint — 2026-07-24 17:42 PDT:
   presentation generations, including either SwiftUI dismissal callback order,
   overlapping generations, late callbacks, and latest-wins handoffs.
 - Commit, ready PR, and Linear `In Review` updates remain for publication.
+
+REC-142 publication handoff — 2026-07-24 17:46 PDT:
+
+- Committed the complete widget implementation as `eae04f4df`
+  (`Add quick capture, search, and calendar widgets`) on
+  `codex/rec-142-widgets`.
+- Pushed the branch and opened ready PR
+  [#215](https://github.com/joelipshutz/wander/pull/215) against `main`.
+- Final validation remains: focused navigation/presentation tests 16/16,
+  complete simulator suite 689/689, clean universal simulator build, signed
+  iPhone 17 Pro Max build, two-device-size visual QA, live deep-link route
+  smoke, privacy inspection of the aggregate-only App Group snapshot, and
+  independent P1/P2 source review.
+- Known follow-up remains REC-144 for historical Wanna dates on a clean second
+  device. It does not block widget/in-app calendar parity for current local
+  data.
+- Build number remains 96. No archive, upload, TestFlight group change, or
+  tester Slack announcement was performed because this handoff requested a
+  branch for Xcode testing, not a TestFlight release.
