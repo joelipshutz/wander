@@ -22112,3 +22112,14 @@ Review completion — 2026-07-24 17:24 PDT:
 Final outcome: the isolated instrumentation served its review purpose and is
 ready for a draft `[DO NOT MERGE]` PR. It changes no production data or release
 state and must be removed rather than merged.
+
+Publication — 2026-07-24 17:31 PDT:
+
+- Committed the temporary tooling at `67285a4e1`, pushed
+  `codex/rec-143-ios-design-instrumentation`, and opened draft PR
+  [#214](https://github.com/joelipshutz/wander/pull/214) against `main` with
+  `[DO NOT MERGE]` in the title and explicit cleanup instructions.
+- The GitHub app returned `403 Resource not accessible by integration`; the
+  authenticated `gh` fallback opened the draft successfully.
+- No TestFlight release, build-number change, archive, upload, or Slack
+  announcement was requested or performed.
