@@ -22011,3 +22011,115 @@ Landing completion — 2026-07-24 14:31 PDT:
 Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
+
+## 2026-07-24 16:16 PDT - Codex - REC-143 Live iOS Design Instrumentation
+
+Agent: Codex using `ios-design-review`
+Branch: `codex/rec-143-ios-design-instrumentation`
+Worktree: `/private/tmp/recme-rec143-ios-design-instrumentation`
+Linear: `REC-143` (`In Progress`)
+
+Goal: install isolated, debug-only `DebugBridge` / `StateServer`
+instrumentation so the requested live-device design review can inspect the
+current rec.me screens before the Been-to-Check-in ticketing spec is finalized.
+
+Starting status and coordination:
+
+- Fetched `origin`; this isolated worktree is clean at latest `origin/main`
+  commit `74ab31bb0`.
+- The root checkout is on an unrelated stale REC-88 branch with user-owned
+  `.gitignore` and `.pnpm-store/` changes. Those files and that checkout will
+  not be touched.
+- Linear `REC-143` was created, assigned to Ryan, related to the existing
+  multiple-visit/shared-check-in/save-flow work, and moved to `In Progress`.
+- Prior repo sessions intentionally declined debug-server scope on production
+  feature branches. Ryan explicitly approved the recommended isolated
+  instrumentation option for this review, so this branch must keep every bridge
+  dependency and startup hook debug-only and separate from the eventual
+  ticketing implementation branch.
+- The connected device is Ry's iPhone 15 Pro
+  (`871CDC6E-9974-5BB8-B0FE-300B5589AF97`). Swift 6.3.3 and current Xcode
+  CoreDevice tooling are available.
+
+Expected files:
+
+- `project.yml`
+- `Wander.xcodeproj/project.pbxproj` only through `xcodegen generate`
+- `Wander/App/WanderApp.swift`
+- Debug-only bridge/accessor source or package configuration required by the
+  gstack iOS QA daemon
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Generate and inspect bridge accessors, preserving Release exclusion.
+- Build, install, and launch the exact Debug app on the connected iPhone
+  without uninstalling it or clearing user data.
+- Acquire an observe-only daemon session and capture screenshots plus
+  accessibility elements across the Been/check-in-relevant major screens.
+- Write the required iOS design report with dimension scores and concrete
+  ticketing recommendations, then hand those findings into the REC-143
+  engineering spec.
+
+Review completion — 2026-07-24 17:24 PDT:
+
+- Added the gstack `DebugBridge` package and debug-only startup wiring, then
+  regenerated the Xcode project from `project.yml`. XcodeGen cannot express a
+  configuration-specific Swift package dependency, so the package reference is
+  present in generated project metadata while all imports and startup calls
+  remain behind `#if DEBUG`. This temporary branch is for review tooling only
+  and must not merge into production.
+- Corrected two defects in the copied upstream review template: moved
+  `// swift-tools-version` to the first line of `Package.swift`, and removed a
+  nonexistent test target from the temporary accessor generator package. The
+  generator correctly emitted no state accessors because the relevant app
+  state is `ObservableObject`, not the expected Observation model shape.
+- A signed physical-device build succeeded at
+  `/private/tmp/DerivedData-rec143-ios-design/Build/Products/Debug-iphoneos/Wander.app`
+  for team `Y7TVK75RZ8`, bundle `com.grayline.wander`, and installed on Ry’s
+  iPhone 15 Pro without uninstalling or clearing app data.
+- The observe-only daemon connected on port 9099, but screenshot and
+  accessibility calls returned `device_locked`. The phone subsequently became
+  `unavailable`; the daemon session was stopped cleanly. No physical-device
+  screenshot or accessibility tree was captured.
+- Switched to the skill’s established simulator/source fallback. An
+  instrumented arm64 Debug build succeeded for the booted iPhone 17 Pro Max,
+  then installed and launched on both iPhone 17 Pro Max
+  (`66BC1F7C-8B51-4AD3-BD44-32569EEC9713`) and compact iPhone 17e
+  (`F393749B-CEB8-4A50-93F9-CBB8E9436B99`).
+- Captured ten deterministic fixture screenshots covering Add visit, place
+  activity/latest and visit history, owner Profile, Profile calendar, and
+  import candidate. The complete report is
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-24.md`.
+- Review status is `DONE_WITH_CONCERNS`. The simulator/source design decisions
+  were accepted into the REC-143 spec; physical-device screenshot/AX,
+  VoiceOver, XXL Dynamic Type, Reduce Motion, and color filters remain pre-ship
+  validation.
+- Validation passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'platform=iOS Simulator,id=66BC1F7C-8B51-4AD3-BD44-32569EEC9713'
+  -derivedDataPath /private/tmp/DerivedData-rec143-ios-design-sim
+  CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES`.
+  Existing Swift isolation, App Intents, and headermap warnings remain. A prior
+  generic dual-architecture simulator build was intentionally interrupted
+  after the active-architecture fallback was selected; it was not an app-code
+  failure.
+- Local gstack end-of-skill timeline and analytics records were finalized.
+  Optional remote telemetry was skipped after the environment’s egress policy
+  had already rejected the same destination during the paired engineering
+  review.
+
+Final outcome: the isolated instrumentation served its review purpose and is
+ready for a draft `[DO NOT MERGE]` PR. It changes no production data or release
+state and must be removed rather than merged.
+
+Publication — 2026-07-24 17:31 PDT:
+
+- Committed the temporary tooling at `67285a4e1`, pushed
+  `codex/rec-143-ios-design-instrumentation`, and opened draft PR
+  [#214](https://github.com/joelipshutz/wander/pull/214) against `main` with
+  `[DO NOT MERGE]` in the title and explicit cleanup instructions.
+- The GitHub app returned `403 Resource not accessible by integration`; the
+  authenticated `gh` fallback opened the draft successfully.
+- No TestFlight release, build-number change, archive, upload, or Slack
+  announcement was requested or performed.

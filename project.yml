@@ -11,6 +11,8 @@ settings:
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
 packages:
+  DebugBridge:
+    path: DebugBridge
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
     from: 3.59.3
@@ -95,6 +97,10 @@ targets:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
           APS_ENVIRONMENT: production
     dependencies:
+      - package: DebugBridge
+        product: DebugBridgeCore
+      - package: DebugBridge
+        product: DebugBridgeUI
       - package: posthog-ios
         product: PostHog
       - package: clerk-ios
