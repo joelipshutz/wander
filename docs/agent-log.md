@@ -24819,3 +24819,12 @@ REC-157 typography revision completion — 2026-07-26 13:43 PDT:
   traditional headermap warnings are unchanged and outside this visual tweak.
 - Next: commit and push the revision to PR #243, return REC-157 to `In Review`,
   and leave Xcode on the existing REC-157 worktree for device testing.
+
+REC-157 typography revision handoff — 2026-07-26 13:43 PDT:
+
+- Commit `ab2049ff5` (`Refine Lock Screen widget ring typography`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the new metrics, commit, and
+  validation results recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number change or release was requested.
