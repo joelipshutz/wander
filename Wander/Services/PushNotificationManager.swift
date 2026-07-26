@@ -10,21 +10,104 @@ private final class NotificationUserInfoBox: @unchecked Sendable {
     }
 }
 
-private final class NotificationResponseBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var values: [[AnyHashable: Any]] = []
+private final class AuthenticatedNotificationGate: @unchecked Sendable {
+    private enum State: Equatable {
+        case unknown
+        case authenticated
+        case signedOut
+    }
 
-    func append(_ value: [AnyHashable: Any]) {
+    private struct PendingResponse {
+        let userInfo: [AnyHashable: Any]
+        let expectedUserID: String
+        let validationGeneration: Int
+    }
+
+    private let lock = NSLock()
+    private var state: State = .unknown
+    private var authenticatedUserID: String?
+    private var expectedUserID: String?
+    private var validationGeneration = 0
+    private var pendingResponses: [PendingResponse] = []
+
+    func beginValidation(expectedUserID: String?) {
         lock.lock()
-        values.append(value)
+        defer { lock.unlock() }
+        if state == .unknown, self.expectedUserID == expectedUserID {
+            return
+        }
+        state = .unknown
+        authenticatedUserID = nil
+        self.expectedUserID = expectedUserID
+        validationGeneration &+= 1
+        pendingResponses.removeAll()
+    }
+
+    func authenticate(userID: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        state = .authenticated
+        authenticatedUserID = userID
+        expectedUserID = userID
+        pendingResponses.removeAll {
+            $0.expectedUserID != userID || $0.validationGeneration != validationGeneration
+        }
+    }
+
+    func signOut() {
+        lock.lock()
+        state = .signedOut
+        authenticatedUserID = nil
+        expectedUserID = nil
+        validationGeneration &+= 1
+        pendingResponses.removeAll()
         lock.unlock()
     }
 
-    func takeFirst() -> [AnyHashable: Any]? {
+    func receive(_ userInfo: [AnyHashable: Any]) -> String? {
         lock.lock()
         defer { lock.unlock() }
-        guard !values.isEmpty else { return nil }
-        return values.removeFirst()
+        switch state {
+        case .authenticated:
+            return authenticatedUserID
+        case .unknown:
+            guard let expectedUserID else { return nil }
+            pendingResponses.append(
+                PendingResponse(
+                    userInfo: userInfo,
+                    expectedUserID: expectedUserID,
+                    validationGeneration: validationGeneration
+                )
+            )
+            return nil
+        case .signedOut:
+            return nil
+        }
+    }
+
+    func takeFirst(for userID: String) -> [AnyHashable: Any]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard state == .authenticated, authenticatedUserID == userID,
+              let index = pendingResponses.firstIndex(where: {
+                  $0.expectedUserID == userID
+                      && $0.validationGeneration == validationGeneration
+              })
+        else { return nil }
+        return pendingResponses.remove(at: index).userInfo
+    }
+
+    func isAuthenticated(userID: String? = nil) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard state == .authenticated else { return false }
+        return userID.map { $0 == authenticatedUserID } ?? true
+    }
+
+    func isBuffering() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return state == .unknown && expectedUserID != nil
     }
 }
 
@@ -36,16 +119,48 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
     static let deviceTokenKey = "deviceToken"
     static let errorKey = "error"
     nonisolated static let userInfoKey = "userInfo"
-    private nonisolated static let notificationResponseBuffer = NotificationResponseBuffer()
+    private nonisolated static let authenticatedNotificationGate = AuthenticatedNotificationGate()
+    private nonisolated static let lastValidatedUserIDKey = "wander.lastValidatedNotificationUserID"
 
-    static func takePendingNotificationUserInfo() -> [AnyHashable: Any]? {
-        notificationResponseBuffer.takeFirst()
+    static func takePendingNotificationUserInfo(for userID: String) -> [AnyHashable: Any]? {
+        authenticatedNotificationGate.takeFirst(for: userID)
+    }
+
+    nonisolated static func setAuthenticatedSessionActive(userID: String) {
+        authenticatedNotificationGate.authenticate(userID: userID)
+        UserDefaults.standard.set(userID, forKey: lastValidatedUserIDKey)
+    }
+
+    nonisolated static func setAuthenticatedSessionSignedOut() {
+        authenticatedNotificationGate.signOut()
+        UserDefaults.standard.removeObject(forKey: lastValidatedUserIDKey)
+    }
+
+    nonisolated static func beginAuthenticatedSessionValidation(expectedUserID: String? = nil) {
+        let expectedUserID = expectedUserID
+            ?? UserDefaults.standard.string(forKey: lastValidatedUserIDKey)
+        authenticatedNotificationGate.beginValidation(expectedUserID: expectedUserID)
+    }
+
+    nonisolated static func shouldAcceptAuthenticatedNotification(for userID: String? = nil) -> Bool {
+        authenticatedNotificationGate.isAuthenticated(userID: userID)
+    }
+
+    nonisolated static func shouldBufferAuthenticatedNotification() -> Bool {
+        authenticatedNotificationGate.isBuffering()
+    }
+
+    nonisolated static func receiveAuthenticatedNotificationUserInfo(
+        _ userInfo: [AnyHashable: Any]
+    ) -> String? {
+        authenticatedNotificationGate.receive(userInfo)
     }
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        Self.beginAuthenticatedSessionValidation()
         UNUserNotificationCenter.current().delegate = self
         return true
     }
@@ -77,6 +192,10 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        guard Self.shouldAcceptAuthenticatedNotification() else {
+            completionHandler([])
+            return
+        }
         let boxedUserInfo = NotificationUserInfoBox(notification.request.content.userInfo)
         Task { @MainActor in
             NotificationCenter.default.post(
@@ -94,13 +213,15 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let boxedUserInfo = NotificationUserInfoBox(response.notification.request.content.userInfo)
-        Self.notificationResponseBuffer.append(boxedUserInfo.value)
-        Task { @MainActor in
-            NotificationCenter.default.post(
-                name: Self.didReceiveNotificationResponse,
-                object: nil,
-                userInfo: [Self.userInfoKey: boxedUserInfo.value]
-            )
+        if let receivingUserID = Self.receiveAuthenticatedNotificationUserInfo(boxedUserInfo.value) {
+            Task { @MainActor in
+                guard Self.shouldAcceptAuthenticatedNotification(for: receivingUserID) else { return }
+                NotificationCenter.default.post(
+                    name: Self.didReceiveNotificationResponse,
+                    object: nil,
+                    userInfo: [Self.userInfoKey: boxedUserInfo.value]
+                )
+            }
         }
         completionHandler()
     }
@@ -180,6 +301,15 @@ final class PushNotificationManager: ObservableObject {
 
     func clearLastError() {
         lastErrorMessage = nil
+    }
+
+    func clearAuthenticatedSessionState() {
+        navigationRequest = nil
+        handledEventIDs.removeAll()
+        applyNotificationPreferences(.allDisabled)
+        WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
 
     @discardableResult

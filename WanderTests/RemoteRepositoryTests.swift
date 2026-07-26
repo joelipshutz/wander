@@ -1263,6 +1263,124 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(attributes?[2]["value"] as? String, "Thai")
     }
 
+    func testCheckInSaveUsesAtomicRPCWithStableTicketAndHistoricalWannaSnapshot() async throws {
+        let rpc = RecordingRPC()
+        let visitID = "38D2B5B8-7F95-42CF-991B-253991C8C6C9"
+        rpc.responses["save_own_check_in"] = """
+        {
+          "user_place_id": "up_saved",
+          "place_id": "place_saved",
+          "visit_id": "\(visitID)",
+          "visited_at": "2026-07-20T18:00:00Z",
+          "note": "first check-in",
+          "rating_score": 4.5,
+          "tags": ["date night", "quiet"],
+          "backfilled_from_user_place": false
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let visitedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-20T18:00:00Z"))
+        let wantedAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-01T17:00:00Z"))
+        let userPlace = UserPlaceDraft(
+            place: PlaceDraft(
+                localID: "local_place_maru",
+                serverID: nil,
+                canonicalName: "Maru Coffee",
+                category: "coffee",
+                address: nil,
+                locality: "Los Angeles",
+                region: "CA",
+                country: nil,
+                latitude: 34.045,
+                longitude: -118.235,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mk_maru",
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "first check-in",
+            ratingScore: 4.5,
+            nearbyConfirmed: true,
+            sourceType: "manual",
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: "visit_tags",
+                    valueType: "multi_tag",
+                    stringValues: ["date night", "quiet"]
+                )
+            ]
+        )
+        let result = try await repository.saveCheckIn(
+            CheckInSaveDraft(
+                userPlace: userPlace,
+                visit: PlaceVisitDraft(
+                    id: visitID,
+                    userPlaceID: "local_user_place_maru",
+                    visitedAt: visitedAt,
+                    note: "first check-in",
+                    ratingScore: 4.5,
+                    attributeAnswersJSON: VisitAttributeAnswers.encoded(from: userPlace.attributes),
+                    backfilledFromUserPlace: false
+                ),
+                historicalWant: HistoricalWantSnapshotDraft(
+                    note: "Joe recommended it",
+                    attributeAnswersJSON: "[]",
+                    tags: ["coffee"],
+                    wantedAt: wantedAt
+                )
+            )
+        )
+
+        XCTAssertEqual(rpc.calls.map(\.name), ["save_own_check_in"])
+        XCTAssertEqual(result.saveResult.userPlaceID, "up_saved")
+        XCTAssertEqual(result.saveResult.placeID, "place_saved")
+        XCTAssertEqual(result.visitResult.visitID, visitID)
+        XCTAssertEqual(result.visitResult.visitedAt, visitedAt)
+        XCTAssertEqual(result.visitResult.tags, ["date night", "quiet"])
+
+        let body = rpc.rawBodies[0]
+        let userPlaceBody = try XCTUnwrap(body["input_user_place"] as? [String: Any])
+        XCTAssertEqual(userPlaceBody["status"] as? String, "been")
+
+        let visit = try XCTUnwrap(body["input_visit"] as? [String: Any])
+        XCTAssertEqual(visit["id"] as? String, visitID)
+        XCTAssertEqual(visit["visited_at"] as? String, "2026-07-20T18:00:00Z")
+        XCTAssertEqual(visit["note"] as? String, "first check-in")
+        XCTAssertEqual(visit["rating_score"] as? Double, 4.5)
+        let answers = try XCTUnwrap(visit["attribute_answers"] as? [[String: Any]])
+        XCTAssertEqual(answers.first?["question_key"] as? String, "visit_tags")
+        XCTAssertEqual(answers.first?["value_type"] as? String, "multi_tag")
+        XCTAssertEqual(answers.first?["value"] as? [String], ["date night", "quiet"])
+
+        let historicalWant = try XCTUnwrap(body["input_historical_want"] as? [String: Any])
+        XCTAssertEqual(historicalWant["note"] as? String, "Joe recommended it")
+        XCTAssertEqual(historicalWant["tags"] as? [String], ["coffee"])
+        XCTAssertEqual(historicalWant["wanted_at"] as? String, "2026-07-01T17:00:00Z")
+    }
+
+    func testCheckInDeleteUsesAtomicRPCAndDecodesRemovalTransition() async throws {
+        let rpc = RecordingRPC()
+        let visitID = "38D2B5B8-7F95-42CF-991B-253991C8C6C9"
+        rpc.responses["delete_own_check_in"] = """
+        {
+          "visit_id": "\(visitID)",
+          "user_place_id": null,
+          "transition": "removed"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+
+        let result = try await repository.deleteCheckIn(visitID: visitID)
+
+        XCTAssertEqual(
+            result,
+            CheckInDeleteResult(visitID: visitID, userPlaceID: nil, transition: .removed)
+        )
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_check_in"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_visit_id"] as? String, visitID)
+    }
+
     func testWannaPlaceSaveSendsPlannedDateAndOwnerPlanRPCDecodesIt() async throws {
         let rpc = RecordingRPC()
         rpc.responses["save_own_place"] = #"{"user_place_id":"up_maru","place_id":"place_maru"}"#.data(using: .utf8)
@@ -2126,6 +2244,42 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
     }
 
+    func testPushNotificationDeliveryRequiresValidatedAuthenticatedSession() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertFalse(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertTrue(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+
+        WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        XCTAssertFalse(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertFalse(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertTrue(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertFalse(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+    }
+
+    func testUnknownNotificationResponseOnlyReleasesToExpectedAccount() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let accountAUserInfo: [AnyHashable: Any] = ["recme": ["event_id": "event_a"]]
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(accountAUserInfo))
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_b")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_b"))
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(accountAUserInfo))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"] as? [String: String],
+            ["event_id": "event_a"]
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
@@ -2316,6 +2470,12 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
         self.forcedRefreshFailuresRemaining = forcedRefreshFailuresRemaining
         self.pausesForcedRefresh = pausesForcedRefresh
         self.switchesUserDuringForcedRefresh = switchesUserDuringForcedRefresh
+    }
+
+    func sessionChanges() -> AsyncStream<AuthState> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
     }
 
     func refreshSession() async {}

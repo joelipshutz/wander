@@ -70,6 +70,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     let id: String
     let source: PlaceImportSource
     var sourceName: String?
+    let captureDeliveryID: String?
     let createdAt: Date
     var updatedAt: Date
     var state: PlaceImportBatchState
@@ -80,6 +81,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         id: String = UUID().uuidString.lowercased(),
         source: PlaceImportSource,
         sourceName: String?,
+        captureDeliveryID: String? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         state: PlaceImportBatchState = .queued,
@@ -89,6 +91,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.id = id
         self.source = source
         self.sourceName = sourceName
+        self.captureDeliveryID = captureDeliveryID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.state = state

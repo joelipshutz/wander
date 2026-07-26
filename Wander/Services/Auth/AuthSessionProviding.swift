@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 enum AuthState: Equatable {
     case signedOut
@@ -129,6 +130,7 @@ enum AuthSessionError: Error, Equatable {
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
+    func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
     func signOut() async throws
     func deleteAccount() async throws
@@ -156,12 +158,36 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published var isPresentingNativeAuth = false
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
+    @Published private(set) var isSessionValidated = false
 
     private let provider: AuthSessionProviding
+    private var sessionObservationTask: Task<Void, Never>?
+    private var foregroundObservationTask: Task<Void, Never>?
+    private var refreshGeneration = 0
 
     init(provider: AuthSessionProviding) {
         self.provider = provider
         self.state = provider.state
+        sessionObservationTask = Task { @MainActor [weak self] in
+            for await state in provider.sessionChanges() {
+                guard !Task.isCancelled else { return }
+                self?.refreshGeneration &+= 1
+                self?.synchronizeState(state)
+            }
+        }
+        foregroundObservationTask = Task { @MainActor [weak self] in
+            for await _ in NotificationCenter.default.notifications(
+                named: UIApplication.willEnterForegroundNotification
+            ) {
+                guard !Task.isCancelled else { return }
+                self?.beginSessionValidation()
+            }
+        }
+    }
+
+    deinit {
+        sessionObservationTask?.cancel()
+        foregroundObservationTask?.cancel()
     }
 
     var isSignedIn: Bool {
@@ -172,12 +198,24 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         provider.canPresentNativeAuth
     }
 
+    func sessionChanges() -> AsyncStream<AuthState> {
+        provider.sessionChanges()
+    }
+
+    func beginSessionValidation() {
+        isSessionValidated = false
+    }
+
     func refreshSession() async {
+        beginSessionValidation()
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         #if DEBUG
         WanderDebugLog.remote.debug("auth store refresh start current_state=\(self.state.debugSummary, privacy: .public)")
         #endif
         await provider.refreshSession()
-        state = provider.state
+        guard !Task.isCancelled, generation == refreshGeneration else { return }
+        synchronizeState(provider.state)
         #if DEBUG
         WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
         #endif
@@ -212,6 +250,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         #if DEBUG
         WanderDebugLog.remote.debug("auth store supabase token requested state=\(self.state.debugSummary, privacy: .public)")
         #endif
+        guard isSessionValidated else { throw AuthSessionError.notSignedIn }
         do {
             let token = try await provider.supabaseAccessToken()
             #if DEBUG
@@ -230,6 +269,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         #if DEBUG
         WanderDebugLog.remote.debug("auth store forced supabase token refresh requested state=\(self.state.debugSummary, privacy: .public)")
         #endif
+        guard isSessionValidated else { throw AuthSessionError.notSignedIn }
         do {
             let token = try await provider.refreshSupabaseAccessToken()
             #if DEBUG
@@ -245,27 +285,37 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     func signOut() async throws {
+        beginSessionValidation()
         isSigningOut = true
         signOutError = nil
         defer { isSigningOut = false }
 
         do {
             try await provider.signOut()
-            state = provider.state
-            activeGate = nil
-            isPresentingNativeAuth = false
+            synchronizeStateFromProvider()
         } catch {
             await provider.refreshSession()
-            state = provider.state
+            synchronizeStateFromProvider()
             signOutError = "Could not sign out. Try again."
             throw error
         }
     }
 
     func deleteAccount() async throws {
+        beginSessionValidation()
         try await provider.deleteAccount()
         await provider.refreshSession()
-        state = provider.state
+        synchronizeStateFromProvider()
+    }
+
+    private func synchronizeStateFromProvider() {
+        synchronizeState(provider.state)
+    }
+
+    private func synchronizeState(_ state: AuthState) {
+        self.state = state
+        isSessionValidated = state.isSignedIn
+        guard !state.isSignedIn else { return }
         activeGate = nil
         isPresentingNativeAuth = false
     }
@@ -277,17 +327,29 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
+    private let sessionChangeStream: AsyncStream<AuthState>
+    private let sessionChangeContinuation: AsyncStream<AuthState>.Continuation
 
     init(state: AuthState = .signedOut, canPresentNativeAuth: Bool = false, token: String? = nil, signOutError: Error? = nil) {
+        let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
+        self.sessionChangeStream = stream
+        self.sessionChangeContinuation = continuation
     }
 
     func setState(_ state: AuthState) {
         self.state = state
+        sessionChangeContinuation.yield(state)
     }
+
+    func setStateSilently(_ state: AuthState) {
+        self.state = state
+    }
+
+    func sessionChanges() -> AsyncStream<AuthState> { sessionChangeStream }
 
     func refreshSession() async {}
 

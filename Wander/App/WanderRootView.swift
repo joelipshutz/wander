@@ -21,6 +21,72 @@ struct WanderDeepLinkPresentationToken: Hashable, Sendable {
     }
 }
 
+private struct SharedPlaceImportDrainNotice: Identifiable {
+    let id = UUID()
+    let report: SharedPlaceImportDrainReport
+
+    var title: String {
+        if report.importedOrDuplicateBatchCount > 0,
+           report.failedEnvelopeCount + report.quarantinedEnvelopeCount + report.expiredEnvelopeCount > 0 {
+            return "Some shared places were added"
+        }
+        if report.importedOrDuplicateBatchCount > 0 {
+            return "Shared places added"
+        }
+        return "Shared import needs attention"
+    }
+
+    var message: String {
+        var parts: [String] = []
+        if report.importedBatchCount > 0 {
+            parts.append(
+                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? "" : "s") added to your inbox."
+            )
+        }
+        if report.duplicateBatchCount > 0 {
+            parts.append(
+                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already in your inbox."
+            )
+        }
+        let unavailableCount = report.failedEnvelopeCount
+            + report.quarantinedEnvelopeCount
+            + report.expiredEnvelopeCount
+        if unavailableCount > 0 {
+            parts.append(
+                "\(unavailableCount) shared item\(unavailableCount == 1 ? "" : "s") could not be recovered. Share \(unavailableCount == 1 ? "it" : "them") again."
+            )
+        }
+        return parts.joined(separator: " ")
+    }
+
+    var canReview: Bool {
+        report.importedOrDuplicateBatchCount > 0
+    }
+}
+
+private struct SharedPlaceImportAlertModifier: ViewModifier {
+    @Binding var notice: SharedPlaceImportDrainNotice?
+    let onReview: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(item: $notice) { notice in
+            if notice.canReview {
+                return Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    primaryButton: .default(Text("Review"), action: onReview),
+                    secondaryButton: .cancel(Text("Later"))
+                )
+            }
+            return Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+}
+
 struct WanderDeepLinkHandoffCoordinator {
     private struct PendingHandoff {
         let requestID: UUID
@@ -242,24 +308,30 @@ struct WanderRootView: View {
     @State private var widgetCalendarIdentityUserID: String?
     @State private var widgetCalendarHydratedUserID: String?
     @State private var widgetCalendarLastHydratedAt: Date?
+    @State private var nearbyWidgetRefreshTask: Task<Void, Never>?
     @State private var sharedVisitBannerInvitation: SharedVisitInvitation?
     @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
     @State private var sharedVisitBannerTask: Task<Void, Never>?
     @State private var visitInvitationInboxRequestID: UUID?
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
+    @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     private let fixtureMode: WanderFixtureMode
+    private let isSessionValidated: Bool
 
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
+        initialSession: AuthSession? = nil,
+        isSessionValidated: Bool = true,
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
+        self.isSessionValidated = isSessionValidated
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -271,7 +343,8 @@ struct WanderRootView: View {
                 fixtureMode: fixtureMode,
                 parser: parser,
                 analytics: analytics,
-                persistence: persistence
+                persistence: persistence,
+                initialSession: initialSession
             )
         )
         let importStore = PlaceImportStore()
@@ -284,6 +357,10 @@ struct WanderRootView: View {
     }
 
     var body: some View {
+        stateObservedRoot
+    }
+
+    private var tabRoot: some View {
         TabView(selection: tabSelection) {
             MapScreen(
                 presentationResetRequest: presentationResetRequest,
@@ -352,6 +429,10 @@ struct WanderRootView: View {
                 .zIndex(100)
             }
         }
+    }
+
+    private var presentedRoot: some View {
+        tabRoot
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -447,24 +528,37 @@ struct WanderRootView: View {
                     .environmentObject(backend)
             }
         }
-        .onAppear {
+    }
+
+    private var lifecycleRoot: some View {
+        presentedRoot
+        .task(id: isSessionValidated) {
+            guard isSessionValidated else {
+                cancelSignedInMaintenance()
+                return
+            }
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
+            drainSharedPlaceImports()
             importStore.resumePendingImports()
             reconcilePlaceImports()
             publishWidgetSnapshot()
-        }
-        .task {
+            refreshNearbyWidgetSnapshot()
             await pushNotifications.refreshAuthorizationStatus()
-            await auth.refreshSession()
+            guard !Task.isCancelled, isSessionValidated else { return }
             applyAuthStateIfNeeded(auth.state)
             await refreshWannaGoReminders(for: auth.state)
-            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
+            guard !Task.isCancelled, isSessionValidated else { return }
+            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo(
+                for: store.currentUser.id
+            ) {
                 pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
-            guard let deviceToken = notification.userInfo?[WanderAppDelegate.deviceTokenKey] as? Data else { return }
+            guard isSessionValidated,
+                  let deviceToken = notification.userInfo?[WanderAppDelegate.deviceTokenKey] as? Data
+            else { return }
             Task {
                 await pushNotifications.handleRegisteredDeviceToken(deviceToken, backend: backend, authState: auth.state)
             }
@@ -474,21 +568,29 @@ struct WanderRootView: View {
             pushNotifications.handleRegistrationFailure(error)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveNotificationResponse)) { notification in
-            guard let userInfo = WanderAppDelegate.takePendingNotificationUserInfo()
+            guard isSessionValidated,
+                  let userInfo = WanderAppDelegate.takePendingNotificationUserInfo(
+                      for: store.currentUser.id
+                  )
                 ?? notification.userInfo?[WanderAppDelegate.userInfoKey] as? [AnyHashable: Any]
             else { return }
             pushNotifications.handleNotificationResponse(userInfo: userInfo)
             scheduleSignedInMaintenance(for: auth.state)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
+            guard isSessionValidated else { return }
             scheduleSignedInMaintenance(for: auth.state)
         }
+    }
+
+    private var authObservedRoot: some View {
+        lifecycleRoot
         .onChange(of: pushNotifications.navigationRequest) { _, request in
-            guard let request else { return }
+            guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
         .onChange(of: auth.isPresentingNativeAuth) { _, isPresenting in
-            guard !isPresenting else { return }
+            guard isSessionValidated, !isPresenting else { return }
             Task {
                 await auth.refreshSession()
                 applyAuthStateIfNeeded(auth.state)
@@ -501,18 +603,26 @@ struct WanderRootView: View {
                 await refreshWannaGoReminders(for: state)
             }
         }
+    }
+
+    private var storeObservedRoot: some View {
+        authObservedRoot
         .onChange(of: store.wannaGoReminderItems) { _, items in
+            guard isSessionValidated else { return }
             Task {
                 await pushNotifications.reconcileWannaGoReminders(items)
             }
         }
         .onChange(of: store.sharedVisitInvitations) { _, invitations in
+            guard isSessionValidated else { return }
             presentSharedVisitBannerIfNeeded(from: invitations)
         }
         .onChange(of: store.saveStreakCelebration) { _, celebration in
+            guard isSessionValidated else { return }
             queueSaveStreakCelebration(celebration)
         }
         .onChange(of: store.presentationRevision) { _, _ in
+            guard isSessionValidated else { return }
             reconcilePlaceImports()
             publishWidgetSnapshot()
         }
@@ -522,7 +632,12 @@ struct WanderRootView: View {
         .onChange(of: store.isRefreshingCurrentUserCalendarData) {
             handleCalendarRefreshStateChange($0, $1)
         }
+    }
+
+    private var stateObservedRoot: some View {
+        storeObservedRoot
         .onChange(of: importStore.items) { _, _ in
+            guard isSessionValidated else { return }
             reconcilePlaceImports()
         }
         .onChange(of: importStore.summary.hasPendingImports) { _, _ in
@@ -537,15 +652,28 @@ struct WanderRootView: View {
             }
         }
         .onOpenURL { url in
+            guard isSessionValidated else { return }
             handleDeepLink(url)
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
+            guard phase == .active, isSessionValidated else { return }
+            drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
+            refreshNearbyWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: auth.state)
             }
+        }
+        .modifier(
+            SharedPlaceImportAlertModifier(
+                notice: $sharedPlaceImportNotice,
+                onReview: presentSharedPlaceImportReview
+            )
+        )
+        .onChange(of: isSessionValidated) { _, isValidated in
+            guard !isValidated else { return }
+            cancelSignedInMaintenance()
         }
         .onDisappear(perform: handleRootDisappear)
     }
@@ -602,7 +730,26 @@ struct WanderRootView: View {
         )
     }
 
+    private func drainSharedPlaceImports() {
+        guard let inbox = try? SharedPlaceImportInbox.live() else { return }
+        let report = SharedPlaceImportInboxDrainer.drain(
+            inbox: inbox,
+            into: importStore
+        )
+        guard report.hasUserVisibleResult else { return }
+        reconcilePlaceImports()
+        sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+    }
+
+    private func presentSharedPlaceImportReview() {
+        addTabResetToken = UUID()
+        addSheetDetent = .large
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)
+        isPresentingAdd = true
+    }
+
     private func publishWidgetSnapshot(allowFreshnessAdvance: Bool = false) {
+        guard isSessionValidated || fixtureMode != .empty else { return }
         guard !store.isRefreshingCurrentUserCalendarData else { return }
 
         if fixtureMode == .empty, auth.isSignedIn {
@@ -620,6 +767,13 @@ struct WanderRootView: View {
             isAvailable: auth.isSignedIn || fixtureMode != .empty,
             allowFreshnessAdvance: allowFreshnessAdvance || fixtureMode != .empty
         )
+    }
+
+    private func refreshNearbyWidgetSnapshot() {
+        nearbyWidgetRefreshTask?.cancel()
+        nearbyWidgetRefreshTask = Task { @MainActor in
+            await WanderNearbyWidgetSnapshotPublisher.refreshIfConfigured()
+        }
     }
 
     private func handleCurrentUserCalendarHydration(revision: UInt64) {
@@ -655,11 +809,21 @@ struct WanderRootView: View {
     }
 
     private func handleRootDisappear() {
+        cancelSignedInMaintenance()
+        nearbyWidgetRefreshTask?.cancel()
+        nearbyWidgetRefreshTask = nil
         deepLinkHandoffTask?.cancel()
         deepLinkHandoff.cancel()
         deepLinkPresentations.removeAll()
         sharedVisitBannerTask?.cancel()
         saveStreakCelebrationTask?.cancel()
+
+        guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
+        WanderWidgetSnapshotPublisher.clear()
+        store.apply(authState: auth.state)
+        Task {
+            await refreshWannaGoReminders(for: auth.state)
+        }
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
@@ -835,6 +999,25 @@ struct WanderRootView: View {
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
             addSheetDetent = .large
             isPresentingAdd = true
+        case .map:
+            selectedTab = .map
+        case .nearbyPlace(let candidateID):
+            let snapshot = WanderNearbyWidgetSnapshotStore().load()
+            let candidate = snapshot.flatMap {
+                $0.isUsable(at: .now)
+                    ? $0.place(id: candidateID)?.placeCandidate
+                    : nil
+            }
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(
+                destination: candidate.map(
+                    WanderAddLaunchRequest.Destination.nearbyPlace
+                ) ?? .hereNow
+            )
+            addSheetDetent = .large
+            isPresentingAdd = true
         case .quickSearch(let query):
             selectedTab = .map
             mapSearchLaunchRequest = WanderMapSearchLaunchRequest(query: query)
@@ -1007,7 +1190,8 @@ struct WanderRootView: View {
     }
 
     private func scheduleSignedInMaintenance(for state: AuthState) {
-        guard fixtureMode == .empty,
+        guard isSessionValidated,
+              fixtureMode == .empty,
               case .signedIn(let session) = state,
               signedInMaintenanceTask == nil
         else { return }
@@ -1021,8 +1205,10 @@ struct WanderRootView: View {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
             }
             #endif
-            await store.refreshRemoteCurrentProfile(backend: backend)
-            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
+            guard didHydrateCurrentProfile,
+                  shouldContinueSignedInMaintenance(runID: runID, state: state)
+            else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
@@ -1091,7 +1277,8 @@ struct WanderRootView: View {
     }
 
     private func shouldContinueSignedInMaintenance(runID: UUID, state: AuthState) -> Bool {
-        !Task.isCancelled
+        isSessionValidated
+            && !Task.isCancelled
             && signedInMaintenanceRunID == runID
             && auth.state == state
     }
@@ -1118,6 +1305,7 @@ struct WanderRootView: View {
             await pushNotifications.cancelAllWannaGoReminders()
             return
         }
+        guard isSessionValidated || fixtureMode != .empty else { return }
 
         if backend.notificationRepository != nil,
            let preferences = try? await backend.notificationPreferences() {
@@ -1193,7 +1381,8 @@ struct WanderRootView: View {
         fixtureMode: WanderFixtureMode,
         parser: any LLMFilterParser,
         analytics: AnalyticsClient,
-        persistence: WanderStorePersistence?
+        persistence: WanderStorePersistence?,
+        initialSession: AuthSession?
     ) -> WanderStore {
         let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
         let fixtures = resolvedFixtures(mode: fixtureMode)
@@ -1204,6 +1393,9 @@ struct WanderRootView: View {
             analytics: analytics,
             persistence: persistence
         )
+        if fixtureMode == .empty, let initialSession {
+            store.apply(authState: .signedIn(initialSession))
+        }
         let storeFinishedAt = CFAbsoluteTimeGetCurrent()
         WanderDebugLog.performance.notice(
             "root initialization fixture_mode=\(String(describing: fixtureMode), privacy: .public) fixture_ms=\((fixturesFinishedAt - fixturesStartedAt) * 1_000, privacy: .public) store_ms=\((storeFinishedAt - fixturesFinishedAt) * 1_000, privacy: .public)"

@@ -11,6 +11,8 @@ struct WanderPresentationResetRequest: Equatable, Identifiable {
 struct WanderAddLaunchRequest: Equatable, Identifiable {
     enum Destination: Equatable {
         case hereNow
+        case importInbox
+        case nearbyPlace(PlaceCandidate)
     }
 
     let id: UUID

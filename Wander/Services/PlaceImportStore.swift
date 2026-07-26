@@ -140,7 +140,16 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         case .tiktok, .instagram:
             return try await socialResolution(url: sourceURL, source: source, seed: seed)
         case .textNotes:
-            return .needsHelp("Add a place name and nearby city to match this line.")
+            do {
+                let candidates = try await placeResolver.resolveLink(
+                    LinkPlaceInput(rawValue: sourceURLString)
+                )
+                return candidateResolution(candidates, seed: seed)
+            } catch {
+                return .needsHelp(
+                    "This link did not expose a place. Add a place name and nearby city to match it."
+                )
+            }
         }
     }
 
@@ -801,9 +810,23 @@ final class PlaceImportStore: ObservableObject {
     }
 
     @discardableResult
-    func enqueue(source: PlaceImportSource, text: String, sourceName: String? = nil) throws -> String {
+    func enqueue(
+        source: PlaceImportSource,
+        text: String,
+        sourceName: String? = nil,
+        captureDeliveryID: String? = nil
+    ) throws -> String {
+        if let captureDeliveryID,
+           let existingBatch = batches.first(where: { $0.captureDeliveryID == captureDeliveryID }) {
+            return existingBatch.id
+        }
         let seeds = try PlaceImportParser.parse(source: source, text: text, fileName: sourceName)
-        let batch = PlaceImportBatch(source: source, sourceName: sourceName, totalCount: seeds.count)
+        let batch = PlaceImportBatch(
+            source: source,
+            sourceName: sourceName,
+            captureDeliveryID: captureDeliveryID,
+            totalCount: seeds.count
+        )
         batches.append(batch)
         items.append(contentsOf: seeds.map { seed in
             PlaceImportItem(batchID: batch.id, source: source, seed: seed)
@@ -811,6 +834,10 @@ final class PlaceImportStore: ObservableObject {
         persist()
         startProcessing(batchID: batch.id)
         return batch.id
+    }
+
+    func batch(captureDeliveryID: String) -> PlaceImportBatch? {
+        batches.first(where: { $0.captureDeliveryID == captureDeliveryID })
     }
 
     func resumePendingImports() {
