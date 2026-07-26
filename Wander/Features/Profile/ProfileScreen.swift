@@ -192,7 +192,15 @@ struct ProfileScreen: View {
 
             await Task.yield()
             guard !Task.isCancelled, calendarLaunchRequest?.id == request.id else { return }
-            activeCalendarLaunchRequest = request
+            switch request.destination {
+            case .calendar:
+                activeCalendarLaunchRequest = request
+            case .day:
+                placeCollectionRoute = .calendar(
+                    calendarDaySummary(on: request.targetDate)
+                )
+                onCalendarLaunchRequestHandled(request.id)
+            }
         }
     }
 
@@ -225,6 +233,23 @@ struct ProfileScreen: View {
         guard activeCalendarLaunchRequest?.id == id else { return }
         activeCalendarLaunchRequest = nil
         onCalendarLaunchRequestHandled(id)
+    }
+
+    private func calendarDaySummary(on date: Date) -> ProfileCalendarDaySummary {
+        let projection = store.currentUserCalendarProjection
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        let insights = profileInsightsCache.present(
+            ownerID: store.currentUser.id,
+            userPlaces: projection.userPlaces,
+            visits: projection.visits,
+            places: projection.places,
+            month: date,
+            calendar: calendar,
+            dataRevision: store.presentationRevision
+        )
+        return insights.monthDaySummaries[day]
+            ?? ProfileCalendarDaySummary.empty(on: day)
     }
 
     private func openRequestedVisitInvitationInbox() {

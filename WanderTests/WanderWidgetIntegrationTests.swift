@@ -64,6 +64,21 @@ final class WanderWidgetIntegrationTests: XCTestCase {
             ).targetDate,
             profileCalendarTargetDate
         )
+        XCTAssertEqual(
+            WanderProfileCalendarLaunchRequest(
+                id: profileCalendarID,
+                targetDate: profileCalendarTargetDate
+            ).destination,
+            .calendar
+        )
+        XCTAssertEqual(
+            WanderProfileCalendarLaunchRequest(
+                id: profileCalendarID,
+                targetDate: profileCalendarTargetDate,
+                destination: .day
+            ).destination,
+            .day
+        )
         XCTAssertNotEqual(
             WanderProfileCalendarLaunchRequest().id,
             WanderProfileCalendarLaunchRequest().id
@@ -318,7 +333,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(root.contains("WanderAddLaunchRequest.Destination.nearbyPlace"))
         XCTAssertTrue(root.contains("WanderMapSearchLaunchRequest(query: query)"))
         XCTAssertTrue(root.contains("selectedTab = .profile"))
-        XCTAssertTrue(root.contains("WanderProfileCalendarLaunchRequest(targetDate: .now)"))
+        XCTAssertTrue(root.contains("case .profileCalendarDate(let calendarDate):"))
+        XCTAssertTrue(root.contains("destination: .calendar"))
+        XCTAssertTrue(root.contains("destination: .day"))
         XCTAssertTrue(root.contains("presentationResetRequest: presentationResetRequest"))
         XCTAssertTrue(root.contains("deepLinkHandoffTask?.cancel()"))
         XCTAssertTrue(root.contains("let resetRequest = WanderPresentationResetRequest()"))
@@ -377,7 +394,12 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
         XCTAssertTrue(map.contains(".task(id: searchLaunchRequest?.id)"))
         XCTAssertTrue(map.contains("await handleMapSearchLaunchRequest(searchLaunchRequest)"))
-        XCTAssertTrue(map.contains("isMapSearchFocused = true"))
+        XCTAssertTrue(map.contains("mapSearchFocusRequestID = request.id"))
+        XCTAssertTrue(map.contains(".task(id: focusRequestID)"))
+        XCTAssertTrue(map.contains("scenePhase == .active"))
+        XCTAssertTrue(map.contains("isFocused.wrappedValue = true"))
+        XCTAssertTrue(map.contains("onFocusRequestHandled(focusRequestID)"))
+        XCTAssertFalse(map.contains(".milliseconds(140)"))
         XCTAssertTrue(map.contains("requestedQuery: query"))
         XCTAssertTrue(map.contains("requestRevision: requestRevision"))
         XCTAssertTrue(map.contains("mapSearchTask?.cancel()"))
@@ -429,6 +451,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("showsVisitInvitations = false"))
         XCTAssertTrue(profileScreen.contains("showsEditProfile = false"))
         XCTAssertTrue(profileScreen.contains("activeCalendarLaunchRequest = request"))
+        XCTAssertTrue(profileScreen.contains("calendarDaySummary(on: request.targetDate)"))
+        XCTAssertTrue(profileScreen.contains("placeCollectionRoute = .calendar("))
         XCTAssertTrue(profileScreen.contains("store.currentUserCalendarProjection"))
 
         XCTAssertTrue(profileHome.contains(".id(ProfileHomeScrollAnchor.calendar)"))
@@ -514,6 +538,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains(".accessoryRectangular"))
         XCTAssertFalse(widgetSource.contains("TextField("))
         XCTAssertTrue(widgetSource.contains(".widgetURL("))
+        XCTAssertTrue(widgetSource.contains("Link(destination: destination)"))
+        XCTAssertTrue(widgetSource.contains("WanderDeepLinkRoute.profileCalendarDate(date).url"))
         XCTAssertTrue(widgetSource.contains("containerBackground(for: .widget)"))
         XCTAssertTrue(widgetSource.contains("if model.needsRefresh"))
         XCTAssertFalse(widgetSource.contains("?? snapshot.currentMonth"))
