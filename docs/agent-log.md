@@ -23779,3 +23779,44 @@ Build 98 release completion — 2026-07-26 01:16 PDT:
 Final outcome: rec.me 0.1 (98) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers. Only the Slack and
 Linear release records remain blocked by unavailable integrations.
+
+## 2026-07-26 01:45 PDT - Codex - REC-97 Share Extension Landing Completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-97-share-merge-record`
+Worktree: `/private/tmp/recme-rec97-share-merge-record`
+Linear: `REC-97` (`Done` after this completion record lands)
+
+Landing completion:
+
+- Pushed reviewed head `348fde623`, confirmed ready PR #226 was `CLEAN` and
+  `MERGEABLE` against exact current `main`, and posted the final review and
+  validation record:
+  `https://github.com/joelipshutz/wander/pull/226#issuecomment-5082766313`.
+- Squash-merged PR #226 to `main` as
+  `fb37c744bfc406fb518f72811986f4486c6293e0`:
+  `https://github.com/joelipshutz/wander/pull/226`.
+- Final behavior: one universal `Save to rec.me` iOS Share Extension accepts
+  supported links, selected text, and place files from Google Maps, Apple Maps,
+  Instagram, TikTok, and other share-sheet hosts. It writes a bounded App Group
+  envelope and the signed-in app drains it idempotently into Import Review.
+- Pre-landing review found no unresolved code, data, auth, concurrency,
+  path-safety, embedding, accessibility, performance, documentation, human, or
+  Greptile finding. Latest-main reconciliation preserved the validated auth
+  boundary, check-ins, and released build 98.
+- Validation: focused Share Extension suite 7/7; complete iPhone 17 Pro Max /
+  iOS 26.5 suite 721/721; all 14 widget/project integration tests; successful
+  embedded-binary validation for the widget and share extensions; clean
+  generated project and diff.
+- Build 98 remains unchanged. This merge did not increment a build, archive,
+  upload, change TestFlight groups, or post tester Slack notes. The Share
+  Extension will ride the next explicitly requested TestFlight release batch.
+- Physical-device acceptance still requires registering
+  `com.grayline.wander.share`, enabling
+  `group.com.grayline.wander.shared`, and refreshing the host/widget/share
+  provisioning profiles. Exact setup and acceptance steps are in
+  `docs/setup.md`.
+
+Final outcome: the universal rec.me Share Extension is on `main`, fully
+validated in Simulator, and ready for physical-device testing once the
+documented Apple Developer provisioning is complete.
