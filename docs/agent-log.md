@@ -25216,7 +25216,6 @@ REC-152 reconciled-head validation — 2026-07-26 14:17 PDT:
   traditional-headermap warnings were emitted.
 - Review gate is complete with no remaining findings. PR #245 is ready to push
   and squash-merge before exact-main build-100 release validation.
-
 ## 2026-07-26 14:23 PDT - Codex - TestFlight Build 101 Profile Activity
 
 Agent: Codex
@@ -25355,3 +25354,29 @@ TestFlight build 101 release completion — 2026-07-26 14:54 PDT:
 Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
+## 2026-07-26 14:20 PDT — Codex — REC-132 onboarding carousel wiring
+
+- Goal: wire Joe-approved logged-out carousel artwork and copy into existing
+  PR #182, then reconcile the older onboarding branch with current `main`.
+- Worktree/branch: `/private/tmp/recme-rec132-onboarding`,
+  `codex/rec-132-onboarding`. Linear REC-132 remains the tracking issue.
+- Replaced the three carousel assets with fixed-ratio approved crops: native
+  diary pins, a complete Maya Chen friend check-in, and a place-first Circuit
+  Coffee recommendation. Removed `a map made personal` and the Apple map-data
+  badge, with UI assertions protecting both removals.
+- The pre-rebase full iPhone 16 Plus run passed 648 unit/integration tests and
+  one production auto-advance UI test with zero failures. The hosted rollback-
+  only onboarding migration preview and all 18 pgTAP assertions also passed.
+- `main` advanced by 23 commits during validation. Rebased the four onboarding
+  commits onto `b4d7c98`, preserving the newer required-auth boundary, deep-link
+  routing, map search work, widgets, check-ins, and build-99 release changes.
+  The onboarding entry coordinator now carries the validated `AuthSession`
+  into `WanderRootView`, revalidates on foreground, and never exposes the root
+  while Clerk session validation is incomplete.
+- Post-rebase focused XCTest execution was attempted, but Xcode aborted before
+  compilation while writing its build manifest because the host volume is full
+  (`ENOSPC`). Removed only this worktree's disposable DerivedData. Swift parser,
+  `xcodegen generate`, `git diff --check`, Node syntax validation, and the exact
+  hosted onboarding pgTAP validation pass.
+- No migration apply, merge, TestFlight build, build-number bump, or external
+  announcement was performed. Next step is PR #182 review/merge after CI.

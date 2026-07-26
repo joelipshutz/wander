@@ -482,21 +482,6 @@ struct WanderRootView: View {
             }
         }
         .sheet(
-            isPresented: $auth.isPresentingNativeAuth,
-            onDismiss: {
-                handleDeepLinkPresentationDismissal(of: .nativeAuth)
-            }
-        ) {
-            WanderRootPresentationLifecycle(
-                surface: .nativeAuth,
-                onPresent: handleDeepLinkPresentation,
-                onDismiss: handleDeepLinkPresentationWillDismiss
-            ) {
-                ClerkNativeAuthView()
-                    .environmentObject(auth)
-            }
-        }
-        .sheet(
             item: $initialPresentation,
             onDismiss: {
                 handleDeepLinkPresentationDismissal(of: .initialPresentation)
@@ -589,13 +574,6 @@ struct WanderRootView: View {
         .onChange(of: pushNotifications.navigationRequest) { _, request in
             guard isSessionValidated, let request else { return }
             routeNotification(request)
-        }
-        .onChange(of: auth.isPresentingNativeAuth) { _, isPresenting in
-            guard isSessionValidated, !isPresenting else { return }
-            Task {
-                await auth.refreshSession()
-                applyAuthStateIfNeeded(auth.state)
-            }
         }
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)

@@ -39,7 +39,7 @@ final class OnboardingStateTests: XCTestCase {
 
         XCTAssertEqual(
             AppEntryStateResolver.signedInState(session: session, localState: .fresh, remoteProfile: profile),
-            .ready
+            .ready(session: session)
         )
     }
 

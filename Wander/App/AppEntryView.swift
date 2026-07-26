@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct AppEntryView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
@@ -31,9 +32,11 @@ struct AppEntryView: View {
                     saveProgress: { coordinator.saveProgress($0, for: session) },
                     complete: { coordinator.completeOnboarding(for: session, serverConfirmed: $0) }
                 )
-            case .ready:
+            case .ready(let session):
                 WanderRootView(
                     initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
+                    initialSession: session,
+                    isSessionValidated: auth.isSessionValidated,
                     analytics: analytics,
                     parser: parser
                 )
@@ -74,6 +77,11 @@ struct AppEntryView: View {
         .onChange(of: auth.state) { _, state in
             guard didFinishInitialResolution else { return }
             coordinator.authStateChanged(state)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, didFinishInitialResolution else { return }
+            auth.beginSessionValidation()
+            Task { await coordinator.start() }
         }
         .onOpenURL { url in
             if case .ready = coordinator.state {

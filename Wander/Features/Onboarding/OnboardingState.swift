@@ -80,7 +80,7 @@ enum AppEntryState: Equatable {
     case launching
     case signedOut
     case onboarding(session: AuthSession, step: OnboardingStep)
-    case ready
+    case ready(session: AuthSession)
     case recoverableFailure(session: AuthSession, message: String, canContinueOffline: Bool)
     case unavailable(String)
 }
@@ -92,7 +92,7 @@ enum AppEntryStateResolver {
         remoteProfile: LocalProfile?
     ) -> AppEntryState {
         if localState.isComplete || remoteProfile?.onboardingCompletedAt != nil {
-            return .ready
+            return .ready(session: session)
         }
         return .onboarding(session: session, step: localState.nextStep)
     }
@@ -158,14 +158,14 @@ final class AppEntryCoordinator: ObservableObject {
         guard case .recoverableFailure(let session, _, true) = state else { return }
         completionStore.markComplete(for: session.userID, needsServerCompletion: true)
         analytics.identify(userID: session.userID)
-        state = .ready
+        state = .ready(session: session)
     }
 
     func completeOnboarding(for session: AuthSession, serverConfirmed: Bool) {
         completionStore.markComplete(for: session.userID, needsServerCompletion: !serverConfirmed)
         analytics.identify(userID: session.userID)
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCompleted, properties: [:]))
-        state = .ready
+        state = .ready(session: session)
     }
 
     func saveProgress(_ step: OnboardingStep, for session: AuthSession) {
@@ -191,11 +191,15 @@ final class AppEntryCoordinator: ObservableObject {
         case .unavailable(let message):
             state = .unavailable(message)
         case .signedIn(let session):
+            guard auth.isSessionValidated else {
+                state = .launching
+                return
+            }
             let local = completionStore.state(for: session.userID)
             if local.isComplete && !forceRemote {
                 resolvedUserID = session.userID
                 analytics.identify(userID: session.userID)
-                state = .ready
+                state = .ready(session: session)
                 if local.needsServerCompletion {
                     Task { [weak self] in await self?.retryServerCompletion(for: session) }
                 }
