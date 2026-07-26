@@ -22743,6 +22743,32 @@ Final outcome: rec.me 0.1 (97) is validated, uploaded, approved, attached to
 the public TestFlight group, announced to testers, and durably tracked. No
 known build-97 blocker remains.
 
+## 2026-07-25 — Codex — REC-154 nearby-place Rich Visit widget
+
+Start — 2026-07-25 23:34 PDT:
+
+- Goal: add a large Home Screen widget showing up to five useful nearby places,
+  refresh its snapshot as aggressively and honestly as WidgetKit permits, and
+  open a selected result directly in the manual Rich Visit/save flow.
+- Linear: created REC-154, assigned it to Ryan in the `mvp` project, related it
+  to REC-142 and REC-153, and moved it to `In Progress`. Voice capture is
+  explicitly deferred.
+- Branch/worktree: `codex/rec-154-nearby-widget` in
+  `/private/tmp/recme-rec154-nearby-widget`, based on current `origin/main`
+  (`e7b7122a5`).
+- Coordination: the primary checkout has an unrelated untracked
+  `.pnpm-store/` and remains untouched. REC-153 has a separate open worktree
+  and PR for calendar/search deep-link polish. No existing nearby-widget
+  implementation or overlapping agent-log entry was found.
+- Expected files: `project.yml` and generated project configuration; the
+  widget bundle/view/provider; shared widget snapshot/deep-link contracts;
+  app launch routing; location/place discovery and shared-store integration;
+  focused tests; setup/decision documentation if capabilities change; and
+  this append-only work log.
+- Initial assumptions to verify before editing: use only When In Use location,
+  avoid implying live distance when WidgetKit serves stale timelines, cap the
+  display at five results, and preserve the existing three widgets unchanged.
+
 ## 2026-07-25 21:47 PDT - Codex - REC-142 Been-only Calendar Landing
 
 Agent: Codex
@@ -23922,3 +23948,347 @@ Landing completion:
 
 Final outcome: full-screen photo zoom is on `main`, validated, and ready for
 local Xcode testing or inclusion in the next explicit TestFlight release.
+
+## 2026-07-26 — Codex — REC-154 implementation checkpoint
+
+Checkpoint — 2026-07-26 00:18 PDT:
+
+- Implemented a separate `WanderNearbyWidgets` location-enabled extension with
+  one system-large configuration and five independently tappable MapKit POI
+  rows. A selected place resolves through a strict opaque deep link and opens
+  the existing manual Rich Visit form with the candidate prefilled; missing or
+  expired candidate metadata falls back safely to I'm Here Now.
+- Refresh policy follows Apple's WidgetKit constraints: request a 15-minute
+  timeline, retry transient failures after five minutes, accept significant
+  location-change reloads, and refresh/reload from the active host app only
+  when the widget is installed. WidgetKit remains authoritative and no cadence
+  is promised as live.
+- Privacy and freshness: When In Use only, separate widget location approval,
+  App Group cache excluded from backup, bounded candidate/history counts,
+  privacy-sensitive rendered rows, exact distance hidden after 30 minutes, and
+  all results hidden/rejected after 24 hours. Future timeline entries enforce
+  both expiry boundaries even if a network reload is deferred.
+- Updated `project.yml`, generated the Xcode project/plists, added the new
+  bundle id `com.grayline.wander.nearbywidgets`, and documented its additional
+  App ID/App Group provisioning requirement and the revised location usage
+  copy. Durable architecture/refresh/privacy decisions are in
+  `docs/decisions.md`.
+- Validation so far: `xcodegen generate` passed; unsigned generic iOS Simulator
+  build passed; focused deep-link/snapshot/integration suite passed 29/29 on
+  iPhone 17 Pro, iOS 26.5. Xcode's system-large preview rendered all five rows
+  without clipping on iPhone 17 Pro and exposed each row as one labeled
+  accessibility action. The attempted iPhone 17e preview was interrupted when
+  Xcode focused another already-open worktree; no product failure was observed.
+- Existing warnings remain outside this change: Swift 6 formatter isolation in
+  `WanderSupabaseClient`, traditional headermap warnings, and one unrelated
+  unused Boolean expression in `WanderStoreTests`.
+- Next: integrate the two newer `origin/main` commits, rerun focused/full tests
+  and build, inspect the final diff, then push/open the REC-154 PR and leave
+  Xcode focused on this branch. No TestFlight build-number or release action is
+  authorized.
+
+## 2026-07-26 00:42 PDT — Codex — REC-154 implementation completion
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Progress` pending publication)
+
+Final implementation and validation:
+
+- Rebased the implementation onto current `origin/main`
+  `af8f8000b` and regenerated `Wander.xcodeproj`; the implementation commit
+  before this completion record is `44e984f15`.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 707/707 with zero
+  failures. The focused nearby-widget/deep-link/snapshot suite passed 29/29.
+- A clean unsigned generic iOS Simulator build passed for arm64 and x86_64.
+  A signed Simulator build that included both App Group-enabled app extensions
+  also passed. Existing unrelated Swift 6 formatter-isolation, traditional
+  headermap, and unused-expression warnings remain unchanged.
+- Live Simulator smoke validation seeded one bounded App Group candidate, opened
+  `recme://add/nearby/ggiata-smoke`, and confirmed the widget route presents the
+  existing `save this place` choice with Ggiata Delicatessen prefilled. Choosing
+  Check-in reached the full manual Rich Visit details form with category,
+  cuisine, rating, photos, and more-options controls. No place was saved.
+  Captures: `/private/tmp/rec154-rich-visit-open.png` and
+  `/private/tmp/rec154-rich-visit-details.png`.
+- Xcode's system-large preview on iPhone 17 Pro rendered all five nearby rows
+  without clipping and exposed each row as one labeled accessibility action.
+  The secondary iPhone 17e preview attempt was interrupted by Xcode switching
+  to another existing worktree; it is a remaining visual-validation gap, not an
+  observed functional failure.
+- `git diff --check` passed. Derived-data directories remain local and
+  untracked. Voice capture remains intentionally deferred. No build-number,
+  archive, TestFlight, tester-group, or Slack release action was requested or
+  performed.
+
+Next: push the branch, open the ready REC-154 PR, move Linear to `In Review`,
+and complete physical-device signing by registering
+`com.grayline.wander.nearbywidgets` with the shared App Group before device
+testing.
+
+Publication — 2026-07-26 00:44 PDT:
+
+- Pushed `codex/rec-154-nearby-widget` and opened ready PR #229:
+  `https://github.com/joelipshutz/wander/pull/229`.
+- Moved Linear REC-154 to `In Review`, attached the PR, and added the validation,
+  device-provisioning, refresh-cadence, visual-gap, voice-deferral, and
+  no-TestFlight handoff.
+- Remaining reviewer/device step: register the new nearby-widget App ID and
+  enable `group.com.grayline.wander.shared` for all three relevant targets
+  before installing on a physical iPhone.
+
+## 2026-07-26 01:15 PDT — Codex — REC-154 widget visual follow-up
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Progress`)
+
+Goal: apply Ryan's follow-up to the open large nearby widget: rename the header
+to Nearby spots, change the helper copy to “tap a place to check-in,” show
+freshness as whole minutes in the bottom-right, expand every recommendation row
+to the available widget width, and replace the ambiguous top-right rec.me icon
+with a clearly labeled route to more nearby options in the app.
+
+Starting state:
+
+- Fetched latest `origin/main` at `dace9c1a5`, including the logged-out session
+  boundary and TestFlight build 98 metadata, then rebased the three REC-154
+  commits onto it.
+- Resolved the root-view overlap by preserving main's authenticated-session
+  maintenance gate while adding the nearby-widget refresh inside that gate and
+  cancelling both maintenance tasks on disappear. Preserved both append-only
+  agent-log histories.
+- The isolated worktree has no tracked changes after the rebase; only this
+  task's local untracked DerivedData directories remain. Expected edits:
+  `WanderNearbyWidgets/WanderNearbyWidget.swift`, shared widget deep-link
+  routing/tests if needed for the explicit more-nearby action, and this log.
+- PR #229 remains the review target. No TestFlight action is authorized.
+
+Follow-up validation — 2026-07-26 01:39 PDT:
+
+- Renamed the header to `Nearby spots` and the ready-state helper to
+  `tap a place to check-in`. Recommendation links and their containing stack
+  now explicitly consume the full available width.
+- Replaced the ambiguous top-right rec.me tile with a labeled `See all` pill
+  and chevron. Added the strict `recme://map` route so this action and
+  non-place widget taps open the map without invoking Quick Search or the
+  I'm Here Now flow; individual place rows still open their selected Check-in
+  flow.
+- Removed SwiftUI's seconds-level relative date presentation. The shared
+  freshness model now renders `<1 min`, `1 min`, or whole plural minutes, and
+  the widget places that label in the bottom-right footer.
+- Focused deep-link, nearby-snapshot, and widget-integration validation passed
+  30/30 on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec154-followup/Logs/Test/Test-Wander-2026.07.26_01-17-29--0700.xcresult`.
+- The complete latest-main suite passed 723/723 with zero failures or skips:
+  `/private/tmp/DerivedData-rec154-followup-full/Logs/Test/Test-Wander-2026.07.26_01-25-44--0700.xcresult`.
+- A clean generic iOS Simulator build passed for arm64 and x86_64 after the
+  required unsandboxed retry restored package dependencies. The initial
+  sandboxed attempt failed before compilation because CoreSimulator and
+  GitHub package resolution were unavailable; it was not an app failure.
+- Reviewed live Xcode system-large previews on iPhone 17 Pro and the smaller
+  iPhone 17e. The first 17e pass exposed title truncation beside the wider
+  `View map` experiment; changing the secondary action to the shorter, clearer
+  `See all` pill resolved it. Both final previews show all five full-width rows,
+  the complete header, and the minute-only bottom-right footer without
+  clipping. Accessibility exposes the See all action and each place row as
+  separately labeled controls.
+- Only the existing formatter actor-isolation, signed-XCTest stripping, and
+  traditional-headermap warnings remain. `xcodegen generate` and
+  `git diff --check` passed. No TestFlight action was performed.
+
+Next: commit and force-with-lease push the rebased branch to update PR #229,
+return Linear REC-154 to `In Review`, and leave Xcode focused on this branch.
+
+Final sync — 2026-07-26 01:42 PDT:
+
+- After validation, `origin/main` advanced only with the completed TestFlight
+  build-98 release record (`061edc336`). Rebased the four REC-154 commits onto
+  that exact head and preserved both append-only log histories.
+- No app, widget, project, test, or dependency source changed in this final
+  sync, so the 30/30 focused suite, 723/723 complete suite, two-device preview,
+  and clean universal Simulator build remain applicable. Post-rebase
+  `git diff --check` and conflict-marker sweeps passed.
+
+Publication — 2026-07-26 01:44 PDT:
+
+- Force-with-lease pushed validated head `402c91aa2` and confirmed PR #229 is
+  open, ready, `MERGEABLE`, and based on exact `origin/main` `061edc336`.
+- Posted the copy, layout, See all/map-route, full-width, minute-footer, test,
+  build, and two-device preview summary to PR #229:
+  `https://github.com/joelipshutz/wander/pull/229#issuecomment-5082764418`.
+- Returned Linear REC-154 to `In Review` and added the matching validation and
+  no-TestFlight handoff. No known follow-up blocker remains.
+
+Latest-main reconciliation — 2026-07-26 02:08 PDT:
+
+- While publishing, REC-97's universal Share Extension and its landing record
+  merged to `main` (`fb37c744b`, then `9d51b0ec3`). Rebased REC-154 onto that
+  exact head and resolved the shared extension surfaces by preserving all three
+  targets: `WanderWidgets`, `WanderNearbyWidgets`, and
+  `WanderShareExtension`.
+- Preserved both Add launch destinations (`importInbox` and the selected nearby
+  place), main's share-inbox drain, the authenticated-session gate, both widget
+  refresh paths, all generated scheme entries, both App IDs, all App Group
+  entitlements, and the combined setup/privacy documentation. Regenerated the
+  Xcode project from the merged `project.yml`.
+- The combined project has four build-number consumers: the app and three
+  extensions. Updated the integration contract from three to four after the
+  first combined full run correctly exposed that stale expectation. A
+  fresh-DerivedData rerun then passed 730/730 with zero failures or skips:
+  `/private/tmp/DerivedData-rec154-combined-final/Logs/Test/Test-Wander-2026.07.26_01-55-10--0700.xcresult`.
+- The final combined focused widget/deep-link/snapshot suite passed 30/30:
+  `/private/tmp/DerivedData-rec154-combined-final/Logs/Test/Test-Wander-2026.07.26_02-05-44--0700.xcresult`.
+  The generic iOS Simulator build also passed for arm64 and x86_64 with the app,
+  both widget extensions, and the Share Extension.
+- The previously reviewed iPhone 17 Pro and iPhone 17e widget previews remain
+  applicable because the final reconciliation did not alter the nearby-widget
+  SwiftUI source. Existing formatter actor-isolation, signed-XCTest stripping,
+  and headermap warnings remain unchanged. No TestFlight action was performed.
+
+Next: commit this combined-target contract/log update, force-with-lease push
+PR #229 again, verify it is mergeable on exact current main, update Linear with
+the superseding 730/730 result, and leave Xcode on REC-154.
+
+Final publication — 2026-07-26 02:10 PDT:
+
+- Force-with-lease pushed combined validated head `5cfddb80a` and confirmed
+  ready PR #229 is `MERGEABLE` against exact `origin/main` `9d51b0ec3`.
+- Posted the superseding 730/730 full-suite, 30/30 focused-suite, universal
+  build, three-extension reconciliation, and no-TestFlight record:
+  `https://github.com/joelipshutz/wander/pull/229#issuecomment-5082846548`.
+- Added the same superseding handoff to Linear REC-154, which remains
+  `In Review`. No known code, integration, visual, build, or tracking blocker
+  remains.
+
+## 2026-07-26 08:58 PDT — Codex — REC-154 interactive refresh and landing
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Review` before resuming implementation)
+
+Goal: add a bottom-left interactive Refresh control to the large nearby widget
+with brief `Refreshing…` feedback, route the top-right `See all` action to the
+in-app I'm Here Now nearby-place list instead of the map, reduce horizontal dead
+space around the place rows, then fully review and squash-merge PR #229 to
+`main`.
+
+Starting state:
+
+- Fetched `origin`; the branch is based on exact current `origin/main`
+  `9d51b0ec3`. PR #229 was previously confirmed ready and mergeable.
+- The isolated worktree has no tracked changes. Four task-local untracked
+  DerivedData directories remain and will not be committed or removed.
+- No overlapping agent-log entry reports edits to the nearby widget files.
+  Expected edits: `WanderNearbyWidgets/WanderNearbyWidget.swift`, shared widget
+  routing/constants and tests as required, `docs/agent-log.md`, and generated
+  project files only if `project.yml` changes.
+- TestFlight build 98 has a completed release record on `main`; this request is
+  merge-only, so no build-number bump, archive, upload, or Slack release note is
+  authorized.
+
+Implementation and validation checkpoint — 2026-07-26 09:15 PDT:
+
+- Added an interactive App Intent refresh button in the widget footer. It
+  persists a short-lived refresh state in the shared App Group, requests a
+  fresh widget-authorized Core Location reading and MapKit nearby search,
+  displays `Refreshing…` while that work runs, then reloads the widget timeline.
+- Explicit user refreshes bypass the normal five-minute equivalent-content
+  write throttle, so the displayed minute timestamp advances even when the
+  nearby place set has not changed. Refresh state expires safely after 30
+  seconds and completed state after 60 seconds.
+- Changed both the `See all` link and the widget background route to
+  `wander://add/quick-capture`, which enters the existing I'm Here Now nearby
+  list. Individual place rows still route to their selected Rich Visit form.
+- Disabled WidgetKit's default content margins and applied a 12-point custom
+  horizontal inset so all five place rows use more of the large widget width.
+- Added normal and refreshing Xcode previews. Visual QA passed on iPhone 17 Pro
+  and iPhone 17e: both footer states fit, rows remain full-width, and the minute
+  timestamp stays bottom-right.
+- Focused widget/deep-link/snapshot tests passed 33/33 with zero failures:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-08-13--0700.xcresult`.
+- Full Wander suite passed 733/733 with zero failures:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-12-58--0700.xcresult`.
+- `git diff --check` passed. Existing simulator-only App Group/keychain,
+  formatter actor-isolation, signed-XCTest stripping, and traditional headermap
+  warnings remain unchanged. No TestFlight action was performed.
+
+Next: finish the generic Simulator build, commit/push this follow-up, rebase if
+`main` advanced, run the required complete PR review, then squash-merge PR #229
+and mark REC-154 done.
+
+Review and final validation checkpoint — 2026-07-26 09:34 PDT:
+
+- Corrected the earlier checkpoint's route shorthand: `See all` and the widget
+  background use the existing `recme://add/here-now` route, which opens the
+  in-app I'm Here Now nearby list. Individual place rows still use
+  `recme://add/nearby/<candidate-id>` for the prefilled Rich Visit form.
+- A three-lens code review found and fixed refresh-state, cache-lifetime,
+  location-privacy, and performance edge cases. Refresh now blocks only while a
+  request is actually running; request IDs prevent a stale completion from
+  replacing newer state; older search results cannot overwrite a newer
+  snapshot; and the minute label updates through `TimelineView(.everyMinute)`.
+- The Refresh footer remains available in empty/error states so the user can
+  recover manually. Widget snapshot and timeline callbacks now clear cached
+  names/coordinates as soon as location is no longer widget-authorized.
+  Snapshots are also removed after the 24-hour usable lifetime or after a
+  successful configuration lookup confirms the widget is no longer installed.
+  Transient WidgetCenter lookup errors preserve the valid cache.
+- App-active updates now ask WidgetKit to reload rather than running a second
+  host-app location/search pipeline. They skip reloads inside the existing
+  five-minute freshness interval, avoiding duplicate Core Location/MapKit work.
+  The main and nearby widget extensions also exclude each other's unrelated
+  shared snapshot source from their generated build phases.
+- Focused widget tests passed 26/26 on the installed iPhone 17e / iOS 26.5
+  simulator:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-32-53--0700.xcresult`.
+- The complete Wander suite passed 735/735 with zero failures or skips on the
+  same simulator:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-33-13--0700.xcresult`.
+  The repo-documented iPhone 16 Plus / iOS 18.6 destination was not installed
+  in the current Xcode runtime; an initial iPhone 17 Pro run also exited before
+  XCTest bootstrap, so validation continued on the available iPhone 17e.
+- Prior normal/refreshing visual QA on iPhone 17 Pro and iPhone 17e remains
+  applicable to the final ready-state layout. `git diff --check` passes. The
+  remaining source-spelling integration assertions are consistent with the
+  repository's existing project-contract tests; refresh persistence, expiry,
+  monotonic writes, bounded route history, and candidate conversion have direct
+  behavioral unit coverage.
+
+Next: record the final generic Simulator build result, publish the reviewed
+commit to PR #229, update Linear, squash-merge to `main`, and add the landing
+record. No TestFlight action is authorized or planned.
+
+Build completion — 2026-07-26 09:35 PDT:
+
+- The final generic iOS Simulator build passed for the app, both widget
+  extensions, and the Share Extension using
+  `/private/tmp/DerivedData-rec154-refresh-build`.
+- Final pre-publication checks: 26/26 focused tests, 735/735 complete tests,
+  universal Simulator build, generated project/source-scope verification, and
+  `git diff --check` all pass. Existing formatter actor-isolation, simulator
+  App Group/keychain, signed-XCTest stripping, and headermap warnings are
+  unchanged and non-blocking.
+
+Latest-main reconciliation — 2026-07-26 09:38 PDT:
+
+- `origin/main` advanced from `9d51b0ec3` to `03fb30e35` with the reviewed
+  full-screen photo zoom implementation and its landing record. Rebased all
+  REC-154 commits onto that exact head. The only conflict was the append-only
+  agent log; both histories were preserved.
+- Regenerated the Xcode project after the rebase; it produced no tracked diff,
+  confirming the photo-zoom files and the nearby-widget shared-source
+  exclusions coexist in the generated project.
+- Re-ran the complete suite on the exact rebased source. All 741 tests passed
+  with zero failures or skips:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-36-22--0700.xcresult`.
+- The previously completed 26/26 focused widget suite and universal Simulator
+  build remain applicable; the rebase added no overlapping widget source.
+  `git diff --check` and conflict-marker checks pass.
+
+Next: commit this reconciliation record, force-with-lease push the rebased
+branch, update ready PR #229 and Linear REC-154 with the exact validation,
+complete the final review record, then squash-merge to `main`.
