@@ -149,7 +149,7 @@ private struct OwnerProfileRedesignMockup: View {
         HStack(spacing: WanderTheme.spacing3) {
             ProfileSaveTile(
                 value: "87",
-                label: "BEEN",
+                label: CheckInCopy.pluralNoun.uppercased(),
                 symbol: "checkmark.circle.fill",
                 color: WanderTheme.stateSuccess.color,
                 fill: WanderTheme.categorySage.color.opacity(0.22)

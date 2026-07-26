@@ -83,7 +83,6 @@ struct ProfileOwnerHome: View {
                 ProfileMapSection(
                     profile: profile,
                     insights: insights,
-                    beenCount: stats.been,
                     ownerLabel: ownerLabel,
                     summaryAction: mapSummaryAction
                 )
@@ -575,7 +574,7 @@ struct SaveStreakProfileRowMockup: View {
             HStack(spacing: WanderTheme.spacing3) {
                 OwnerProfileSaveTile(
                     value: 87,
-                    label: "BEEN",
+                    label: CheckInCopy.pluralNoun.uppercased(),
                     symbol: "checkmark.circle.fill",
                     color: WanderTheme.stateSuccess.color,
                     fill: WanderTheme.categorySage.color.opacity(0.22),
@@ -889,11 +888,11 @@ enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
 private struct ProfileMapSection: View {
     let profile: LocalProfile
     let insights: ProfileInsights
-    let beenCount: Int
     let ownerLabel: String
     let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
     @State private var shareImageFileURL: URL?
+    @State private var activeShareItemID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -901,7 +900,7 @@ private struct ProfileMapSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) map")
                         .font(.system(size: 23, weight: .black))
-                    Text("\(insights.mapCityCount) \(insights.mapCityCount == 1 ? "city" : "cities")  •  \(beenCount) checked-in \(beenCount == 1 ? "place" : "places")")
+                    Text(mapCountSummary)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
@@ -952,13 +951,23 @@ private struct ProfileMapSection: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(summaryItems.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            summaryAction(selectedSummary, item)
-                        } label: {
-                            ProfileMapSummaryRow(item: item)
+                        HStack(spacing: 0) {
+                            Button {
+                                summaryAction(selectedSummary, item)
+                            } label: {
+                                ProfileMapSummaryRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows matching checked-in places")
+
+                            ProfileMapSummaryShareButton(
+                                profile: profile,
+                                item: item,
+                                points: insights.mapPoints(matching: item),
+                                activeShareItemID: $activeShareItemID
+                            )
+                            .padding(.trailing, WanderTheme.spacing2)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows matching checked-in places")
                         if index < summaryItems.count - 1 {
                             Divider().overlay(WanderTheme.borderHairline.color)
                         }
@@ -982,6 +991,12 @@ private struct ProfileMapSection: View {
             handle: profile.handle,
             imageFileURL: shareImageFileURL
         )
+    }
+
+    private var mapCountSummary: String {
+        let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
+        let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
+        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) checked-in \(placeLabel)"
     }
 
     private var summaryItems: [ProfileSummaryItem] {
@@ -1206,6 +1221,134 @@ private struct ProfileMapSummaryRow: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
         .padding(.horizontal, WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 58)
+    }
+}
+
+private struct ProfileMapSummaryShareButton: View {
+    let profile: LocalProfile
+    let item: ProfileSummaryItem
+    let points: [ProfileMapPoint]
+    @Binding var activeShareItemID: String?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    @State private var shareTask: Task<Void, Never>?
+    @State private var shareContent: WanderShareContent?
+    @State private var showsShareSheet = false
+    @State private var showsShareError = false
+
+    var body: some View {
+        Button {
+            prepareAndShare()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(WanderTheme.surfaceSand.color)
+                Circle()
+                    .stroke(WanderTheme.borderHairline.color)
+                if isPreparing {
+                    ProgressView()
+                        .tint(WanderTheme.terracotta.color)
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+        }
+        .buttonStyle(.plain)
+        .disabled(activeShareItemID != nil || profile.serverID == nil)
+        .opacity(profile.serverID == nil ? 0.45 : 1)
+        .accessibilityLabel("Share \(item.title)")
+        .accessibilityHint(shareAccessibilityHint)
+        .sheet(isPresented: $showsShareSheet, onDismiss: cleanupShareAttachment) {
+            if let shareContent {
+                WanderShareSheet(content: shareContent)
+            }
+        }
+        .alert("Couldn't prepare this map", isPresented: $showsShareError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try sharing again.")
+        }
+        .onDisappear(perform: cancelSharePreparation)
+    }
+
+    private func prepareAndShare() {
+        shareTask?.cancel()
+        showsShareError = false
+        activeShareItemID = item.id
+        shareTask = Task {
+            defer {
+                if activeShareItemID == item.id {
+                    activeShareItemID = nil
+                }
+                shareTask = nil
+            }
+
+            let request = ProfileMapSnapshotRequest(
+                points: points,
+                size: CGSize(width: 334, height: 205),
+                displayScale: displayScale,
+                colorScheme: colorScheme
+            )
+            guard let image = await ProfileMapSnapshotCache.shared.image(for: request),
+                  !Task.isCancelled,
+                  let pngData = image.pngData(),
+                  let imageFileURL = await WanderShareAttachmentStore.preparePNG(pngData),
+                  !Task.isCancelled,
+                  let content = WanderShareContent.profileMap(
+                    serverID: profile.serverID,
+                    displayName: profile.displayName,
+                    handle: profile.handle,
+                    imageFileURL: imageFileURL,
+                    filterTitle: item.title
+                  )
+            else {
+                guard !Task.isCancelled else { return }
+                showsShareError = true
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "Couldn't prepare this map. Check your connection and try sharing again."
+                )
+                return
+            }
+
+            shareContent = content
+            showsShareSheet = true
+        }
+    }
+
+    private var isPreparing: Bool {
+        activeShareItemID == item.id
+    }
+
+    private var shareAccessibilityHint: String {
+        guard profile.serverID != nil else {
+            return "Available after this profile finishes syncing"
+        }
+        return "Shares the profile link and a map of these \(item.count) checked-in \(item.count == 1 ? "place" : "places")"
+    }
+
+    private func cancelSharePreparation() {
+        shareTask?.cancel()
+        shareTask = nil
+        if activeShareItemID == item.id {
+            activeShareItemID = nil
+        }
+    }
+
+    private func cleanupShareAttachment() {
+        guard let fileURL = shareContent?.additionalItems.first else {
+            shareContent = nil
+            return
+        }
+        shareContent = nil
+        Task {
+            await WanderShareAttachmentStore.removePreparedPNG(at: fileURL)
+        }
     }
 }

@@ -630,7 +630,7 @@ private struct SharedVisitInboxInvitationCard: View {
                 Label(invitation.visitedAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock.fill")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                Text("BEEN")
+                Text(CheckInCopy.noun.uppercased())
                     .font(.system(size: 10, weight: .black))
                     .foregroundStyle(WanderTheme.stateSuccess.color)
             }

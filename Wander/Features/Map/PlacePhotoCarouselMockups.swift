@@ -332,7 +332,7 @@ private struct PlacePhotoCarouselCardMockup: View {
 
                 Spacer(minLength: WanderTheme.spacing3)
 
-                Text("BEEN")
+                Text(CheckInCopy.noun.uppercased())
                     .font(.system(size: 11, weight: .black))
                     .padding(.horizontal, WanderTheme.spacing2)
                     .frame(height: 30)

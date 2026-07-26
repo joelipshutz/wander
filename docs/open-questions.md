@@ -1,6 +1,6 @@
 # Open Questions
 
-Last updated: 2026-06-22
+Last updated: 2026-07-25
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
 
@@ -37,7 +37,7 @@ These are the known unresolved questions and risks. Some are intentionally defer
 
 | Question | Recommendation | Notes |
 |---|---|---|
-| Which cheap LLM path parses Discover queries? | Use a cheap/swappable model behind `LLMFilterParser`. | Send only raw phrase + allowed filter schema. |
+| Which cheap LLM path parses Discover queries? | Resolved for REC-150: extend the existing authenticated `parse-discover-query` Edge Function and shared swappable structured-JSON provider. | Submit-only, one call per uncached normalized query. Keep raw phrase + allowed schema as the entire model payload; deterministic code resolves people and proves result metadata. The configured model snapshot remains an eval-time operational choice. |
 | What extraction providers are used for link/photo/social saves? | Evaluate Slate extraction first, then implement backend job lanes. | Known gaps: Instagram and location extraction are weak in Slate today. |
 | What confidence and fallback UX should extraction use? | Keep candidate confirmation and manual rescue mandatory. | Never pretend extraction worked if confidence is low. |
 

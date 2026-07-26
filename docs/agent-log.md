@@ -22893,3 +22893,309 @@ Starting status and coordination:
   plan/engineering/iOS design reviews, `DESIGN.md`, migration/RPC security,
   delete/retry/data-flow behavior, final copy/action hierarchy, tests, hosted
   verification evidence, PR comments/checks, and mergeability.
+
+## 2026-07-25 21:50 PDT - Codex - REC-146 Profile map filter sharing
+
+Agent: Codex
+Branch: `codex/rec-146-profile-filter-sharing`
+Worktree: `/private/tmp/recme-rec146-profile-filter-sharing`
+Linear: `REC-146` (`In Progress`)
+
+Goal: update Profile > your map so its subtitle reports the accurate Been-only
+city and place totals as `{x} cities • Been to {x} places`, and add an
+accessible share option to every Places, Cities, and Countries summary row.
+Each row share should reuse the existing stable profile-link plus PNG workflow
+while rendering only the row's matching Been places.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from `origin/main` at
+  `d8ef2e74d`.
+- The primary checkout is mid-conflict on `codex/rec-142-widgets`, including
+  `project.yml`, the generated Xcode project, and this log. It remains
+  untouched; this branch is isolated specifically to avoid that overlap.
+- REC-146 already covered individual map-item sharing. Expanded its title,
+  description, and acceptance criteria for the requested summary copy/counts
+  and row-level accessible sharing, then moved it from Backlog to In Progress.
+- Expected files are
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, focused Profile presenter or
+  navigation/share tests under `WanderTests/`, and this append-only log.
+  `project.yml`, backend contracts, build number, TestFlight, and Slack are out
+  of scope.
+
+Implementation and validation — 2026-07-25 22:35 PDT:
+
+- Profile map totals now derive from the resolved Been-place collection rather
+  than only from mappable coordinates. The subtitle uses correct singular and
+  plural forms in the requested `{x} cities • Been to {x} places` format.
+- Every Places, Cities, and Countries summary row now keeps its existing
+  navigation action and adds a separate 44-point share action. Sharing renders
+  an on-demand PNG containing only that row's mappable Been places and sends it
+  through the existing stable profile-link workflow with filter-specific copy.
+- Added regression coverage for accurate totals when a resolved place has no
+  valid map coordinate, summary-to-pin filtering, filter-specific share
+  content, and the separate navigation/share interaction contract.
+- Updated the worktree onto `origin/main` at `e7b12a97f`. The overlapping
+  Profile test and append-only log conflicts preserved both upstream REC-142
+  work and this REC-146 work.
+- Focused validation passed 22/22 after adapting the share task syntax to the
+  existing Profile source contract. Final full suite passed 692/692 on iPhone
+  17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_22-34-39--0700.xcresult`.
+- Visual QA passed on iPhone 17e and iPhone 17 Pro. The title, requested count
+  copy, map, segmented control, percentages, chevrons, and circular share
+  actions remain legible without clipping or overlap. Screenshots:
+  `/private/tmp/rec146-profile-map-17e.png` and
+  `/private/tmp/rec146-profile-map-17pro.png`.
+- `xcodegen generate` completed with no generated-project diff, and
+  `git diff --check` passed. Existing Swift isolation, App Intents, and
+  traditional headermap warnings remain unchanged.
+- Next: commit and push the feature branch, open a ready PR linked to REC-146,
+  move the issue to In Review, and leave TestFlight/build 98 untouched because
+  no release was requested.
+
+Handoff — 2026-07-25 22:38 PDT:
+
+- Committed the implementation as `070e8b636` and pushed
+  `codex/rec-146-profile-filter-sharing`.
+- Opened ready PR #221 against `main`:
+  `https://github.com/joelipshutz/wander/pull/221`.
+- Linked the PR to REC-146, posted the validation summary, and moved the Linear
+  issue to `In Review`.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser reports `Wander, codex/rec-146-profile-filter-sharing`.
+- Known issues: none specific to REC-146. Existing build warnings remain
+  unchanged. TestFlight/build 98, beta-group changes, and tester Slack notes
+  were intentionally not performed because no release was requested.
+
+Final outcome: accurate Profile map totals and per-filter share actions are
+implemented, fully tested, visually validated, and ready for review in PR #221.
+
+Pre-landing review and hardening — 2026-07-25 23:31 PDT:
+
+- Ryan requested that PR #221 land on `main`. This remains a merge-only request:
+  build 97 is the latest completed TestFlight release, and no build-number bump,
+  archive, upload, beta-group change, or tester Slack note is authorized.
+- Fetched current `origin/main` and confirmed the ready PR was exactly current
+  with `main`, mergeable, and limited to the Profile map/share implementation,
+  focused tests, and coordination log. No backend, auth, database, project, or
+  release metadata is in scope.
+- The gstack pre-landing review plus independent design, test, and
+  security/performance passes found one correctness blocker: two local
+  user-place aliases can resolve to the same canonical place, causing the new
+  Been-place total and map pins to double count it. The presenter now
+  canonicalizes resolved Been places by place ID with a deterministic preferred
+  user-place row, and the existing alias fixture now asserts one place and one
+  map point.
+- Hardened the row share flow discovered during review: only one row can prepare
+  at a time; preparation cancels when the row disappears; unavailable unsynced
+  rows are visibly disabled; failures show an alert and VoiceOver announcement;
+  filter PNGs are deleted after the activity sheet closes; and cancellation
+  cleans up a just-created attachment.
+- Replaced undocumented activity-controller subject KVC with a supported
+  `UIActivityItemSource` that supplies the message and subject. Added regression
+  coverage for the supported activity source and the new failure/cancellation
+  source contracts.
+- Focused post-fix validation passed 19/19 presenter tests, including the
+  canonical-alias regression. The share/navigation selectors compiled cleanly;
+  their exact contract tests will be included in the final complete-suite run.
+  Focused result:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-30-21--0700.xcresult`.
+- Greptile had no line-level or top-level review comments. The core scope review
+  found no additional blocker. Prior iPhone 17e and iPhone 17 Pro visual QA
+  remains applicable because the happy-path layout did not change; review
+  hardening affects disabled, failure, cancellation, and cleanup states.
+- Next: run the complete iPhone 17 Pro suite on the hardened head, record the
+  final review, commit and push the fixes, recheck mergeability against current
+  `main`, post validation to PR #221, and squash-merge it.
+
+Final pre-push validation — 2026-07-25 23:32 PDT:
+
+- The two exact share/navigation contracts passed 2/2:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-33--0700.xcresult`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 693/693 on the hardened
+  branch:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-47--0700.xcresult`.
+- Existing Swift isolation, simulator entitlement/resource, App Intents, and
+  traditional headermap warnings remain unchanged. No REC-146 regression or
+  unresolved pre-landing review finding remains.
+
+## 2026-07-25 22:29 PDT - Codex - REC-150 Discover Search Engineering Plan
+
+Agent: Codex
+Branch: `codex/rec-150-eng-plan`
+Worktree: `/private/tmp/recme-rec150-eng-plan`
+Linear: `REC-150` (`In Progress`)
+
+Goal: turn the approved Discover search interaction direction into an
+implementation-ready engineering plan, including truthful per-result match
+metadata, the low-cost LLM boundary, fallback/caching/cost controls, testing,
+and rollout sequencing.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `e7b12a9`; no existing worktree advertises overlapping
+  Discover planning edits.
+- Read the latest coordination log and the existing REC-90 Discover research,
+  design review, parser/store/UI implementation, remote repository boundary,
+  shared structured-JSON provider layer, and parser/store repository tests.
+- The current app already makes one authenticated server-side structured parse
+  call through `parse-discover-query`, defaults to the configurable nano model,
+  caches successful filters in memory, and falls back to the deterministic
+  parser on failure. The plan will extend this path rather than introduce a
+  second LLM call per result.
+- Early truth constraint: the LLM may normalize the query into a strict typed
+  interpretation, but it must not invent free-form per-place explanations.
+  Every displayed `Why it matched` item must be derived deterministically from
+  visible place/profile evidence actually present in the result.
+- Expected files: a new REC-150 engineering plan, `docs/decisions.md`,
+  `docs/open-questions.md` if a stale question is resolved, and this append-only
+  log. No app, Edge Function, schema, or release change is authorized in this
+  planning branch.
+
+Planning checkpoint — 2026-07-25 22:39 PDT:
+
+- Added `docs/plans/2026-07-25-rec-150-discover-search-engineering-plan.md`.
+  It specifies the reversible Back/Clear interaction, static teaching examples,
+  submit-only model calls, schema-v2 query plan, exact owner resolution,
+  favorite truth/ranking, typed per-result evidence, zero/fallback behavior,
+  bounded cache, privacy-safe analytics, deployment order, file map, tests, and
+  six implementation tasks.
+- Verified the current configured default against official OpenAI material:
+  `gpt-5.4-nano` supports the Responses API and Structured Outputs and is priced
+  for low-cost extraction/classification. The plan retains provider/model env
+  configurability, requires a synthetic golden-query benchmark before pinning a
+  snapshot, and uses an illustrative sub-$0.40/1,000 uncached-search token
+  envelope rather than treating today's rate as permanent.
+- Locked the durable project decisions that the LLM translates one submitted
+  query but never generates per-place explanation copy; deterministic code
+  proves `Matched:` metadata from the exact visible owner-place row. Updated the
+  stale M5 open question to record the existing Edge Function/provider path as
+  resolved for REC-150.
+- Review found no need for a second model endpoint, database migration, RPC, new
+  dependency, or per-result LLM call. Existing app builds can ignore the Edge
+  response's new keys; the new native decoder must also tolerate the old
+  response during rollback.
+- `git diff --check` passed. This docs-only plan does not warrant an iOS build or
+  test run; the plan names the required Deno, focused/full iOS, hosted synthetic
+  invocation, visual, Dynamic Type, and VoiceOver gates for implementation.
+- Mission Control at `localhost:4000` remains unavailable, so no duplicate local
+  tracker task was created. Linear REC-150 already exists and remains correctly
+  `In Progress`; the bundled Linear tool was unavailable in this session, so the
+  branch/PR will carry the issue id and plan link instead of claiming a Linear
+  comment update.
+
+Completion — 2026-07-25 22:43 PDT:
+
+- Committed the engineering plan and durable decision updates as `bd3247b`
+  (`docs: add REC-150 Discover search engineering plan`) and pushed
+  `codex/rec-150-eng-plan`.
+- Opened ready PR #222, which is clean against `main`:
+  `https://github.com/joelipshutz/wander/pull/222`.
+- Validation: staged diff check passed; manual architecture review covered
+  privacy, one-call cost control, semantic invariants, evidence ownership,
+  stale-result protection, old/new response compatibility, failure states, and
+  implementation test gates. No app build or test was run for this docs-only
+  branch.
+- No application code, Edge Function, hosted configuration, database, release,
+  or TestFlight state changed. REC-150 remains `In Progress`; next action is to
+  review/merge this plan and execute REC150-E1 through REC150-E6 on a fresh
+  implementation branch.
+
+Final outcome: the approved Discover search direction now has an
+implementation-ready, costed, privacy-bounded engineering plan and a clean
+ready PR. The feature itself is not yet implemented.
+
+## 2026-07-25 23:36 PDT - Codex - REC-146 landing completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-146-merge-record`
+Worktree: `/private/tmp/recme-rec146-merge-record`
+Linear: `REC-146` (`Done` after this completion record lands)
+
+Landing completion:
+
+- Pushed hardened feature head `b122c7c93`, confirmed ready PR #221 was
+  `CLEAN` and `MERGEABLE` against current `main`, and posted the final review
+  and validation record:
+  `https://github.com/joelipshutz/wander/pull/221#issuecomment-5082383767`.
+- Squash-merged PR #221 to `main` as
+  `9feb4c79513fc195e8d2b2bff71468f56734dfae`:
+  `https://github.com/joelipshutz/wander/pull/221`. GitHub deleted the remote
+  `codex/rec-146-profile-filter-sharing` branch.
+- Final behavior: Profile > your map reports accurate canonical Been-only city
+  and place totals in the requested copy, and every Places, Cities, and
+  Countries summary row has a separate accessible share action for its
+  matching map and stable profile link.
+- Pre-landing review fixed canonical-place alias double counting, concurrent or
+  abandoned share preparation, silent share failures, unsynced affordance
+  ambiguity, unsupported activity-subject KVC, and generated PNG cleanup. No
+  unresolved gstack, design, test, security/performance, or Greptile finding
+  remained at merge.
+- Validation: complete iPhone 17 Pro / iOS 26.5 suite 693/693; exact share
+  contracts 2/2; prior iPhone 17e and iPhone 17 Pro visual QA; clean diff and
+  latest-main merge. Existing unrelated build warnings remain unchanged.
+- Build 97 remains unchanged. This merge did not increment the build, archive,
+  upload, change TestFlight groups, or post tester Slack notes. REC-146 is
+  eligible for the next explicitly requested TestFlight release batch.
+
+Final outcome: the requested Profile map totals and per-filter sharing are on
+`main`; no known REC-146 landing blocker remains.
+
+## 2026-07-25 23:56 PDT - Codex - REC-143 landing review checkpoint
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Review`)
+
+Review checkpoint:
+
+- Merged current `origin/main` into the feature branch. The only conflicts were
+  Profile summary copy and this append-only coordination log; the resolution
+  keeps REC-146's canonical map totals while expressing the result as checked-in
+  places, and preserves both branches' log histories.
+- Reviewed production repository wiring, the atomic save/delete RPCs, their
+  authenticated-user ownership checks, pinned `search_path`, feed projection,
+  per-ticket feed lifecycle, current-day-only notification gate, hosted pgTAP
+  metadata assertions, durable local delete retry, and stable client UUID
+  idempotency. No blocking data, RLS, auth, or migration issue was found.
+- GitHub reports no reviews, comments, or checks on PR #224. Its temporary
+  `CONFLICTING` state reflects the resolved latest-main merge not yet being
+  pushed; the merge commit and final feature adjustments remain under local
+  validation.
+- A literal-copy sweep found four remaining visible `BEEN` labels in older
+  SwiftUI/mockup-backed surfaces. They now use centralized `CheckInCopy` values.
+  Internal `PlaceStatus.been`, serialized `"been"`, event names, fixture ids,
+  and deterministic query synonyms remain stable compatibility contracts.
+- The installed gstack review skill cannot run its canonical pipeline because
+  the required `.agents/skills/gstack/review/checklist.md` is absent from both
+  the repo and installed gstack package. This checkpoint records the equivalent
+  manual review; it does not claim a gstack pass.
+- Next gate: run the complete merged iOS suite and generic simulator build,
+  recheck the final PR diff, push the reviewed head, and land only if GitHub
+  reports it clean and mergeable.
+
+Pre-merge validation — 2026-07-26 00:12 PDT:
+
+- The complete merged iPhone 17 / iOS 26.5 suite passed 699/699 with zero
+  failures. Result bundle:
+  `/private/tmp/rec143-landing-tests.xcresult`.
+- A clean generic iOS Simulator build passed for both arm64 and x86_64 with
+  code signing disabled. Only the existing unrelated formatter warnings remain.
+- `git diff --check` passed, and a final SwiftUI literal-copy sweep found no
+  remaining visible `Been` or `BEEN` labels. Stable internal enum, wire, fixture,
+  analytics, and search-synonym compatibility names intentionally remain.
+- Earlier branch validation remains applicable: hosted check-in pgTAP passed
+  21/21; the exact hosted check-in smoke block passed; the later broad smoke run
+  stopped on the already-existing unrelated profile-geography assertion; and
+  iPhone 17 Pro Max plus iPhone 17e visual captures were reviewed.
+- The approved plan's implementation tasks T1 through T7 are complete. T8's
+  automated, hosted, and two-size visual gates are complete; physical-device
+  VoiceOver, accessibility XXL, Reduce Motion, and color-filter checks remain
+  explicit pre-ship validation rather than a merge blocker.
+- Final manual engineering review found no unresolved functional, migration,
+  RLS, security, performance, or regression blocker. No TestFlight release was
+  requested: build 97, archive/upload state, tester groups, and Slack release
+  notes remain unchanged.
