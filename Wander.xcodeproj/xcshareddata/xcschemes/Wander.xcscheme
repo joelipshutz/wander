@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Wander.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "3EB8B4EBA82BA89478F45844"
+               BuildableName = "WanderWidgets.appex"
+               BlueprintName = "WanderWidgets"
+               ReferencedContainer = "container:Wander.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
