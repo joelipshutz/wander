@@ -22808,3 +22808,54 @@ Final outcome: repeatable Check-ins and ticket presentation are implemented,
 the hosted schema is current, the merged app/widget project is fully tested,
 PR #224 is ready for review, REC-143 is `In Review`, and Xcode is on the exact
 implementation branch requested for local testing.
+
+## 2026-07-25 23:08 PDT - Codex - REC-143 Xcode Feedback Polish
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Review`)
+PR: `#224`
+
+Goal: apply Ryan's first Xcode feedback without changing persistence or remote
+contracts: make the check-in picker date-only, remove its instructional helper
+copy, and restore the repeat-check-in place action from a ticket icon to `+`.
+
+Starting status and coordination:
+
+- Fetched origin; the dedicated REC-143 worktree and branch were clean and
+  synchronized with the published PR head at `4556b6c9a`.
+- Xcode remains open on this isolated worktree. The primary checkout and all
+  unrelated worktrees remain untouched.
+- Expected files are `Wander/Features/Map/MapScreen.swift`, focused UI-contract
+  tests, and this append-only log. No schema, migration, build-number,
+  TestFlight, or release action is in scope.
+
+Completion — 2026-07-25 23:27 PDT:
+
+- Changed the check-in picker label to `Check-in date`, restricted the native
+  picker to `.date`, and removed the `Defaults to now...` helper sentence.
+  The existing non-future date bound and visit timestamp persistence remain
+  unchanged.
+- Restored `PlaceSheetAction.addVisit.systemImage` from `ticket.fill` to
+  `plus`. Both the compact/header repeat action and labeled
+  `Check in again` action now use `+`; ticket-card presentation and Profile
+  ticket/count semantics are unchanged.
+- Added focused regression contracts for the exact picker copy/components,
+  absent helper text, and both add/repeat `+` icons. The focused pair passed
+  2/2 on iPhone 17 / iOS 26.5:
+  `/private/tmp/rec143-polish-tests.xcresult`.
+- The required complete simulator suite passed 695/695 with 0 failures and
+  0 skips:
+  `/private/tmp/rec143-polish-full.xcresult`.
+- Installed the exact validated app on iPhone 17 Pro Max and compact iPhone
+  17e. Visual inspection confirms the top action and full-width
+  `Check in again` action use `+` without clipping:
+  `/private/tmp/rec143-polish-place-profile-17-pro-max.png` and
+  `/private/tmp/rec143-polish-place-profile-17e.png`.
+- Only the existing formatter actor-isolation and traditional-headermap
+  warnings remain. No backend, migration, build-number, TestFlight, or Slack
+  release action was performed.
+
+Next: commit and push this feedback revision to ready PR #224, update REC-143's
+validation comment, and keep Xcode on the implementation worktree.

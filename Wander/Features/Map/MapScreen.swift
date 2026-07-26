@@ -2790,7 +2790,7 @@ enum PlaceSheetAction {
     var systemImage: String {
         switch self {
         case .add: "plus"
-        case .addVisit: "ticket.fill"
+        case .addVisit: "plus"
         case .choose: "checkmark"
         case .none: ""
         }
@@ -4247,10 +4247,10 @@ struct MapPlaceSaveFlowSheet: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
 
             DatePicker(
-                "check-in date and time",
+                "Check-in date",
                 selection: $visitedAt,
                 in: ...Date.now,
-                displayedComponents: [.date, .hourAndMinute]
+                displayedComponents: [.date]
             )
             .datePickerStyle(.compact)
             .font(.system(size: 14, weight: .bold))
@@ -4262,10 +4262,6 @@ struct MapPlaceSaveFlowSheet: View {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                     .stroke(WanderTheme.borderHairline.color)
             )
-
-            Text("Defaults to now. Pick an earlier date for a past check-in.")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
         }
     }
 

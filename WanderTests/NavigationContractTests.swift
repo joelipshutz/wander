@@ -608,6 +608,25 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testCheckInPickerUsesDateOnlyWithoutInstructionalCopy() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let checkInDateSection = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private var checkInDateSection: some View")
+                .last?
+                .components(separatedBy: "private var canInviteFriends: Bool")
+                .first
+        )
+
+        XCTAssertTrue(checkInDateSection.contains("\"Check-in date\""))
+        XCTAssertTrue(checkInDateSection.contains("displayedComponents: [.date]"))
+        XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
+        XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
+        XCTAssertFalse(checkInDateSection.contains("Pick an earlier date for a past check-in."))
+    }
+
     func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
