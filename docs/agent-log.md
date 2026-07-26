@@ -24818,3 +24818,39 @@ REC-152 review handoff — 2026-07-26 13:40 PDT:
   or present in `~/Library/LaunchAgents`. Its existing task
   `67856d32-86fa-4faa-8121-a5fdac4af423` therefore could not be advanced to
   review in this session; Linear and the PR contain the complete live status.
+
+REC-152 Check-ins terminology follow-up — 2026-07-26 13:50 PDT:
+
+- Joe clarified that the former user-facing `Been` term is now `Check-ins`.
+  Scope is limited to correcting PR #245's new activity module, full-history
+  screen, tests, and REC-152 copy; layout, behavior, and persistence remain
+  unchanged.
+- Confirmed `PlaceStatus.been` and backend `"been"` are explicitly stable
+  compatibility contracts in `WanderEnums.swift`. The UI filter will use a
+  `checkIns` case and centralized `CheckInCopy`; stored status values will not
+  be renamed or migrated.
+- Fetched `origin`, confirmed the isolated worktree is clean with no overlap,
+  updated REC-152's description to Check-ins terminology, and moved it back to
+  In Progress while the correction is active.
+
+REC-152 Check-ins terminology validation — 2026-07-26 14:00 PDT:
+
+- Updated the new activity filter's UI state from `been` to `checkIns` and all
+  visible labels, empty states, and accessibility copy from Been to Check-ins.
+  Added title-case values to centralized `CheckInCopy`; the row label now uses
+  `Check-in` without Foundation's incorrect `Check-In` capitalization.
+- Kept `PlaceStatus.been`, backend `"been"`, and existing persistence/data
+  contracts unchanged. This is strictly a product-terminology correction.
+- The focused clean simulator run passed 3/3 tests on iPhone 16 Plus / iOS
+  18.6, covering chronology/filtering, legacy status compatibility, explicit
+  timestamps, mobile module order, navigation, and the no-stale-Been contract.
+  Result bundle:
+  `/tmp/DerivedData-rec152-copy/Logs/Test/Test-Wander-2026.07.26_13-39-14--0700.xcresult`.
+- An incremental iPhone 16e build passed after the expected sandbox-only
+  CoreSimulator/cache failure was rerun outside the sandbox. Compact-phone
+  visual QA confirmed `315 Check-ins` fits the equal-width filter without
+  truncation or layout changes. Screenshot:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-check-ins-iphone-16e.png`.
+- Removed the temporary QA-only launch route and confirmed `WanderApp.swift`
+  has no diff. `git diff --check` passed and no stale user-facing Been copy
+  remains in the new activity module or history screen.

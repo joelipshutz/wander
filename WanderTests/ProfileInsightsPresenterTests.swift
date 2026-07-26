@@ -1250,13 +1250,13 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
 
         XCTAssertEqual(items.map(\.timestamp), [newestVisit, wannaSave, olderVisit, historicalWant])
         XCTAssertEqual(items.map(\.kind), [.checkIn, .wanna, .checkIn, .wanna])
-        XCTAssertEqual(items.filter(ProfileActivityFilter.been.includes).count, 2)
+        XCTAssertEqual(items.filter(ProfileActivityFilter.checkIns.includes).count, 2)
         XCTAssertEqual(items.filter(ProfileActivityFilter.wanna.includes).count, 2)
         XCTAssertEqual(items.first?.visiblePlace.place.canonicalName, "Republique")
         XCTAssertEqual(items.first?.visitID, "visit-new")
     }
 
-    func testProfileActivityKeepsLegacyBeenAndFormatsExplicitDateAndTime() throws {
+    func testProfileActivityKeepsLegacyCheckInAndFormatsExplicitDateAndTime() throws {
         let owner = profile(id: "owner")
         let checkedIn = visiblePlace(
             owner: owner,

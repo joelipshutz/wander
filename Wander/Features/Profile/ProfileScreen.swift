@@ -146,7 +146,7 @@ struct ProfileScreen: View {
                     ProfileActivityHistoryScreen(
                         items: profileActivityItems,
                         initialFilter: filter,
-                        beenCount: profileStats.checkIns,
+                        checkInCount: profileStats.checkIns,
                         wannaCount: profileStats.wanna,
                         itemAction: { item in
                             selectedActivityItemID = item.id
@@ -1264,7 +1264,7 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
 
 private struct ProfileActivityHistoryScreen: View {
     let items: [ProfileActivityItem]
-    let beenCount: Int
+    let checkInCount: Int
     let wannaCount: Int
     let itemAction: (ProfileActivityItem) -> Void
     @State private var filter: ProfileActivityFilter
@@ -1272,12 +1272,12 @@ private struct ProfileActivityHistoryScreen: View {
     init(
         items: [ProfileActivityItem],
         initialFilter: ProfileActivityFilter,
-        beenCount: Int,
+        checkInCount: Int,
         wannaCount: Int,
         itemAction: @escaping (ProfileActivityItem) -> Void
     ) {
         self.items = items
-        self.beenCount = beenCount
+        self.checkInCount = checkInCount
         self.wannaCount = wannaCount
         self.itemAction = itemAction
         _filter = State(initialValue: initialFilter)
@@ -1292,7 +1292,7 @@ private struct ProfileActivityHistoryScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 ProfileActivityFilterControl(
                     selection: $filter,
-                    beenCount: beenCount,
+                    checkInCount: checkInCount,
                     wannaCount: wannaCount
                 )
 
@@ -1334,7 +1334,7 @@ private struct ProfileActivityHistoryScreen: View {
     private var emptyStateTitle: String {
         switch filter {
         case .all: "No activity yet"
-        case .been: "No Been activity yet"
+        case .checkIns: "No check-ins yet"
         case .wanna: "No Wanna activity yet"
         }
     }

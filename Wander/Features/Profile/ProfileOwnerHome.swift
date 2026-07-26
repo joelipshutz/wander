@@ -8,7 +8,7 @@ private enum ProfileHomeScrollAnchor {
 
 enum ProfileActivityFilter: String, CaseIterable, Identifiable, Hashable {
     case all
-    case been
+    case checkIns = "check_ins"
     case wanna
 
     var id: String { rawValue }
@@ -16,7 +16,7 @@ enum ProfileActivityFilter: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .all: "All"
-        case .been: "Been"
+        case .checkIns: CheckInCopy.pluralTitle
         case .wanna: "Wanna"
         }
     }
@@ -24,7 +24,7 @@ enum ProfileActivityFilter: String, CaseIterable, Identifiable, Hashable {
     func includes(_ item: ProfileActivityItem) -> Bool {
         switch self {
         case .all: true
-        case .been: item.kind == .checkIn
+        case .checkIns: item.kind == .checkIn
         case .wanna: item.kind == .wanna
         }
     }
@@ -43,7 +43,7 @@ enum ProfileActivityKind: String, Equatable {
 
     var title: String {
         switch self {
-        case .checkIn: CheckInCopy.noun.capitalized
+        case .checkIn: CheckInCopy.title
         case .wanna: "Wanna"
         }
     }
@@ -251,7 +251,7 @@ struct ProfileOwnerHome: View {
                     )
                     ProfileRecentActivitySection(
                         items: recentActivity,
-                        beenCount: stats.checkIns,
+                        checkInCount: stats.checkIns,
                         wannaCount: stats.wanna,
                         itemAction: recentActivityAction,
                         allActivityAction: allActivityAction
@@ -674,7 +674,7 @@ private struct OwnerProfileSaveTile: View {
 
 struct ProfileActivityFilterControl: View {
     @Binding var selection: ProfileActivityFilter
-    let beenCount: Int
+    let checkInCount: Int
     let wannaCount: Int
 
     var body: some View {
@@ -719,7 +719,7 @@ struct ProfileActivityFilterControl: View {
     private func title(for filter: ProfileActivityFilter) -> String {
         switch filter {
         case .all: filter.title
-        case .been: "\(beenCount) \(filter.title)"
+        case .checkIns: "\(checkInCount) \(filter.title)"
         case .wanna: "\(wannaCount) \(filter.title)"
         }
     }
@@ -727,7 +727,7 @@ struct ProfileActivityFilterControl: View {
     private func accessibilityLabel(for filter: ProfileActivityFilter) -> String {
         switch filter {
         case .all: "All activity"
-        case .been: "Been activity, \(beenCount)"
+        case .checkIns: "\(CheckInCopy.pluralTitle) activity, \(checkInCount)"
         case .wanna: "Wanna activity, \(wannaCount)"
         }
     }
@@ -735,7 +735,7 @@ struct ProfileActivityFilterControl: View {
 
 private struct ProfileRecentActivitySection: View {
     let items: [ProfileActivityItem]
-    let beenCount: Int
+    let checkInCount: Int
     let wannaCount: Int
     let itemAction: (ProfileActivityItem) -> Void
     let allActivityAction: (ProfileActivityFilter) -> Void
@@ -753,7 +753,7 @@ private struct ProfileRecentActivitySection: View {
 
             ProfileActivityFilterControl(
                 selection: $filter,
-                beenCount: beenCount,
+                checkInCount: checkInCount,
                 wannaCount: wannaCount
             )
 
@@ -811,7 +811,7 @@ private struct ProfileRecentActivitySection: View {
     private var emptyStateText: String {
         switch filter {
         case .all: "Your activity will show up here."
-        case .been: "No Been activity yet."
+        case .checkIns: "No check-ins yet."
         case .wanna: "No Wanna activity yet."
         }
     }
