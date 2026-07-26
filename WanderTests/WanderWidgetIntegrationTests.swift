@@ -712,7 +712,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let declarations = project.components(separatedBy: "CURRENT_PROJECT_VERSION:").count - 1
 
         XCTAssertEqual(declarations, 1)
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"99\""))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"100\""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
             4
