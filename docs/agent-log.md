@@ -24969,3 +24969,30 @@ Landing and validation:
 Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
+
+## 2026-07-26 13:58 PDT - Codex - TestFlight Build 100
+
+Agent: Codex
+Branch: `codex/testflight-build-100`
+Worktree: `/private/tmp/recme-testflight-build-100`
+Linear: `REC-122` (`In Review`)
+
+Goal: ship Joe's explicitly requested TestFlight release from exact latest
+`main`, containing the REC-122 streak hierarchy and REC-159 Nearby-widget
+plus-icon follow-up.
+
+Release start:
+
+- Created this clean release branch from exact `origin/main`
+  `0765ac64c740691a17a92f72bd5b141f22f1c0ad`, the squash merge of ready PR
+  #217. REC-159 landed immediately before it at
+  `977f7c654264fd21532fe1b4694ef10fc1192753`.
+- Incremented `CURRENT_PROJECT_VERSION` once from 99 to 100. This release keeps
+  marketing version 0.1 and will regenerate the Xcode project before review.
+- Intended tester coverage: the save sheet closes before the streak takeover;
+  the takeover waits for `got it`, shows the numeric counter, seven-day card,
+  ticket/confetti animation, and `Keep it up 🔥`; same-day saves only produce
+  confetti; Nearby widget rows use plus actions.
+- Next: regenerate the project, review and land the release metadata, validate
+  exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
+  external beta-review state, post `#testflight-feedback`, and close REC-122.
