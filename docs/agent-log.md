@@ -22687,3 +22687,52 @@ REC-132 handoff — 2026-07-25 22:45 PDT:
   `git diff --check` passed. Known repository warnings are unchanged.
 - REC-132 should remain `In Review` until PR #223 lands. No TestFlight release
   was requested; build 97 remains unchanged.
+
+REC-132 explicit TestFlight release review — 2026-07-25 23:47 PDT:
+
+- Joe explicitly requested "push to tf", authorizing review/merge of PR #223,
+  one build-number increment on latest `main`, archive/upload, public beta-group
+  attachment, external beta review, and the required tester Slack note.
+- Release sweep confirmed build 97 is fully completed and `origin/main` still
+  declares build 97; there is no abandoned build bump or upload to resume.
+- The pre-landing specialist gate found three real release blockers in the first
+  PR head: foreground validation unmounted/recreated the entire app shell;
+  cached Clerk user data was accepted before an authoritative client refresh;
+  and persisted person metadata could cross from account A to account B before
+  remote hydration. The source-of-truth design doc also still instructed future
+  agents to preserve the superseded guest-first behavior.
+- Fixing the gate before merge by keeping a validated authenticated subtree
+  mounted behind an opaque/non-interactive foreground-check overlay, deduping
+  refresh work through `.task(id:)`, awaiting Clerk `refreshClient()`, failing
+  closed when verification errors, applying the validated session before the
+  root store's first render, scrubbing avatar/bio/home/privacy metadata on
+  logout/account change, and canceling root-owned maintenance on disappearance.
+- Adding deterministic event/foreground/auth-failure/person-isolation tests and
+  aligning `DESIGN.md` with Joe's signed-in-only decision. The review-expanded
+  file set includes `WanderLocalStore.swift`, `WanderStoreTests.swift`,
+  `RemoteRepositoryTests.swift`, and `DESIGN.md` in addition to the existing
+  REC-132 files.
+- The repository still intentionally uses a Clerk development instance whose
+  hosted native UI says `Wander` and shows Clerk's development-mode banner.
+  That is existing TestFlight environment state, not a regression in this PR;
+  record it as a known alpha branding issue rather than silently changing auth
+  credentials or Clerk dashboard configuration during this release.
+- The gstack-requested external Codex CLI review was rejected because it would
+  export private repo code to another model service without separate approval.
+  It was not retried or circumvented; local structured review and isolated
+  in-workspace specialist reviews remain the merge evidence.
+
+Release-review validation checkpoint — 2026-07-25 23:53 PDT:
+
+- The expanded focused auth/session/person suite passed 17/17 on iPhone 17 Pro
+  Max, iOS 26.2 after one test-only constructor-label compile correction:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_23-51-03--0700.xcresult`.
+- A final event-path audit found that a Clerk logout/session-change event could
+  leave the prior signed-in state visible while its authoritative refresh was
+  in flight. Session-change observation now moves the store to `.loading`
+  before awaiting that refresh, so the authenticated root is removed at the
+  event boundary instead of after the network round trip.
+- `origin/main` advanced during review from `e7b12a9` to `f4242bc` with the
+  REC-146 Profile-map share landing and coordination docs. The hardened auth
+  changes will be checkpointed, merged with that latest main, conflict-resolved
+  without dropping either feature, and fully revalidated before PR #223 lands.

@@ -9,11 +9,16 @@ final class ClerkAuthService: AuthSessionProviding {
     private let configuration: WanderBackendConfiguration
 
     #if canImport(ClerkKit)
+    typealias SessionResolver = @MainActor () async throws -> AuthSession?
+    private let resolveAuthoritativeSession: SessionResolver
+
     init(
         configuration: WanderBackendConfiguration,
+        resolveSession: @escaping SessionResolver = ClerkAuthService.resolveCurrentSession,
         configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
     ) {
         self.configuration = configuration
+        self.resolveAuthoritativeSession = resolveSession
 
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
@@ -85,27 +90,22 @@ final class ClerkAuthService: AuthSessionProviding {
             return
         }
 
-        if let user = Clerk.shared.user {
-            let name = [user.firstName, user.lastName]
-                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-            state = .signedIn(
-                AuthSession(
-                    userID: user.id,
-                    displayName: name.isEmpty ? user.username : name,
-                    handle: user.username,
-                    email: user.primaryEmailAddress?.emailAddress,
-                    phoneNumber: user.primaryPhoneNumber?.phoneNumber
-                )
-            )
+        do {
+            guard let session = try await resolveAuthoritativeSession() else {
+                state = .signedOut
+                #if DEBUG
+                WanderDebugLog.remote.debug("clerk refresh signed_out")
+                #endif
+                return
+            }
+            state = .signedIn(session)
             #if DEBUG
-            WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(user.id), privacy: .public)")
+            WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public)")
             #endif
-        } else {
-            state = .signedOut
+        } catch {
+            state = .unavailable("Could not verify your session. Check your connection and try again.")
             #if DEBUG
-            WanderDebugLog.remote.debug("clerk refresh signed_out")
+            WanderDebugLog.remote.error("clerk refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
         }
         #else
@@ -188,4 +188,23 @@ final class ClerkAuthService: AuthSessionProviding {
         throw AuthSessionError.notConfigured
         #endif
     }
+
+    #if canImport(ClerkKit)
+    private static func resolveCurrentSession() async throws -> AuthSession? {
+        _ = try await Clerk.shared.refreshClient()
+        guard let user = Clerk.shared.user else { return nil }
+
+        let name = [user.firstName, user.lastName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return AuthSession(
+            userID: user.id,
+            displayName: name.isEmpty ? user.username : name,
+            handle: user.username,
+            email: user.primaryEmailAddress?.emailAddress,
+            phoneNumber: user.primaryPhoneNumber?.phoneNumber
+        )
+    }
+    #endif
 }

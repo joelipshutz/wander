@@ -255,6 +255,7 @@ struct WanderRootView: View {
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
+        initialSession: AuthSession? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
@@ -266,14 +267,16 @@ struct WanderRootView: View {
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        _store = StateObject(
-            wrappedValue: Self.makeStore(
-                fixtureMode: fixtureMode,
-                parser: parser,
-                analytics: analytics,
-                persistence: persistence
-            )
+        let store = Self.makeStore(
+            fixtureMode: fixtureMode,
+            parser: parser,
+            analytics: analytics,
+            persistence: persistence
         )
+        if fixtureMode == .empty, let initialSession {
+            store.apply(authState: .signedIn(initialSession))
+        }
+        _store = StateObject(wrappedValue: store)
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
         _addSheetDetent = State(
@@ -468,7 +471,6 @@ struct WanderRootView: View {
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
-            await auth.refreshSession()
             applyAuthStateIfNeeded(auth.state)
             await refreshWannaGoReminders(for: auth.state)
             while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo() {
@@ -671,11 +673,19 @@ struct WanderRootView: View {
     }
 
     private func handleRootDisappear() {
+        cancelSignedInMaintenance()
         deepLinkHandoffTask?.cancel()
         deepLinkHandoff.cancel()
         deepLinkPresentations.removeAll()
         sharedVisitBannerTask?.cancel()
         saveStreakCelebrationTask?.cancel()
+
+        guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
+        WanderWidgetSnapshotPublisher.clear()
+        store.apply(authState: auth.state)
+        Task {
+            await refreshWannaGoReminders(for: auth.state)
+        }
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {

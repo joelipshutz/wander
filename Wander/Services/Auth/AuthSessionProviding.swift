@@ -138,12 +138,6 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
-    func sessionChanges() -> AsyncStream<Void> {
-        AsyncStream { continuation in
-            continuation.finish()
-        }
-    }
-
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -173,6 +167,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         sessionObservationTask = Task { @MainActor [weak self] in
             for await _ in provider.sessionChanges() {
                 guard !Task.isCancelled else { return }
+                self?.state = .loading
                 await provider.refreshSession()
                 self?.synchronizeStateFromProvider()
             }
@@ -189,6 +184,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     var canPresentNativeAuth: Bool {
         provider.canPresentNativeAuth
+    }
+
+    func sessionChanges() -> AsyncStream<Void> {
+        provider.sessionChanges()
     }
 
     func refreshSession() async {
@@ -315,6 +314,10 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     func setState(_ state: AuthState) {
         self.state = state
         sessionChangeContinuation.yield()
+    }
+
+    func setStateSilently(_ state: AuthState) {
+        self.state = state
     }
 
     func sessionChanges() -> AsyncStream<Void> { sessionChangeStream }

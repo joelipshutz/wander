@@ -1613,7 +1613,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
     }
 
-    func testSignedInSessionPreservesExistingLocalAvatarURL() {
+    func testSignedInSessionDoesNotInheritSignedOutDeviceAvatarURL() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let avatarURL = "file:///tmp/wander-avatar.jpg"
         store.updateCurrentUserAvatarURL(avatarURL)
@@ -1630,9 +1630,51 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(store.currentUser.id, "user_live")
-        XCTAssertEqual(store.currentUser.avatarURL, avatarURL)
-        XCTAssertEqual(store.profileState(for: "user_live")?.shell.avatarURL, avatarURL)
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.profileState(for: "user_live")?.shell.avatarURL)
         XCTAssertEqual(store.currentUser.syncState, .synced)
+    }
+
+    func testSignedOutAndAccountSwitchClearPersonMetadata() {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Account A", handle: "account_a")
+            )
+        )
+        store.updateCurrentUserAvatarURL("https://example.com/account-a.jpg")
+        store.updateCurrentUserProfile(
+            displayName: "Account A",
+            handle: "account_a",
+            bio: "Account A bio",
+            homeArea: "Los Angeles"
+        )
+        store.defaultVisibility = .selfOnly
+        store.setPrivateProfile(true)
+
+        store.apply(authState: .signedOut)
+
+        XCTAssertEqual(store.currentUser.displayName, "You")
+        XCTAssertEqual(store.currentUser.handle, "you")
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.currentUser.bio)
+        XCTAssertNil(store.currentUser.homeArea)
+        XCTAssertFalse(store.currentUser.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_b", displayName: "Account B", handle: "account_b")
+            )
+        )
+
+        XCTAssertEqual(store.currentUser.id, "user_b")
+        XCTAssertEqual(store.currentUser.displayName, "Account B")
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.currentUser.bio)
+        XCTAssertNil(store.currentUser.homeArea)
+        XCTAssertFalse(store.currentUser.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .followers)
     }
 
     func testSignedInSessionRefreshPreservesPersistedAppOwnedIdentityForSameUser() {

@@ -2318,6 +2318,12 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
         self.switchesUserDuringForcedRefresh = switchesUserDuringForcedRefresh
     }
 
+    func sessionChanges() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
     func refreshSession() async {}
     func signOut() async throws {}
     func deleteAccount() async throws {}

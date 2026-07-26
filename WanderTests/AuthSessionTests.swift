@@ -35,9 +35,10 @@ final class AuthSessionTests: XCTestCase {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
-        let service = ClerkAuthService(configuration: configuration) { publishableKey in
-            publishableKey
-        }
+        let service = ClerkAuthService(
+            configuration: configuration,
+            configureClerk: { publishableKey in publishableKey }
+        )
         let store = AuthSessionStore(provider: service)
 
         store.presentGate(for: .syncPlace)
@@ -52,12 +53,37 @@ final class AuthSessionTests: XCTestCase {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
-        let service = ClerkAuthService(configuration: configuration) { _ in
-            ""
-        }
+        let service = ClerkAuthService(
+            configuration: configuration,
+            configureClerk: { _ in "" }
+        )
 
         XCTAssertEqual(service.state, .unavailable("Missing Clerk publishable key."))
         XCTAssertFalse(service.canPresentNativeAuth)
+    }
+
+    func testClerkSessionRefreshFailsClosedWhenAuthoritativeResolutionFails() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        var resolution: Result<AuthSession?, AuthSessionError> = .success(session)
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { try resolution.get() },
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+        XCTAssertEqual(service.state, .signedIn(session))
+
+        resolution = .failure(.tokenUnavailable)
+        await service.refreshSession()
+
+        XCTAssertEqual(
+            service.state,
+            .unavailable("Could not verify your session. Check your connection and try again.")
+        )
     }
 
     func testSupabaseTokenRequiresSignedInSession() async {
@@ -134,14 +160,39 @@ final class AuthSessionTests: XCTestCase {
         store.presentGate(for: .syncPlace)
         store.isPresentingNativeAuth = true
 
-        provider.setState(.signedOut)
-        for _ in 0..<20 where store.state != .signedOut {
-            await Task.yield()
+        let signedOut = expectation(description: "provider logout reaches auth store")
+        let observation = Task { @MainActor in
+            while store.state != .signedOut {
+                guard !Task.isCancelled else { return }
+                await Task.yield()
+            }
+            signedOut.fulfill()
         }
+        defer { observation.cancel() }
+
+        provider.setState(.signedOut)
+        await fulfillment(of: [signedOut], timeout: 1)
 
         XCTAssertEqual(store.state, .signedOut)
         XCTAssertNil(store.activeGate)
         XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
+    func testForegroundStyleRefreshRejectsSilentProviderLogout() async {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let provider = PreviewAuthSessionProvider(state: .signedIn(session), token: "token")
+        let store = AuthSessionStore(provider: provider)
+
+        provider.setStateSilently(.signedOut)
+        XCTAssertEqual(store.state, .signedIn(session))
+
+        await store.refreshSession()
+
+        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: store.state, hasResolvedSession: true),
+            .signIn
+        )
     }
 
     func testAppSessionDestinationNeverShowsAppWithoutSignedInSession() {

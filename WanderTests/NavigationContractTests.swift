@@ -8,13 +8,21 @@ final class NavigationContractTests: XCTestCase {
         let app = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
         )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
         let authGate = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Auth/AuthGateSheet.swift")
         )
 
         XCTAssertTrue(app.contains("WanderAppEntryView(analytics: analytics, parser: discoverParser)"))
-        XCTAssertTrue(app.contains("case .signIn:\n                ClerkNativeAuthView(isDismissable: false)"))
-        XCTAssertTrue(app.contains("case .authenticated:\n                WanderRootView(analytics: analytics, parser: parser)"))
+        XCTAssertTrue(app.contains("ClerkNativeAuthView(isDismissable: false)"))
+        XCTAssertTrue(app.contains("if case .signedIn(let session) = auth.state"))
+        XCTAssertTrue(app.contains("initialSession: session"))
+        XCTAssertTrue(app.contains(".allowsHitTesting(destination == .authenticated)"))
+        XCTAssertTrue(app.contains(".task(id: sessionRefreshGeneration)"))
+        XCTAssertTrue(app.contains("guard phase == .active else { return }"))
+        XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(authGate.contains("AuthView(isDismissable: isDismissable)"))
     }
 
