@@ -22070,3 +22070,43 @@ Pre-landing validation — 2026-07-25 21:28 PDT:
   headermap warnings remain. No new release-blocking issue was found.
 - Next: commit and push the release branch, open and squash-merge a ready PR,
   then archive/export/upload the exact merged `main`.
+
+Release completion — 2026-07-25 21:40 PDT:
+
+- Opened ready PR #216, confirmed it was clean and mergeable against exact
+  latest `origin/main`, posted the validation summary, and squash-merged it as
+  `ba172e380f1bb5eacc70fefc119f0ee70a1f6745`:
+  `https://github.com/joelipshutz/wander/pull/216`. The merged remote release
+  branch was deleted.
+- Created a clean detached worktree at that exact released `main` SHA and
+  archived `/private/tmp/Wander-0.1-build97.xcarchive`. Archive and embedded
+  app metadata verify display name `rec.me`, marketing version `0.1`, build
+  `97`, and bundle `com.grayline.wander`; strict code-signature verification
+  passed.
+- Export options `/private/tmp/recme-build97-export-options.plist` used
+  `destination=upload`, `method=app-store-connect`, automatic distribution
+  signing, and `manageAppVersionAndBuildNumber=false`. Xcode reported
+  `Uploaded Wander`, `Upload succeeded`, and `EXPORT SUCCEEDED`; archive
+  upload metadata independently confirmed build 97.
+- `scripts/testflight-release.mjs` confirmed App Store Connect build
+  `f25cba53-4060-4549-8a70-155b50e80e4b` is `VALID`, set
+  `usesNonExemptEncryption=false`, updated the en-US What to Test copy,
+  attached public group `rec.me Alpha`, submitted external beta review, and
+  returned review state `APPROVED`.
+- Posted the required live tester note in `#testflight-feedback` with the
+  change summary, concrete Profile calendar checks, deferred WidgetKit scope,
+  and requested repro details:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785040819977229`.
+- Updated REC-149 with PR, exact main SHA, archive, validation, App Store
+  Connect build id, public link, and Slack record, then moved the issue to
+  `Done`.
+- Public TestFlight:
+  `https://testflight.apple.com/join/knEhRa6t`. Build 97 is live and approved
+  for external testing.
+- Included release behavior is REC-140's combined Been/Wanna Profile
+  calendar. REC-142 / PR #215 widgets remain unmerged and were not included.
+  No App Store production submission was made.
+
+Final outcome: rec.me 0.1 (97) is validated, uploaded, approved, attached to
+the public TestFlight group, announced to testers, and durably tracked. No
+known build-97 blocker remains.
