@@ -25304,3 +25304,54 @@ TestFlight build 100 release completion — 2026-07-26 14:26 PDT:
 
 Final outcome: rec.me 0.1 (100) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-122 and REC-159.
+
+TestFlight build 101 release completion — 2026-07-26 14:54 PDT:
+
+- Merged the build-101 release metadata in PR #250 as `cf31f6f`, then found the
+  widget integration contract still expected build 100. The first exact-main
+  complete run executed 753 tests: 752 passed and only that stale build-number
+  assertion failed.
+- Updated the expected build literal to 101, passed the focused contract 1/1,
+  preserved the concurrently landed build-100 release record, and squash-
+  merged PR #252 as exact shipped `main`
+  `7e8cc0f64efb7de993874e0429a9222d5a0f1dac`.
+- The corrected exact-main suite passed 753/753 with zero failures on iPhone 16
+  Plus / iOS 18.6. Result bundle:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.26_14-38-27--0700.xcresult`.
+- A generic arm64/x86_64 Simulator build exhausted the host disk while scanning
+  an x86_64 PostHog dependency. No source compile failure occurred. Preserved
+  the passing result and removed only explicit regenerable Wander/Xcode
+  DerivedData caches; the signed device Release archive then completed with
+  exit 0.
+- Archived `/private/tmp/Wander-0.1-build101.xcarchive` from exact corrected
+  `main`. Archive inspection confirmed app `rec.me`, marketing version `0.1`,
+  build `101`, bundle id `com.grayline.wander`, and all three embedded
+  extensions at build 101. The binary contains the REC-152 Profile activity
+  strings, including the Check-ins/Wanna empty and activity states. A direct
+  local `codesign --verify` reported an untrusted local certificate chain;
+  Xcode's automatic App Store distribution export and App Store package
+  validation both succeeded, so the uploaded package has no signing blocker.
+- Export options `/private/tmp/recme-build101-export-options.plist` used
+  `destination=upload`, `method=app-store-connect`, automatic signing,
+  `uploadSymbols=true`, and `manageAppVersionAndBuildNumber=false`.
+  API-key authenticated `xcodebuild -exportArchive` reported `Upload succeeded`,
+  `Uploaded Wander`, and `EXPORT SUCCEEDED` without build-number drift.
+- `scripts/testflight-release.mjs` independently confirmed archive upload build
+  101, resolved App Store Connect build id
+  `330f7269-6e86-457d-aea5-fa2ca319cef2`, confirmed processing state `VALID`,
+  set `usesNonExemptEncryption=false`, updated en-US What to Test copy, attached
+  the build to `rec.me Alpha`, submitted external beta review, and confirmed
+  review state `APPROVED`.
+- Build 101 is live at `https://testflight.apple.com/join/knEhRa6t`. Posted the
+  required tester-facing note in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785102843822449`.
+- Added the full release receipt to Linear REC-152; it is Done. Mission Control
+  remained unavailable at `localhost:4000` (`curl` exit 7), so task
+  `67856d32-86fa-4faa-8121-a5fdac4af423` could not be advanced there. Linear,
+  GitHub, Slack, and this log carry the complete status.
+- Known alpha issue remains unchanged: Clerk authentication may show `Wander`
+  branding and the development-mode banner.
+
+Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers with REC-152 Profile
+Recent activity.
