@@ -1001,6 +1001,8 @@ struct WanderRootView: View {
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
             addSheetDetent = .large
             isPresentingAdd = true
+        case .map:
+            selectedTab = .map
         case .nearbyPlace(let candidateID):
             let snapshot = WanderNearbyWidgetSnapshotStore().load()
             let candidate = snapshot.flatMap {

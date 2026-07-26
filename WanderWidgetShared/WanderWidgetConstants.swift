@@ -11,6 +11,7 @@ enum WanderWidgetConstants {
     static let nearbyPlacesKind = "NearbyPlacesWidget"
 
     static let quickCaptureURL = URL(string: "recme://add/here-now")!
+    static let mapURL = URL(string: "recme://map")!
     static let quickSearchURL = URL(string: "recme://map/search")!
     static let profileCalendarURL = URL(string: "recme://profile/calendar")!
 }

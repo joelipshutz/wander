@@ -24037,3 +24037,67 @@ Publication — 2026-07-26 00:44 PDT:
 - Remaining reviewer/device step: register the new nearby-widget App ID and
   enable `group.com.grayline.wander.shared` for all three relevant targets
   before installing on a physical iPhone.
+
+## 2026-07-26 01:15 PDT — Codex — REC-154 widget visual follow-up
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Progress`)
+
+Goal: apply Ryan's follow-up to the open large nearby widget: rename the header
+to Nearby spots, change the helper copy to “tap a place to check-in,” show
+freshness as whole minutes in the bottom-right, expand every recommendation row
+to the available widget width, and replace the ambiguous top-right rec.me icon
+with a clearly labeled route to more nearby options in the app.
+
+Starting state:
+
+- Fetched latest `origin/main` at `dace9c1a5`, including the logged-out session
+  boundary and TestFlight build 98 metadata, then rebased the three REC-154
+  commits onto it.
+- Resolved the root-view overlap by preserving main's authenticated-session
+  maintenance gate while adding the nearby-widget refresh inside that gate and
+  cancelling both maintenance tasks on disappear. Preserved both append-only
+  agent-log histories.
+- The isolated worktree has no tracked changes after the rebase; only this
+  task's local untracked DerivedData directories remain. Expected edits:
+  `WanderNearbyWidgets/WanderNearbyWidget.swift`, shared widget deep-link
+  routing/tests if needed for the explicit more-nearby action, and this log.
+- PR #229 remains the review target. No TestFlight action is authorized.
+
+Follow-up validation — 2026-07-26 01:39 PDT:
+
+- Renamed the header to `Nearby spots` and the ready-state helper to
+  `tap a place to check-in`. Recommendation links and their containing stack
+  now explicitly consume the full available width.
+- Replaced the ambiguous top-right rec.me tile with a labeled `See all` pill
+  and chevron. Added the strict `recme://map` route so this action and
+  non-place widget taps open the map without invoking Quick Search or the
+  I'm Here Now flow; individual place rows still open their selected Check-in
+  flow.
+- Removed SwiftUI's seconds-level relative date presentation. The shared
+  freshness model now renders `<1 min`, `1 min`, or whole plural minutes, and
+  the widget places that label in the bottom-right footer.
+- Focused deep-link, nearby-snapshot, and widget-integration validation passed
+  30/30 on iPhone 17 Pro / iOS 26.5:
+  `/private/tmp/DerivedData-rec154-followup/Logs/Test/Test-Wander-2026.07.26_01-17-29--0700.xcresult`.
+- The complete latest-main suite passed 723/723 with zero failures or skips:
+  `/private/tmp/DerivedData-rec154-followup-full/Logs/Test/Test-Wander-2026.07.26_01-25-44--0700.xcresult`.
+- A clean generic iOS Simulator build passed for arm64 and x86_64 after the
+  required unsandboxed retry restored package dependencies. The initial
+  sandboxed attempt failed before compilation because CoreSimulator and
+  GitHub package resolution were unavailable; it was not an app failure.
+- Reviewed live Xcode system-large previews on iPhone 17 Pro and the smaller
+  iPhone 17e. The first 17e pass exposed title truncation beside the wider
+  `View map` experiment; changing the secondary action to the shorter, clearer
+  `See all` pill resolved it. Both final previews show all five full-width rows,
+  the complete header, and the minute-only bottom-right footer without
+  clipping. Accessibility exposes the See all action and each place row as
+  separately labeled controls.
+- Only the existing formatter actor-isolation, signed-XCTest stripping, and
+  traditional-headermap warnings remain. `xcodegen generate` and
+  `git diff --check` passed. No TestFlight action was performed.
+
+Next: commit and force-with-lease push the rebased branch to update PR #229,
+return Linear REC-154 to `In Review`, and leave Xcode focused on this branch.

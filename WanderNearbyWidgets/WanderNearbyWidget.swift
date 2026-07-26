@@ -429,11 +429,11 @@ private struct WanderNearbyWidgetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             header
 
             if canShowPlaces, let snapshot = entry.snapshot {
-                VStack(spacing: 7) {
+                VStack(spacing: 6) {
                     ForEach(snapshot.places) { place in
                         if let destination = WanderDeepLinkRoute
                             .nearbyPlace(candidateID: place.id)
@@ -443,62 +443,72 @@ private struct WanderNearbyWidgetView: View {
                                 placeRow(place, snapshot: snapshot)
                             }
                             .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .privacySensitive()
+
+                HStack {
+                    Spacer()
+                    Text(freshness?.minuteAgeLabel ?? "")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(WanderNearbyPalette.textMuted)
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: .infinity)
             } else {
                 unavailableState
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(14)
         .containerBackground(for: .widget) {
             WanderNearbyPalette.canvasWarm
         }
-        .widgetURL(WanderWidgetConstants.quickCaptureURL)
+        .widgetURL(WanderWidgetConstants.mapURL)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Nearby picks")
+                Text("Nearby spots")
                     .font(.title2.weight(.black))
                     .fontDesign(.rounded)
                     .foregroundStyle(WanderNearbyPalette.textInk)
-                HStack(spacing: 4) {
-                    Text(headerSubtitle)
-                    if let generatedAt = entry.snapshot?.generatedAt {
-                        Text("·")
-                        Text(generatedAt, style: .relative)
-                    }
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(WanderNearbyPalette.textMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Text(headerSubtitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(WanderNearbyPalette.textMuted)
             }
+            .layoutPriority(1)
 
             Spacer()
 
-            VStack(spacing: 3) {
-                Image(systemName: "location.fill.viewfinder")
-                    .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(WanderNearbyPalette.terracotta)
-                Text("rec.me")
-                    .font(.caption2.weight(.black))
+            Link(destination: WanderWidgetConstants.mapURL) {
+                Label("See all", systemImage: "chevron.right")
+                    .font(.caption.weight(.bold))
                     .fontDesign(.rounded)
-                    .foregroundStyle(WanderNearbyPalette.textInk)
+                    .foregroundStyle(WanderNearbyPalette.terracottaDark)
+                    .padding(.horizontal, 10)
+                    .frame(height: 36)
+                    .background(WanderNearbyPalette.surfaceBone)
+                    .clipShape(Capsule())
+                    .overlay {
+                        Capsule()
+                            .stroke(WanderNearbyPalette.borderHairline, lineWidth: 1)
+                    }
             }
-            .frame(width: 48, height: 48)
-            .background(WanderNearbyPalette.surfaceBone)
-            .clipShape(RoundedRectangle(cornerRadius: 15))
+            .buttonStyle(.plain)
+            .accessibilityLabel("See all nearby spots on the map")
         }
     }
 
     private var headerSubtitle: String {
         switch entry.availability {
         case .ready:
-            "tap a place to add a Rich Visit"
+            "tap a place to check-in"
         case .locationAuthorizationRequired:
             "location access needed"
         case .locationTemporarilyUnavailable:
@@ -545,7 +555,7 @@ private struct WanderNearbyWidgetView: View {
                 .foregroundStyle(WanderNearbyPalette.terracotta)
         }
         .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 46)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .background(WanderNearbyPalette.surfaceBone)
         .clipShape(RoundedRectangle(cornerRadius: 15))
         .overlay {
@@ -554,7 +564,7 @@ private struct WanderNearbyWidgetView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(place.name), \(place.categoryLabel), \(distanceLabel). Add a Rich Visit."
+            "\(place.name), \(place.categoryLabel), \(distanceLabel). Check in here."
         )
     }
 
@@ -603,7 +613,7 @@ private struct WanderNearbyWidgetView: View {
     private var unavailableTitle: String {
         switch entry.availability {
         case .locationAuthorizationRequired:
-            "Turn on nearby picks"
+            "Turn on nearby spots"
         case .noPlaces:
             "Nothing nearby yet"
         case .ready, .locationTemporarilyUnavailable:

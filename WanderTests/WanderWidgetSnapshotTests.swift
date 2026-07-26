@@ -12,6 +12,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         XCTAssertEqual(WanderWidgetConstants.activityCalendarKind, "ActivityCalendarWidget")
         XCTAssertEqual(WanderWidgetConstants.nearbyPlacesKind, "NearbyPlacesWidget")
         XCTAssertEqual(WanderWidgetConstants.quickCaptureURL.absoluteString, "recme://add/here-now")
+        XCTAssertEqual(WanderWidgetConstants.mapURL.absoluteString, "recme://map")
         XCTAssertEqual(WanderWidgetConstants.quickSearchURL.absoluteString, "recme://map/search")
         XCTAssertEqual(WanderWidgetConstants.profileCalendarURL.absoluteString, "recme://profile/calendar")
     }
@@ -19,6 +20,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
     func testFixedWidgetRoutesBuildExactURLsAndRoundTrip() throws {
         let expectations: [(WanderDeepLinkRoute, String)] = [
             (.quickCapture, "recme://add/here-now"),
+            (.map, "recme://map"),
             (.quickSearch(query: nil), "recme://map/search"),
             (.profileCalendar, "recme://profile/calendar")
         ]
@@ -28,6 +30,32 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             XCTAssertEqual(url.absoluteString, expectedURL)
             XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
         }
+    }
+
+    func testNearbyFreshnessFormatsWholeMinutesWithoutSeconds() {
+        let generatedAt = Date(timeIntervalSince1970: 1_000)
+
+        XCTAssertEqual(
+            WanderNearbyWidgetFreshness(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(59)
+            ).minuteAgeLabel,
+            "updated <1 min ago"
+        )
+        XCTAssertEqual(
+            WanderNearbyWidgetFreshness(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(60)
+            ).minuteAgeLabel,
+            "updated 1 min ago"
+        )
+        XCTAssertEqual(
+            WanderNearbyWidgetFreshness(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(179)
+            ).minuteAgeLabel,
+            "updated 2 mins ago"
+        )
     }
 
     func testQuickSearchTrimsAndPercentEncodesUnicodeQuery() throws {
@@ -91,6 +119,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "recme://add/nearby/%20%0A",
             "recme://add/nearby/place/extra",
             "recme://add/nearby/place?q=coffee",
+            "recme://map?q=coffee",
             "recme://map/search/extra",
             "recme://map/search?query=cafe",
             "recme://map/search?q=one&q=two",

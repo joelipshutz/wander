@@ -2,6 +2,7 @@ import Foundation
 
 enum WanderDeepLinkRoute: Equatable, Sendable {
     case quickCapture
+    case map
     case quickSearch(query: String?)
     case nearbyPlace(candidateID: String)
     case profileCalendar
@@ -11,6 +12,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         switch self {
         case .quickCapture:
             WanderWidgetConstants.quickCaptureURL
+        case .map:
+            WanderWidgetConstants.mapURL
         case .quickSearch(let query):
             Self.quickSearchURL(query: query)
         case .nearbyPlace(let candidateID):
@@ -40,6 +43,10 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         case ("add", ["here-now"]):
             guard hasNoQuery(in: components) else { return nil }
             return .quickCapture
+
+        case ("map", []):
+            guard hasNoQuery(in: components) else { return nil }
+            return .map
 
         case ("map", ["search"]):
             guard let query = searchQuery(in: components) else { return nil }

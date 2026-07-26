@@ -24,6 +24,18 @@ struct WanderNearbyWidgetFreshness: Equatable, Sendable {
     var isUsable: Bool {
         age <= Self.usableLifetime
     }
+
+    var minuteAgeLabel: String {
+        let wholeMinutes = Int(age / 60)
+        switch wholeMinutes {
+        case 0:
+            return "updated <1 min ago"
+        case 1:
+            return "updated 1 min ago"
+        default:
+            return "updated \(wholeMinutes) mins ago"
+        }
+    }
 }
 
 enum WanderNearbyWidgetDistanceFormatter {
