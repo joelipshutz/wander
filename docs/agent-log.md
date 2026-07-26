@@ -22144,3 +22144,12 @@ Next step: Joe reviews the focused-empty and results states. On approval, restar
 from this worktree, implement REC-150 in `DiscoverScreen.swift` with focus/back/
 clear state tests, run the full simulator suite, and capture large + small iPhone
 screenshots before opening the implementation PR.
+
+Handoff preservation:
+
+- Committed the design record as `629e60b` and pushed
+  `codex/rec-150-discover-search-mock`.
+- Opened draft PR #219:
+  `https://github.com/joelipshutz/wander/pull/219`.
+- Linked the draft PR and validation summary to Linear REC-150, which remains
+  `In Progress` pending Joe's mock decision.
